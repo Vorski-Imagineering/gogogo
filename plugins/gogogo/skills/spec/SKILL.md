@@ -1,6 +1,6 @@
 ---
 name: spec
-description: Use when turning a tracker issue into a specification another agent will implement, when triaging whether an issue is ready to hand off, or when an agent came back blocked on an issue that looked fully specified.
+description: Use when turning a tracker issue, or an idea not yet filed as one, into a specification another agent will implement, when triaging whether an issue is ready to hand off, or when an agent came back blocked on an issue that looked fully specified.
 ---
 
 # spec
@@ -309,6 +309,11 @@ reporter already wrote.
 the full body locally and never let the report exist only in memory. In this
 order, checking each step before starting the next:
 
+0. **No issue yet?** When the user gave an idea rather than an issue, file one
+   first in `tracker.issues_repo`, with a short title and the user's own words
+   as the body: `gh issue create --repo <tracker.issues_repo> --title "<title>"
+   --body-file <scratch>/idea.md`. Its number is `<N>` below, and those words
+   become the original report.
 1. **Save the current body to the scratchpad before anything else**:
    `gh issue view <N> --json body -q .body > <scratch>/issue-<N>-original.md`.
    Confirm the file is non-empty (unless the issue body is empty).
