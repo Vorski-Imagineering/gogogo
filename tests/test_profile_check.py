@@ -296,9 +296,12 @@ class Columns(unittest.TestCase):
             self.assertEqual(len([e for e in errors if e.startswith("tracker.columns.needs_human")]), 1,
                              (skill, errors))
 
-    def test_column_roles_are_in_fields(self):
-        for role in pc.COLUMN_ROLES:
-            self.assertIn(f"tracker.columns.{role}", pc.FIELDS)
+    def test_a_blank_retired_column_only_warns(self):
+        settings, sections = parse()
+        settings["tracker"]["columns"]["back_to_queue"] = ""
+        errors, warnings = pc.check(settings, sections)
+        self.assertEqual(errors, [])
+        self.assertTrue(any(w.startswith("tracker.columns.back_to_queue") for w in warnings), warnings)
 
     def test_another_column_role_is_allowed(self):
         settings, sections = parse()

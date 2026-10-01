@@ -203,18 +203,21 @@ Write the body to a file and pass `--body-file`; inline `--body` mangles markdow
 ## 8. Hand back: move the card as far as the code has got
 
 The card moves to the column of the **stage the code has actually reached**,
-and no further:
+and no further. Take the first case that fits:
 
+- **stopped for a person**: a review fix no round has reviewed, a correctness
+  finding you could not fix, a decision or Hard Stop found mid-change (§4), or
+  verification that gave up → `tracker.columns.needs_human`, whether or not
+  the work sits on a branch or PR. The §7 report's first line is
+  `**Needs you:**` and one sentence saying what the person must do, followed
+  by the branch or PR link: for example, read commit `<sha>` and merge; decide
+  `<question>`; read the attempts and re-spec or requeue. When nothing is
+  committed (this skill commits only when asked, §4), ask the person whether
+  to commit and push the work first, so the card links to something; if they
+  decline, say "in the working tree of <path>";
 - not committed, or on a branch or PR awaiting review, or stopped at an open
   PR only because the merge is a release or a two-licence apply row is
   missing → `tracker.columns.in_progress`;
-- **stopped for a person**: a review fix no round has reviewed, a correctness
-  finding you could not fix, a decision or Hard Stop found mid-change (§4), or
-  verification that gave up → `tracker.columns.needs_human`. The §7 report's
-  first line is `**Needs you:**` and one sentence saying what the person must
-  do, followed by the branch or PR link, or "in the working tree" when nothing
-  is committed: for example, read commit `<sha>` and merge; decide
-  `<question>`; read the attempts and re-spec or requeue;
 - merged → the first of the profile's `stages`, and only after the merge is
   verified (`verify_merged.py`, below).
 
@@ -224,17 +227,16 @@ starts `/gogogo:dev` on it, which then moves the card as for any issue. Also
 remove `tracker.ready_marker` from an issue you move to `needs_human`: the
 label means the issue needs nothing from anyone, and on a label queue it would
 let the next run take it. The person puts it back when the issue is ready
-again. In a
-session with the person present, a question they answer there is not a stop:
-carry on.
+again. In a session with the person present, a question they answer there is
+not a stop: carry on.
 
 ```bash
-<tracker.tool> move <n> --to "<column>"
+<tracker.tool> move <n> --to '<column>'
 ```
 
 `<column>` is a role key (`in_progress`, `needs_human`) or a stage column's
-name. Pass the role key, not the name, for those two: a `!` in a name, as in
-`Human!Help!`, is expanded by an interactive shell inside double quotes.
+name. Pass the role key for those two. Single quotes keep a `!` in a name, as
+in `Human!Help!`, from being expanded by an interactive shell.
 
 A zero exit is the confirmation: the tool read the card back. Anything else is
 a failed move; say so, do not retry blind.

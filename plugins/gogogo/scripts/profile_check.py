@@ -111,8 +111,8 @@ ROLES = ("pre-merge", "pre-production", "production")
 # tool (references/tracker-contract.md), so they do not warn.
 RETIRED = {"tracker.columns.back_to_queue": "retired: no skill reads it since gogogo#26"}
 
-# The `tracker.columns` roles the profile format defines (each is in FIELDS).
-COLUMN_ROLES = ("in_progress", "needs_human")
+# The `tracker.columns` roles the profile format defines, from FIELDS.
+COLUMN_ROLES = tuple(p.split(".", 2)[2] for p in FIELDS if p.startswith("tracker.columns."))
 
 # The keys a stage may have (`stages` is a list, so FIELDS cannot name them).
 STAGE_KEYS = ("code_is", "environment", "column", "moved_by", "tag")
@@ -348,8 +348,8 @@ def check(settings, sections, skill=None):
         errors.append(f"tracker.columns: expected a table of role = column name, found {type(columns).__name__}")
     elif columns_present:
         for role, name in columns.items():
-            if any(e.startswith(f"tracker.columns.{role}:") for e in errors):
-                continue  # FIELDS above already named it
+            if f"tracker.columns.{role}" in RETIRED or any(e.startswith(f"tracker.columns.{role}:") for e in errors):
+                continue  # retired (it warns, below), or FIELDS above already named it
             if not isinstance(name, str) or not name.strip():
                 errors.append(f"tracker.columns.{role}: expected a column name, found {name!r}")
 
