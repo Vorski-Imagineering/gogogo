@@ -104,6 +104,14 @@ class Ships(unittest.TestCase):
         sha = self.merge("Fix it (#8)\n\nShips-issue: Acme/Issues#450")
         self.assertEqual(self.verify(sha, "--ships", "acme/issues#450")[0], 0)
 
+    def test_an_unreadable_profile_still_checks_full_form_links(self):
+        """No profile only loses the short form; the full form is still checked."""
+        sha = self.merge("Fix it (#7)\n\nShips-issue: acme/issues#450\nShips-issue: issues#451")
+        self.profile.write_text("not a profile")
+        self.assertEqual(self.verify(sha, "--ships", "acme/issues#450")[0], 0)
+        self.assertEqual(self.verify(sha, "--ships", "acme/issues#452")[0], 3)
+        self.assertEqual(self.verify(sha, "--ships", "acme/issues#451")[0], 3)
+
     def test_without_ships_a_commit_with_no_trailer_still_passes(self):
         sha = self.merge("Fix it (#7)")
         self.assertEqual(self.verify(sha)[0], 0)

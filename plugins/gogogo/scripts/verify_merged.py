@@ -17,7 +17,8 @@ the squash commit from the body it was handed, and only the commit itself
 proves the link survived. The trailers are read by `stage_sync.py`'s reader,
 so both accept exactly the same forms: the legacy short form
 (`<repo name>#<n>`) counts only for the profile's issues and code repos, which
-is why `--ships` reads the profile (`--profile`, default the nearest one).
+is why `--ships` reads the profile (`--profile`, default the nearest one). An
+unreadable profile only loses the short form; full-form links still check.
 """
 import argparse
 import json
@@ -70,8 +71,9 @@ def main(argv=None):
         try:
             known = stage_sync.load_profile(args.profile).known
         except stage_sync.SyncError as exc:
-            print(f"cannot tell: {exc}", file=sys.stderr)
-            return 2
+            # Without the profile only the short form is lost: full-form links
+            # are still checked, and a short-form trailer simply does not count.
+            print(f"warning: {exc}; a short-form Ships-issue cannot count", file=sys.stderr)
 
     view = ["gh", "pr", "view", args.pr, "--json", "state,mergeCommit"]
     if args.repo:
