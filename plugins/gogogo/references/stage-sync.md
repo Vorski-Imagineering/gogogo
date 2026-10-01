@@ -93,11 +93,14 @@ explicitly in CI.
 
 A crash exits 2, never 1. A failed comment leaves that card where it is (no
 assignment, no move), the other cards still move, and the run exits 2 naming
-it. The comment carries a marker, `<!-- stage-sync tag=<tag> shas=<sha8>,… -->`:
-a marker for the same commits whose tag matches the stage's glob counts as
-already posted, so a sync that commented and then failed to move moves the card
-on the next tag without commenting again, and each stage is still announced
-once. `sync` reads the board once per run, so a card moves at most one stage
+it. The comment carries a marker,
+`<!-- stage-sync stage=<column> tag=<tag> shas=<sha8>,… -->`: a marker for the
+same commits and the same target column counts as already posted (an older
+marker without `stage=` counts when its tag matches the stage's glob), so a
+sync that commented and then failed to move moves the card on the next tag
+without commenting again, and each stage is still announced once. A failed
+move stops the run (exit 2) after reporting failed comments, unlinked cards and
+the cards not attempted. `sync` reads the board once per run, so a card moves at most one stage
 per run.
 
 ## Running it in CI

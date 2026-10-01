@@ -422,8 +422,15 @@ class Sync(TrackerState):
         if comments is None:
             announcing = mock.patch.object(ss, "already_announced", return_value=announced)
         else:
-            announcing = mock.patch.object(ss.subprocess, "run",
-                                           return_value=mock.Mock(returncode=0, stdout=comments))
+            real_run = subprocess.run
+
+            def comments_only(cmd, *a, **kw):
+                # Only the comment read is faked; any other subprocess call
+                # takes its real path.
+                if cmd[:3] == ["gh", "issue", "view"] and "comments" in cmd:
+                    return mock.Mock(returncode=0, stdout=comments)
+                return real_run(cmd, *a, **kw)
+            announcing = mock.patch.object(ss.subprocess, "run", side_effect=comments_only)
         with mock.patch.object(ss, "resolve_tag", side_effect=fake_resolve), announcing, \
              mock.patch.object(ss, "trailer_links", return_value=links), \
              mock.patch.object(ss.tracker, "list_cards", self.list_cards), \
@@ -597,7 +604,7 @@ class Sync(TrackerState):
         """A card announced for staging-1 is announced again when deploy-1 ships it."""
         profile = self.write_profile(three_stages=True)
         staged = ss.Decision(ss.MOVE, ("acme/issues", 450), ("1a6e11b7ffff",))
-        body = ss.live_comment("staging-1", staged, "https://staging.example.org", False)
+        body = ss.live_comment("staging-1", staged, "https://staging.example.org", False, "In Staging")
         code, calls = self._sync([card(450, status="In Staging")], tag="deploy-1",
                                  profile=profile, comments=body)
         self.assertEqual(code, 0, self.err)
@@ -606,6 +613,40 @@ class Sync(TrackerState):
         code, calls = self._sync([card(450)], tag="staging-2", profile=profile, comments=body)
         self.assertEqual(code, 0, self.err)
         self.assertNotIn("issue comment", self.verbs(calls))
+
+    def test_overlapping_globs_a_staging_comment_does_not_suppress_the_release_one(self):
+        """deploy-prod-1 matches both globs: the In Staging comment carries that
+        tag, and must still not stand in for the Released one."""
+        profile = self.write_profile(three_stages=True, staging_tag="deploy-*", deploy_tag="deploy-prod-*")
+        staged = ss.Decision(ss.MOVE, ("acme/issues", 450), ("1a6e11b7ffff",))
+        body = ss.live_comment("deploy-prod-1", staged, "https://staging.example.org", False, "In Staging")
+        code, calls = self._sync([card(450, status="In Staging")], tag="deploy-prod-1",
+                                 profile=profile, comments=body)
+        self.assertEqual(code, 0, self.err)
+        self.assertIn("issue comment", self.verbs(calls))
+        self.assertIn("stage=Released", self.bodies[0])
+
+    def test_a_failed_move_reports_what_it_knows_before_stopping(self):
+        links = {("acme/issues", n): ss.Linked([f"{n}aaaa"], []) for n in (449, 450, 451)}
+        fail = lambda cmd: ("comment" in cmd and "449" in cmd) or ("move" in cmd and "450" in cmd)
+        code, calls = self._sync([card(449), card(450), card(451), card(7)], links, fail=fail)
+        self.assertEqual(code, 2)
+        self.assertEqual(self.verbs(calls), ["show --expect", "issue comment",
+                                             "show --expect", "issue comment", "move"])
+        self.assertIn("acme/issues#450: commented, but the move did not verify", self.err)
+        self.assertIn("1 card(s) not moved, their comment failed: acme/issues#449", self.err)
+        self.assertIn("1 card(s) in Merged have no linked commit; move them by hand: acme/issues#7", self.err)
+        self.assertIn("1 card(s) not attempted: acme/issues#451", self.err)
+
+    def test_the_source_column_is_resolved_as_list_cards_resolves_it(self):
+        """A stage column that is also a role key's value (the queue) is read
+        under the name tracker.column() gives it."""
+        profile = Path(self.write_profile())
+        profile.write_text(profile.read_text().replace('column = "Merged"', 'column = "Dev Ready"'))
+        board = {"options": {"Dev Ready": "q", "Released": "b"}}
+        code, calls = self._sync([card(450, status="dev ready")], profile=str(profile), board_meta=board)
+        self.assertEqual(code, 0, self.err)
+        self.assertEqual(self.moves(calls), {"450": "Released"})
 
     def test_reporter_none_neither_assigns_nor_mentions(self):
         code, calls = self._sync([card(450)], profile=self.write_profile(reporter="none"))
@@ -643,28 +684,36 @@ class AlreadyAnnounced(unittest.TestCase):
     def test_reads_the_marker_for_these_shas_under_either_name(self):
         decision = ss.Decision(ss.MOVE, ("acme/issues", 450), ("1a6e11b7ffff",))
         other = ss.Decision(ss.MOVE, ("acme/issues", 450), ("1a6e11b7ffff", "2b2b2b2b"))
-        posted = ss.live_comment("deploy-a", decision, "https://app.example.org", True)
-        old = posted.replace("<!-- stage-sync ", "<!-- board-sync ")
-        self.assertNotEqual(posted, old)
-        for body in (posted, old):
+        def announced(body, d=decision, glob="deploy-*", stage="Released"):
             with mock.patch.object(ss.subprocess, "run", return_value=mock.Mock(returncode=0, stdout=body)):
-                self.assertTrue(ss.already_announced("acme/issues", "450", decision, "deploy-*"))
-                self.assertFalse(ss.already_announced("acme/issues", "450", other, "deploy-*"))
-                # The same commits announced for another stage's tag.
-                self.assertFalse(ss.already_announced("acme/issues", "450", decision, "staging-*"))
+                return ss.already_announced("acme/issues", "450", d, glob, stage)
+
+        posted = ss.live_comment("deploy-a", decision, "https://app.example.org", True, "Released")
+        self.assertIn("<!-- stage-sync stage=Released tag=deploy-a shas=1a6e11b7 -->", posted)
+        # New form: the stage decides, case-insensitively; the tag does not.
+        self.assertTrue(announced(posted))
+        self.assertTrue(announced(posted, stage="released", glob="nothing-*"))
+        self.assertFalse(announced(posted, stage="In Staging"))
+        self.assertFalse(announced(posted, d=other))
+        # Markers without stage= (the older names) keep the tag-glob rule.
+        for prefix in ("<!-- stage-sync ", "<!-- board-sync "):
+            legacy = f"{prefix}tag=deploy-a shas=1a6e11b7 -->\n"
+            self.assertTrue(announced(legacy, stage="In Staging"))
+            self.assertFalse(announced(legacy, glob="staging-*"))
+            self.assertFalse(announced(legacy, d=other))
         failed = mock.Mock(returncode=1, stdout=posted)
         with mock.patch.object(ss.subprocess, "run", return_value=failed):
-            self.assertFalse(ss.already_announced("acme/issues", "450", decision, "deploy-*"))
+            self.assertFalse(ss.already_announced("acme/issues", "450", decision, "deploy-*", "Released"))
 
 
 class LiveComment(unittest.TestCase):
     def test_comment_names_the_place_the_tag_and_the_reporter(self):
         decision = ss.Decision(ss.MOVE, ("acme/issues", 450), ("1a6e11b7aaaa",), (), ("jdoe",))
-        body = ss.live_comment("deploy-2026Sep27-10.00", decision, "https://app.example.org", True)
+        body = ss.live_comment("deploy-2026Sep27-10.00", decision, "https://app.example.org", True, "Released")
         self.assertIn("https://app.example.org", body)
         self.assertIn("`deploy-2026Sep27-10.00`", body)
         self.assertIn("@jdoe", body)
-        self.assertIn("<!-- stage-sync tag=deploy-2026Sep27-10.00 shas=1a6e11b7 -->", body)
+        self.assertIn("<!-- stage-sync stage=Released tag=deploy-2026Sep27-10.00 shas=1a6e11b7 -->", body)
 
 
 class SyncAgainstRealGit(RepoTestCase):
@@ -795,7 +844,7 @@ class SharedFiles(unittest.TestCase):
     def test_auto_dev_runs_the_same_commands(self):
         text = (PLUGIN / "skills" / "auto-dev" / "SKILL.md").read_text(encoding="utf-8")
         self.assertRegex(text, r'stage_sync\.py" .*\btrailer\b')
-        self.assertRegex(text, r"verify_merged\.py.*--ships")
+        self.assertRegex(text, r"verify_merged\.py.*--profile <profile>.*--ships")
 
 
 if __name__ == "__main__":
