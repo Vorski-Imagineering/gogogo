@@ -180,15 +180,25 @@ Re-run the unattended-mode check immediately before every merge, chained so
 the merge is unreachable when it fails. The mode can change mid-session.
 
 **The PR's checks, when a merge is a release** (§Preflight 4). Before the `gh`
-merge, run `gh pr checks <pr> --watch`. Just after `gh pr create`, CI may not
-have registered yet: when it reports no checks, run it again every 30 seconds,
-in the foreground (§4), for up to three minutes before counting the PR as
-having none. A failing check stops that issue at its PR, handed back to
-`tracker.columns.needs_human` as `/gogogo:dev` §8 says for a gate you could not
-make pass. A PR with no checks is a failure under `run-branch-pr` or when
-`integration.ci_before_merge` is true, and otherwise merges on the suite §4
-ran. Read the output, not only the exit code: `gh pr checks` exits non-zero
-when a PR has no checks.
+merge, wait for the PR's checks. Just after `gh pr create`, CI may not have
+registered yet, so retry for up to three minutes, in one foreground command
+(§4):
+
+```bash
+for i in 1 2 3 4 5 6 7; do
+  gh pr checks <pr> --watch > <scratch>/checks.txt 2>&1; rc=$?
+  grep -q 'no checks reported' <scratch>/checks.txt || break; sleep 30
+done; cat <scratch>/checks.txt; echo "exit $rc"
+```
+
+Read the output, not only the exit code: `gh pr checks` exits non-zero both
+when a check fails and when a PR has no checks. A PR with no checks is a
+failure under `run-branch-pr` or when `integration.ci_before_merge` is true,
+and otherwise merges on the suite §4 ran. A failure (a failing check, or no
+checks when that is a failure) stops that issue at its PR at once, with no fix
+pushed to it, handed back to `tracker.columns.needs_human` as `/gogogo:dev` §8
+says for a gate you could not make pass. For the run's final PR, see
+`run-branch-pr` below.
 
 **The link, when a merge is yours.** When you merge with `gh` and the profile
 uses the `Ships-issue` link (`/gogogo:dev`'s *When you merge with `gh`*
@@ -213,9 +223,9 @@ and the merge is `gh pr merge ... --body-file` with the body built as
   applies. **Zero checks is a failure**, not a pass. At the end, one PR from
   the run branch to `integration.final_target` carries the whole run. When
   that final PR is a release (§Preflight 4), merge it too, with a merge
-  commit, once its checks pass (above) and every issue in it cleared its
-  gates. Otherwise, or when a check on it fails, it waits for a person and
-  the cards stay where they are. When the
+  commit, once its checks pass (above). When it is not a release, it waits
+  for a person. When its checks fail, or it has none, the run branch is red:
+  stop the whole run and ask, and leave the cards where they are. When the
   link applies, the final PR's description says it must be merged with a merge
   commit, not squashed: a squash leaves the issue commits out of the target's
   history, and the stage sync then finds no link. The close-run report (§9)
