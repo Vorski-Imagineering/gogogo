@@ -154,23 +154,35 @@ raise a budget, or stop the issue.
 Re-run the unattended-mode check immediately before every merge, chained so
 the merge is unreachable when it fails. The mode can change mid-session.
 
+**The link, when a merge is yours.** When you merge with `gh` and the profile
+uses the `Ships-issue` link (`/gogogo:dev`'s *When you merge with `gh`*
+subsection says when), the squash body ends with the output of the same
+command `/gogogo:dev` runs:
+
+```bash
+python3 "${CLAUDE_PLUGIN_ROOT}/scripts/stage_sync.py" --profile <profile> trailer \
+  --issue <n>[=<reporter-login>] --verify --co-authors-from origin/<base>..HEAD > <scratch>/trailers.txt
+```
+
+and the merge is `gh pr merge ... --body-file` with the body built as
+`/gogogo:dev` builds it.
+
 - **`merge-script`**: run `integration.command` for this issue. Know what the
   script does and does not check (the profile says); if it does not run the
   suite, §4 was the only thing standing between a broken suite and the base.
 - **`run-branch-pr`**: the first issue creates the run branch
   (`integration.base`, dated) from the main line. Each issue merges into it by
   a PR: `gh pr create --base <run branch>`, `gh pr checks --watch`, then
-  `gh pr merge --squash --delete-branch`, with the body from `/gogogo:dev` §8
-  when its *When you merge with `gh`* subsection applies. **Zero checks is a
-  failure**, not a pass. At the end, one PR from the run branch to
-  `integration.final_target` carries the whole run. When that subsection
-  applies, the final PR's description says it must be merged with a merge
+  `gh pr merge --squash --delete-branch`, with the link's body when it
+  applies. **Zero checks is a failure**, not a pass. At the end, one PR from
+  the run branch to `integration.final_target` carries the whole run. When the
+  link applies, the final PR's description says it must be merged with a merge
   commit, not squashed: a squash leaves the issue commits out of the target's
   history, and the stage sync then finds no link. The close-run report (§9)
   repeats it.
 - **`pr-squash`**: open the PR and **stop there** when §Preflight 4 said a
-  merge is a release. Otherwise squash-merge it, with the body from
-  `/gogogo:dev` §8 when that subsection applies.
+  merge is a release. Otherwise squash-merge it, with the link's body when it
+  applies.
 
 Never hand-roll a merge around a failed integration step, and never use a
 script the profile marks forbidden.
@@ -186,7 +198,13 @@ that reports six merges and delivered five is worse than one that stops at the
 first failure: the board says done, the branch says otherwise, and nobody looks
 again. NOT-MERGED, or "cannot tell", stops the whole run.
 
-When the link was written, pass `--ships` as `/gogogo:dev` §8 says. Exit 3
+When the link was written, add it to the check:
+
+```bash
+python3 "${CLAUDE_PLUGIN_ROOT}/scripts/verify_merged.py" <pr> <base branch> [--repo <code_repo>] --ships <tracker.issues_repo>#<n>
+```
+
+Exit 3
 (merged, link missing) does **not** stop the run: hand back as merged, and list
 the issue in the between-issues log and the close-run report as one whose card
 must be moved by hand when its tag ships.
