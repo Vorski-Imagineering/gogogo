@@ -90,7 +90,7 @@ no skill requires it; a skill that finds it uses it.
 | `integration.final_target` | str | optional | Branch the run's PR targets, for run-branch-pr. |
 | `integration.mode_check` | str | optional | Command that proves unattended mode is on. |
 | `integration.ci_before_merge` | bool | `auto-dev` | True if CI must pass on each issue before it merges. |
-| `handback.reporter` | str | `dev`, `auto-dev` | trailer / assign / none. |
+| `handback.reporter` | str | `dev`, `auto-dev` | trailer / assign / none. trailer: each merge writes a Ships-issue trailer naming the reporter, and stage sync assigns them when the card enters a stage with a tag. |
 | `preflight.extra` | list | optional | Extra checks before a run. |
 | `stop.extra` | list | optional | Extra conditions that stop a whole run. |
 | `notify` | str | optional | none / telegram. |
@@ -205,6 +205,34 @@ moved_by = "the loop, once the run PR shows MERGED"
 
 A card moves only as far as the code has. A skill checks the code is at a stage
 before it moves the card there, and names the column, never a stored id.
+
+A stage may also have a `tag`: a glob such as `deploy-*`. A card enters that
+stage when every commit linked to its issue (by a `Ships-issue` trailer) is in
+a pushed tag matching the glob, and it comes from the stage before it. The
+repo's CI runs `stage_sync.py` on each such tag; see
+`references/stage-sync.md`. A `tag` is optional, never on the first stage (a
+merge puts a card there, not a tag), needs an `environment` (the comment says
+where the fix is now live), must not contain `/`, and is used by one stage
+only.
+
+```toml
+[[stages]]
+code_is = "merged to main"
+environment = "dev"
+column = "In Dev"
+moved_by = "the loop, after the merge is verified"
+
+[[stages]]
+code_is = "every linked commit is in a deploy tag"
+environment = "production"
+column = "In Production"
+moved_by = "stage_sync.py, run by CI on each deploy tag"
+tag = "deploy-*"
+```
+
+`profile_check.py` warns on any other key in a stage (a typo there would
+otherwise be silent), and when `handback.reporter` is `trailer` but no stage
+has a `tag`.
 
 ### Two-licence changes
 

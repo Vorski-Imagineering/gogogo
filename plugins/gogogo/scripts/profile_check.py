@@ -76,7 +76,9 @@ FIELDS = {
     "integration.final_target": (str, (), "Branch the run's PR targets, for run-branch-pr."),
     "integration.mode_check": (str, (), "Command that proves unattended mode is on."),
     "integration.ci_before_merge": (bool, (LOOP,), "True if CI must pass on each issue before it merges."),
-    "handback.reporter": (str, (ONE, LOOP), "trailer | assign | none."),
+    "handback.reporter": (str, (ONE, LOOP), "trailer | assign | none. trailer: each merge writes a Ships-issue "
+                          "trailer naming the reporter, and stage sync assigns them when the card enters a "
+                          "stage with a tag."),
     "preflight.extra": (list, (), "Extra checks before a run."),
     "stop.extra": (list, (), "Extra conditions that stop a whole run."),
     "notify": (str, (), "none | telegram."),
@@ -100,6 +102,9 @@ TEST_DATA_HEADINGS = ("Running build", "Finding the change", "Sandbox and fixtur
                       "Optional lanes", "Extra step rules", "Never call")
 
 ROLES = ("pre-merge", "pre-production", "production")
+
+# The keys a stage may have (`stages` is a list, so FIELDS cannot name them).
+STAGE_KEYS = ("code_is", "environment", "column", "moved_by", "tag")
 
 ENUMS = {
     "tracker.kind": {"github-project", "github-label", "todo-file"},
@@ -188,16 +193,6 @@ def _check_environments(settings):
         if names and role not in roles_seen:
             errors.append(f"environments: none has the role {role}")
 
-    stages = settings.get("stages")
-    if isinstance(stages, list):
-        for i, stage in enumerate(stages):
-            if not isinstance(stage, dict) or not stage.get("code_is") or not stage.get("column"):
-                errors.append(f"stages[{i}]: each stage needs code_is and column")
-                continue
-            env = stage.get("environment")
-            if env is not None and env not in names:
-                errors.append(f"stages[{i}] ({stage['column']}): environment '{env}' is not in environments")
-
     verify = settings.get("verify") if isinstance(settings.get("verify"), dict) else {}
     human = verify.get("human")
     if isinstance(human, str) and human and human not in names:
@@ -208,6 +203,56 @@ def _check_environments(settings):
             if name not in names:
                 errors.append(f"verify.agent: '{name}' is not in environments")
     return errors
+
+
+def _check_stages(settings):
+    """Each stage, and its `tag` (a glob: a card enters the stage when every
+    commit linked to it is in a tag matching it). Returns (errors, warnings).
+
+    `_leaf_paths` does not descend into lists, so a typo'd key inside a stage
+    is caught here or nowhere.
+    """
+    errors, warnings = [], []
+    stages = settings.get("stages")
+    if not isinstance(stages, list):
+        return errors, warnings
+    environments = settings.get("environments")
+    names = ([e["name"] for e in environments if isinstance(e, dict) and e.get("name")]
+             if isinstance(environments, list) else None)
+    tags = {}
+    for i, stage in enumerate(stages):
+        if not isinstance(stage, dict) or not stage.get("code_is") or not stage.get("column"):
+            errors.append(f"stages[{i}]: each stage needs code_is and column")
+            continue
+        where = f"stages[{i}] ({stage['column']})"
+        env = stage.get("environment")
+        if names is not None and env is not None and env not in names:
+            errors.append(f"{where}: environment '{env}' is not in environments")
+        for key in stage:
+            if key not in STAGE_KEYS:
+                warnings.append(f"{where}: unknown key '{key}' (typo, or not in this profile version)")
+        if "tag" not in stage:
+            continue
+        tag = stage["tag"]
+        if not isinstance(tag, str) or not tag:
+            errors.append(f'{where}: tag must be a non-empty glob, such as "deploy-*"')
+            continue
+        if i == 0:
+            errors.append(f"{where}: tag is not allowed on the first stage (a merge puts a card there, not a tag)")
+        if env is None:
+            errors.append(f"{where}: a stage with a tag needs an environment")
+        if "/" in tag:
+            # git's tag patterns and fnmatch disagree on '/'.
+            errors.append(f"{where}: tag '{tag}' must not contain '/'")
+        if tag in tags:
+            errors.append(f"{where}: tag '{tag}' is also on stages[{tags[tag]}]")
+        else:
+            tags[tag] = i
+
+    handback = settings.get("handback") if isinstance(settings.get("handback"), dict) else {}
+    if handback.get("reporter") == "trailer" and not tags:
+        warnings.append("handback.reporter: 'trailer', but no stage has a tag, so nothing assigns the reporter")
+    return errors, warnings
 
 
 def environment(settings, name):
@@ -285,6 +330,9 @@ def check(settings, sections, skill=None):
                 errors.append(f"lanes[{i}] ({lane['name']}): needs run (a command) or env (where it is checked)")
 
     errors.extend(_check_environments(settings))
+    stage_errors, stage_warnings = _check_stages(settings)
+    errors.extend(stage_errors)
+    warnings.extend(stage_warnings)
     if TEST in wanted:
         errors.extend(_check_auto_test(settings, sections))
 

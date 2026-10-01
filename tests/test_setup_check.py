@@ -216,6 +216,44 @@ class ReleaseShape(unittest.TestCase):
         shape_rows(dict(STRAIGHT, verify="agent"))
         shape_rows(dict(STRAIGHT, environments=[LOCAL, dict(PRODUCTION, name=["x"])]))
 
+    def test_a_tagged_stage_gets_a_stage_sync_row(self):
+        tagged = dict(STAGED, stages=[STAGED["stages"][0], dict(STAGED["stages"][1], tag="deploy-*")])
+        rows = [r for r in shape_rows(tagged) if r["check"] == "release shape: stage sync"]
+        self.assertEqual([r["level"] for r in rows], ["INFO"])
+        for needle in ("In Production", "deploy-*", "from In Staging"):
+            self.assertIn(needle, rows[0]["detail"])
+        self.assertEqual([r for r in shape_rows(STAGED) if r["check"] == "release shape: stage sync"], [])
+
+    def test_a_tagged_stage_is_not_counted_against_straight_to_production(self):
+        tagged = {"code_is": "in a deploy tag", "environment": "production", "column": "Live", "tag": "deploy-*"}
+        self.assertEqual(warns(shape_rows(dict(STRAIGHT, stages=[RELEASED, tagged]))), [])
+        # Two untagged stages still warn.
+        self.assertEqual(warns(shape_rows(dict(STRAIGHT, stages=[RELEASED, dict(tagged, tag=None)]))),
+                         ["release shape: stages"])
+
+    def test_the_schema_example_with_a_tagged_stage_gives_no_warning(self):
+        import tomllib
+        doc = (ROOT / "plugins" / "gogogo" / "references" / "profile-schema.md").read_text(encoding="utf-8")
+        blocks = [tomllib.loads(b.split("```")[0]) for b in doc.split("```toml\n")[1:]]
+        envs = next(b for b in blocks if b.get("environments") and len(b) == 1)
+        stages = next(b for b in blocks if any("tag" in s for s in b.get("stages", [])))
+        rows = shape_rows({**envs, **stages})
+        self.assertEqual(warns(rows), [])
+        self.assertIn("release shape: stage sync", [r["check"] for r in rows])
+
+    def test_a_tagged_stage_needs_a_deployed_environment(self):
+        for env in ("local", "nowhere"):
+            with self.subTest(env=env):
+                s = dict(STAGED, stages=[STAGED["stages"][0],
+                                         dict(STAGED["stages"][1], environment=env, tag="deploy-*")])
+                self.assertIn("release shape: stage sync", warns(shape_rows(s)))
+        ok = dict(STAGED, stages=[STAGED["stages"][0], dict(STAGED["stages"][1], tag="deploy-*")])
+        self.assertEqual(warns(shape_rows(ok)), [])
+
+    def test_a_tag_on_the_first_stage_warns(self):
+        s = dict(STAGED, stages=[dict(STAGED["stages"][0], tag="staging-*"), STAGED["stages"][1]])
+        self.assertIn("release shape: stage sync", warns(shape_rows(s)))
+
     def test_never_fails(self):
         for s in (STRAIGHT, STAGED, dict(STRAIGHT, stages=[]),
                   dict(STRAIGHT, verify={"agent": ["production"]})):

@@ -440,12 +440,14 @@ def check_release_shape(settings, rep):
     if not pre_prod:
         rep.info("release shape", f"straight to production: a merge to the base branch is the release; "
                                   f"stage column: {columns or 'none'}")
-        if len(stages) != 1:
+        # A stage with a tag is reached by a tag, not a merge: only the others count here.
+        merged = [s for s in stages if not (isinstance(s.get("tag"), str) and s["tag"])]
+        if len(merged) != 1:
             rep.warn("release shape: stages", f"found {columns or 'none'}; a straight-to-production repo has "
                      "one stage, merged to main, with the production environment")
-        elif not is_production(stage_envs[0]):
-            rep.warn("release shape: stage environment", f"the stage {columns} names "
-                     f"'{stage_envs[0]}', which is not a production environment")
+        elif not is_production(merged[0].get("environment")):
+            rep.warn("release shape: stage environment", f"the stage {merged[0].get('column')} names "
+                     f"'{merged[0].get('environment')}', which is not a production environment")
         verify = settings.get("verify")
         verify = verify.get("agent") if isinstance(verify, dict) else None
         named = [n for n in (verify if isinstance(verify, list) else []) if is_production(n)]
@@ -458,6 +460,21 @@ def check_release_shape(settings, rep):
         if any(n not in stage_envs for n in pre_prod) or not any(is_production(n) for n in stage_envs):
             rep.warn("release shape: stages", f"stages ({columns or 'none'}) do not reach every pre-production "
                      "environment and production")
+
+    for i, stage in enumerate(stages):
+        if not (isinstance(stage.get("tag"), str) and stage["tag"]):
+            continue
+        if i == 0:
+            rep.warn("release shape: stage sync", f"{stage.get('column')} has tag {stage['tag']}, but a merge "
+                     "puts a card in the first stage, not a tag")
+            continue
+        env = stage.get("environment")
+        if not {"pre-production", "production"} & set(roles(by_name.get(env) or {})):
+            rep.warn("release shape: stage sync", f"{stage.get('column')} moves on tags, but its environment "
+                     f"'{env}' is not a pre-production or production environment")
+        rep.info("release shape: stage sync",
+                 f"{stage.get('column')} moves on tags matching {stage['tag']}, from {stages[i - 1].get('column')}; "
+                 "the repo's CI runs stage_sync.py sync on each such tag (references/stage-sync.md)")
 
 
 def main(argv=None):

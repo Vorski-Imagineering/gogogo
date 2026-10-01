@@ -195,8 +195,9 @@ and no further:
 A zero exit is the confirmation: the tool read the card back. Anything else is
 a failed move; say so, do not retry blind.
 
-Follow the profile's `handback.reporter`: `trailer` means the merge carries the
-reporter for the deploy to assign; `assign` means assign them now; `none` means
+Follow the profile's `handback.reporter`: `trailer` means each merge writes a
+`Ships-issue` trailer naming the reporter, and stage sync assigns them when the
+card enters a stage with a `tag`; `assign` means assign them now; `none` means
 leave assignees alone. Leave the issue **open**, and never move a card to Done
 yourself. Close only when asked.
 
@@ -205,6 +206,36 @@ When you did merge, confirm it landed before commenting or moving anything:
 ```bash
 python3 "${CLAUDE_PLUGIN_ROOT}/scripts/verify_merged.py" <pr> <base branch> [--repo <code_repo>]
 ```
+
+### When you merge with `gh`: the squash body carries the link
+
+Applies when you merge a PR yourself with `gh` (`integration.strategy` is
+`pr-squash` or `run-branch-pr`) **and** `handback.reporter` is `trailer` or any
+of the profile's `stages` has a `tag`. A `merge-script` repo's script writes
+the link itself; never write one around it. Otherwise merge as before.
+
+1. The final paragraph. `<profile>` is the path `profile_check.py` printed;
+   `<base>` is the PR's base branch:
+   ```bash
+   python3 "${CLAUDE_PLUGIN_ROOT}/scripts/stage_sync.py" --profile <profile> trailer \
+     --issue <n>[=<reporter-login>] --verify --co-authors-from origin/<base>..HEAD > <scratch>/trailers.txt
+   ```
+   Add `=<reporter-login>` only when `handback.reporter` is `trailer`: the login
+   the profile's sections say how to find, else the issue's author
+   (`gh issue view <n> --repo <tracker.issues_repo> --json author -q .author.login`).
+   Exit 3: that login cannot be assigned. Run it again without `=<login>`, and
+   say in the hand-back that nobody will be asked to confirm automatically.
+   Exit 2: do not merge; report it.
+2. The body: the branch's commit subjects, a blank line, the trailer file, and
+   nothing after it. Git reads trailers only from the final paragraph.
+   ```bash
+   { git log --reverse --format='* %s' origin/<base>..HEAD; echo; cat <scratch>/trailers.txt; } > <scratch>/squash-body.txt
+   gh pr merge <pr> --squash --delete-branch --body-file <scratch>/squash-body.txt
+   ```
+3. Verify with `--ships <tracker.issues_repo>#<n>` added to the
+   `verify_merged.py` call. Exit 3 means the merge landed but the link did not
+   survive: hand back as merged, and say in the report that this card will not
+   move on its own when its tag ships.
 
 ## Do not
 
