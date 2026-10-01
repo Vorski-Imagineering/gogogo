@@ -201,7 +201,7 @@ again. NOT-MERGED, or "cannot tell", stops the whole run.
 When the link was written, add it to the check:
 
 ```bash
-python3 "${CLAUDE_PLUGIN_ROOT}/scripts/verify_merged.py" <pr> <base branch> [--repo <code_repo>] --ships <tracker.issues_repo>#<n>
+python3 "${CLAUDE_PLUGIN_ROOT}/scripts/verify_merged.py" <pr> <base branch> [--repo <code_repo>] --profile <profile> --ships <tracker.issues_repo>#<n>
 ```
 
 Exit 3
