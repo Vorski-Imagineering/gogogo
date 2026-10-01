@@ -419,6 +419,115 @@ class ColumnGuardTests(unittest.TestCase):
             self.assertEqual(board.main(), 2)
 
 
+class KeepingTheBoardCurrent(unittest.TestCase):
+    """views and tidy: what keeps the board right between runs."""
+
+    def test_only_views_that_filter_to_open_hide_closed_issues(self):
+        views = [{"name": "none", "filter": None}, {"name": "empty", "filter": ""},
+                 {"name": "label", "filter": "label:bug"}, {"name": "open", "filter": "label:bug is:open"},
+                 {"name": "not closed", "filter": "-is:closed"}, {"name": "reopen", "filter": "is:opened"}]
+        showing = [v["name"] for v in board.views_showing_closed(views)]
+        self.assertEqual(showing, ["none", "empty", "label", "reopen"])
+
+    def _hide_closed(self, read_back):
+        before = [
+            {"id": "V1", "number": 1, "name": "Table", "filter": None},
+            {"id": "V2", "number": 2, "name": "Board", "filter": "label:bug"},
+            {"id": "V3", "number": 3, "name": "Done", "filter": "is:open"}]
+        with mock.patch.object(board, "board_views", side_effect=[before, read_back]), \
+             mock.patch.object(board, "graphql", return_value={}) as wrote, \
+             mock.patch("builtins.print"):
+            code = board.cmd_views(Namespace(hide_closed=True))
+        return code, [c.kwargs for c in wrote.call_args_list]
+
+    def test_hide_closed_adds_is_open_and_keeps_the_existing_filter(self):
+        code, writes = self._hide_closed([{"name": "x", "filter": "is:open"}])
+        self.assertEqual(code, 0)
+        self.assertEqual(writes, [{"view": "V1", "filter": "is:open"},
+                                  {"view": "V2", "filter": "label:bug is:open"}])
+
+    def test_hide_closed_fails_when_the_board_does_not_read_back_hidden(self):
+        code, _ = self._hide_closed([{"name": "Table", "filter": ""}])
+        self.assertEqual(code, 2)
+
+    def _untidy(self):
+        def item(n, state, status, kind="Issue"):
+            return {"id": f"I{n}", "content": {"__typename": kind, "number": n, "title": "t",
+                                               "state": state, "repository": {"nameWithOwner": "acme/issues"}},
+                    "fieldValueByName": {"name": status} if status else None}
+        items = [item(1, "CLOSED", "Released"), item(2, "CLOSED", "Done"), item(3, "OPEN", "Backlog"),
+                 item(4, "CLOSED", "In progress", kind="PullRequest"), item(5, "CLOSED", None)]
+        issues = [
+            {"number": 3, "title": "on board", "repository": {"nameWithOwner": "acme/issues"},
+             "projectItems": {"nodes": [{"project": {"number": 2}}]}},
+            {"number": 6, "title": "on another board", "repository": {"nameWithOwner": "acme/issues"},
+             "projectItems": {"nodes": [{"project": {"number": 9}}]}},
+            {"number": 7, "title": "on no board", "repository": {"nameWithOwner": "acme/issues"},
+             "projectItems": {"nodes": []}},
+        ]
+        with mock.patch.object(board, "fetch_items", return_value=items), \
+             mock.patch.object(board, "open_issues", return_value=iter(issues)):
+            return board.untidy("acme/issues")
+
+    def test_untidy_finds_closed_issues_outside_done_and_open_issues_off_the_board(self):
+        closed, off_board = self._untidy()
+        self.assertEqual([c["number"] for c in closed], [1, 5])
+        self.assertEqual([i["number"] for i in off_board], [6, 7])
+
+    def test_tidy_apply_moves_closed_to_done_and_adds_missing_to_new(self):
+        closed = [{"number": 1, "repo": "acme/issues", "status": "Released"}]
+        off_board = [{"number": 7, "repo": "acme/issues", "title": "t"}]
+        with mock.patch.object(board, "untidy", return_value=(closed, off_board)), \
+             mock.patch.object(board, "board_meta", return_value={}), \
+             mock.patch.object(board, "move_card", side_effect=[0, 2]) as moved, \
+             mock.patch("builtins.print"):
+            code = board.cmd_tidy(Namespace(repo="acme/issues", apply=True))
+        self.assertEqual(code, 2, "one failed move must fail the run")
+        self.assertEqual(moved.call_args_list[0].args, (1, "acme/issues", board.DONE_COLUMN))
+        self.assertEqual(moved.call_args_list[1].args, (7, "acme/issues", board.NEW_COLUMN))
+        self.assertTrue(moved.call_args_list[1].kwargs["add_missing"])
+
+    def test_tidy_apply_moves_to_the_boards_spelling_of_new(self):
+        with mock.patch.object(board, "untidy", return_value=([], [{"number": 7, "repo": "a/b", "title": "t"}])), \
+             mock.patch.object(board, "board_meta", return_value={"options": {"\u26a1 New": "o1", "Done": "o2"}}), \
+             mock.patch.object(board, "move_card", return_value=0) as moved, mock.patch("builtins.print"):
+            self.assertEqual(board.cmd_tidy(Namespace(repo="a/b", apply=True)), 0)
+        self.assertEqual(moved.call_args.args[2], "\u26a1 New")
+
+    def test_tidy_apply_goes_on_after_a_card_that_cannot_move(self):
+        closed = [{"number": 1, "repo": "a/b", "status": "Released"}, {"number": 2, "repo": "a/b", "status": "Released"}]
+        with mock.patch.object(board, "untidy", return_value=(closed, [])), \
+             mock.patch.object(board, "board_meta", return_value={"options": {}}), \
+             mock.patch.object(board, "move_card", side_effect=[board.BoardError("gone"), 0]) as moved, \
+             mock.patch("builtins.print"):
+            self.assertEqual(board.cmd_tidy(Namespace(repo="a/b", apply=True)), 2)
+        self.assertEqual(moved.call_count, 2)
+
+    def test_views_made_to_show_closed_work_are_left_alone(self):
+        views = [{"name": "Shipped", "filter": "is:closed"}, {"name": "Not open", "filter": "-is:open label:x"}]
+        self.assertEqual(board.views_showing_closed(views), [])
+
+    def test_a_card_with_an_odd_shape_does_not_stop_the_rest(self):
+        closed = [{"number": 1, "repo": "a/b", "status": "Released"}, {"number": 2, "repo": "a/b", "status": "Released"}]
+        with mock.patch.object(board, "untidy", return_value=(closed, [])), \
+             mock.patch.object(board, "board_meta", return_value={"options": {}}), \
+             mock.patch.object(board, "move_card", side_effect=[TypeError("None"), 0]) as moved, \
+             mock.patch("builtins.print"):
+            self.assertEqual(board.cmd_tidy(Namespace(repo="a/b", apply=True)), 2)
+        self.assertEqual(moved.call_count, 2)
+
+    def test_tidy_without_apply_writes_nothing(self):
+        with mock.patch.object(board, "untidy", return_value=([{"number": 1, "repo": "a/b", "status": None}], [])), \
+             mock.patch.object(board, "move_card") as moved, mock.patch("builtins.print"):
+            self.assertEqual(board.cmd_tidy(Namespace(repo="a/b", apply=False)), 0)
+        moved.assert_not_called()
+
+    def test_cmd_move_delegates_to_move_card(self):
+        args = Namespace(issue=7, to="Done", repo="acme/issues", add_missing=True)
+        with mock.patch.object(board, "move_card", return_value=3) as moved:
+            self.assertEqual(board.cmd_move(args), 3)
+        moved.assert_called_once_with(7, "acme/issues", "Done", add_missing=True)
+
+
 if __name__ == "__main__":
     unittest.main()
-

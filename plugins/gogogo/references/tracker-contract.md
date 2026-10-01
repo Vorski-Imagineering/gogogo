@@ -49,3 +49,7 @@ A repo may name its own tool instead, as long as it meets this contract. A repo
 whose CI also moves cards (for example on deploy) imports a pinned copy of
 `tracker.py` and runs a pinned `stage_sync.py` beside it (see
 `references/stage-sync.md`); the skills still use `tracker.py`.
+
+The shared tool also has `views [--hide-closed]` and `tidy [--apply]`, which
+`/gogogo:setup` uses to keep views and cards current. They are not part of the
+contract, and a repo's own tool need not provide them.

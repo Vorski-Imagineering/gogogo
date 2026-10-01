@@ -314,14 +314,14 @@ class Audit(unittest.TestCase):
         sc.check_board_hygiene([{"number": 3, "status": None, "state": "OPEN"}],
                                [{"number": 9}], ["Backlog"], {"backlog"}, rep)
         self.assertEqual(sorted(r["check"] for r in rep.rows),
-                         ["tracker: cards without a column", "tracker: issues missing from the board"])
+                         ["tracker: cards the board's index missed", "tracker: cards without a column"])
 
     def test_drafts_and_recovered_cards_are_not_double_reported(self):
         rep = sc.Report()
         cards = [{"number": None, "status": None, "state": None},
                  {"number": 9, "status": None, "state": "OPEN"}]
         sc.check_board_hygiene(cards, [{"number": 9}], ["Backlog"], {"backlog"}, rep)
-        self.assertEqual([r["check"] for r in rep.rows], ["tracker: issues missing from the board"])
+        self.assertEqual([r["check"] for r in rep.rows], ["tracker: cards the board's index missed"])
 
     def test_new_column_matches_with_or_without_the_emoji_selector(self):
         rep = sc.Report()
@@ -745,6 +745,69 @@ class ConfigHeader(unittest.TestCase):
     def test_setup_skill_mentions_header(self):
         text = (ROOT / "plugins" / "gogogo" / "skills" / "setup" / "SKILL.md").read_text(encoding="utf-8")
         self.assertIn("config:", text)
+class BoardTidiness(unittest.TestCase):
+    """The board stays current: views hide closed issues, no card is left behind. Warn only."""
+
+    import tracker as real
+
+    def shared(self, views, closed=(), off_board=()):
+        fake = mock.Mock()
+        fake.DONE_COLUMN, fake.BoardError = "Done", self.real.BoardError
+        fake.views_showing_closed = self.real.views_showing_closed
+        fake.board_views.return_value = views
+        fake.untidy.return_value = (list(closed), list(off_board))
+        return fake
+
+    def test_a_tidy_board_passes(self):
+        rep = sc.Report()
+        sc.check_board_tidiness(self.shared([{"name": "Board", "filter": "is:open"}]), "a/b", rep)
+        self.assertEqual([(r["level"], r["check"]) for r in rep.rows],
+                         [("PASS", "tracker: views"), ("PASS", "tracker: cards")])
+
+    def test_each_gap_warns_with_its_own_command(self):
+        rep = sc.Report()
+        sc.check_board_tidiness(self.shared([{"name": "Board", "filter": ""}],
+                                            closed=[{"number": 7}], off_board=[{"number": 9}]), "a/b", rep)
+        rows = {r["check"]: r for r in rep.rows}
+        self.assertEqual([r["level"] for r in rep.rows], ["WARN", "WARN"])
+        self.assertFalse(rep.failed())
+        self.assertIn("views --hide-closed", rows["tracker: views"]["detail"])
+        self.assertIn("#7", rows["tracker: cards"]["detail"])
+        self.assertIn("#9", rows["tracker: cards"]["detail"])
+        self.assertIn("tidy", rows["tracker: cards"]["detail"])
+
+    def test_open_issues_off_the_board_warn_on_their_own(self):
+        rep = sc.Report()
+        sc.check_board_tidiness(self.shared([{"name": "Board", "filter": "is:open"}], off_board=[{"number": 9}]),
+                                "a/b", rep)
+        cards = [r for r in rep.rows if r["check"] == "tracker: cards"]
+        self.assertEqual([r["level"] for r in cards], ["WARN"])
+        self.assertNotIn("closed but not in", cards[0]["detail"])
+
+    def test_an_unreadable_board_is_info_never_pass(self):
+        fake = self.shared([])
+        fake.board_views.side_effect = self.real.BoardError("no access")
+        rep = sc.Report()
+        sc.check_board_tidiness(fake, "a/b", rep)
+        self.assertEqual([(r["level"], r["check"]) for r in rep.rows], [("INFO", "tracker: views and cards")])
+
+    def test_an_odd_api_shape_is_info_not_a_crash(self):
+        fake = self.shared([])
+        fake.untidy.side_effect = TypeError("'NoneType' object is not subscriptable")
+        rep = sc.Report()
+        sc.check_board_tidiness(fake, "a/b", rep)
+        self.assertEqual([r["level"] for r in rep.rows], ["INFO"])
+
+    def test_a_null_view_is_info_not_a_crash(self):
+        rep = sc.Report()
+        sc.check_board_tidiness(self.shared([None]), "a/b", rep)
+        self.assertEqual([r["level"] for r in rep.rows], ["INFO"])
+
+    def test_the_index_row_does_not_claim_the_issues_have_no_card(self):
+        rep = sc.Report()
+        sc.check_board_hygiene([], [{"number": 9}], ["Backlog"], {"backlog"}, rep)
+        self.assertEqual([r["check"] for r in rep.rows], ["tracker: cards the board's index missed"])
+        self.assertNotIn("have no card", rep.rows[0]["detail"])
 
 
 if __name__ == "__main__":

@@ -262,6 +262,39 @@ def check_tracker(root, settings, rep):
         views = None
     stages = [s.get("column") for s in settings.get("stages") or [] if isinstance(s, dict) and s.get("column")]
     check_board_views(views, tracker.get("ready_marker"), stages, rep)
+    check_board_tidiness(shared, repo, rep)
+
+
+def numbers(items, limit=10):
+    shown = ", ".join(f"#{i['number']}" for i in items[:limit])
+    return shown + (f" and {len(items) - limit} more" if len(items) > limit else "")
+
+
+def check_board_tidiness(shared, repo, rep):
+    """The board stays current: views hide closed issues, and no card is left behind. Only warns."""
+    tool = '"${CLAUDE_PLUGIN_ROOT}/scripts/tracker.py"'
+    try:
+        showing = shared.views_showing_closed(shared.board_views())
+        closed, off_board = shared.untidy(repo)
+    except (shared.BoardError, KeyError, TypeError, AttributeError) as exc:
+        rep.info("tracker: views and cards", f"could not be read ({exc!r})")
+        return
+
+    if showing:
+        rep.warn("tracker: views", "show closed issues: " + ", ".join(repr(v["name"]) for v in showing)
+                 + f". Run `python3 {tool} views --hide-closed`")
+    else:
+        rep.ok("tracker: views", "every working view hides closed issues")
+
+    if closed or off_board:
+        detail = []
+        if closed:
+            detail.append(f"closed but not in {shared.DONE_COLUMN}: {numbers(closed)}")
+        if off_board:
+            detail.append(f"open but not on the board: {numbers(off_board)}")
+        rep.warn("tracker: cards", "; ".join(detail) + f". Run `python3 {tool} tidy`, then `tidy --apply`")
+    else:
+        rep.ok("tracker: cards", f"closed issues are in {shared.DONE_COLUMN}; every open issue is on the board")
 
 
 def check_marketplace_source(market, rep):
@@ -348,12 +381,12 @@ def check_board_views(views, ready, stage_columns, rep):
     problems = []
     if not backlog:
         problems.append("no Backlog kanban: add a board-layout view 'Backlog' filtered "
-                        "`-status:Done,Future`, sorted by Created, newest first")
+                        "`is:open -status:Done,Future`, sorted by Created, newest first")
     elif not any(("Created", "DESC") in [tuple(x) for x in v.get("sort") or []] for v in backlog):
         problems.append(f"'{backlog[0]['name']}' is not sorted newest first (View → Sort by → Created, descending)")
     if ready and not queue:
         problems.append(f"no {ready!r} kanban: add a board-layout view filtered "
-                        f"`-status:{_status_list(['Done', 'Future', *stage_columns])} label:\"{ready}\"`")
+                        f"`is:open -status:{_status_list(['Done', 'Future', *stage_columns])} label:\"{ready}\"`")
     if problems:
         rep.warn("tracker: board views", "; ".join(problems))
     unlabelled = [v["name"] for v in boards if "Labels" not in (v.get("fields") or [])]
@@ -382,10 +415,10 @@ def check_board_hygiene(cards, recovered, options, expected, rep):
     """`cards`: flattened cards; `recovered`: open issues the board did not list;
     `options`: the live Status column names; `expected`: lower-case names the profile uses."""
     if recovered:
-        rep.warn("tracker: issues missing from the board",
-                 f"{len(recovered)} open issue(s) have no card: "
+        rep.warn("tracker: cards the board's index missed",
+                 f"{len(recovered)} open issue(s) have a card the board's own listing omitted: "
                  + ", ".join(f"#{c['number']}" for c in recovered[:10]) + ("..." if len(recovered) > 10 else "")
-                 + ". Add them (`gh project item-add`) and turn on Auto-add to project")
+                 + "; tracker.py reads them from the issue side, so nothing to fix unless it persists")
     for name in options:
         if _norm(name) in expected:
             continue
