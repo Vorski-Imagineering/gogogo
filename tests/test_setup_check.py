@@ -193,6 +193,19 @@ class ReleaseShape(unittest.TestCase):
         self.assertEqual(warns(rows), [])
         self.assertIn("release shape: stage sync", [r["check"] for r in rows])
 
+    def test_a_tagged_stage_needs_a_deployed_environment(self):
+        for env in ("local", "nowhere"):
+            with self.subTest(env=env):
+                s = dict(STAGED, stages=[STAGED["stages"][0],
+                                         dict(STAGED["stages"][1], environment=env, tag="deploy-*")])
+                self.assertIn("release shape: stage sync", warns(shape_rows(s)))
+        ok = dict(STAGED, stages=[STAGED["stages"][0], dict(STAGED["stages"][1], tag="deploy-*")])
+        self.assertEqual(warns(shape_rows(ok)), [])
+
+    def test_a_tag_on_the_first_stage_warns(self):
+        s = dict(STAGED, stages=[dict(STAGED["stages"][0], tag="staging-*"), STAGED["stages"][1]])
+        self.assertIn("release shape: stage sync", warns(shape_rows(s)))
+
     def test_never_fails(self):
         for s in (STRAIGHT, STAGED, dict(STRAIGHT, stages=[]),
                   dict(STRAIGHT, verify={"agent": ["production"]})):

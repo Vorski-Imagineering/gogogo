@@ -444,11 +444,20 @@ def check_release_shape(settings, rep):
             rep.warn("release shape: stages", f"stages ({columns or 'none'}) do not reach every pre-production "
                      "environment and production")
 
-    for previous, stage in zip(stages, stages[1:]):
-        if isinstance(stage.get("tag"), str) and stage["tag"]:
-            rep.info("release shape: stage sync",
-                     f"{stage.get('column')} moves on tags matching {stage['tag']}, from {previous.get('column')}; "
-                     "the repo's CI runs stage_sync.py sync on each such tag (references/stage-sync.md)")
+    for i, stage in enumerate(stages):
+        if not (isinstance(stage.get("tag"), str) and stage["tag"]):
+            continue
+        if i == 0:
+            rep.warn("release shape: stage sync", f"{stage.get('column')} has tag {stage['tag']}, but a merge "
+                     "puts a card in the first stage, not a tag")
+            continue
+        env = stage.get("environment")
+        if not {"pre-production", "production"} & set(roles(by_name.get(env) or {})):
+            rep.warn("release shape: stage sync", f"{stage.get('column')} moves on tags, but its environment "
+                     f"'{env}' is not a pre-production or production environment")
+        rep.info("release shape: stage sync",
+                 f"{stage.get('column')} moves on tags matching {stage['tag']}, from {stages[i - 1].get('column')}; "
+                 "the repo's CI runs stage_sync.py sync on each such tag (references/stage-sync.md)")
 
 
 def main(argv=None):
