@@ -157,7 +157,7 @@ There are two ways to have gogogo on a machine, for two different jobs.
 | | **Using the skills** | **Working on gogogo itself** |
 |---|---|---|
 | Who | Anyone running the skills in an adopting repo, on any machine | Someone changing a skill or script here |
-| What you need | Nothing beyond the repo: its `.claude/settings.json` installs the plugin from GitHub when you open it | A clone of this repo |
+| What you need | The repo. Its `.claude/settings.json` names the plugin, but each machine installs it once: accept the prompt when you first open the repo, or run `claude plugin install gogogo@vorski-skills --scope project` from its root (`update` fails with "not installed" until then) | A clone of this repo |
 | Where the skills load from | Claude Code's plugin cache (`~/.claude/plugins/cache/…`), one copy per repo | Your clone: `claude --plugin-dir <clone>/plugins/gogogo` |
 | Who keeps it current | Claude Code: `autoUpdate` refreshes it when an interactive session starts. Before a headless or unattended run, update by hand (above) | You: `git pull`. Nothing updates a clone for you |
 | Sees unmerged changes | No: only what is merged to `main` | Yes: whatever the clone has checked out |
