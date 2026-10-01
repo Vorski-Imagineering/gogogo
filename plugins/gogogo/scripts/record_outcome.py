@@ -146,17 +146,28 @@ def cell(value, code=False):
 
 
 def board_has(profile_path, name):
-    """Whether the shared tracker's `move --to <name>` finds a column, by move's own rule."""
+    """Whether the shared tracker's `move --to <name>` finds a column, by move's own rule.
+
+    configure() sets the tracker module's globals; they are put back afterwards so
+    a caller importing the same module keeps its own configuration.
+    """
+    saved = (shared_tracker.ORG, shared_tracker.PROJECT_NUMBER, shared_tracker.DEFAULT_REPO,
+             dict(shared_tracker.COLUMNS))
     try:
-        shared_tracker.configure(str(profile_path))
-        meta = shared_tracker.board_meta()
-    except (shared_tracker.ProfileMissing, shared_tracker.BoardError) as exc:
-        raise Stop(f"could not read the board's columns: {exc}") from None
-    try:
-        shared_tracker.resolve_option(meta, shared_tracker.column(name))
-    except shared_tracker.BoardError:
-        return False
-    return True
+        try:
+            shared_tracker.configure(str(profile_path))
+            meta = shared_tracker.board_meta()
+        except (shared_tracker.ProfileMissing, shared_tracker.BoardError) as exc:
+            raise Stop(f"could not read the board's columns: {exc}") from None
+        try:
+            shared_tracker.resolve_option(meta, shared_tracker.column(name))
+        except shared_tracker.BoardError:
+            return False
+        return True
+    finally:
+        shared_tracker.ORG, shared_tracker.PROJECT_NUMBER, shared_tracker.DEFAULT_REPO = saved[:3]
+        shared_tracker.COLUMNS.clear()
+        shared_tracker.COLUMNS.update(saved[3])
 
 
 def issue_number(n):

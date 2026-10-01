@@ -293,6 +293,12 @@ class Apply(unittest.TestCase):
         world = FakeWorld(board=("NEW", COLUMN, "Done"))
         self.assertEqual(self.apply(world, "FAIL", text=SHARED)[0], 0)
 
+    def test_the_board_check_leaves_the_tracker_module_as_it_found_it(self):
+        tracker = ro.shared_tracker
+        before = (tracker.ORG, tracker.PROJECT_NUMBER, tracker.DEFAULT_REPO, dict(tracker.COLUMNS))
+        self.assertEqual(self.apply(FakeWorld(), "PASS", text=SHARED)[0], 0)
+        self.assertEqual((tracker.ORG, tracker.PROJECT_NUMBER, tracker.DEFAULT_REPO, dict(tracker.COLUMNS)), before)
+
     def test_the_repos_own_tool_is_not_board_checked_by_apply(self):
         world = FakeWorld(board=("In progress", COLUMN))
         self.assertEqual(self.apply(world, "FAIL")[0], 0)
