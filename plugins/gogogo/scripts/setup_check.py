@@ -27,6 +27,10 @@ import profile_check  # noqa: E402
 MARKETPLACE = "vorski-skills"
 PLUGIN = "gogogo@vorski-skills"
 MARKETPLACE_REPO = "Vorski-Imagineering/gogogo"
+# The ready label looks the same in every repo; gh writes colours without '#'.
+READY_LABEL_COLOUR = "0E8A16"
+READY_LABEL_DESCRIPTION = "The spec is in this issue's body and needs nothing further from anyone."
+READY_LABEL_COLOUR_CHECK = "tracker: ready label colour"
 # Local skills that the shared plugin replaces. A copy left in .claude/skills
 # competes with the shared one for the same requests.
 REPLACED_LOCAL_SKILLS = [
@@ -175,6 +179,22 @@ def check_hard_stop_source(root, source, rep):
     rep.ok("hard stops: source", source)
 
 
+def check_ready_label(repo, label, listing, rep):
+    """`listing`: parsed `gh label list --json name,color,description`, or None when gh failed."""
+    found = next((x for x in listing or [] if x.get("name") == label), None)
+    if found is None:
+        rep.fail("tracker: ready label", f"{repo} has no label {label!r}",
+                 f"`gh label create \"{label}\" --repo {repo} --color {READY_LABEL_COLOUR} "
+                 f"--description \"{READY_LABEL_DESCRIPTION}\"`")
+        return
+    rep.ok("tracker: ready label", label)
+    colour = found.get("color") or ""
+    if colour.lower() != READY_LABEL_COLOUR.lower():
+        rep.warn(READY_LABEL_COLOUR_CHECK,
+                 f"{label!r} is #{colour} in {repo}; the standard is #{READY_LABEL_COLOUR} so the label looks "
+                 f"the same in every repo. Fix: gh label edit \"{label}\" --repo {repo} --color {READY_LABEL_COLOUR}")
+
+
 def check_tracker(root, settings, rep):
     tracker = settings.get("tracker") or {}
     repo = tracker.get("issues_repo")
@@ -193,14 +213,8 @@ def check_tracker(root, settings, rep):
 
     label = tracker.get("ready_marker")
     if label:
-        labels = run("gh", "label", "list", "--repo", repo, "--limit", "200", "--json", "name")
-        names = {x["name"] for x in json.loads(labels.stdout or "[]")} if labels.returncode == 0 else set()
-        if label in names:
-            rep.ok("tracker: ready label", label)
-        else:
-            rep.fail("tracker: ready label", f"{repo} has no label {label!r}",
-                     f"`gh label create \"{label}\" --repo {repo} --description \"The spec is in this "
-                     "issue's body and needs nothing further from anyone.\"`")
+        labels = run("gh", "label", "list", "--repo", repo, "--limit", "200", "--json", "name,color,description")
+        check_ready_label(repo, label, json.loads(labels.stdout or "[]") if labels.returncode == 0 else None, rep)
 
     tool = tracker.get("tool")
     if not tool:
