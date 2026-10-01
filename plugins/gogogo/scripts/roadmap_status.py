@@ -61,7 +61,8 @@ SEPARATOR = re.compile(r"^\|[-\s|:]+\|\s*$")
 # `\|` inside a cell is a literal pipe, not a column break.
 PIPE = re.compile(r"(?<!\\)\|")
 CELL_PREFIX = re.compile(r"^(?P<mark>\S+)\s+(?:\*\*(?P<bold>[^*]+)\*\*|(?P<dash>—))")
-FENCE = re.compile(r"^(`{3,}|~{3,})")
+FENCE = re.compile(r"^\s{0,3}(`{3,}|~{3,})")
+NOTE_HEADERS = ("note", "notes")
 LEGEND_STATE = re.compile(r"^\*\*(?P<words>[^*]+)\*\*$")
 # What /gogogo:spec always writes: a `## Design` heading.
 SPEC_PATTERN = re.compile(r"^#{1,6}\s*Design\b", re.MULTILINE)
@@ -120,20 +121,30 @@ def content(line: str) -> str:
     return line.rstrip("\r\n")
 
 
+def closes(line: str, run: str) -> bool:
+    """True if `line` closes a fence opened with `run`."""
+    found = FENCE.match(line)
+    return bool(found) and found.group(1)[0] == run[0] and len(found.group(1)) >= len(run) \
+        and not line[found.end():].strip()
+
+
 def fenced(lines: list[str]) -> set[int]:
-    """Indexes of lines inside a ``` or ~~~ fence, the fence lines included."""
-    inside, opener = set(), None
-    for i, line in enumerate(lines):
-        stripped = line.lstrip()
-        if opener is None:
-            found = FENCE.match(stripped)
-            if found:
-                opener = found.group(0)
-                inside.add(i)
-        else:
-            inside.add(i)
-            if stripped.startswith(opener[0] * len(opener)) and not stripped.strip(opener[0]).strip():
-                opener = None
+    """Indexes of lines inside a ``` or ~~~ fence, the fence lines included.
+
+    A line that also closes the fence (```foo```) opens none, and an opener
+    with no closer below it is an ordinary line.
+    """
+    inside, i = set(), 0
+    while i < len(lines):
+        opener = FENCE.match(lines[i])
+        if opener and opener.group(1)[0] * 3 not in lines[i][opener.end():]:
+            run = opener.group(1)
+            end = next((j for j in range(i + 1, len(lines)) if closes(lines[j], run)), None)
+            if end is not None:
+                inside.update(range(i, end + 1))
+                i = end + 1
+                continue
+        i += 1
     return inside
 
 
@@ -305,7 +316,7 @@ def read_issue(number: int, repo: str) -> dict:
         }
     except json.JSONDecodeError as exc:
         raise ReadError(f"{repo}#{number}: gh did not return JSON ({exc})") from None
-    except (TypeError, KeyError) as exc:
+    except (TypeError, KeyError, AttributeError) as exc:
         raise ReadError(f"{repo}#{number}: unexpected answer from GitHub ({type(exc).__name__}: {exc})") from None
     except (FileNotFoundError, tracker.BoardError) as exc:
         raise ReadError(f"{repo}#{number}: {first_line(str(exc))}") from None
@@ -466,9 +477,11 @@ def run(args, reader) -> int:
         info = infos[issue]
         wanted = derive(info, legend, ready_marker)
         facts = f"#{issue} {info['state'].lower()}, column {info.get('column') or '—'}"
-        # The note may follow the mark (` — note`) or sit in any later cell.
-        later = cells[cells.index(state) + 1:]
-        if current is legend.get(BY_HAND) and " — " not in text and not any(c.text for c in later):
+        # The note follows the mark (` — note`) or sits in a Note/Notes column.
+        note_header = next((h for h in table.header if h.lower() in NOTE_HEADERS), None)
+        note = table.cell(cells, note_header) if note_header else None
+        has_note = re.match(r"\s*—\s*\S", text[prefix.end():]) or (note and note.text not in ("", BARE))
+        if current is legend.get(BY_HAND) and not has_note:
             print(f"FIX BY HAND  {where}: {current.state}, but the note does not say on what")
             attention += 1
         # Checked whether or not the mark agrees: a correct closed mark beside

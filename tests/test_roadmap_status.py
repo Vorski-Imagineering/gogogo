@@ -281,6 +281,16 @@ class Derivation(Case):
         self.assertEqual(self.run_main({1: issue()}), rs.EXIT_ATTENTION)
         self.assertRegex(self.out, r"FIX BY HAND .*blocked, but the note does not say on what")
 
+    def test_by_hand_issue_cell_after_state_is_not_a_note(self):
+        self.write(document(["| Item | State | Issue |", "|---|---|---|", f"| w | ⛔ **blocked** | [#1]({url(1)}) |"]))
+        self.assertEqual(self.run_main({1: issue()}), rs.EXIT_ATTENTION)
+        self.assertRegex(self.out, r"FIX BY HAND .*the note does not say on what")
+
+    def test_by_hand_dash_in_the_note_column_is_not_a_note(self):
+        self.write(document([*ISSUE_HEADER, row("w", 1, "⛔ **blocked**", note="—")]))
+        self.assertEqual(self.run_main({1: issue()}), rs.EXIT_ATTENTION)
+        self.assertRegex(self.out, r"FIX BY HAND .*the note does not say on what")
+
     def test_by_hand_note_in_a_later_cell(self):
         self.write(document([*ISSUE_HEADER, row("w", 1, "⛔ **blocked**", note="waits on #9")]))
         self.assertEqual(self.run_main({1: issue()}), rs.EXIT_OK, self.out + self.err)
@@ -351,6 +361,22 @@ class Fences(Case):
                 self.assertNotIn("tables start", self.err)
 
 
+class FenceEdges(Case):
+    def closed_row_is_checked(self, *before):
+        table = [*ISSUE_HEADER, row("Work", 1, "🟠 **In Production**")]
+        self.write(document(list(before), table))
+        code = self.run_main({1: issue("CLOSED", "COMPLETED")})
+        self.assertEqual(code, rs.EXIT_ATTENTION, self.out + self.err)
+        self.assertEqual(self.fake.asked, [1])
+        self.assertEqual(len(self.lines("MISMATCH")), 1, self.out)
+
+    def test_a_fence_that_closes_on_its_own_line_is_not_a_fence(self):
+        self.closed_row_is_checked("```foo```")
+
+    def test_an_unclosed_opener_is_not_a_fence(self):
+        self.closed_row_is_checked("Below:", "```")
+
+
 class Write(Case):
     def test_write_swaps_the_prefix_only(self):
         self.write(document([*ISSUE_HEADER, LINE_A]))
@@ -409,6 +435,13 @@ class DefaultReader(Case):
     def test_null_repository_or_issue_is_a_read_error(self):
         self.read(self.GOOD, {"repository": None})
         self.read(self.GOOD, {})
+
+    def test_an_odd_graphql_payload_is_a_read_error(self):
+        self.read(self.GOOD, None)
+        self.read(self.GOOD, [])
+        tracker.PROJECT_NUMBER = 2  # put back by the Case cleanup
+        node = {"project": {"number": 2}, "fieldValueByName": "In progress"}
+        self.read(self.GOOD, {"repository": {"issue": {"projectItems": {"nodes": [node]}}}})
 
     def test_a_bad_read_exits_2_without_a_traceback(self):
         self.write(document([*ISSUE_HEADER, row("Work", 2, "⚪ —")]))

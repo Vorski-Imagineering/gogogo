@@ -97,10 +97,14 @@ git rev-parse --show-toplevel
   `git -C "$D" status -sb`. Stop and report if the document has uncommitted changes
   (another session's edit), or the branch has no upstream. If it is behind,
   `git -C "$D" pull --ff-only`; stop and report if that refuses.
-- **The same repo:** `git fetch`, then `git status -sb`. The current branch must be
-  `integration.base` (or the default branch when it is unset): stop and report if it is
-  another branch, or if the document has uncommitted changes. Then `git pull --ff-only`;
-  stop and report if that refuses. The run starts from that up-to-date checkout.
+- **The same repo:** `git fetch`. Stop and report if the document has uncommitted
+  changes. Then cut the refresh branch from the remote base `B`:
+  ```bash
+  git switch -c roadmap-refresh-<YYYY-MM-DD-HHMM> origin/<B>
+  ```
+  `B` is `integration.final_target` when `integration.strategy` is `run-branch-pr`,
+  otherwise `integration.base` (or the default branch when it is unset). Stop and report
+  if the switch fails. Steps 2 to 6 run on this branch.
 
 ## 2. Report
 
@@ -117,7 +121,7 @@ python3 "${CLAUDE_PLUGIN_ROOT}/scripts/roadmap_status.py"
 |---|---|
 | `MISMATCH` | step 3 writes the new mark |
 | `FIX BY HAND ... does not start with a known mark` | the `State` cell has no mark from the legend; give it one, from the issue if the row names one |
-| `FIX BY HAND ... the note does not say on what` | a `by hand` mark with no ` — ` note; find what it waits on and write it, or derive the mark if nothing does |
+| `FIX BY HAND ... the note does not say on what` | a `by hand` mark with no note: neither ` — <text>` after the mark nor a non-empty `Note` or `Notes` cell (a bare `—` there is not a note); find what it waits on and write it, or derive the mark if nothing does |
 | `FIX BY HAND ... still says it is open` | the issue is closed but the row's text says otherwise; correct the text (step 3) |
 
 ## 3. Write the marks
@@ -165,10 +169,10 @@ point at.
   git -C "$D" commit -m "roadmap: refresh marks from the tracker (<#n A → B>, ...)"
   git -C "$D" push
   ```
-- **The same repo:** from the up-to-date checkout of step 1, carrying the edits,
-  `git switch -c roadmap-refresh-<YYYY-MM-DD>`, commit the document there, push the
-  branch, and report it for the repo's own integration path (`integration.strategy`).
-  This skill never merges into the base itself.
+- **The same repo:** on the refresh branch step 1 cut, commit the document, push the
+  branch (`git push -u origin roadmap-refresh-<YYYY-MM-DD-HHMM>`), and report it for the
+  repo's own integration path (`integration.strategy`). This skill never merges into the
+  base itself.
 
 ## 8. Report
 
