@@ -181,7 +181,8 @@ def check_hard_stop_source(root, source, rep):
 
 def check_ready_label(repo, label, listing, rep):
     """`listing`: parsed `gh label list --json name,color,description`, or None when gh failed."""
-    found = next((x for x in listing or [] if x.get("name") == label), None)
+    # GitHub label names are case-insensitive: "Dev Ready" is the profile's "dev ready".
+    found = next((x for x in listing or [] if (x.get("name") or "").lower() == label.lower()), None)
     if found is None:
         rep.fail("tracker: ready label", f"{repo} has no label {label!r}",
                  f"`gh label create \"{label}\" --repo {repo} --color {READY_LABEL_COLOUR} "
