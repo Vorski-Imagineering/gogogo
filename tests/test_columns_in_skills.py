@@ -15,6 +15,13 @@ class ColumnSettingsInSkills(unittest.TestCase):
             text = (PLUGIN / "skills" / skill / "SKILL.md").read_text(encoding="utf-8")
             self.assertIn("tracker.columns.needs_human", text, skill)
 
+    def test_dev_removes_the_ready_label_on_needs_human(self):
+        # The Dev Ready view filters on the label, so a stopped card that
+        # keeps it still shows there (gogogo#26 Approvals row 9).
+        text = (PLUGIN / "skills" / "dev" / "SKILL.md").read_text(encoding="utf-8")
+        self.assertIn("tracker.ready_marker", text)
+        self.assertIn("--remove-label", text)
+
     def test_no_skill_or_reference_names_back_to_queue(self):
         named = [str(p.relative_to(PLUGIN)) for folder in ("skills", "references")
                  for p in (PLUGIN / folder).rglob("*.md")
