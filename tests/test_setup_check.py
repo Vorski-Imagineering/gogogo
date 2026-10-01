@@ -689,6 +689,15 @@ class ConfigHeader(unittest.TestCase):
         self.assertEqual(order, self.NAMES)
         self.assertIn("(production)", rows["config: release"])
 
+    def test_scalar_profile_values_do_not_crash(self):
+        s = self.settings(project_owner=5)
+        s["verify"] = {"agent": True}
+        s["environments"][0]["roles"] = 1
+        s["hard_stops"]["items"] = 3
+        rows, order, _ = self.header(s)
+        self.assertEqual(order, self.NAMES)
+        self.assertIn("verify agent True", rows["config: release"])
+
     def test_unset_tool_is_missing_not_an_own_tool(self):
         s = self.settings()
         del s["tracker"]["tool"]

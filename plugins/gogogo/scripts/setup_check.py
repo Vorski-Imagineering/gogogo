@@ -538,7 +538,7 @@ def check_release_shape(settings, rep):
 
 
 def _joined(values, sep=", "):
-    if isinstance(values, str):
+    if values is not None and not isinstance(values, (list, tuple)):
         values = [values]
     return sep.join(str(v) for v in values or []) or "missing"
 
@@ -564,7 +564,7 @@ def config_header(root, settings, rep, profile=None):
         board = "missing"
     else:
         view = run("gh", "project", "view", str(tracker["project_number"]), "--owner",
-                   tracker["project_owner"], "--format", "json", "-q", ".url")
+                   str(tracker["project_owner"]), "--format", "json", "-q", ".url")
         board = (view.stdout.strip() if view.returncode == 0
                  else f"unreadable ({(view.stderr.strip().splitlines() or ['gh failed'])[0]})")
     rep.info("config: board", board)
