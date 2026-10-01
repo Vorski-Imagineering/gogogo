@@ -199,9 +199,8 @@ one command.
      under `run-branch-pr` or when `integration.ci_before_merge` is true;
      otherwise the PR merges on the suite §4 ran.
    - A check in `fail` (a check failed), in `cancel` (a check was
-     cancelled), in `pending`
-     (CI still running), or `gh` still erroring (the checks cannot be read):
-     a failure, for that reason.
+     cancelled), in `pending` (CI still running), or `gh` still erroring (the
+     checks cannot be read): a failure, for that reason.
 
 A failure stops that issue at its PR, handed back to
 `tracker.columns.needs_human` as `/gogogo:dev` §8 says for a gate you could not
