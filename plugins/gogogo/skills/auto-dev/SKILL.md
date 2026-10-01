@@ -190,7 +190,8 @@ one command.
      checks appear, for up to three minutes;
    - any other error from `gh` (an HTTP, network or auth message): re-run it,
      at most three times;
-   - the watch ended on its own, or a budget above is spent: go on to Judge.
+   - otherwise (the watch followed its checks to the end), or once a budget
+     above is spent: go on to Judge.
 2. **Judge** by each check's state, never by the watch's exit code:
    `gh pr checks <pr> --json name,bucket`. When it exits non-zero with any
    message other than `no checks reported`, re-run it, at most three times.
@@ -200,7 +201,7 @@ one command.
      otherwise the PR merges on the suite §4 ran.
    - A check in `fail` (a check failed), in `cancel` (a check was
      cancelled), in `pending` (CI still running), or `gh` still erroring (the
-     checks cannot be read): a failure, for that reason.
+     checks cannot be read): a failure. Name every reason that applies.
 
 A failure stops that issue at its PR, handed back to
 `tracker.columns.needs_human` as `/gogogo:dev` §8 says for a gate you could not
