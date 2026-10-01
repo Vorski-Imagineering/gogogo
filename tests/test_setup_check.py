@@ -461,6 +461,10 @@ class Audit(unittest.TestCase):
         rep = self._label([{"name": "Dev Ready", "color": "0E8A16"}])
         self.assertEqual([r["level"] for r in rep.rows], ["PASS"])
 
+    def test_ready_label_of_the_wrong_type_is_missing_not_a_crash(self):
+        rep = self._label([{"name": "dev ready", "color": "0E8A16"}], label=1)
+        self.assertEqual([(r["level"], r["check"]) for r in rep.rows], [("FAIL", "tracker: ready label")])
+
     def test_ready_label_edit_changes_only_the_colour(self):
         detail = self._label([{"name": "dev ready", "color": "BFD4F2"}]).rows[1]["detail"]
         edit = detail[detail.index("gh label edit"):]
