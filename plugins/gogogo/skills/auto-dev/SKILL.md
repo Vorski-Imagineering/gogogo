@@ -51,9 +51,9 @@ means finished work sits unverified while you go and ask.
    `run-branch-pr`, the stage `integration.final_target` reaches, so only the
    run's final PR is a release. The run still releases, but only issues that
    §4 and §5 did not stop and, for a merge through a PR, whose PR's checks
-   did not fail (§6). Any other issue stays unmerged, on its branch or open PR, and
-   the run report says which gate it failed. Say in the run report which merges
-   released.
+   cleared §6. Any other issue stays unmerged, on its branch or open PR, and
+   the run report says which gate it failed. Say in the run report which
+   merges released.
 5. **Unattended mode.** Every run that may merge runs this,
    straight-to-production repos included. If the profile sets
    `integration.mode_check`, run it and stop the whole run on a non-zero exit;
@@ -181,21 +181,19 @@ the merge is unreachable when it fails. The mode can change mid-session.
 
 **The PR's checks, when a merge is a release** (§Preflight 4). Before the `gh`
 merge, wait in the foreground (§4) with `gh pr checks <pr> --watch
---fail-fast`, giving the command the longest timeout your tool allows. Read
-the output, not only the exit code:
+--fail-fast`, giving the command the longest timeout your tool allows, and
+run it again if that limit cuts it off. Then judge by each check's state, not
+the exit code: `gh pr checks <pr> --json name,bucket`.
 
-- **Cut off by the tool's time limit** while checks are still running: run
-  it again.
+- **Every check is `pass` or `skipping`, and at least one is `pass`**: the
+  checks passed.
 - **No checks reported.** Just after `gh pr create`, CI may not have
   registered yet: run `sleep 30; gh pr checks <pr> --watch --fail-fast` as one
   command, for up to three minutes in all. Still none: that is a failure under
   `run-branch-pr` or when `integration.ci_before_merge` is true, and otherwise
   the PR merges on the suite §4 ran.
-- **An error from `gh` itself**, not a check result: run it again with
-  `sleep 30;` before it, at most three times. Still erroring: stop the whole
-  run and ask, as for a merge check that cannot tell.
-- **A failing or cancelled check**: a failure. `gh` can exit 0 with a
-  cancelled check, so read each check's state.
+- **Anything else** (a check in `fail`, `cancel` or `pending`, or `gh` still
+  erroring after three tries 30 seconds apart): a failure.
 
 A failure stops that issue at its PR, handed back to
 `tracker.columns.needs_human` as `/gogogo:dev` §8 says for a gate you could not
