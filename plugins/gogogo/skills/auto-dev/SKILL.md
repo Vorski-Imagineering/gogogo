@@ -126,13 +126,13 @@ Push the branch as soon as it has its first commit (`git push -u origin
   number of rounds never stops the issue. **Prose only**: `medium`, two rounds
   at most.
 - **When the review stops an issue** (a correctness finding you cannot fix,
-  or, for prose, a correctness defect in the second round, fixed): commit the
-  issue's changes to its branch and push it, leave the branch unmerged, and
-  carry on with the next. The commit message says why: *unreviewed* for a
-  prose fix, *known defect* and the finding for one you could not fix. Name the
-  finding (file, line, what fails) in the issue's `/gogogo:dev` §7 report,
-  with verification marked not run when the stop came before it, and record
-  the stop for the run report.
+  or, for prose, a correctness defect in the second round, fixed): commit
+  everything the change produced, and nothing else, to its branch and push it,
+  leave the branch unmerged, and carry on with the next. The commit message
+  says each that applies: *unreviewed* for a fix no round has reviewed, and
+  *known defect* with the finding for one you could not fix. Name the finding
+  in the issue's `/gogogo:dev` §7 report, within its rule for a public
+  tracker, and record the stop for the run report.
 - A Hard Stop discovered mid-change → stop **that issue**, leave its branch,
   record it, carry on with the next.
 - **When verification fails, fix forward, bounded.** Up to three attempts, and
