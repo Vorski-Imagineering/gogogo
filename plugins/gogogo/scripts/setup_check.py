@@ -423,12 +423,14 @@ def check_release_shape(settings, rep):
     if not pre_prod:
         rep.info("release shape", f"straight to production: a merge to the base branch is the release; "
                                   f"stage column: {columns or 'none'}")
-        if len(stages) != 1:
+        # A stage with a tag is reached by a tag, not a merge: only the others count here.
+        merged = [s for s in stages if not (isinstance(s.get("tag"), str) and s["tag"])]
+        if len(merged) != 1:
             rep.warn("release shape: stages", f"found {columns or 'none'}; a straight-to-production repo has "
                      "one stage, merged to main, with the production environment")
-        elif not is_production(stage_envs[0]):
-            rep.warn("release shape: stage environment", f"the stage {columns} names "
-                     f"'{stage_envs[0]}', which is not a production environment")
+        elif not is_production(merged[0].get("environment")):
+            rep.warn("release shape: stage environment", f"the stage {merged[0].get('column')} names "
+                     f"'{merged[0].get('environment')}', which is not a production environment")
         verify = settings.get("verify")
         verify = verify.get("agent") if isinstance(verify, dict) else None
         named = [n for n in (verify if isinstance(verify, list) else []) if is_production(n)]
