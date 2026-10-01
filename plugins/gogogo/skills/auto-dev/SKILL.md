@@ -128,8 +128,9 @@ Push the branch as soon as it has its first commit (`git push -u origin
 - **When the review stops an issue** (a correctness finding you cannot fix,
   or, for prose, a correctness defect in the second round, fixed): commit
   everything the change produced, and nothing else, to its branch and push it,
-  leave the branch unmerged, move its card to `tracker.columns.needs_human`
-  with `/gogogo:dev` §8's Needs-you line, and carry on with the next. The
+  leave the branch unmerged, hand the card back to
+  `tracker.columns.needs_human` as `/gogogo:dev` §8 says (the Needs-you line,
+  and the ready label on a label queue), and carry on with the next. The
   commit message
   says each that applies: *unreviewed* for a fix no round has reviewed, and
   *known defect* with the finding for one you could not fix. Name the finding
@@ -138,15 +139,17 @@ Push the branch as soon as it has its first commit (`git push -u origin
 - A Hard Stop, or a decision that belongs to a person and is not in the body,
   discovered mid-change → stop **that issue**: commit what the change has so
   far, and nothing else, to its branch, marked as stopped and naming the
-  question in the commit message within the rule for a public tracker, push it, leave it unmerged, move its card to
-  `tracker.columns.needs_human` with the Needs-you line, record it, carry on
+  question in the commit message within the rule for a public tracker, push it, leave it unmerged, hand the card back to
+  `tracker.columns.needs_human` as `/gogogo:dev` §8 says, record it, carry on
   with the next.
 - **When verification fails, fix forward, bounded.** Up to three attempts, and
   each must name a hypothesis that differs from the last. If you cannot say what
   is different about an attempt, stop there, whatever budget remains. After the
-  bound: abandon the branch unmerged, move the card to
-  `tracker.columns.needs_human`, put what each attempt ruled out in the issue
-  report under the Needs-you line, and go on to the next issue. One stubborn issue does not end the run. **An issue abandoned or
+  bound: commit the attempts, and nothing else, to the branch, marked
+  abandoned in the commit message, push it and leave it unmerged. Hand the
+  card back to `tracker.columns.needs_human` as `/gogogo:dev` §8 says, with
+  what each attempt ruled out in the issue report under the Needs-you line,
+  and go on to the next issue. One stubborn issue does not end the run. **An issue abandoned or
   skipped in this run is not taken again in the same run**, even when §1 lists
   it again.
 - A change that needs a two-licence apply (for example a migration on a shared

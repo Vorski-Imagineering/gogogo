@@ -342,6 +342,8 @@ def check(settings, sections, skill=None):
         errors.append(f"tracker.columns: expected a table of role = column name, found {type(columns).__name__}")
     elif present:
         for role, name in columns.items():
+            if f"tracker.columns.{role}" in FIELDS:
+                continue  # checked with FIELDS above
             if not isinstance(name, str) or not name.strip():
                 errors.append(f"tracker.columns.{role}: expected a column name, found {name!r}")
 
@@ -358,7 +360,7 @@ def check(settings, sections, skill=None):
     for path in _leaf_paths(settings):
         if path in RETIRED:
             warnings.append(f"{path}: unknown setting ({RETIRED[path]}); remove it")
-        elif path not in FIELDS and not path.startswith("tracker.columns."):
+        elif path not in FIELDS and path != "tracker.columns" and not path.startswith("tracker.columns."):
             warnings.append(f"{path}: unknown setting (typo, or not in this profile version)")
 
     for title, needed_by in SECTIONS.items():

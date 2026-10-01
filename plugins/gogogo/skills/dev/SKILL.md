@@ -227,12 +227,12 @@ session with the person present, a question they answer there is not a stop:
 carry on.
 
 ```bash
-<tracker.tool> move <n> --to '<role key, or a stage column's name>'
+<tracker.tool> move <n> --to "<column>"
 ```
 
-Pass `in_progress` and `needs_human` as role keys. Single-quote the value: a
-`!` in a column's name, as in `Human!Help!`, is expanded by an interactive
-shell inside double quotes.
+`<column>` is a role key (`in_progress`, `needs_human`) or a stage column's
+name. Pass the role key, not the name, for those two: a `!` in a name, as in
+`Human!Help!`, is expanded by an interactive shell inside double quotes.
 
 A zero exit is the confirmation: the tool read the card back. Anything else is
 a failed move; say so, do not retry blind.

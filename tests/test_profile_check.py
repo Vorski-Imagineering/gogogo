@@ -264,6 +264,16 @@ class Columns(unittest.TestCase):
         self.assertTrue(any(e.startswith("tracker.columns.in_review: expected a column name") for e in errors),
                         errors)
 
+    def test_a_bad_required_column_is_one_error(self):
+        settings, sections = parse()
+        settings["tracker"]["columns"]["in_progress"] = 5
+        errors, _ = pc.check(settings, sections)
+        self.assertEqual([e for e in errors if e.startswith("tracker.columns.in_progress")],
+                         ["tracker.columns.in_progress: expected str, found int"])
+        settings["tracker"]["columns"] = "In progress"
+        _, warnings = pc.check(settings, sections, pc.ROADMAP)
+        self.assertEqual([w for w in warnings if w.startswith("tracker.columns")], [])
+
     def test_another_column_role_is_allowed(self):
         settings, sections = parse()
         settings["tracker"]["columns"]["in_review"] = "In review"

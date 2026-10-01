@@ -368,6 +368,20 @@ columns = { in_progress = "Doing", needs_human = "Human!Help!" }
         self.assertEqual(board.missing_columns({"options": ["Doing"]}), ["Human!Help!"])
         self.assertEqual(board.missing_columns({"options": ["Doing", "human!help!"]}), [])
 
+    def test_the_retired_back_to_queue_is_not_a_required_column(self):
+        path = self.write("""+++
+profile = 1
+[tracker]
+project_owner = "someone"
+project_number = 7
+issues_repo = "someone/tracker"
+columns = { in_progress = "Doing", needs_human = "Human!Help!", back_to_queue = "Gone" }
++++
+""")
+        board.configure(path)
+        self.assertNotIn("back_to_queue", board.COLUMNS)
+        self.assertEqual(board.missing_columns({"options": ["Doing", "Human!Help!"]}), [])
+
     def test_a_profile_without_a_board_is_refused(self):
         path = self.write('+++\nprofile = 1\n[tracker]\nissues_repo = "a/b"\n+++\n')
         with self.assertRaises(board.ProfileMissing):
