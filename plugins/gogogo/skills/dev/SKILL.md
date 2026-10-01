@@ -220,9 +220,11 @@ and no further:
 
 Nothing sweeps cards out of `tracker.columns.needs_human`, and no run takes an
 issue from there: a person moves it on once they have done what it asked, or
-starts `/gogogo:dev` on it, which then moves the card as for any issue. When
-the queue is a label, not a column, also remove `tracker.ready_marker` from an
-issue you move to `needs_human`, so the next run does not take it. In a
+starts `/gogogo:dev` on it, which then moves the card as for any issue. Also
+remove `tracker.ready_marker` from an issue you move to `needs_human`: the
+label means the issue needs nothing from anyone, and on a label queue it would
+let the next run take it. The person puts it back when the issue is ready
+again. In a
 session with the person present, a question they answer there is not a stop:
 carry on.
 

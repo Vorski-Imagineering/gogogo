@@ -130,7 +130,7 @@ Push the branch as soon as it has its first commit (`git push -u origin
   everything the change produced, and nothing else, to its branch and push it,
   leave the branch unmerged, hand the card back to
   `tracker.columns.needs_human` as `/gogogo:dev` §8 says (the Needs-you line,
-  and the ready label on a label queue), and carry on with the next. The
+  and the ready label removed), and carry on with the next. The
   commit message
   says each that applies: *unreviewed* for a fix no round has reviewed, and
   *known defect* with the finding for one you could not fix. Name the finding

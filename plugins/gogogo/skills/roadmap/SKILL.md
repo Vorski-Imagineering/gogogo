@@ -83,7 +83,7 @@ A repo starting a legend can begin from this one:
 ```
 
 Replace `In progress` with the profile's `tracker.columns.in_progress`, `Human!Help!`
-with its `tracker.columns.needs_human`, and `Released`
+with its `tracker.columns.needs_human` (or drop that row when the profile has none), and `Released`
 with each column in `stages` (a mark may cover several, comma-separated). To change what
 a mark means, edit its `Covers` cell; the script reads it on every run.
 

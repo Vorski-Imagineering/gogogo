@@ -288,6 +288,18 @@ class Columns(unittest.TestCase):
         self.assertEqual([e for e in errors if e.startswith("tracker.columns")],
                          ["tracker.columns.needs_human: expected a column name, found '  '"])
 
+    def test_an_empty_column_name_is_an_error_for_every_skill(self):
+        settings, sections = parse()
+        settings["tracker"]["columns"]["needs_human"] = ""
+        for skill in (pc.ONE, pc.ROADMAP):
+            errors, _ = pc.check(settings, sections, skill)
+            self.assertEqual(len([e for e in errors if e.startswith("tracker.columns.needs_human")]), 1,
+                             (skill, errors))
+
+    def test_column_roles_are_in_fields(self):
+        for role in pc.COLUMN_ROLES:
+            self.assertIn(f"tracker.columns.{role}", pc.FIELDS)
+
     def test_another_column_role_is_allowed(self):
         settings, sections = parse()
         settings["tracker"]["columns"]["in_review"] = "In review"
