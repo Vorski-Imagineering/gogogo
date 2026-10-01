@@ -419,6 +419,62 @@ class Audit(unittest.TestCase):
         sc.check_board_origin(worst, self.OWN, "Dev Ready", rep)
         sc.check_board_workflows([{"name": "Auto-add to project", "enabled": True}], rep, self.OWN)
         self.assertTrue(rep.rows and not rep.failed())
+    # check_ready_label: one standard colour (issue #18)
+    def _label(self, listing, label="dev ready"):
+        rep = sc.Report()
+        sc.check_ready_label("owner/repo", label, listing, rep)
+        return rep
+
+    def test_missing_ready_label_is_created_in_the_standard_colour(self):
+        rep = self._label([])
+        self.assertEqual([(r["level"], r["check"]) for r in rep.rows], [("FAIL", "tracker: ready label")])
+        fix = rep.rows[0]["fix"]
+        for text in ("--color 0E8A16", '"dev ready"', "owner/repo"):
+            self.assertIn(text, fix)
+
+    def test_ready_label_in_the_standard_colour_passes_in_any_case(self):
+        for colour in ("0e8a16", "0E8A16"):
+            rep = self._label([{"name": "dev ready", "color": colour, "description": ""}])
+            self.assertEqual([r["level"] for r in rep.rows], ["PASS"], colour)
+
+    def test_ready_label_in_another_colour_warns_with_the_edit(self):
+        rep = self._label([{"name": "dev ready", "color": "BFD4F2", "description": "x"}])
+        self.assertEqual([r["level"] for r in rep.rows], ["PASS", "WARN"])
+        detail = rep.rows[1]["detail"]
+        self.assertEqual(rep.rows[1]["check"], sc.READY_LABEL_COLOUR_CHECK)
+        for text in ("#BFD4F2", "#0E8A16", 'gh label edit "dev ready" --repo owner/repo --color 0E8A16'):
+            self.assertIn(text, detail)
+
+    def test_ready_label_commands_use_the_profiles_name(self):
+        rep = self._label([{"name": "dev.ready", "color": "bfd4f2"}], label="dev.ready")
+        self.assertIn('gh label edit "dev.ready"', rep.rows[1]["detail"])
+
+    def test_ready_label_colour_never_fails_and_gh_failure_reads_as_missing(self):
+        rep = sc.Report()
+        for colour in ("0e8a16", "BFD4F2"):
+            sc.check_ready_label("owner/repo", "dev ready", [{"name": "dev ready", "color": colour}], rep)
+        self.assertFalse(rep.failed())
+        broken = self._label(None)
+        self.assertEqual([(r["level"], r["check"]) for r in broken.rows], [("FAIL", "tracker: ready label")])
+
+    def test_ready_label_name_matches_in_any_case(self):
+        rep = self._label([{"name": "Dev Ready", "color": "0E8A16"}])
+        self.assertEqual([r["level"] for r in rep.rows], ["PASS"])
+
+    def test_ready_label_of_the_wrong_type_is_missing_not_a_crash(self):
+        rep = self._label([{"name": "dev ready", "color": "0E8A16"}], label=1)
+        self.assertEqual([(r["level"], r["check"]) for r in rep.rows], [("FAIL", "tracker: ready label")])
+
+    def test_ready_label_edit_changes_only_the_colour(self):
+        detail = self._label([{"name": "dev ready", "color": "BFD4F2"}]).rows[1]["detail"]
+        edit = detail[detail.index("gh label edit"):]
+        self.assertNotIn("--description", edit)
+        self.assertNotIn("--name", edit)
+
+    def test_setup_skill_names_the_ready_label_colour_row(self):
+        text = (ROOT / "plugins" / "gogogo" / "skills" / "setup" / "SKILL.md").read_text(encoding="utf-8")
+        self.assertIn(sc.READY_LABEL_COLOUR_CHECK, text)
+        self.assertIn("gh label edit", text)
 
     def test_audit_checks_never_fail(self):
         rep = sc.Report()

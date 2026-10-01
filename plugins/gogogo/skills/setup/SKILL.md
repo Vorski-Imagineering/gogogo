@@ -149,7 +149,12 @@ What each fix involves:
     carrying the ready label looks unlabelled. The check reads the board views
     back.
   Then set `tracker.tool = "shared"`.
-- **No ready label.** The check prints the `gh label create` command.
+- **No ready label.** The check prints the `gh label create` command, with
+  the standard colour.
+- **Ready label colour** (`WARN tracker: ready label colour`). Say that the
+  label's colour will change from its current value to the standard one and
+  nothing else will, ask, then run the `gh label edit` command the row prints
+  and re-run the check. If the user declines, leave it.
 - **Local skills the shared ones replace.** Move each to
   `.claude/skills-retired/` in the same change that moves its project
   specifics into the profile, and update anything that names it.
