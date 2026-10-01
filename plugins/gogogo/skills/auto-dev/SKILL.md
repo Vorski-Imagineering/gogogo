@@ -185,9 +185,8 @@ merge, two steps:
 1. **Wait**, in the foreground (§4): `gh pr checks <pr> --watch --fail-fast`,
    with the longest timeout your tool allows. Run it again, as
    `sleep 30; gh pr checks <pr> --watch --fail-fast` in one command, when the
-   tool's limit cuts it off; when it prints `no checks reported` (CI may not
-   have registered yet), for up to three minutes in all; and when `gh` itself
-   errors, at most three times.
+   tool's limit cuts it off; and when it prints `no checks reported` (CI may
+   not have registered yet), for up to three minutes in all.
 2. **Judge** by each check's state, never by the watch's exit code:
    `gh pr checks <pr> --json name,bucket`.
    - Every check `pass` or `skipping`, and at least one `pass`: passed.
@@ -196,6 +195,9 @@ merge, two steps:
      otherwise the PR merges on the suite §4 ran.
    - Anything else (a check in `fail`, `cancel` or `pending`, or `gh` still
      erroring): a failure.
+
+When `gh` itself errors in either step, run that command again 30 seconds
+later, at most three times.
 
 A failure stops that issue at its PR, handed back to
 `tracker.columns.needs_human` as `/gogogo:dev` §8 says for a gate you could not
@@ -225,8 +227,8 @@ and the merge is `gh pr merge ... --body-file` with the body built as
   the run branch to `integration.final_target` carries the whole run. When
   that final PR is a release (§Preflight 4), merge it too, with a merge
   commit, once its checks pass (above); on a failure there (above), the run
-  branch is red or its checks cannot be read: stop the whole run and ask,
-  saying which, and leave the
+  is not cleared to release: stop the whole run and ask, saying why
+  (a check failed, no CI ran, or its checks cannot be read), and leave the
   cards where they are. When it is not a release, it waits for a person.
   When the link applies, the final PR's description says it must be merged
   with a merge commit, not squashed: a squash leaves the issue commits out of
@@ -299,7 +301,8 @@ work from preflight, and anything the profile's `stop.extra` checks raised.
 ## Stop the whole run and ask when
 
 - the unattended-mode check fails, at the start or before any merge;
-- the base is red before you start, or the run branch goes red mid-run;
+- the base is red before you start, or the run branch goes red mid-run, or
+  a `run-branch-pr` final PR that is a release fails its checks (§6);
 - a merge conflicts, or the merge check says NOT-MERGED or cannot tell;
 - a two-licence apply fails or half-applies;
 - the same change fails verification after the bound on two issues in a row
