@@ -3,6 +3,71 @@
 **From a report in a tracker to verified code on a real environment, run
 the same way in every repo.**
 
+## Why it exists
+
+A coding agent is slow at the scale of a person's attention. One request
+(read the issue, find the cause, change the code, run the tests, review)
+takes Claude minutes, often tens of minutes. Watching it wastes the person.
+Switching away and back wastes them too: every return means picking the
+context up again and answering whatever the agent stopped to ask.
+
+The way out is to stop handing the agent one request at a time and give it a
+queue instead: a pipeline of issues it works through on its own for hours,
+overnight or over a weekend, while the person does something else.
+
+A queue only works if every item in it can be finished without asking anyone.
+That moves the hard work to the front. Each issue has to be fully specified
+before the agent starts: what is wrong, how to check the fix by hand, which
+risky decisions the owner has already made, and which ones the agent must not
+make alone. And the agent has to be trusted to stop rather than guess, to
+prove a fix on real data rather than a green test suite, and to say plainly
+what it did and did not do.
+
+gogogo is that workflow, written down as Claude Code skills:
+`/gogogo:spec` turns a vague report into work an agent can finish alone,
+`/gogogo:auto-dev` works the queue unattended and stops where a person has to
+decide, and the other skills keep the board, the tests and the hand-back
+honest.
+
+## Who it is for
+
+It has been run by one developer across several products on different stacks,
+and it is shaped for a small team: one owner who makes the decisions, issues
+and a board on GitHub, and a few repos that should all work the same way.
+
+Bigger teams probably already have something more sophisticated: ticket
+workflows, review rotations, release engineering, compliance gates. gogogo
+does not try to replace any of that.
+
+You need Claude Code, GitHub Issues with a GitHub Project board, and the `gh`
+CLI.
+
+## Have we reinvented something?
+
+Possibly, and it is a fair question to ask before adopting this. By late 2026
+much of the ground is covered by products:
+
+- **Issue to pull request**: GitHub Copilot's coding agent (assign it an
+  issue, get a PR), OpenAI Codex, Google Jules, Devin, Cursor's background
+  agents, and Claude Code's own GitHub Actions integration.
+- **Spec first, then build**: GitHub Spec Kit and Amazon's Kiro.
+
+What we have not found in one place, and what gogogo is mostly about:
+
+- a ready queue worked unattended one issue after another, with a check
+  (`spec_lint.py`) on what is allowed into it;
+- an owner's decisions recorded in the issue, licensing the risky changes, and
+  a list of Hard Stops the agent halts on when a decision is missing;
+- "done" meaning run on a real environment, with the card moved only as far as
+  the code has really got, and a person moving it to Done;
+- one process across repos on different stacks, with what differs kept in one
+  profile file per repo.
+
+If you know a product that already does all of this, please open an issue and
+tell us.
+
+## What it is
+
 `gogogo` is a Claude Code plugin with the development process shared by
 Vorski-Imagineering projects. An issue gets a spec that another agent can build
 from without asking anything. One command builds one issue end to end. Another
