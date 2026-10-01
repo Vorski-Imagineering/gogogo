@@ -30,7 +30,8 @@ MARKETPLACE_REPO = "Vorski-Imagineering/gogogo"
 # competes with the shared one for the same requests.
 REPLACED_LOCAL_SKILLS = [
     "spec-to-issue", "spec", "dev", "auto-dev", "fix-issue", "fix-reported-issue",
-    "gogogo-auto-dev", "auto-issue-gogo", "wrap-up", "roadmap", "update-milestone-doc",
+    "gogogo-auto-dev", "auto-issue-gogo", "wrap-up", "gogogo-auto-test",
+    "auto-test", "roadmap", "update-milestone-doc",
 ]
 
 
@@ -375,6 +376,22 @@ def check_board_hygiene(cards, recovered, options, expected, rep):
                  + ", ".join(f"#{c['number']}" for c in no_status[:10]))
 
 
+def check_profile_skills(settings, sections, rep):
+    """One row per skill. auto-test is opt-in: a profile without [auto_test] is INFO."""
+    for skill in profile_check.SKILLS:
+        if skill == profile_check.TEST and "auto_test" not in settings:
+            rep.info(f"profile for /gogogo:{skill}", "not set up: add [auto_test] and ## Test data to use it "
+                     "(references/profile-schema.md § Auto-test)")
+            continue
+        errors, warnings = profile_check.check(settings, sections, skill)
+        if errors:
+            rep.fail(f"profile for /gogogo:{skill}", "; ".join(errors), "add the missing settings or sections")
+        else:
+            rep.ok(f"profile for /gogogo:{skill}")
+    for w in profile_check.check(settings, sections)[1]:
+        rep.warn("profile", w)
+
+
 def check_local_skills(root, rep):
     skills = root / ".claude" / "skills"
     found = [n for n in REPLACED_LOCAL_SKILLS if (skills / n / "SKILL.md").is_file()]
@@ -471,14 +488,7 @@ def main(argv=None):
             rep.fail("profile", str(exc), "fix the settings block")
             sections = None
         if sections is not None:
-            for skill in profile_check.SKILLS:
-                errors, warnings = profile_check.check(settings, sections, skill)
-                if errors:
-                    rep.fail(f"profile for /gogogo:{skill}", "; ".join(errors), "add the missing settings or sections")
-                else:
-                    rep.ok(f"profile for /gogogo:{skill}")
-            for w in profile_check.check(settings, sections)[1]:
-                rep.warn("profile", w)
+            check_profile_skills(settings, sections, rep)
     if settings:
         check_release_shape(settings, rep)
         check_hard_stop_source(root, (settings.get("hard_stops") or {}).get("source"), rep)

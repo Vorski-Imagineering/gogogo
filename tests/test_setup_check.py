@@ -7,6 +7,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "plugins" / "gogogo" / "scripts"))
+sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 import setup_check as sc  # noqa: E402
 
@@ -100,10 +101,51 @@ class LocalSkillsAndClaudeMd(unittest.TestCase):
         sc.check_local_skills(repo({".claude/skills-retired/fix-issue/SKILL.md": "x"}), rep)
         self.assertEqual(levels(rep, "local skills"), ["PASS"])
 
+    def test_the_local_auto_test_skill_warns_until_retired(self):
+        rep = sc.Report()
+        sc.check_local_skills(repo({".claude/skills/gogogo-auto-test/SKILL.md": "x"}), rep)
+        self.assertEqual(levels(rep, "local skills"), ["WARN"])
+        self.assertIn("gogogo-auto-test", rep.rows[0]["detail"])
+        rep = sc.Report()
+        sc.check_local_skills(repo({".claude/skills-retired/gogogo-auto-test/SKILL.md": "x"}), rep)
+        self.assertEqual(levels(rep, "local skills"), ["PASS"])
+
+    def test_a_local_skill_named_auto_test_warns(self):
+        rep = sc.Report()
+        sc.check_local_skills(repo({".claude/skills/auto-test/SKILL.md": "x"}), rep)
+        self.assertEqual(levels(rep, "local skills"), ["WARN"])
+        self.assertIn("auto-test", rep.rows[0]["detail"])
+
     def test_claude_md_without_a_pointer_warns(self):
         rep = sc.Report()
         sc.check_claude_md(repo({"CLAUDE.md": "# x\n"}), rep)
         self.assertEqual(levels(rep, "CLAUDE.md"), ["WARN"])
+
+
+class ProfileSkills(unittest.TestCase):
+    def rows(self, settings, sections):
+        rep = sc.Report()
+        sc.check_profile_skills(settings, sections, rep)
+        return rep.rows
+
+    def test_a_profile_without_auto_test_is_info_not_fail(self):
+        import profile_check
+        from test_profile_check import COMPLETE
+        settings, sections = profile_check.split_profile(COMPLETE)
+        del settings["auto_test"]
+        del sections["Test data"]
+        rows = self.rows(settings, sections)
+        self.assertEqual([r["level"] for r in rows if r["check"] == "profile for /gogogo:auto-test"], ["INFO"])
+        self.assertNotIn("FAIL", [r["level"] for r in rows])
+
+    def test_a_profile_with_auto_test_is_checked(self):
+        import profile_check
+        from test_profile_check import COMPLETE
+        settings, sections = profile_check.split_profile(COMPLETE)
+        del settings["auto_test"]["fail_label"]
+        rows = [r for r in self.rows(settings, sections) if r["check"] == "profile for /gogogo:auto-test"]
+        self.assertEqual([r["level"] for r in rows], ["FAIL"])
+        self.assertIn("auto_test.fail_label", rows[0]["detail"])
 
 
 def shape_rows(settings):

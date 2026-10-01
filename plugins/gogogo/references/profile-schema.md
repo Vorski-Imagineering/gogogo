@@ -44,6 +44,8 @@ python3 "${CLAUDE_PLUGIN_ROOT}/scripts/profile_check.py" --show                 
 
 Exit 0 is ok, 2 means there is no profile, 3 means it is unreadable or
 incomplete. Each problem is one line on stderr that starts with the field.
+With no `--for` it checks every skill, and `auto-test` only when the profile
+has an `[auto_test]` table, so a repo that never adopted it still passes.
 
 ## Settings
 
@@ -58,7 +60,7 @@ no skill requires it; a skill that finds it uses it.
 | `tracker.code_repo` | str | all | owner/repo that holds the code. |
 | `tracker.public` | bool | all | True if the tracker is readable by the public. |
 | `tracker.ready_marker` | str | `spec`, `auto-dev` | Label that marks an issue as specced and pickable. |
-| `tracker.tool` | str | `dev`, `auto-dev`, `roadmap` | 'shared' for the plugin's tracker.py, or a command for the repo's own tool meeting references/tracker-contract.md. |
+| `tracker.tool` | str | `dev`, `auto-dev`, `auto-test`, `roadmap` | 'shared' for the plugin's tracker.py, or a command for the repo's own tool meeting references/tracker-contract.md. |
 | `tracker.project_owner` | str | optional | Owner of the GitHub project board. |
 | `tracker.project_number` | int | optional | Number of the GitHub project board. |
 | `tracker.queue` | str | `auto-dev` | Column or label the loop works. |
@@ -92,6 +94,11 @@ no skill requires it; a skill that finds it uses it.
 | `preflight.extra` | list | optional | Extra checks before a run. |
 | `stop.extra` | list | optional | Extra conditions that stop a whole run. |
 | `notify` | str | optional | none / telegram. |
+| `auto_test.pass_column` | str | `auto-test` | Column a card moves to on PASS. |
+| `auto_test.fail_column` | str | `auto-test` | Column a card moves to on FAIL. |
+| `auto_test.fail_label` | str | `auto-test` | Label added on FAIL. |
+| `auto_test.human_label` | str | `auto-test` | Label added on NEEDS HUMAN. |
+| `auto_test.pass_closes` | bool | `auto-test` | True if PASS closes the issue. |
 
 ### Lanes
 
@@ -212,6 +219,27 @@ apply = "migrate on the dev DB"
 procedure = "Applying a migration to dev"
 ```
 
+### Auto-test
+
+`/gogogo:auto-test` tests the cards in one column: the `column` of the one
+stage whose `environment` is `verify.human`. That environment needs a `url`
+(where the tests run) and `writes` (the whole of what a test may write there).
+The `[auto_test]` table says what each outcome does:
+
+```toml
+[auto_test]
+pass_column = "Done"
+fail_column = "Backlog"
+fail_label = "test fail"
+human_label = "test needs human"
+pass_closes = true
+```
+
+The table is the opt-in. A profile without it is not checked for `auto-test`
+when `profile_check.py` runs with no `--for`, and `/gogogo:setup` reports it
+as not set up rather than as a failure. A profile with it also needs a
+`## Test data` section (below).
+
 ### Roadmap
 
 `roadmap.file` is read only by `/gogogo:roadmap`, which keeps a roadmap
@@ -236,6 +264,7 @@ file = "docs/roadmap.md"
 | `## superpowers boundary` | all |
 | `## Technology evaluation` | `tech-eval` (optional) |
 | `## Wrap-up checks` | `wrap-up` (optional) |
+| `## Test data` | `auto-test` |
 
 - **Recon traps**: what this codebase hides. The table of traps and the worked
   examples.
@@ -250,6 +279,19 @@ file = "docs/roadmap.md"
   its own list, as a `| Check | How |` table (other repos this one depends on,
   a database a session may have changed, a docs site a push deploys), which of
   them block closing, and where this repo's learnings go.
+- **Test data**: what the repo's live environment holds that
+  `/gogogo:auto-test` may touch, and what it must never touch. It has six
+  `### ` headings, each of which may say "None":
+  - **Running build**: how to read the build the environment runs, and the
+    git ref it names.
+  - **Finding the change**: how this repo links a commit to an issue, before
+    the shared fallbacks.
+  - **Sandbox and fixtures**: where test data may be created, the fixtures and
+    their baseline, and where planned fixtures are listed.
+  - **Optional lanes**: lanes beyond the browser, and how preflight decides
+    each is READY.
+  - **Extra step rules**: exceptions to the default step classes.
+  - **Never call**: routes and actions never used, on any lane.
 
 A profile may add more sections (for example a procedure that
 `two_licence.procedure` names). Unknown sections are fine; unknown settings

@@ -66,6 +66,7 @@ url = "https://dev.example.org"
 name = "production"
 roles = ["production"]
 url = "https://app.example.org"
+writes = "only through the app's own UI, inside the sandbox"
 
 [[stages]]
 code_is = "merged to main"
@@ -107,6 +108,13 @@ extra = ["check the dev db"]
 
 [stop]
 extra = ["a migrate fails"]
+
+[auto_test]
+pass_column = "Done"
+fail_column = "New"
+fail_label = "test fail"
+human_label = "test needs human"
+pass_closes = true
 +++
 
 # Process profile
@@ -119,6 +127,20 @@ The test host must be dev.
 
 ## superpowers boundary
 Tracker work stays in the tracker.
+
+## Test data
+### Running build
+The settings page prints the deploy tag.
+### Finding the change
+A trailer in the squash commit.
+### Sandbox and fixtures
+None.
+### Optional lanes
+None.
+### Extra step rules
+None.
+### Never call
+None.
 """
 
 
@@ -298,6 +320,84 @@ class Environments(unittest.TestCase):
         self.assertIn("verify.agent: 'preview' is not in environments", errors)
 
 
+AUTO_TEST_FIELDS = [p for p in pc.FIELDS if p.startswith("auto_test.")]
+OTHER_SKILLS = (pc.SPEC, pc.ONE, pc.LOOP, pc.TECH)
+
+
+class AutoTest(unittest.TestCase):
+    """What /gogogo:auto-test needs, and that none of it leaks into the other skills."""
+
+    def test_each_auto_test_setting_is_named_for_auto_test_only(self):
+        settings, sections = parse()
+        self.assertEqual(len(AUTO_TEST_FIELDS), 5, AUTO_TEST_FIELDS)
+        for path in AUTO_TEST_FIELDS:
+            trimmed = drop(settings, path)
+            errors, _ = pc.check(trimmed, sections, pc.TEST)
+            self.assertTrue(errors and errors[0].startswith(f"{path}: missing"), (path, errors))
+            for skill in OTHER_SKILLS:
+                self.assertEqual(pc.check(trimmed, sections, skill)[0], [], (path, skill))
+
+    def test_tracker_tool_is_required_by_auto_test(self):
+        settings, sections = parse()
+        trimmed = drop(settings, "tracker.tool")
+        for skill in (pc.TEST, pc.ONE, pc.LOOP):
+            errors, _ = pc.check(trimmed, sections, skill)
+            self.assertTrue(any(e.startswith("tracker.tool: missing") for e in errors), skill)
+        self.assertEqual(pc.check(trimmed, sections, pc.SPEC)[0], [])
+
+    def test_pass_closes_must_be_a_bool(self):
+        settings, sections = parse()
+        settings["auto_test"]["pass_closes"] = "yes"
+        errors, _ = pc.check(settings, sections, pc.TEST)
+        self.assertIn("auto_test.pass_closes: expected bool, found str", errors)
+
+    def test_test_data_section_and_its_headings(self):
+        settings, sections = parse()
+        rest = {k: v for k, v in sections.items() if k != "Test data"}
+        never = sections["Test data"].replace("### Never call\nNone.", "")
+        for changed, error in (
+            (rest, "section '## Test data': missing"),
+            ({**sections, "Test data": ""}, "section '## Test data': empty"),
+            ({**sections, "Test data": never}, "section '## Test data': no '### Never call'"),
+        ):
+            self.assertIn(error, pc.check(settings, changed, pc.TEST)[0])
+            for skill in OTHER_SKILLS:
+                self.assertEqual(pc.check(settings, changed, skill)[0], [], (error, skill))
+
+    def test_the_human_environment_and_its_one_stage(self):
+        def errors_for(mutate):
+            settings, sections = parse()
+            mutate(settings)
+            for skill in OTHER_SKILLS:
+                self.assertEqual(pc.check(settings, sections, skill)[0], [], skill)
+            return pc.check(settings, sections, pc.TEST)[0]
+
+        self.assertIn("verify.human: environment 'production' has no url",
+                      errors_for(lambda s: s["environments"][1].pop("url")))
+        self.assertIn("verify.human: environment 'production' has no writes",
+                      errors_for(lambda s: s["environments"][1].pop("writes")))
+        self.assertIn("stages: no stage has environment 'production', so there is no column to test",
+                      errors_for(lambda s: s["stages"].pop(1)))
+        self.assertIn("stages: 2 stages have environment 'production'; auto-test needs exactly one",
+                      errors_for(lambda s: s["stages"].append(
+                          {"code_is": "promoted", "environment": "production", "column": "Live"})))
+
+    def test_no_skill_checks_auto_test_only_when_the_profile_has_auto_test(self):
+        settings, sections = parse()
+        bare = drop(settings, "auto_test")
+        rest = {k: v for k, v in sections.items() if k != "Test data"}
+        self.assertEqual(pc.check(bare, rest), ([], []))
+        text = COMPLETE.split("[auto_test]")[0].rstrip() + "\n+++\n" + COMPLETE.split("+++", 2)[2]
+        text = text.split("## Test data")[0]
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "dev-process.md"
+            path.write_text(text)
+            code, _, err = run_main("--path", str(path))
+        self.assertEqual(code, pc.EXIT_OK, err)
+        errors, _ = pc.check(drop(settings, "auto_test.pass_column"), sections)
+        self.assertTrue(any(e.startswith("auto_test.pass_column: missing") for e in errors), errors)
+
+
 class FrontMatter(unittest.TestCase):
     def test_no_opening_fence(self):
         with self.assertRaises(pc.ProfileError):
@@ -381,6 +481,18 @@ class SchemaDoc(unittest.TestCase):
         table = doc.split("| Setting | Type | Required by | Meaning |")[1].split("\n### ")[0]
         documented = {line.split("`")[1] for line in table.splitlines() if line.startswith("| `")}
         self.assertEqual(documented, set(pc.FIELDS))
+
+    def test_doc_and_checker_agree_on_who_requires_each_setting(self):
+        doc = (PLUGIN / "references" / "profile-schema.md").read_text()
+        table = doc.split("| Setting | Type | Required by | Meaning |")[1].split("\n### ")[0]
+        for line in table.splitlines():
+            if not line.startswith("| `"):
+                continue
+            cells = [c.strip() for c in line.split("|")]
+            path, required = cells[1].strip("`"), cells[3]
+            documented = (set(pc.SKILLS) if required == "all" else set() if required == "optional"
+                          else set(required.replace("`", "").replace(" ", "").split(",")))
+            self.assertEqual(documented, set(pc.FIELDS[path][1]), path)
 
     def test_doc_example_is_valid_toml(self):
         doc = (PLUGIN / "references" / "profile-schema.md").read_text()

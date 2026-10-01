@@ -55,7 +55,7 @@ commands, the environments, the Hard Stop rules) lives in one file per repo,
 | `/gogogo:wrap-up` | Before you close a session: finds anything uncommitted, unpushed, stranded or still running, saves what the session learned, and says plainly whether it is safe to close. |
 | `/gogogo:tech-eval` | Evaluates a library, service or tool against the repo before anyone adopts it, and records the verdict in the repo's decisions register. |
 | `/gogogo:roadmap` | Keeps a roadmap document's status marks in step with the board: re-derives every row's mark from the issue's state and column, fixes the notes the change made stale, and commits the document. |
-| `/gogogo:auto-test` | *Planned.* Checks what shipped on each environment after a deploy, and reports back on the issue. |
+| `/gogogo:auto-test` | Tests each shipped issue on the environment where a person confirms fixes, and records PASS, FAIL or NEEDS HUMAN on the issue. `--triage-only` lists what it would test or skip and changes nothing. |
 
 Scripts the skills call, all in `plugins/gogogo/scripts/`:
 
@@ -67,6 +67,7 @@ Scripts the skills call, all in `plugins/gogogo/scripts/`:
 - `require_unattended.sh`: refuses to start the loop unless the session can run without prompts.
 - `setup_check.py`: the read-only check behind `/gogogo:setup`.
 - `roadmap_status.py`: compares a roadmap document's marks with the tracker, and rewrites the ones that disagree with `--write`.
+- `record_outcome.py`: renders and records an auto-test outcome: comment first, then labels, close and card, then reads the issue back.
 
 ## One process, many stacks
 
