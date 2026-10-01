@@ -160,11 +160,17 @@ the merge is unreachable when it fails. The mode can change mid-session.
 - **`run-branch-pr`**: the first issue creates the run branch
   (`integration.base`, dated) from the main line. Each issue merges into it by
   a PR: `gh pr create --base <run branch>`, `gh pr checks --watch`, then
-  `gh pr merge --squash --delete-branch`. **Zero checks is a failure**, not a
-  pass. At the end, one PR from the run branch to
-  `integration.final_target` carries the whole run.
+  `gh pr merge --squash --delete-branch`, with the body from `/gogogo:dev` §8
+  when its *When you merge with `gh`* subsection applies. **Zero checks is a
+  failure**, not a pass. At the end, one PR from the run branch to
+  `integration.final_target` carries the whole run. When that subsection
+  applies, the final PR's description says it must be merged with a merge
+  commit, not squashed: a squash leaves the issue commits out of the target's
+  history, and the stage sync then finds no link. The close-run report (§9)
+  repeats it.
 - **`pr-squash`**: open the PR and **stop there** when §Preflight 4 said a
-  merge is a release. Otherwise squash-merge it.
+  merge is a release. Otherwise squash-merge it, with the body from
+  `/gogogo:dev` §8 when that subsection applies.
 
 Never hand-roll a merge around a failed integration step, and never use a
 script the profile marks forbidden.
@@ -180,6 +186,11 @@ that reports six merges and delivered five is worse than one that stops at the
 first failure: the board says done, the branch says otherwise, and nobody looks
 again. NOT-MERGED, or "cannot tell", stops the whole run.
 
+When the link was written, pass `--ships` as `/gogogo:dev` §8 says. Exit 3
+(merged, link missing) does **not** stop the run: hand back as merged, and list
+the issue in the between-issues log and the close-run report as one whose card
+must be moved by hand when its tag ships.
+
 ## 7. Report and hand back
 
 `/gogogo:dev` §7–8. Move the card to the stage the code has **actually**
@@ -188,7 +199,9 @@ reached, read from the profile's `stages`:
 - merged into a run branch that no site serves → that stage's column;
 - merged into the base that an environment serves → that stage's column;
 - the next stage (a deploy, a promotion) is someone else's move: the deploy's,
-  or a person's. Never move a card there yourself.
+  or a person's. Never move a card there yourself. A stage with a `tag` is
+  moved by the repo's stage sync when a matching tag is pushed, never by this
+  run.
 
 For `run-branch-pr`: when the run's final PR has **merged** (check its state,
 not the merge command's exit), move every card the run landed to the next
