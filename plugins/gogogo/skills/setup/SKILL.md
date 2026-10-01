@@ -104,7 +104,7 @@ What each fix involves:
   | `Dev Ready` | Specced and chosen: the queue (`tracker.queue`, and `columns.back_to_queue`). |
   | `In progress` | Being worked (`columns.in_progress`). |
   | one per stage | The profile's `stages`, in order, named in the repo's words. |
-  | `Done` | Confirmed by a human. The skills never move a card here. |
+  | `Done` | Closed. `/gogogo:auto-test` moves a card here on a pass, and `tracker.py tidy --apply`, run by a person, moves closed issues here. No other skill moves a card here. |
 
   A straight-to-production repo has one stage, so one stage column
   (`Released`); do not create stage columns it will never use.
@@ -182,9 +182,14 @@ ones the user approves:
   current one in `.claude/settings.json`.
 - `board views`, `labels in board views` → create a missing view with the
   API as above; sort and Labels on the web page.
-- `board workflows`, `issues missing from the board`, `cards without a column`
-  → the web steps above (done in the browser), then `<tracker.tool> move` for stray cards; add
-  missing issues with `gh project item-add`.
+- `board workflows`, `cards without a column`
+  → the web steps above (done in the browser), then `<tracker.tool> move` for stray cards.
+- `cards the board's index missed` → nothing to fix unless the row persists:
+  `tracker.py` already reads those cards from the issue side.
+- `views` → run `<tracker.tool> views --hide-closed` with the user's yes; it
+  reads the views back.
+- `cards` → run `<tracker.tool> tidy`, show the user the list, and run
+  `tidy --apply` only on their yes.
 - `unused column` → move its cards to the column that now holds that stage,
   then ask the user to remove the column in the board's Status settings. Never
   delete a column that still holds cards.

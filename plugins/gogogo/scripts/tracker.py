@@ -5,6 +5,8 @@
     tracker.py [--profile FILE] show <issue> [--expect "<column>"]
     tracker.py [--profile FILE] move <issue> --to "<column>" [--add-missing]
     tracker.py [--profile FILE] fields [--check]
+    tracker.py [--profile FILE] views [--hide-closed]
+    tracker.py [--profile FILE] tidy [--apply]
 
 The board (owner, project number), the issues repo and the columns the skills
 move cards between all come from the profile (`.agents/dev-process.md`, the
@@ -33,6 +35,11 @@ project-side index drops an item it drops it from both and the check passes
 over a missing card (a real card sat in a column, unarchived, while the read
 said "369 of 369"). `list` therefore asks a second, independent index (each
 open issue what it belongs to) and prints any card only that side can see.
+
+`views` and `tidy` keep the board current between runs: every view hides closed
+issues, every closed issue sits in Done, and every open issue is on the board.
+GitHub's own board workflows do this going forward once they are on; these
+commands fix what is already there.
 
 Exit codes: 0 ok, 1 usage/not-found, 2 the read or write could not be trusted,
 3 `show --expect`: the card is in a different column.
@@ -81,6 +88,14 @@ class Column:
 #: "back_to_queue", and each stage's column name); values carry the live name.
 #: `fields --check` fails when the live board lacks one of these.
 COLUMNS: dict[str, Column] = {}
+
+#: Two of the standard columns `/gogogo:setup` gives every board. They mean the
+#: same on every board, so they are not profile settings.
+NEW_COLUMN = "⚡️ New"
+DONE_COLUMN = "Done"
+
+#: A view whose filter has one of these hides closed issues.
+OPEN_FILTERS = ("is:open", "-is:closed")
 
 
 class ProfileMissing(Exception):
@@ -368,6 +383,26 @@ query($owner: String!, $name: String!, $size: Int!, $after: String) {
 """
 
 
+def open_issues(repo: str):
+    """Every open issue in `repo`, with its project items, newest first."""
+    owner, name = repo.split("/", 1)
+    cursor: str | None = None
+    pages = 0
+    while True:
+        variables: dict[str, str | int] = {"owner": owner, "name": name, "size": PAGE_SIZE}
+        if cursor:
+            variables["after"] = cursor
+        connection = graphql(REPO_ISSUE_CARDS_QUERY, **variables)["repository"]["issues"]
+        yield from connection["nodes"]
+
+        pages += 1
+        if not connection["pageInfo"]["hasNextPage"]:
+            return
+        cursor = connection["pageInfo"]["endCursor"]
+        if pages > 200:
+            raise BoardError("issue pagination did not terminate")
+
+
 def issue_side_cards(repo: str) -> list[dict]:
     """Every open issue's card on this project, asked from the *issue* side.
 
@@ -375,42 +410,24 @@ def issue_side_cards(repo: str) -> list[dict]:
     each issue what it belongs to. They are different indexes at GitHub's end
     and they do not always agree.
     """
-    owner, name = repo.split("/", 1)
     cards: list[dict] = []
-    cursor: str | None = None
-    pages = 0
-
-    while True:
-        variables: dict[str, str | int] = {"owner": owner, "name": name, "size": PAGE_SIZE}
-        if cursor:
-            variables["after"] = cursor
-        connection = graphql(REPO_ISSUE_CARDS_QUERY, **variables)["repository"]["issues"]
-
-        for issue in connection["nodes"]:
-            for node in (issue.get("projectItems") or {}).get("nodes") or []:
-                if node["isArchived"] or node["project"]["number"] != PROJECT_NUMBER:
-                    continue
-                cards.append({
-                    "item_id": node["id"],
-                    "kind": "Issue",
-                    "number": issue["number"],
-                    "title": issue["title"],
-                    "state": issue["state"],
-                    "url": issue["url"],
-                    "repo": (issue.get("repository") or {}).get("nameWithOwner"),
-                    "status": (node.get("fieldValueByName") or {}).get("name"),
-                    "assignees": [
-                        a["login"] for a in (issue.get("assignees") or {}).get("nodes", [])
-                    ],
-                })
-
-        pages += 1
-        if not connection["pageInfo"]["hasNextPage"]:
-            break
-        cursor = connection["pageInfo"]["endCursor"]
-        if pages > 200:
-            raise BoardError("issue pagination did not terminate")
-
+    for issue in open_issues(repo):
+        for node in (issue.get("projectItems") or {}).get("nodes") or []:
+            if node["isArchived"] or node["project"]["number"] != PROJECT_NUMBER:
+                continue
+            cards.append({
+                "item_id": node["id"],
+                "kind": "Issue",
+                "number": issue["number"],
+                "title": issue["title"],
+                "state": issue["state"],
+                "url": issue["url"],
+                "repo": (issue.get("repository") or {}).get("nameWithOwner"),
+                "status": (node.get("fieldValueByName") or {}).get("name"),
+                "assignees": [
+                    a["login"] for a in (issue.get("assignees") or {}).get("nodes", [])
+                ],
+            })
     return cards
 
 
@@ -617,29 +634,35 @@ def cmd_show(args: argparse.Namespace) -> int:
 
 
 def cmd_move(args: argparse.Namespace) -> int:
-    target = column(args.to)
-    meta = board_meta()
+    return move_card(args.issue, args.repo, args.to, add_missing=args.add_missing)
+
+
+def move_card(number: int, repo: str, to: str, *, add_missing: bool = False,
+              meta: dict | None = None) -> int:
+    """Set one issue's column and read it back. Exit-code semantics of `move`."""
+    target = column(to)
+    meta = meta or board_meta()
     option_id = resolve_option(meta, target)
 
-    found = issue_card(args.issue, args.repo)
+    found = issue_card(number, repo)
     card = found["card"]
 
     if not card:
-        if not args.add_missing:
+        if not add_missing:
             print(
-                f"#{args.issue} is not on project #{PROJECT_NUMBER}. "
+                f"#{number} is not on project #{PROJECT_NUMBER}. "
                 "Re-run with --add-missing to put it on the board and set the column.",
                 file=sys.stderr,
             )
             return 1
-        owner, name = args.repo.split("/", 1)
+        owner, name = repo.split("/", 1)
         content_id = graphql(
-            ISSUE_ID_QUERY, owner=owner, name=name, number=args.issue
+            ISSUE_ID_QUERY, owner=owner, name=name, number=number
         )["repository"]["issue"]["id"]
         item_id = graphql(
             ADD_ITEM_MUTATION, project=meta["project_id"], content=content_id
         )["addProjectV2ItemById"]["item"]["id"]
-        print(f"added #{args.issue} to the board")
+        print(f"added #{number} to the board")
     else:
         item_id = card["id"]
 
@@ -656,7 +679,7 @@ def cmd_move(args: argparse.Namespace) -> int:
 
     # The mutation returning cleanly is not the claim we need; the claim is that
     # the board now reads back as the column we asked for.
-    after = issue_card(args.issue, args.repo)["card"]
+    after = issue_card(number, repo)["card"]
     now = ((after or {}).get("fieldValueByName") or {}).get("name")
     if (now or "").lower() != target.lower():
         print(
@@ -665,7 +688,7 @@ def cmd_move(args: argparse.Namespace) -> int:
         )
         return 2
 
-    print(f"#{args.issue}: {was} -> {now}")
+    print(f"#{number}: {was} -> {now}")
     return 0
 
 
@@ -683,6 +706,98 @@ def cmd_fields(args: argparse.Namespace) -> int:
             print(exc, file=sys.stderr)
             return 2
     return 0
+
+
+# --------------------------------------------------------------------------
+# keeping the board current: views, and cards left behind
+# --------------------------------------------------------------------------
+
+VIEWS_QUERY = """
+query($org: String!, $number: Int!) {
+  repositoryOwner(login: $org) {
+    ... on ProjectV2Owner {
+    projectV2(number: $number) {
+      views(first: 50) { nodes { id name number filter } }
+    }
+    }
+  }
+}
+"""
+
+UPDATE_VIEW_MUTATION = """
+mutation($view: ID!, $filter: String!) {
+  updateProjectV2View(input: {viewId: $view, filter: $filter}) { projectV2View { id } }
+}
+"""
+
+
+def board_views() -> list[dict]:
+    """The board's views, live: id, name, number, filter."""
+    project = (graphql(VIEWS_QUERY, org=ORG, number=PROJECT_NUMBER)
+               .get("repositoryOwner") or {}).get("projectV2")
+    if not project:
+        raise BoardError(f"project {ORG}/#{PROJECT_NUMBER} not visible to this gh login")
+    return project["views"]["nodes"]
+
+
+def views_showing_closed(views: list[dict]) -> list[dict]:
+    """Views whose filter lets closed issues through."""
+    return [v for v in views
+            if not any(token in OPEN_FILTERS for token in (v.get("filter") or "").split())]
+
+
+def untidy(repo: str) -> tuple[list[dict], list[dict]]:
+    """Closed issues not in Done, and open issues in `repo` with no card here."""
+    cards = [flatten(i) for i in fetch_items()]
+    closed = [c for c in cards
+              if c["kind"] == "Issue" and c["state"] == "CLOSED"
+              and (c["status"] or "").lower() != DONE_COLUMN.lower()]
+    off_board = [
+        {"number": i["number"], "title": i["title"],
+         "repo": (i.get("repository") or {}).get("nameWithOwner") or repo}
+        for i in open_issues(repo)
+        if not any(n["project"]["number"] == PROJECT_NUMBER
+                   for n in (i.get("projectItems") or {}).get("nodes") or [])
+    ]
+    return closed, off_board
+
+
+def cmd_views(args: argparse.Namespace) -> int:
+    views = board_views()
+    for v in views:
+        print(f"  view {v['number']} {v['name']!r}: filter {v.get('filter') or '(none)'!r}")
+    if not args.hide_closed:
+        return 0
+    for v in views_showing_closed(views):
+        new = f"{v.get('filter') or ''} is:open".strip()
+        graphql(UPDATE_VIEW_MUTATION, view=v["id"], filter=new)
+        print(f"view {v['number']} {v['name']!r}: {v.get('filter') or '(none)'!r} -> {new!r}")
+    # The claim is that the views now hide closed issues, so read them back.
+    still = views_showing_closed(board_views())
+    if still:
+        print("WROTE but these views still show closed issues: "
+              + ", ".join(repr(v["name"]) for v in still), file=sys.stderr)
+        return 2
+    return 0
+
+
+def cmd_tidy(args: argparse.Namespace) -> int:
+    closed, off_board = untidy(args.repo)
+    for c in closed:
+        print(f"closed, not in {DONE_COLUMN}: {c['repo']}#{c['number']} ({c['status'] or 'no status'})")
+    for i in off_board:
+        print(f"open, not on the board: {i['repo']}#{i['number']} {i['title']}")
+    if not (closed or off_board):
+        print("nothing to tidy")
+    if not args.apply:
+        return 0
+    meta = board_meta()
+    worst = 0
+    for c in closed:
+        worst = max(worst, move_card(c["number"], c["repo"], DONE_COLUMN, meta=meta))
+    for i in off_board:
+        worst = max(worst, move_card(i["number"], i["repo"], NEW_COLUMN, add_missing=True, meta=meta))
+    return worst
 
 
 def main() -> int:
@@ -725,6 +840,18 @@ def main() -> int:
     fields.add_argument("--check", action="store_true",
                         help="exit 2 naming each profile column the board lacks")
     fields.set_defaults(func=cmd_fields)
+
+    views = subparsers.add_parser("views", help="the board's views and their filters")
+    views.add_argument("--hide-closed", action="store_true",
+                       help="add is:open to every view that shows closed issues, then read back")
+    views.set_defaults(func=cmd_views)
+
+    tidy = subparsers.add_parser(
+        "tidy", help=f"closed issues not in {DONE_COLUMN}, open issues not on the board")
+    tidy.add_argument("--repo", default=None, help="repo whose open issues belong on the board")
+    tidy.add_argument("--apply", action="store_true",
+                      help=f"move each closed one to {DONE_COLUMN}, add each missing one to {NEW_COLUMN}")
+    tidy.set_defaults(func=cmd_tidy)
 
     args = parser.parse_args()
     try:
