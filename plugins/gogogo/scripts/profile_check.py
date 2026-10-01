@@ -106,6 +106,11 @@ TEST_DATA_HEADINGS = ("Running build", "Finding the change", "Sandbox and fixtur
 
 ROLES = ("pre-merge", "pre-production", "production")
 
+# Settings a profile may still carry that no skill reads any more: each warns.
+# Other keys of `tracker.columns` are column roles a repo may add for its own
+# tool (references/tracker-contract.md), so they do not warn.
+RETIRED = {"tracker.columns.back_to_queue": "retired: no skill reads it since gogogo#26"}
+
 # The keys a stage may have (`stages` is a list, so FIELDS cannot name them).
 STAGE_KEYS = ("code_is", "environment", "column", "moved_by", "tag")
 
@@ -343,7 +348,9 @@ def check(settings, sections, skill=None):
         errors.extend(_check_auto_test(settings, sections))
 
     for path in _leaf_paths(settings):
-        if path not in FIELDS:
+        if path in RETIRED:
+            warnings.append(f"{path}: unknown setting ({RETIRED[path]}); remove it")
+        elif path not in FIELDS and not path.startswith("tracker.columns."):
             warnings.append(f"{path}: unknown setting (typo, or not in this profile version)")
 
     for title, needed_by in SECTIONS.items():

@@ -211,8 +211,9 @@ and no further:
   finding you could not fix, a decision or Hard Stop found mid-change (§4), or
   verification that gave up → `tracker.columns.needs_human`. The §7 report's
   first line is `**Needs you:**` and one sentence saying what the person must
-  do, followed by the branch or PR link: for example, read commit `<sha>` and
-  merge; decide `<question>`; read the attempts and re-spec or requeue;
+  do, followed by the branch or PR link, or "in the working tree" when nothing
+  is committed: for example, read commit `<sha>` and merge; decide
+  `<question>`; read the attempts and re-spec or requeue;
 - merged → the first of the profile's `stages`, and only after the merge is
   verified (`verify_merged.py`, below).
 
@@ -220,12 +221,12 @@ No skill moves a card out of `tracker.columns.needs_human`; a person does,
 once they have done what it asked.
 
 ```bash
-<tracker.tool> move <n> --to <role key or stage column>
+<tracker.tool> move <n> --to "<role key, or a stage column's name>"
 ```
 
-Pass `in_progress` or `needs_human` as the role key, never the column's name:
-a name such as `Human!Help!` is expanded by an interactive shell inside double
-quotes.
+For `in_progress` and `needs_human`, pass the role key, never the column's
+name: a name such as `Human!Help!` is expanded by an interactive shell inside
+double quotes.
 
 A zero exit is the confirmation: the tool read the card back. Anything else is
 a failed move; say so, do not retry blind.

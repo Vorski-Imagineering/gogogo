@@ -136,17 +136,20 @@ Push the branch as soon as it has its first commit (`git push -u origin
   in the issue's `/gogogo:dev` §7 report, within its rule for a public
   tracker, and record the stop for the run report.
 - A Hard Stop, or a decision that belongs to a person and is not in the body,
-  discovered mid-change → stop **that issue**, leave its branch, move its card
-  to `tracker.columns.needs_human` with the Needs-you line, record it, carry
-  on with the next.
+  discovered mid-change → stop **that issue**: commit what the change has so
+  far to its branch, marked as stopped and naming the question in the commit
+  message, push it, leave it unmerged, move its card to
+  `tracker.columns.needs_human` with the Needs-you line, record it, carry on
+  with the next.
 - **When verification fails, fix forward, bounded.** Up to three attempts, and
   each must name a hypothesis that differs from the last. If you cannot say what
   is different about an attempt, stop there, whatever budget remains. After the
   bound: abandon the branch unmerged, move the card to
   `tracker.columns.needs_human`, put what each attempt ruled out in the issue
   report under the Needs-you line, and go on to the next issue. One stubborn issue does not end the run. **An issue abandoned or
-  skipped in this run is not taken again in the same run**, even though §1
-  re-reads the queue and will list it.
+  skipped in this run is not taken again in the same run**: an abandoned one
+  has left the queue, and a skipped one is still in it, so §1 will list it
+  again.
 - A change that needs a two-licence apply (for example a migration on a shared
   environment) is applied only with its apply row, by the profile's procedure
   for it, never improvised.

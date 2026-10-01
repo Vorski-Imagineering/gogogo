@@ -253,6 +253,11 @@ class Columns(unittest.TestCase):
         self.assertTrue(any(w.startswith("tracker.columns.back_to_queue: unknown setting") for w in warnings),
                         warnings)
 
+    def test_another_column_role_is_allowed(self):
+        settings, sections = parse()
+        settings["tracker"]["columns"]["in_review"] = "In review"
+        self.assertEqual(pc.check(settings, sections), ([], []))
+
 
 class WrongValues(unittest.TestCase):
     def test_wrong_type_is_named(self):
