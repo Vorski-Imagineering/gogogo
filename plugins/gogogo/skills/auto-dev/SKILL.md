@@ -180,9 +180,8 @@ Re-run the unattended-mode check immediately before every merge, chained so
 the merge is unreachable when it fails. The mode can change mid-session.
 
 **The PR's checks, when a merge is a release** (§Preflight 4). Before the `gh`
-merge, two steps:
-
-Every re-run below is `sleep 30; <the same command>`, as one command.
+merge, two steps. Every re-run in them is `sleep 30; <the same command>`, as
+one command.
 
 1. **Wait**, in the foreground (§4): `gh pr checks <pr> --watch --fail-fast`,
    with the longest timeout your tool allows. Then, by what it printed:
@@ -191,7 +190,7 @@ Every re-run below is `sleep 30; <the same command>`, as one command.
      checks appear, for up to three minutes;
    - any other error from `gh` (an HTTP, network or auth message): re-run it,
      at most three times;
-   - a table of checks, or a budget above spent: go on to Judge.
+   - the watch ended on its own, or a budget above is spent: go on to Judge.
 2. **Judge** by each check's state, never by the watch's exit code:
    `gh pr checks <pr> --json name,bucket`. When it exits non-zero with any
    message other than `no checks reported`, re-run it, at most three times.
@@ -199,7 +198,8 @@ Every re-run below is `sleep 30; <the same command>`, as one command.
    - `no checks reported`, or every check `skipping`: no CI ran. A failure
      under `run-branch-pr` or when `integration.ci_before_merge` is true;
      otherwise the PR merges on the suite §4 ran.
-   - A check in `fail` or `cancel` (a check failed), a check in `pending`
+   - A check in `fail` (a check failed), in `cancel` (a check was
+     cancelled), in `pending`
      (CI still running), or `gh` still erroring (the checks cannot be read):
      a failure, for that reason.
 
