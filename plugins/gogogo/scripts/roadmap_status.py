@@ -61,6 +61,7 @@ SEPARATOR = re.compile(r"^\|[-\s|:]+\|\s*$")
 # `\|` inside a cell is a literal pipe, not a column break.
 PIPE = re.compile(r"(?<!\\)\|")
 CELL_PREFIX = re.compile(r"^(?P<mark>\S+)\s+(?:\*\*(?P<bold>[^*]+)\*\*|(?P<dash>—))")
+FENCE = re.compile(r"^(`{3,}|~{3,})")
 LEGEND_STATE = re.compile(r"^\*\*(?P<words>[^*]+)\*\*$")
 # What /gogogo:spec always writes: a `## Design` heading.
 SPEC_PATTERN = re.compile(r"^#{1,6}\s*Design\b", re.MULTILINE)
@@ -119,13 +120,33 @@ def content(line: str) -> str:
     return line.rstrip("\r\n")
 
 
+def fenced(lines: list[str]) -> set[int]:
+    """Indexes of lines inside a ``` or ~~~ fence, the fence lines included."""
+    inside, opener = set(), None
+    for i, line in enumerate(lines):
+        stripped = line.lstrip()
+        if opener is None:
+            found = FENCE.match(stripped)
+            if found:
+                opener = found.group(0)
+                inside.add(i)
+        else:
+            inside.add(i)
+            if stripped.startswith(opener[0] * len(opener)) and not stripped.strip(opener[0]).strip():
+                opener = None
+    return inside
+
+
 def find_tables(lines: list[str]) -> list[Table]:
+    """Every table outside a code fence: a quoted example is not a live row."""
+    skip = fenced(lines)
     found, i = [], 0
     while i < len(lines) - 1:
-        if lines[i].startswith("|") and SEPARATOR.match(content(lines[i + 1])):
+        if (i not in skip and lines[i].startswith("|")
+                and SEPARATOR.match(content(lines[i + 1]))):
             header = [c.text for c in split_cells(content(lines[i]))]
             rows, j = [], i + 2
-            while j < len(lines) and lines[j].startswith("|"):
+            while j < len(lines) and j not in skip and lines[j].startswith("|"):
                 rows.append((j, split_cells(content(lines[j]))))
                 j += 1
             found.append(Table(header, rows))
@@ -273,16 +294,21 @@ def read_issue(number: int, repo: str) -> dict:
         if proc.returncode != 0:
             raise ReadError(f"{repo}#{number}: {first_line(proc.stderr or proc.stdout)}")
         info = json.loads(proc.stdout)
+        # A null repository or issue in the GraphQL answer is a TypeError or KeyError here.
         card = tracker.issue_card(number, repo)["card"]
+        return {
+            "state": info["state"],
+            "state_reason": info.get("stateReason") or None,
+            "labels": [label["name"] for label in info.get("labels") or []],
+            "body": info.get("body") or "",
+            "column": ((card or {}).get("fieldValueByName") or {}).get("name"),
+        }
+    except json.JSONDecodeError as exc:
+        raise ReadError(f"{repo}#{number}: gh did not return JSON ({exc})") from None
+    except (TypeError, KeyError) as exc:
+        raise ReadError(f"{repo}#{number}: unexpected answer from GitHub ({type(exc).__name__}: {exc})") from None
     except (FileNotFoundError, tracker.BoardError) as exc:
         raise ReadError(f"{repo}#{number}: {first_line(str(exc))}") from None
-    return {
-        "state": info["state"],
-        "state_reason": info.get("stateReason") or None,
-        "labels": [label["name"] for label in info.get("labels") or []],
-        "body": info.get("body") or "",
-        "column": ((card or {}).get("fieldValueByName") or {}).get("name"),
-    }
 
 
 # --------------------------------------------------------------------------
@@ -440,7 +466,9 @@ def run(args, reader) -> int:
         info = infos[issue]
         wanted = derive(info, legend, ready_marker)
         facts = f"#{issue} {info['state'].lower()}, column {info.get('column') or '—'}"
-        if current is legend.get(BY_HAND) and " — " not in text:
+        # The note may follow the mark (` — note`) or sit in any later cell.
+        later = cells[cells.index(state) + 1:]
+        if current is legend.get(BY_HAND) and " — " not in text and not any(c.text for c in later):
             print(f"FIX BY HAND  {where}: {current.state}, but the note does not say on what")
             attention += 1
         # Checked whether or not the mark agrees: a correct closed mark beside

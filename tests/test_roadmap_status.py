@@ -140,14 +140,14 @@ class Case(unittest.TestCase):
     def write(self, text):
         self.roadmap.write_bytes(text.encode("utf-8"))
 
-    def run_main(self, issues, *argv, default_file=False):
+    def run_main(self, issues, *argv, default_file=False, reader=None):
         self.fake = Fake(issues)
         args = ["--profile", str(self.profile)]
         if not default_file:
             args += ["--file", str(self.roadmap)]
         out, err = io.StringIO(), io.StringIO()
         with redirect_stdout(out), redirect_stderr(err):
-            code = rs.main(args + list(argv), reader=self.fake)
+            code = rs.main(args + list(argv), reader=reader or self.fake)
         self.out, self.err = out.getvalue(), err.getvalue()
         return code
 
@@ -277,8 +277,14 @@ class Derivation(Case):
         self.assertIn("says ⚪ —, GitHub says 🟣 spec", self.out)
 
     def test_by_hand_without_a_note(self):
-        self.assertEqual(self.says("⛔ **blocked**", issue()), rs.EXIT_ATTENTION)
+        self.write(document([*ISSUE_HEADER, row("w", 1, "⛔ **blocked**", note="")]))
+        self.assertEqual(self.run_main({1: issue()}), rs.EXIT_ATTENTION)
         self.assertRegex(self.out, r"FIX BY HAND .*blocked, but the note does not say on what")
+
+    def test_by_hand_note_in_a_later_cell(self):
+        self.write(document([*ISSUE_HEADER, row("w", 1, "⛔ **blocked**", note="waits on #9")]))
+        self.assertEqual(self.run_main({1: issue()}), rs.EXIT_OK, self.out + self.err)
+        self.assertEqual(self.lines("FIX BY HAND"), [])
 
     def test_stale_prose_on_a_correct_mark(self):
         code = self.says("✅ **Closed** — still open on GitHub", issue("CLOSED", "COMPLETED"))
@@ -325,6 +331,26 @@ class RowsAndIssues(Case):
         self.assertIn("nothing was checked", self.err)
 
 
+class Fences(Case):
+    def test_a_fenced_row_is_not_checked_or_rewritten(self):
+        example = ["```", *ISSUE_HEADER, row("Example", 2, "🟠 **In Production**"), "```"]
+        before = document([*ISSUE_HEADER, row("Work", 1, "⚪ —")], example)
+        self.write(before)
+        code = self.run_main({1: issue(), 2: issue("CLOSED", "COMPLETED")}, "--write")
+        self.assertEqual(code, rs.EXIT_OK, self.out + self.err)
+        self.assertEqual(self.fake.asked, [1])
+        self.assertEqual(self.lines("WROTE"), [])
+        self.assertEqual(self.roadmap.read_bytes(), before.encode("utf-8"))
+
+    def test_a_fenced_legend_is_not_a_second_legend(self):
+        for fence in ("```", "~~~"):
+            with self.subTest(fence):
+                quoted = [fence + "markdown", *LEGEND_HEADER, *LEGEND_ROWS, fence]
+                self.write(document([*ISSUE_HEADER, row("Work", 1, "⚪ —")], quoted))
+                self.assertEqual(self.run_main({1: issue()}), rs.EXIT_OK, self.out + self.err)
+                self.assertNotIn("tables start", self.err)
+
+
 class Write(Case):
     def test_write_swaps_the_prefix_only(self):
         self.write(document([*ISSUE_HEADER, LINE_A]))
@@ -366,7 +392,34 @@ class Write(Case):
         self.assertEqual(self.roadmap.read_bytes(), before.encode("utf-8"))
 
 
-class DefaultReader(unittest.TestCase):
+class DefaultReader(Case):
+    GOOD = '{"state": "OPEN", "stateReason": "", "labels": [], "body": ""}'
+
+    def read(self, stdout, graphql=None):
+        done = subprocess.CompletedProcess([], 0, stdout=stdout, stderr="")
+        with mock.patch.object(rs.subprocess, "run", return_value=done), \
+                mock.patch.object(rs.tracker, "graphql", return_value=graphql):
+            with self.assertRaises(rs.ReadError) as raised:
+                rs.read_issue(2, "acme/issues")
+        self.assertTrue(str(raised.exception).startswith("acme/issues#2: "), raised.exception)
+
+    def test_gh_output_not_json_is_a_read_error(self):
+        self.read("not json")
+
+    def test_null_repository_or_issue_is_a_read_error(self):
+        self.read(self.GOOD, {"repository": None})
+        self.read(self.GOOD, {})
+
+    def test_a_bad_read_exits_2_without_a_traceback(self):
+        self.write(document([*ISSUE_HEADER, row("Work", 2, "⚪ —")]))
+        done = subprocess.CompletedProcess([], 0, stdout=self.GOOD, stderr="")
+        with mock.patch.object(rs.subprocess, "run", return_value=done), \
+                mock.patch.object(rs.tracker, "graphql", return_value={"repository": None}):
+            code = self.run_main({}, reader=rs.read_issue)
+        self.assertEqual(code, rs.EXIT_UNUSABLE)
+        self.assertIn("could not read acme/issues#2: ", self.err)
+        self.assertNotIn("Traceback", self.out + self.err)
+
     def test_gh_failure_is_a_read_error(self):
         failed = subprocess.CompletedProcess([], 1, stdout="", stderr="HTTP 404: Not Found\nmore\n")
         with mock.patch.object(rs.subprocess, "run", return_value=failed):
