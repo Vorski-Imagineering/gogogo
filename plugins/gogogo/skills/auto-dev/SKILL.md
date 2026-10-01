@@ -180,20 +180,22 @@ Re-run the unattended-mode check immediately before every merge, chained so
 the merge is unreachable when it fails. The mode can change mid-session.
 
 **The PR's checks, when a merge is a release** (§Preflight 4). Before the `gh`
-merge, wait in the foreground (§4) with `gh pr checks <pr> --watch
---fail-fast`, giving the command the longest timeout your tool allows, and
-run it again if that limit cuts it off. Then judge by each check's state, not
-the exit code: `gh pr checks <pr> --json name,bucket`.
+merge, two steps:
 
-- **Every check is `pass` or `skipping`, and at least one is `pass`**: the
-  checks passed.
-- **No checks reported.** Just after `gh pr create`, CI may not have
-  registered yet: run `sleep 30; gh pr checks <pr> --watch --fail-fast` as one
-  command, for up to three minutes in all. Still none: that is a failure under
-  `run-branch-pr` or when `integration.ci_before_merge` is true, and otherwise
-  the PR merges on the suite §4 ran.
-- **Anything else** (a check in `fail`, `cancel` or `pending`, or `gh` still
-  erroring after three tries 30 seconds apart): a failure.
+1. **Wait**, in the foreground (§4): `gh pr checks <pr> --watch --fail-fast`,
+   with the longest timeout your tool allows. Run it again, as
+   `sleep 30; gh pr checks <pr> --watch --fail-fast` in one command, when the
+   tool's limit cuts it off; when it prints `no checks reported` (CI may not
+   have registered yet), for up to three minutes in all; and when `gh` itself
+   errors, at most three times.
+2. **Judge** by each check's state, never by the watch's exit code:
+   `gh pr checks <pr> --json name,bucket`.
+   - Every check `pass` or `skipping`, and at least one `pass`: passed.
+   - `no checks reported`, or every check `skipping`: no CI ran. A failure
+     under `run-branch-pr` or when `integration.ci_before_merge` is true;
+     otherwise the PR merges on the suite §4 ran.
+   - Anything else (a check in `fail`, `cancel` or `pending`, or `gh` still
+     erroring): a failure.
 
 A failure stops that issue at its PR, handed back to
 `tracker.columns.needs_human` as `/gogogo:dev` §8 says for a gate you could not
@@ -223,7 +225,8 @@ and the merge is `gh pr merge ... --body-file` with the body built as
   the run branch to `integration.final_target` carries the whole run. When
   that final PR is a release (§Preflight 4), merge it too, with a merge
   commit, once its checks pass (above); on a failure there (above), the run
-  branch is red: stop the whole run and ask, and leave the
+  branch is red or its checks cannot be read: stop the whole run and ask,
+  saying which, and leave the
   cards where they are. When it is not a release, it waits for a person.
   When the link applies, the final PR's description says it must be merged
   with a merge commit, not squashed: a squash leaves the issue commits out of
