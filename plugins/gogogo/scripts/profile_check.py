@@ -348,8 +348,8 @@ def check(settings, sections, skill=None):
         errors.append(f"tracker.columns: expected a table of role = column name, found {type(columns).__name__}")
     elif columns_present:
         for role, name in columns.items():
-            if f"tracker.columns.{role}" in RETIRED or any(e.startswith(f"tracker.columns.{role}:") for e in errors):
-                continue  # retired (it warns, below), or FIELDS above already named it
+            if any(e.startswith(f"tracker.columns.{role}:") for e in errors):
+                continue  # FIELDS above already named it
             if not isinstance(name, str) or not name.strip():
                 errors.append(f"tracker.columns.{role}: expected a column name, found {name!r}")
 

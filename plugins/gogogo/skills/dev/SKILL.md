@@ -206,8 +206,9 @@ The card moves to the column of the **stage the code has actually reached**,
 and no further. Take the first case that fits:
 
 - **stopped for a person**: a review fix no round has reviewed, a correctness
-  finding you could not fix, a decision or Hard Stop found mid-change (§4), or
-  verification that gave up → `tracker.columns.needs_human`, whether or not
+  finding you could not fix, a decision or Hard Stop found mid-change (§4), a
+  gate you could not make pass, or verification that gave up →
+  `tracker.columns.needs_human`, whether or not
   the work sits on a branch or PR. The §7 report's first line is
   `**Needs you:**` and one sentence saying what the person must do, followed
   by the branch or PR link: for example, read commit `<sha>` and merge; decide
@@ -224,19 +225,23 @@ and no further. Take the first case that fits:
 Nothing sweeps cards out of `tracker.columns.needs_human`, and no run takes an
 issue from there: a person moves it on once they have done what it asked, or
 starts `/gogogo:dev` on it, which then moves the card as for any issue. Also
-remove `tracker.ready_marker` from an issue you move to `needs_human`: the
-label means the issue needs nothing from anyone, and on a label queue it would
-let the next run take it. The person puts it back when the issue is ready
-again. In a session with the person present, a question they answer there is
-not a stop: carry on.
+remove `tracker.ready_marker` from an issue you move to `needs_human`, and
+`tracker.queue` too when the queue is a label
+(`gh issue edit <n> --repo <tracker.issues_repo> --remove-label "<label>"`):
+the ready label means the issue needs nothing from anyone, and a queue label
+would let the next run take it. The person puts them back when the issue is
+ready again. In a session with the person present, a question they answer
+there is not a stop once the answer is in the issue body (§2: a sign-off in
+chat or a comment does not count): record it with `/gogogo:spec`, then carry
+on.
 
 ```bash
-<tracker.tool> move <n> --to '<column>'
+<tracker.tool> move <n> --to "<column>"
 ```
 
 `<column>` is a role key (`in_progress`, `needs_human`) or a stage column's
-name. Pass the role key for those two. Single quotes keep a `!` in a name, as
-in `Human!Help!`, from being expanded by an interactive shell.
+name. Pass the role key, not the name, for those two: a `!` in a name, as in
+`Human!Help!`, is expanded by an interactive shell inside double quotes.
 
 A zero exit is the confirmation: the tool read the card back. Anything else is
 a failed move; say so, do not retry blind.

@@ -163,7 +163,8 @@ Push the branch as soon as it has its first commit (`git push -u origin
 
 Run the profile's `gates.always`, and each `gates.when` entry whose pattern the
 change touches, before merging. A gate failure is a finding: fix it rather than
-raise a budget, or stop the issue.
+raise a budget, or stop the issue and hand its card back to
+`tracker.columns.needs_human` as `/gogogo:dev` §8 says.
 
 ## 6. Merge, by the profile's integration strategy
 
