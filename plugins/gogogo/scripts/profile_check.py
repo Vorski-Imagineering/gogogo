@@ -308,7 +308,11 @@ def check(settings, sections, skill=None):
     else:
         wanted = tuple(s for s in SKILLS if s != TEST or "auto_test" in settings)
 
+    columns, columns_present = _lookup(settings, "tracker.columns")
+    columns_bad = columns_present and not isinstance(columns, dict)
     for path, (kind, required_by, meaning) in FIELDS.items():
+        if columns_bad and path.startswith("tracker.columns."):
+            continue  # one error for the whole table, below
         value, present = _lookup(settings, path)
         required = any(s in required_by for s in wanted)
         if not present:
@@ -337,13 +341,13 @@ def check(settings, sections, skill=None):
             elif not (lane.get("run") or lane.get("env")):
                 errors.append(f"lanes[{i}] ({lane['name']}): needs run (a command) or env (where it is checked)")
 
-    columns, present = _lookup(settings, "tracker.columns")
-    if present and not isinstance(columns, dict):
+    if columns_bad:
         errors.append(f"tracker.columns: expected a table of role = column name, found {type(columns).__name__}")
-    elif present:
+    elif columns_present:
         for role, name in columns.items():
-            if f"tracker.columns.{role}" in FIELDS:
-                continue  # checked with FIELDS above
+            known = f"tracker.columns.{role}" in FIELDS
+            if known and (not isinstance(name, str) or name == ""):
+                continue  # FIELDS above already named the wrong type or the empty value
             if not isinstance(name, str) or not name.strip():
                 errors.append(f"tracker.columns.{role}: expected a column name, found {name!r}")
 

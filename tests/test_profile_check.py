@@ -274,6 +274,20 @@ class Columns(unittest.TestCase):
         _, warnings = pc.check(settings, sections, pc.ROADMAP)
         self.assertEqual([w for w in warnings if w.startswith("tracker.columns")], [])
 
+    def test_a_columns_value_that_is_not_a_table_is_one_error(self):
+        settings, sections = parse()
+        settings["tracker"]["columns"] = "In progress"
+        errors, _ = pc.check(settings, sections, pc.ONE)
+        self.assertEqual([e for e in errors if e.startswith("tracker.columns")],
+                         ["tracker.columns: expected a table of role = column name, found str"])
+
+    def test_a_blank_required_column_name_is_an_error(self):
+        settings, sections = parse()
+        settings["tracker"]["columns"]["needs_human"] = "  "
+        errors, _ = pc.check(settings, sections, pc.ONE)
+        self.assertEqual([e for e in errors if e.startswith("tracker.columns")],
+                         ["tracker.columns.needs_human: expected a column name, found '  '"])
+
     def test_another_column_role_is_allowed(self):
         settings, sections = parse()
         settings["tracker"]["columns"]["in_review"] = "In review"

@@ -46,6 +46,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import profile_check  # noqa: E402
+import profile_check  # noqa: E402
 import tracker  # noqa: E402
 
 EXIT_OK, EXIT_ATTENTION, EXIT_UNUSABLE = 0, 1, 2
@@ -269,8 +270,10 @@ def read_legend(tables: list[Table], settings: dict) -> Legend:
     tracker_settings = settings.get("tracker") or {}
     required = [CLOSED, NOT_PLANNED, NONE]
     columns_settings = tracker_settings.get("columns") or {}
-    for role in ("in_progress", "needs_human"):
-        if columns_settings.get(role):
+    # Every column role the profile format defines; a repo's own extra roles are not.
+    roles = [p.split(".", 2)[2] for p in profile_check.FIELDS if p.startswith("tracker.columns.")]
+    for role in roles:
+        if isinstance(columns_settings.get(role), str) and columns_settings[role]:
             required.append(columns_settings[role])
     for stage in settings.get("stages") or []:
         if isinstance(stage, dict) and stage.get("column"):

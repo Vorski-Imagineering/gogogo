@@ -124,8 +124,6 @@ def configure(profile_path: str | None = None) -> Path:
     if tracker.get("queue"):
         COLUMNS["queue"] = Column(tracker["queue"], "the queue the loop works")
     for role, name in (tracker.get("columns") or {}).items():
-        if f"tracker.columns.{role}" in profile_check.RETIRED:
-            continue  # no skill moves a card there any more
         COLUMNS[role] = Column(name, f"tracker.columns.{role}")
     for stage in settings.get("stages") or []:
         if isinstance(stage, dict) and stage.get("column"):
