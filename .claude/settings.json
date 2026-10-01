@@ -1,0 +1,14 @@
+{
+  "extraKnownMarketplaces": {
+    "vorski-skills": {
+      "source": {
+        "source": "github",
+        "repo": "Vorski-Imagineering/gogogo"
+      },
+      "autoUpdate": true
+    }
+  },
+  "enabledPlugins": {
+    "gogogo@vorski-skills": true
+  }
+}

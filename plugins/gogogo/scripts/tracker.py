@@ -1,0 +1,751 @@
+#!/usr/bin/env python3
+"""Read and move cards on a repo's GitHub project board, as its profile describes.
+
+    tracker.py [--profile FILE] list [--status "<column>"] [--open-only] [--issues-only] [--json]
+    tracker.py [--profile FILE] show <issue> [--expect "<column>"]
+    tracker.py [--profile FILE] move <issue> --to "<column>" [--add-missing]
+    tracker.py [--profile FILE] fields [--check]
+
+The board (owner, project number), the issues repo and the columns the skills
+move cards between all come from the profile (`.agents/dev-process.md`, the
+nearest one above this folder): `tracker.project_owner`,
+`tracker.project_number`, `tracker.issues_repo`, `tracker.queue`,
+`tracker.columns` and the `column` of each of `stages`. It meets
+`references/tracker-contract.md`.
+
+Why this exists rather than raw `gh` in a skill: two of the board operations
+fail *silently* when done by hand.
+
+  * `gh project item-list` has no ordering and no status filter, and caps at
+    `--limit`. A board past the limit reads exactly like a short column: the
+    newest cards are simply not in the answer.
+  * The Status field/option ids change when the board is edited, and a column
+    can be renamed while keeping its id. A stored id makes `item-edit` fail, or
+    worse, moves a card into a column that now means something else.
+
+So: `list` pages to the end and refuses to print a result it cannot reconcile
+against `totalCount`; every id is resolved live; `move` reads the card back and
+exits non-zero if the board does not agree with what it just wrote.
+
+That `totalCount` guard is necessary and not sufficient. It compares the pages
+received against the count the *same* connection reported, so when GitHub's
+project-side index drops an item it drops it from both and the check passes
+over a missing card (a real card sat in a column, unarchived, while the read
+said "369 of 369"). `list` therefore asks a second, independent index (each
+open issue what it belongs to) and prints any card only that side can see.
+
+Exit codes: 0 ok, 1 usage/not-found, 2 the read or write could not be trusted,
+3 `show --expect`: the card is in a different column.
+"""
+from __future__ import annotations
+
+import argparse
+import json
+import subprocess
+import sys
+import traceback
+import time
+from dataclasses import dataclass
+
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import profile_check  # noqa: E402
+
+# Set from the profile by configure(); module-level so the queries read them
+# the way board.py's constants were read.
+ORG = ""
+PROJECT_NUMBER = 0
+DEFAULT_REPO = ""
+PAGE_SIZE = 100
+STATUS_FIELD = "Status"
+
+
+class BoardError(Exception):
+    """Something came back that we are not willing to act on."""
+
+
+# --------------------------------------------------------------------------
+# column registry: the columns the skills move cards between, from the profile
+# --------------------------------------------------------------------------
+
+
+@dataclass(frozen=True)
+class Column:
+    name: str
+    meaning: str
+
+
+#: Filled by configure(): tracker.queue, tracker.columns and every stage's
+#: column. Keys are the roles the skills use ("queue", "in_progress",
+#: "back_to_queue", and each stage's column name); values carry the live name.
+#: `fields --check` fails when the live board lacks one of these.
+COLUMNS: dict[str, Column] = {}
+
+
+class ProfileMissing(Exception):
+    """No usable profile: this tool cannot know which board to read."""
+
+
+def configure(profile_path: str | None = None) -> Path:
+    """Read the board, repo and columns from the profile. Returns its path."""
+    global ORG, PROJECT_NUMBER, DEFAULT_REPO
+    path = Path(profile_path) if profile_path else profile_check.find_profile()
+    if not path.is_file():
+        raise ProfileMissing(f"no profile at {path}")
+    try:
+        settings, _ = profile_check.split_profile(path.read_text(encoding="utf-8"))
+    except profile_check.ProfileError as exc:
+        raise ProfileMissing(str(exc)) from None
+    tracker = settings.get("tracker") or {}
+    for key in ("project_owner", "project_number", "issues_repo"):
+        if not tracker.get(key):
+            raise ProfileMissing(f"tracker.{key}: missing in {path}")
+    ORG = tracker["project_owner"]
+    PROJECT_NUMBER = int(tracker["project_number"])
+    DEFAULT_REPO = tracker["issues_repo"]
+
+    COLUMNS.clear()
+    if tracker.get("queue"):
+        COLUMNS["queue"] = Column(tracker["queue"], "the queue the loop works")
+    for role, name in (tracker.get("columns") or {}).items():
+        COLUMNS[role] = Column(name, f"tracker.columns.{role}")
+    for stage in settings.get("stages") or []:
+        if isinstance(stage, dict) and stage.get("column"):
+            COLUMNS[stage["column"]] = Column(stage["column"], f"stage: {stage.get('code_is', '')}")
+    return path
+
+
+def missing_columns(meta: dict, keys: list[str] | None = None) -> list[str]:
+    """The profile's columns (all, or just `keys`) the live board lacks, by name."""
+    live = {name.lower() for name in meta["options"]}
+    wanted = [COLUMNS[k] for k in keys] if keys else list(COLUMNS.values())
+    return sorted({c.name for c in wanted if c.name.lower() not in live})
+
+
+def require_columns(meta: dict, keys: list[str] | None = None) -> None:
+    """Raise BoardError naming each missing profile column, and how to add it."""
+    missing = missing_columns(meta, keys)
+    if missing:
+        raise BoardError(
+            "the board lacks column(s) the profile names: " + ", ".join(repr(m) for m in missing)
+            + ". Add them in the board's Status field settings (the GitHub UI, not the API),"
+            " or correct the profile."
+        )
+
+
+def column(key_or_name: str) -> str:
+    """A profile role key → its column name; anything else passes through unchanged."""
+    registered = COLUMNS.get(key_or_name)
+    return registered.name if registered else key_or_name
+
+
+# --------------------------------------------------------------------------
+# gh plumbing
+# --------------------------------------------------------------------------
+
+
+def graphql(query: str, **variables: str | int) -> dict:
+    """Run one GraphQL query through `gh`, retrying only transient failures.
+
+    A partial `data` alongside `errors` is treated as a failure: a half-answered
+    board query is the exact shape this script exists to stop.
+
+    `int` values go through `-F` (gh's typed form, required by `Int!`); strings
+    go through `-f`, which never coerces — a page cursor that happens to be all
+    digits must stay a String.
+    """
+    cmd = ["gh", "api", "graphql", "-f", f"query={query}"]
+    for key, value in variables.items():
+        flag = "-F" if isinstance(value, int) else "-f"
+        cmd += [flag, f"{key}={value}"]
+
+    last_error = ""
+    for attempt in range(3):
+        proc = subprocess.run(cmd, capture_output=True, text=True)
+        if proc.returncode == 0:
+            payload = json.loads(proc.stdout)
+            if payload.get("errors"):
+                raise BoardError(
+                    "GitHub returned errors:\n  "
+                    + "\n  ".join(e.get("message", str(e)) for e in payload["errors"])
+                )
+            return payload["data"]
+
+        last_error = (proc.stderr or proc.stdout).strip()
+        transient = any(
+            marker in last_error
+            for marker in ("rate limit", "was submitted too quickly", "502", "503", "timeout")
+        )
+        if not transient:
+            break
+        time.sleep(2 * (attempt + 1))
+
+    raise BoardError(f"gh api graphql failed: {last_error}")
+
+
+# --------------------------------------------------------------------------
+# board metadata — always live, never a constant
+# --------------------------------------------------------------------------
+
+FIELDS_QUERY = """
+query($org: String!, $number: Int!) {
+  repositoryOwner(login: $org) {
+    ... on ProjectV2Owner {
+    projectV2(number: $number) {
+      id
+      title
+      items(first: 1) { totalCount }
+      fields(first: 50) {
+        nodes {
+          ... on ProjectV2SingleSelectField {
+            id
+            name
+            options { id name }
+          }
+        }
+      }
+    }
+    }
+  }
+}
+"""
+
+
+def board_meta() -> dict:
+    """Project id, item count, and the Status field with its current options."""
+    data = graphql(FIELDS_QUERY, org=ORG, number=PROJECT_NUMBER)
+    project = (data.get("repositoryOwner") or {}).get("projectV2")
+    if not project:
+        raise BoardError(f"project {ORG}/#{PROJECT_NUMBER} not visible to this gh login")
+
+    status = next(
+        (f for f in project["fields"]["nodes"] if f and f.get("name") == STATUS_FIELD),
+        None,
+    )
+    if not status:
+        raise BoardError(f"the board has no single-select {STATUS_FIELD!r} field")
+
+    return {
+        "project_id": project["id"],
+        "title": project["title"],
+        "total": project["items"]["totalCount"],
+        "status_field_id": status["id"],
+        "options": {o["name"]: o["id"] for o in status["options"]},
+    }
+
+
+def resolve_option(meta: dict, name: str) -> str:
+    """Match a column name case-insensitively; list the real ones on a miss."""
+    for option_name, option_id in meta["options"].items():
+        if option_name.lower() == name.lower():
+            return option_id
+    raise BoardError(
+        f"no column named {name!r} on this board. It has: "
+        + ", ".join(meta["options"])
+    )
+
+
+# --------------------------------------------------------------------------
+# list — the whole board, or nothing
+# --------------------------------------------------------------------------
+
+ITEMS_QUERY = """
+query($org: String!, $number: Int!, $size: Int!, $after: String) {
+  repositoryOwner(login: $org) {
+    ... on ProjectV2Owner {
+    projectV2(number: $number) {
+      items(first: $size, after: $after,
+            orderBy: {field: POSITION, direction: DESC}) {
+        totalCount
+        pageInfo { hasNextPage endCursor }
+        nodes {
+          id
+          type
+          content {
+            __typename
+            ... on Issue {
+              number title state url
+              repository { nameWithOwner }
+              assignees(first: 10) { nodes { login } }
+            }
+            ... on PullRequest {
+              number title state url
+              repository { nameWithOwner }
+            }
+            ... on DraftIssue { title }
+          }
+          fieldValueByName(name: "Status") {
+            ... on ProjectV2ItemFieldSingleSelectValue { name }
+          }
+        }
+      }
+    }
+    }
+  }
+}
+"""
+
+
+def fetch_items() -> list[dict]:
+    """Every card on the board, newest-added first.
+
+    Raises rather than returns if the pages do not reconcile against
+    `totalCount` — a short read and an empty column look identical otherwise,
+    and only one of them is a fact.
+    """
+    items: list[dict] = []
+    cursor: str | None = None
+    total: int | None = None
+    pages = 0
+
+    while True:
+        variables: dict[str, str | int] = {"org": ORG, "number": PROJECT_NUMBER, "size": PAGE_SIZE}
+        if cursor:
+            variables["after"] = cursor
+        page = graphql(ITEMS_QUERY, **variables)["repositoryOwner"]["projectV2"]["items"]
+
+        total = page["totalCount"] if total is None else total
+        items.extend(page["nodes"])
+        pages += 1
+
+        if not page["pageInfo"]["hasNextPage"]:
+            break
+        cursor = page["pageInfo"]["endCursor"]
+        if pages > 200:  # ~20k cards; a cursor that stopped advancing, in practice
+            raise BoardError("pagination did not terminate — refusing to report a partial board")
+
+    if total is not None and len(items) != total:
+        raise BoardError(
+            f"read {len(items)} cards but the board reports {total}. "
+            "This is the short read this script exists to catch — not an empty column."
+        )
+    return items
+
+
+def flatten(item: dict) -> dict:
+    """One card as flat fields; drafts and deleted content stay representable."""
+    content = item.get("content") or {}
+    status = (item.get("fieldValueByName") or {}).get("name")
+    return {
+        "item_id": item["id"],
+        "kind": content.get("__typename") or item.get("type") or "Unknown",
+        "number": content.get("number"),
+        "title": content.get("title") or "(no content — draft or deleted)",
+        "state": content.get("state"),
+        "url": content.get("url"),
+        "repo": (content.get("repository") or {}).get("nameWithOwner"),
+        "status": status,
+        "assignees": [a["login"] for a in (content.get("assignees") or {}).get("nodes", [])],
+    }
+
+
+REPO_ISSUE_CARDS_QUERY = """
+query($owner: String!, $name: String!, $size: Int!, $after: String) {
+  repository(owner: $owner, name: $name) {
+    issues(first: $size, after: $after, states: [OPEN],
+           orderBy: {field: CREATED_AT, direction: DESC}) {
+      totalCount
+      pageInfo { hasNextPage endCursor }
+      nodes {
+        number title state url
+        repository { nameWithOwner }
+        assignees(first: 10) { nodes { login } }
+        projectItems(first: 10, includeArchived: true) {
+          nodes {
+            id
+            isArchived
+            project { number }
+            fieldValueByName(name: "Status") {
+              ... on ProjectV2ItemFieldSingleSelectValue { name }
+            }
+          }
+        }
+      }
+    }
+  }
+}
+"""
+
+
+def issue_side_cards(repo: str) -> list[dict]:
+    """Every open issue's card on this project, asked from the *issue* side.
+
+    The second opinion. `fetch_items` asks the project what it holds; this asks
+    each issue what it belongs to. They are different indexes at GitHub's end
+    and they do not always agree.
+    """
+    owner, name = repo.split("/", 1)
+    cards: list[dict] = []
+    cursor: str | None = None
+    pages = 0
+
+    while True:
+        variables: dict[str, str | int] = {"owner": owner, "name": name, "size": PAGE_SIZE}
+        if cursor:
+            variables["after"] = cursor
+        connection = graphql(REPO_ISSUE_CARDS_QUERY, **variables)["repository"]["issues"]
+
+        for issue in connection["nodes"]:
+            for node in (issue.get("projectItems") or {}).get("nodes") or []:
+                if node["isArchived"] or node["project"]["number"] != PROJECT_NUMBER:
+                    continue
+                cards.append({
+                    "item_id": node["id"],
+                    "kind": "Issue",
+                    "number": issue["number"],
+                    "title": issue["title"],
+                    "state": issue["state"],
+                    "url": issue["url"],
+                    "repo": (issue.get("repository") or {}).get("nameWithOwner"),
+                    "status": (node.get("fieldValueByName") or {}).get("name"),
+                    "assignees": [
+                        a["login"] for a in (issue.get("assignees") or {}).get("nodes", [])
+                    ],
+                })
+
+        pages += 1
+        if not connection["pageInfo"]["hasNextPage"]:
+            break
+        cursor = connection["pageInfo"]["endCursor"]
+        if pages > 200:
+            raise BoardError("issue pagination did not terminate")
+
+    return cards
+
+
+def cards_the_board_did_not_list(board_cards: list[dict], repo: str) -> list[dict]:
+    """Cards that exist issue-side and are missing from the project-side read.
+
+    **Why a second read at all, when `fetch_items` already reconciles.** It
+    reconciles the pages it got against the `totalCount` the *same* connection
+    reported. When GitHub's project-side index omits an item, it omits it from
+    both — so the count matches, the guard passes, and the card is simply gone.
+    That is not hypothetical: an issue sat in its queue column, unarchived,
+    while `list` read "369 of 369" and never showed it. `move` found it
+    instantly, because `move` asks from the issue side.
+
+    A count can only ever catch a read that came back short against its own
+    idea of how long it should be. Catching an index that is wrong needs an
+    index that is independently wrong, which is what the issue side is.
+
+    Open issues only: that is what the queue is selected from, and it keeps the
+    second read to two pages where enumerating everything would be five.
+    """
+    listed = {card["item_id"] for card in board_cards}
+    return [card for card in issue_side_cards(repo) if card["item_id"] not in listed]
+
+
+def list_cards(
+    *,
+    status: str | None = None,
+    open_only: bool = False,
+    issues_only: bool = False,
+    repo: str = DEFAULT_REPO,
+    crosscheck: bool = True,
+) -> tuple[list[dict], list[dict], int]:
+    """The cards matching the filters, the recovered ones, and the board total.
+
+    The one reading of a column, for `list` and any other caller alike — so no
+    caller can quietly skip the issue-side cross-check that `list` relies on.
+    """
+    if status:
+        # A column the board does not have filters to no cards, which reads
+        # exactly like an empty column. Refuse it instead (BoardError, exit 2).
+        resolve_option(board_meta(), column(status))
+    cards = [flatten(i) for i in fetch_items()]
+    total = len(cards)
+
+    # The project side has finished answering; now ask the issues themselves.
+    # Recovered cards go to the front because they are newest-added, which is
+    # the end of the list the queue is taken from — and because a card the
+    # board could not name is the one a reader most needs to see.
+    recovered: list[dict] = []
+    if crosscheck:
+        recovered = cards_the_board_did_not_list(cards, repo)
+        cards = recovered + cards
+
+    if status:
+        wanted = column(status).lower()
+        cards = [c for c in cards if (c["status"] or "").lower() == wanted]
+    if open_only:
+        cards = [c for c in cards if c["state"] in (None, "OPEN")]
+    if issues_only:
+        cards = [c for c in cards if c["kind"] == "Issue"]
+    return cards, recovered, total
+
+
+def cmd_list(args: argparse.Namespace) -> int:
+    cards, recovered, total = list_cards(
+        status=args.status,
+        open_only=args.open_only,
+        issues_only=args.issues_only,
+        repo=args.repo,
+        crosscheck=not args.no_crosscheck,
+    )
+
+    if args.json:
+        print(json.dumps(cards, indent=2))
+    else:
+        for card in cards:
+            ref = f"#{card['number']}" if card["number"] else "(draft)"
+            where = "" if args.status else f"  [{card['status'] or 'no status'}]"
+            print(f"{ref:>7}{where}  {card['title']}")
+
+    label = f"{column(args.status)!r} " if args.status else ""
+    summary = f"\n{len(cards)} {label}card(s); {total} of {total} board items read"
+    if args.no_crosscheck:
+        summary += "; issue-side cross-check SKIPPED"
+    elif recovered:
+        summary += (
+            f"; {len(recovered)} card(s) recovered from the issue side "
+            "(GitHub's project index did not list them)"
+        )
+    else:
+        summary += "; issue side agrees"
+    print(summary + ".", file=sys.stderr)
+
+    if recovered:
+        # Every recovered card is named, whatever `--status` was asked for: the
+        # filter is a question about columns, and this is a warning about the
+        # board index being wrong. Each line carries its real column so the list
+        # cannot be misread as "these are in the column you filtered for".
+        print(
+            "  cards below exist on the board but GitHub's project index "
+            "omitted them; their real column is in brackets:",
+            file=sys.stderr,
+        )
+        for card in recovered:
+            print(
+                f"    #{card['number']} [{card['status'] or 'no status'}] {card['title']}",
+                file=sys.stderr,
+            )
+    return 0
+
+
+# --------------------------------------------------------------------------
+# show / move — one issue, asked directly, whatever the board size
+# --------------------------------------------------------------------------
+
+ISSUE_ITEMS_QUERY = """
+query($owner: String!, $name: String!, $number: Int!) {
+  repository(owner: $owner, name: $name) {
+    issue(number: $number) {
+      title
+      url
+      state
+      projectItems(first: 20, includeArchived: true) {
+        nodes {
+          id
+          isArchived
+          project { number title }
+          fieldValueByName(name: "Status") {
+            ... on ProjectV2ItemFieldSingleSelectValue { name }
+          }
+        }
+      }
+    }
+  }
+}
+"""
+
+
+def issue_card(number: int, repo: str) -> dict:
+    """The issue's own card on this board — a read that ignores board size."""
+    owner, name = repo.split("/", 1)
+    issue = graphql(
+        ISSUE_ITEMS_QUERY, owner=owner, name=name, number=number
+    )["repository"]["issue"]
+    if not issue:
+        raise BoardError(f"{repo}#{number} does not exist")
+
+    card = next(
+        (
+            node
+            for node in issue["projectItems"]["nodes"]
+            if node["project"]["number"] == PROJECT_NUMBER
+        ),
+        None,
+    )
+    return {"issue": issue, "card": card}
+
+
+ADD_ITEM_MUTATION = """
+mutation($project: ID!, $content: ID!) {
+  addProjectV2ItemById(input: {projectId: $project, contentId: $content}) {
+    item { id }
+  }
+}
+"""
+
+ISSUE_ID_QUERY = """
+query($owner: String!, $name: String!, $number: Int!) {
+  repository(owner: $owner, name: $name) { issue(number: $number) { id } }
+}
+"""
+
+SET_FIELD_MUTATION = """
+mutation($project: ID!, $item: ID!, $field: ID!, $option: String!) {
+  updateProjectV2ItemFieldValue(input: {
+    projectId: $project, itemId: $item, fieldId: $field,
+    value: {singleSelectOptionId: $option}
+  }) { projectV2Item { id } }
+}
+"""
+
+
+def cmd_show(args: argparse.Namespace) -> int:
+    if args.expect:
+        # Otherwise every card "is not in" a renamed column: exit 3 for all.
+        resolve_option(board_meta(), column(args.expect))
+    found = issue_card(args.issue, args.repo)
+    issue, card = found["issue"], found["card"]
+    print(f"#{args.issue} {issue['title']}  ({issue['state'].lower()})")
+    print(issue["url"])
+    if not card:
+        print(f"not on project #{PROJECT_NUMBER}")
+        return 1 if args.expect else 0
+    current = (card.get("fieldValueByName") or {}).get("name")
+    status = current or "on board, no status"
+    archived = "  (archived)" if card.get("isArchived") else ""
+    print(f"column: {status}{archived}")
+    if args.expect and (current or "").lower() != column(args.expect).lower():
+        # An exit status, not a name for the caller to grep: a grep for a
+        # literal column silently matches nothing after a rename.
+        return 3
+    return 0
+
+
+def cmd_move(args: argparse.Namespace) -> int:
+    target = column(args.to)
+    meta = board_meta()
+    option_id = resolve_option(meta, target)
+
+    found = issue_card(args.issue, args.repo)
+    card = found["card"]
+
+    if not card:
+        if not args.add_missing:
+            print(
+                f"#{args.issue} is not on project #{PROJECT_NUMBER}. "
+                "Re-run with --add-missing to put it on the board and set the column.",
+                file=sys.stderr,
+            )
+            return 1
+        owner, name = args.repo.split("/", 1)
+        content_id = graphql(
+            ISSUE_ID_QUERY, owner=owner, name=name, number=args.issue
+        )["repository"]["issue"]["id"]
+        item_id = graphql(
+            ADD_ITEM_MUTATION, project=meta["project_id"], content=content_id
+        )["addProjectV2ItemById"]["item"]["id"]
+        print(f"added #{args.issue} to the board")
+    else:
+        item_id = card["id"]
+
+    was = (card or {}).get("fieldValueByName", {})
+    was = (was or {}).get("name") or "no status"
+
+    graphql(
+        SET_FIELD_MUTATION,
+        project=meta["project_id"],
+        item=item_id,
+        field=meta["status_field_id"],
+        option=option_id,
+    )
+
+    # The mutation returning cleanly is not the claim we need; the claim is that
+    # the board now reads back as the column we asked for.
+    after = issue_card(args.issue, args.repo)["card"]
+    now = ((after or {}).get("fieldValueByName") or {}).get("name")
+    if (now or "").lower() != target.lower():
+        print(
+            f"WROTE but board reads {now!r}, expected {target!r} — card NOT moved reliably",
+            file=sys.stderr,
+        )
+        return 2
+
+    print(f"#{args.issue}: {was} -> {now}")
+    return 0
+
+
+def cmd_fields(args: argparse.Namespace) -> int:
+    meta = board_meta()
+    print(f"{meta['title']} (#{PROJECT_NUMBER}) — {meta['total']} items")
+    print(f"project id:      {meta['project_id']}")
+    print(f"Status field id: {meta['status_field_id']}")
+    for name, option_id in meta["options"].items():
+        print(f"  {option_id}  {name}")
+    if args.check:
+        try:
+            require_columns(meta)
+        except BoardError as exc:
+            print(exc, file=sys.stderr)
+            return 2
+    return 0
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser(description=__doc__.split("\n")[0])
+    parser.add_argument("--profile", help="profile file (default: the nearest .agents/dev-process.md above this folder)")
+    subparsers = parser.add_subparsers(dest="command", required=True)
+
+    lister = subparsers.add_parser("list", help="cards on the board, newest-added first")
+    lister.add_argument("--status", help='registry key or column name, e.g. in-dev or "Dev Ready"')
+    lister.add_argument("--open-only", action="store_true", help="drop closed issues/PRs")
+    lister.add_argument("--issues-only", action="store_true", help="drop drafts and PRs")
+    lister.add_argument("--json", action="store_true")
+    lister.add_argument("--repo", default=None,
+                        help="repo whose open issues the cross-check reads")
+    lister.add_argument(
+        "--no-crosscheck", action="store_true",
+        help="skip the issue-side second opinion (faster, and loses the one "
+             "guard that catches a card GitHub's project index omits)",
+    )
+    lister.set_defaults(func=cmd_list)
+
+    shower = subparsers.add_parser("show", help="one issue's column")
+    shower.add_argument("issue", type=int)
+    shower.add_argument("--repo", default=None)
+    shower.add_argument("--expect", help="profile role key or column name; exit 3 if the card is elsewhere")
+    shower.set_defaults(func=cmd_show)
+
+    mover = subparsers.add_parser("move", help="set an issue's column, verified")
+    mover.add_argument("issue", type=int)
+    mover.add_argument("--to", required=True, help='profile role key or column name')
+    mover.add_argument("--repo", default=None)
+    mover.add_argument(
+        "--add-missing",
+        action="store_true",
+        help="add the issue to the board if it has no card there",
+    )
+    mover.set_defaults(func=cmd_move)
+
+    fields = subparsers.add_parser("fields", help="the board's Status options, live")
+    fields.add_argument("--check", action="store_true",
+                        help="exit 2 naming each profile column the board lacks")
+    fields.set_defaults(func=cmd_fields)
+
+    args = parser.parse_args()
+    try:
+        configure(args.profile)
+    except ProfileMissing as exc:
+        print(f"tracker.py: {exc}", file=sys.stderr)
+        return 2
+    if hasattr(args, "repo") and not args.repo:
+        args.repo = DEFAULT_REPO
+    try:
+        return args.func(args)
+    except BoardError as exc:
+        print(f"tracker.py: {exc}", file=sys.stderr)
+        return 2
+    except Exception:
+        # An uncaught traceback exits 1, which `show --expect` uses for "not on
+        # the board" — and a caller reads that as a card to skip. A crash must
+        # read as untrusted (2), never as an answer.
+        traceback.print_exc()
+        return 2
+
+
+if __name__ == "__main__":
+    sys.exit(main())

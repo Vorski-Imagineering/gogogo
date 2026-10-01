@@ -1,0 +1,10 @@
+{
+  "name": "gogogo",
+  "description": "Spec, dev-loop and test processes with a shared core and a per-repo profile (.agents/dev-process.md)",
+  "author": {
+    "name": "Vorski-Imagineering"
+  },
+  "license": "MIT",
+  "repository": "https://github.com/Vorski-Imagineering/gogogo",
+  "homepage": "https://github.com/Vorski-Imagineering/gogogo"
+}

@@ -1,0 +1,17 @@
+name: tests
+on:
+  pull_request:
+  push:
+    branches: [main]
+jobs:
+  tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: python3 -m unittest discover -s tests
+      - name: Skills and scripts name no stack
+        run: |
+          if grep -rniE 'manage\.py|npm |firebase|django|htmx|sentry' plugins/gogogo/skills plugins/gogogo/scripts; then exit 1; fi

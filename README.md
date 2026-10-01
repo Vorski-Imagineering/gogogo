@@ -1,0 +1,165 @@
+# gogogo
+
+**From a report in a tracker to verified code on a real environment, run
+the same way in every repo.**
+
+`gogogo` is a Claude Code plugin with the development process shared by
+Vorski-Imagineering projects. An issue gets a spec that another agent can build
+from without asking anything. One command builds one issue end to end. Another
+works the whole ready queue unattended, stopping where a human has to decide.
+The skills are the same in every repo. What differs (the tracker, the test
+commands, the environments, the Hard Stop rules) lives in one file per repo,
+`.agents/dev-process.md`, which every skill reads first.
+
+## The process
+
+```
+ report ──► /gogogo:spec ──► "dev ready" ──► /gogogo:auto-dev ──► PR / merge ──► stages ──► a human confirms
+            (asks, decides,     (label)      (or /gogogo:dev        (by the repo's   (dev, staging,
+             writes the spec)                  for one issue)        own rules)       production…)
+```
+
+1. **Spec.** A vague report becomes a spec in the issue body: the original
+   report, how to check the fix by hand, an **Approvals** table recording every
+   decision the owner made, the design, test cases, files and a **Hard-stop
+   check**. A linter blocks the ready label until the spec holds together.
+2. **Build.** The agent reads the issue, finds the real cause (often data or
+   configuration rather than code), makes the change, runs `/code-review`
+   twice, and watches the new test fail before trusting that it passes.
+3. **Verify.** "Done" means the path was run on real data in the pre-merge
+   environment. A green test suite alone only counts as "written".
+4. **Hand back.** A comment in the reporter's words, and the card moves only as
+   far as the code has actually got. Never to Done: a human confirms that.
+
+**What makes it safe to leave running:**
+
+- **Hard Stops.** Changes the repo's owner must approve (schema, auth, money,
+  shared data…) are listed in the repo's `CLAUDE.md`. A spec approves them one
+  at a time. Anything not approved, the loop stops on.
+- **Production is never merged to unattended.** If a merge deploys to
+  production, the loop stops at a pull request.
+- **Every card move is read back**, and every merge is checked against the base
+  branch before anyone is told it landed.
+- **It gives up properly.** At most three attempts per issue, each with a
+  different theory. Then the issue goes back to the queue with a note, and the
+  loop moves on.
+
+## Skills
+
+| Command | What it does |
+|---|---|
+| `/gogogo:spec` | Turns an issue into a spec another agent can build from without asking. Asks the owner in rounds, records the decisions, lints the result. |
+| `/gogogo:dev` | One issue end to end: read, triage, find the cause, change, review, verify on real data, report, move the card. |
+| `/gogogo:auto-dev` | Works the ready queue unattended, one issue after another, each on its own branch. `--triage-only` reads the queue and changes nothing. |
+| `/gogogo:setup` | Onboards a repo, or checks it is still set up right: plugin settings, profile, Hard Stops, board and columns, ready label, competing local skills. |
+| `/gogogo:wrap-up` | Before you close a session: finds anything uncommitted, unpushed, stranded or still running, saves what the session learned, and says plainly whether it is safe to close. |
+| `/gogogo:tech-eval` | Evaluates a library, service or tool against the repo before anyone adopts it, and records the verdict in the repo's decisions register. |
+| `/gogogo:auto-test` | *Planned.* Checks what shipped on each environment after a deploy, and reports back on the issue. |
+
+Scripts the skills call, all in `plugins/gogogo/scripts/`:
+
+- `profile_check.py`: reads and validates the repo's profile.
+- `spec_lint.py`: checks a spec's layout, approvals and hard-stop verdict.
+- `tracker.py`: lists and moves cards on a GitHub Project board, by column name, with read-back.
+- `verify_merged.py`: confirms a PR's merge is really on the base branch.
+- `stranded_work.py`: finds branches holding work no open issue points to.
+- `require_unattended.sh`: refuses to start the loop unless the session can run without prompts.
+- `setup_check.py`: the read-only check behind `/gogogo:setup`.
+
+## One process, many stacks
+
+The skills never name a project, host or command. Each repo describes itself in
+`.agents/dev-process.md`: a settings block plus a few prose sections.
+
+- **tracker**: where issues live, the board, its columns and the ready label.
+- **environments and stages**: where code runs before and after a merge, and
+  which one is production.
+- **lanes**: the repo's own test commands.
+- **Hard Stops**: which of the repo's rules need the owner's sign-off.
+- **recon traps**: what this codebase hides from a newcomer.
+
+A Django app deployed from a server checkout and a Firebase app with a staging
+site run the same skills. The format is in
+[`references/profile-schema.md`](plugins/gogogo/references/profile-schema.md).
+
+## Adopting it in a repo
+
+`/gogogo:setup` and the board steps need a `gh` login with project access:
+`gh auth refresh -s project`.
+
+**1. Install the plugin for the repo.** From the repo's root:
+
+```bash
+claude plugin marketplace add Vorski-Imagineering/gogogo --scope project
+claude plugin install gogogo@vorski-skills --scope project
+```
+
+This writes `.claude/settings.json`. Set `"autoUpdate": true` on the
+`vorski-skills` marketplace entry and commit the file: everyone who opens the
+repo then gets the plugin.
+
+**2. Run `/gogogo:setup`.** It checks everything and fixes what is missing,
+one step at a time, asking before anything is written:
+
+- **The profile.** It drafts `.agents/dev-process.md` by reading the repo:
+  test commands from scripts and CI, environments from the deploy setup, the
+  tracker from the remote. You read the draft and approve it, since it
+  describes how your project works.
+- **Hard Stops.** It points at the repo's own list in `CLAUDE.md`. If there
+  isn't one, it stops and asks. Which changes need sign-off is the owner's
+  call, never the skill's.
+- **The board.** A GitHub Project with the standard columns: `Future` ·
+  `⚡️ New` · `Backlog` · `Dev Ready` · `In progress` · one per stage (for
+  example "In Dev", "In Staging", "Released") · `Done`. New issues land in
+  ⚡️ New for you to triage; the loop works Dev Ready. It can create the board,
+  or check the one you have.
+- **The ready label** (`dev ready` by default).
+- **Local skills this replaces.** Their project-specific text moves into the
+  profile word for word, and the old copies go to `.claude/skills-retired/`.
+- **A pointer in `CLAUDE.md`**, so every session knows where the process lives.
+
+Run it again at any time to check that a repo is still set up right.
+
+**3. Prove it.** In a fresh session, the `/` menu shows the `gogogo:` skills
+and none of the retired ones, and `/gogogo:auto-dev --triage-only` reads the
+queue and changes nothing.
+
+**4. Start small.** Spec one issue with `/gogogo:spec <n>`. Build it attended
+with `/gogogo:dev <n>` and watch what it does. Once that looks right, let the
+loop work the queue:
+
+```bash
+claude --dangerously-skip-permissions "/gogogo:auto-dev"
+```
+
+The loop refuses to start in a session that would stop for permission prompts.
+Give it a checkout of its own, so it never shares a working tree with you.
+
+**Keeping it current.** `autoUpdate` refreshes the plugin when an interactive
+session starts. To update by hand:
+
+```bash
+claude plugin marketplace update vorski-skills
+claude plugin update gogogo@vorski-skills --scope project
+```
+
+**Changing the process.** Anything specific to one repo goes in that repo's
+`.agents/dev-process.md`. A change to how every repo works is a PR here.
+
+## Working on this repo
+
+```bash
+python3 -m unittest discover -s tests
+```
+
+Read [`CLAUDE.md`](CLAUDE.md) first: skills hold only what is the same in every
+repo, and changes to skill behaviour, the profile format or what a script
+writes need approval.
+
+- [`docs/history.md`](docs/history.md): where gogogo came from.
+- [`CONTRIBUTING.md`](CONTRIBUTING.md) and [`SECURITY.md`](SECURITY.md).
+- [`.agents/dev-process.md`](.agents/dev-process.md): this repo's own profile, as a worked example.
+
+## License
+
+MIT. See [LICENSE](LICENSE).

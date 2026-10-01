@@ -1,0 +1,228 @@
+---
+name: dev
+description: Use when asked to fix, build or work one tracker issue given a number or URL — read it, find the real cause, change the code, review, verify on real data, report on the issue and move its card. Also when deciding whether an issue is ready to be worked at all. The unattended loop over a queue is auto-dev, which calls this for each issue.
+---
+
+# dev: one issue, end to end
+
+The loop is: **read → triage → locate → change → review → verify → report →
+hand back.** Do not skip verify, and do not skip the hand-back: an issue that is
+done but still sits in its old column reads as untouched.
+
+`auto-dev` runs this skill unattended over a queue and does not repeat it. When
+it does, it says which parts change; everything else here holds.
+
+## First: read this repo's profile
+
+```bash
+python3 "${CLAUDE_PLUGIN_ROOT}/scripts/profile_check.py" --for dev --show
+```
+
+Exit 0 prints the settings; use them wherever this skill says *the profile*.
+Any other exit: **stop and report the line it printed**. Do not guess a
+tracker, a test command, an environment or a column.
+
+Then read the profile's sections before touching code: `## Recon traps`,
+`## Lane constraints`, and any section it names for reading real state,
+verifying, or handing back. The repo's Hard Stop rules are at
+`hard_stops.source`. `CLAUDE.md` applies in full; nothing here relaxes it.
+
+Board commands go through the profile's `tracker.tool`, which meets
+`references/tracker-contract.md` in this plugin. When `tracker.tool` is
+`shared`, the tool is this plugin's own:
+`python3 "${CLAUDE_PLUGIN_ROOT}/scripts/tracker.py"`. Wherever this skill says
+`<tracker.tool>`, run that. Never `gh project item-edit`
+by hand: it prints nothing on success and nothing on a write that went
+nowhere, and its ids change when the board is edited.
+
+## 1. Read the issue
+
+```bash
+gh issue view <n> --repo <tracker.issues_repo> --comments
+```
+
+Reporters describe what they *saw*, in their own words. The words in the title
+are rarely the string in the codebase.
+
+**Is the report already stale?** The profile's `report.staleness_source` says
+how to tell which build a report came from (a commit hash in the body, an
+error tracker's release). Check whether that build already contains a fix:
+`git merge-base --is-ancestor <commit> origin/<base> && echo "already shipped"`.
+
+When the profile has `observability`, look for an error event behind the report
+before reading code. A human writes "it's broken"; the error tracker has the
+exception, the stack, and how many people hit it. No event usually means a UX
+or data problem, not a thrown error, which itself narrows the search.
+
+## 2. Triage: is this workable at all?
+
+Stop and say so, rather than guessing, when the issue:
+
+- names an **open product decision** nobody has answered;
+- needs a **Hard Stop** under the repo's rules with no recorded approval;
+- is a feature with no analysis pass. Those need a spec first, via
+  `/gogogo:spec`, not an improvised implementation.
+
+**An issue carrying a spec in its body is the ready case.** Its `## Approvals`
+table records every decision the user made, and it is what licenses
+implementation, including of a Hard Stop when a row names that specific change.
+
+- **The sign-off must be in the body.** A comment does not count, even from the
+  repo owner.
+- **A row approving one Hard Stop does not license another.** If the work turns
+  out to need a Hard Stop the table does not name, treat it as unapproved.
+- **An "every item is no" verdict is not a sign-off** for a Hard Stop you then
+  discover; it is evidence the spec did not anticipate one. Stop and say so.
+- **A two-licence change needs both rows** (the profile's
+  `hard_stops.two_licence`): approving the design is not approving applying it
+  to a shared environment. With only the design row, build it and stop before
+  applying it.
+
+## 3. Locate the real cause: expect data and state, not just code
+
+`rg` for the literal string first. **A miss is information.** Much of what shows
+on screen is data: user-editable names and labels, configuration records. A
+label the reporter quotes may not exist in the tree at all.
+
+Read a safe copy of real state freely, the way the profile's `state.read` says.
+Never write anything the profile's `state.forbidden` lists, and never write to
+an environment whose `writes` does not allow it. When the cause turns out to be
+data or configuration, say so, and still change what code can: the confusing
+presentation, the missing empty state, the jargon where a human word belongs.
+"It's just data" does not resolve an issue on its own.
+
+The profile's `## Recon traps` lists what this codebase specifically hides.
+
+## 4. Change
+
+- `CLAUDE.md` is not relaxed because a change is small. Reuse first; follow
+  existing patterns.
+- **Thread a change through every consumer.** If you change a value, a flag or
+  a rule, find every place that reads it and every path that re-renders it. A
+  partial thread is the "two things must agree, nothing enforces it" failure.
+- **A Hard Stop discovered mid-change → stop** and present the repo's proposal
+  format. Do not negotiate with yourself about whether it is "small".
+- **Do not commit or push unless asked.** Leave the change in the working tree
+  and say which branch it is on. (`auto-dev` overrides this.)
+
+## 5. Review
+
+```
+/code-review high
+```
+
+Run it on the working tree before reporting anything; a change that is only
+prose (instructions, docs) is reviewed at `medium`, because prose always has
+another ambiguity to find. Apply findings deliberately rather than with
+`--fix`, then **run it once more on the corrections**: rounds of corrections
+are where defects enter. Render findings as markdown, never raw JSON.
+
+- Findings you disagree with may be declined, with the reason. Correctness
+  findings may not: fix them or stop.
+- **Two rounds at most**: the change, then its corrections. After the second
+  round, apply nothing except a correctness fix; its other findings are listed
+  in the report as follow-ups. If it found a correctness defect, fix it and
+  **stop before merging**: the change goes to a person with the fix marked
+  unreviewed. Do not start a third round.
+- When the spec moves content unchanged, findings about that content are not
+  part of the move: list them in the report as follow-ups. A correctness
+  finding there still means fix or stop.
+
+## 6. Verify: an executed path, not a green suite
+
+Work through the profile's `verify.rungs` in order, in the environments
+`verify.agent` names. Each rung sees something the one below it cannot. Two are
+always required:
+
+**The new test, seen failing.** The regression test must be watched going red.
+Stash the change, run the test, confirm red, restore:
+
+```bash
+git stash push -- <changed files>
+<the lane's `focused` command for the new test>      # expect FAIL
+git stash pop
+```
+
+**Never revert with `git checkout -- <file>`.** Until the branch has a commit,
+`HEAD` is still the base, so `git checkout` on a tracked file you have been
+editing silently discards the whole change. Stash and pop, or copy the file
+aside first. After any revert experiment, `grep` for something you wrote to
+confirm it survived.
+
+Report how many of the new tests went red. Guards that were already true are
+fine; name them as guards. Then run every lane's `run` command that applies.
+
+**The real thing, on real data.** Drive the path the issue describes in the
+pre-merge environment and confirm the reported behaviour is gone. Hard-reload
+rather than trusting a cached bundle. Read back real content (text, an
+attribute, an element's presence), never a screenshot. Close anything you
+opened that holds a resource (a room, a camera, a browser left running).
+
+"Done" means an executed path. A green suite alone is "written", not "done".
+
+## 7. Report on the issue
+
+Comment in the reporter's language, not the codebase's:
+
+- **What was happening**: the mechanism, one short paragraph, in their terms.
+- **What changed**: user-visible effects, as bullets.
+- **How it was verified**: which rungs ran, how many new tests went red, what
+  the real run showed.
+- **Anything they still own**: data, configuration, a decision left open.
+- **Where it is now, and only what is true when you post**: in the working
+  tree, on a branch, or merged. Name the stage in the repo's words (the
+  profile's `stages`), and say when the person who confirms fixes
+  (`verify.human`) will be able to see it.
+
+When `tracker.public` is true, the comment is published: no credentials,
+internal hostnames, personal data or infrastructure detail.
+
+Write the body to a file and pass `--body-file`; inline `--body` mangles markdown.
+
+## 8. Hand back: move the card as far as the code has got
+
+The card moves to the column of the **stage the code has actually reached**,
+and no further:
+
+- not committed, or on a branch awaiting review → `tracker.columns.in_progress`;
+- merged → the first of the profile's `stages`, and only after the merge is
+  verified (`verify_merged.py`, below).
+
+```bash
+<tracker.tool> move <n> --to "<column>"
+```
+
+A zero exit is the confirmation: the tool read the card back. Anything else is
+a failed move; say so, do not retry blind.
+
+Follow the profile's `handback.reporter`: `trailer` means the merge carries the
+reporter for the deploy to assign; `assign` means assign them now; `none` means
+leave assignees alone. Leave the issue **open**, and never move a card to Done
+yourself. Close only when asked.
+
+When you did merge, confirm it landed before commenting or moving anything:
+
+```bash
+python3 "${CLAUDE_PLUGIN_ROOT}/scripts/verify_merged.py" <pr> <base branch> [--repo <code_repo>]
+```
+
+## Do not
+
+- Write to anything `state.forbidden` lists, or to production data.
+- Report "fixed" on a green suite alone.
+- Commit, push, or open a PR unless asked (outside `auto-dev`).
+- Move a card ahead of the code, or to Done.
+
+## Working alongside superpowers
+
+`superpowers:systematic-debugging` fits step 3 and may be used there. Do not use
+`superpowers:using-git-worktrees`, `superpowers:subagent-driven-development` or
+`superpowers:finishing-a-development-branch` for tracker work: implementation
+and integration follow this skill and the repo's merge path. See the profile's
+`## superpowers boundary`.
+
+## Claude-specific
+
+- `/code-review high` is Claude Code's review command.
+- Browser checks use the `claude-in-chrome` tools; load the ones you need in one
+  `ToolSearch` call.

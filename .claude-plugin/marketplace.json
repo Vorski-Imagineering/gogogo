@@ -1,0 +1,17 @@
+{
+  "name": "vorski-skills",
+  "description": "Spec, dev-loop and setup skills for running AI-driven development the same way in every repo",
+  "owner": {
+    "name": "Vorski-Imagineering"
+  },
+  "plugins": [
+    {
+      "name": "gogogo",
+      "source": "./plugins/gogogo",
+      "description": "Spec, dev-loop and test processes with a shared core and a per-repo profile"
+    }
+  ],
+  "renames": {
+    "ai-dev-skills": "gogogo"
+  }
+}
