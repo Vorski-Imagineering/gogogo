@@ -100,6 +100,13 @@ reporter = "none"
   origin/main`. Switching branches in the loaded tree, or pulling into it,
   changes the skills under the running loop (`CLAUDE.md` § What a change here
   does). The 2026-10-01 runs used a worktree per issue.
+- **confirming a Released card**: `/gogogo:auto-test` is browser-based and is
+  not set up here. Confirm instead against a worktree of `origin/main`: scripts
+  in read-only or dry-run modes, and skill behaviour as scenario runs
+  (`claude -p --tools "" --system-prompt "$(cat <SKILL.md>)" "<situation>"`,
+  3 runs each, every answer read). Then comment on the issue, remove the ready
+  label, close it, and run `tracker.py tidy --apply`: the board's own
+  close→Done workflow is off.
 
 ## superpowers boundary
 
