@@ -161,14 +161,16 @@ question. All four are always offered:
 4. **Leave it open**: stop, post nothing, apply no label, and say what remains.
 
 After choice 1 or 2, ask the original question again. After 3, continue the
-round. After 4, stop.
+round. After 4, stop. A declined menu is choice 4: stop, and do not offer it
+again.
 
 Only the user delegates. Never offer "you decide" as your own decision, and
 never read silence or a refusal as delegation.
 
-When there is no person to ask (the question tool returns an error, or the run
-is non-interactive), do not show the menu: stop without posting, and report the
-question as unanswered.
+A decline is a person's act: the question reached them and they turned it
+down. When there is no person to ask (the run is non-interactive, or the
+question tool is not available at all), nothing was declined. Do not show the
+menu: stop without posting, and report the question as unanswered.
 
 ## Hard-stop verdict
 
@@ -350,12 +352,14 @@ order, checking each step before starting the next:
 
    A spec that stops at a gate is still worth posting; it just is not ready
    until the gate is cleared.
-8. **Offer to move the card to the queue.** Only when step 7 applied the label
-   and the profile has both `tracker.tool` and `tracker.queue`; otherwise skip
+8. **Offer to move the card to the queue.** Only when step 7 applied the label,
+   the profile has both `tracker.tool` and `tracker.queue`, and
+   `tracker.queue` is a column on the board rather than a label; otherwise skip
    this step without a word.
    1. Read the card's column: `<tracker.tool> show <N>` (for `shared`,
-      `python3 "${CLAUDE_PLUGIN_ROOT}/scripts/tracker.py" show <N>`). When it
-      is already in `tracker.queue`, skip.
+      `python3 "${CLAUDE_PLUGIN_ROOT}/scripts/tracker.py" show <N>`, and the
+      same command for `move` below). When it is already in `tracker.queue`,
+      skip. When the issue has no card on the board, say so and skip.
    2. Otherwise ask the user whether to move the card from its current column
       to `tracker.queue`, naming both columns.
    3. On yes: `<tracker.tool> move <N> --to "<tracker.queue>"`, and report the
@@ -411,8 +415,9 @@ Then read `## Verify by hand` as the reporter, who has no technical context:
 Then as the tracker:
 
 9. Is the spec in the issue **body**?
-10. Does the issue carry the ready label and has the move to the queue been
-    offered (Posting step 8), or did I say which withholding case applies?
+10. Does the issue carry the ready label, and was the move to the queue
+    offered or skipped for a reason Posting step 8 names? Or did I say which
+    withholding case applies?
 
 Any "no" is a rewrite.
 
@@ -424,8 +429,9 @@ Listed in one place so an adapter for another agent knows what to replace.
   per call. Five forks means at least two rounds. When a fork is about layout
   or wording, its option previews settle it faster than prose.
 - **A declined question**: when the user declines or interrupts it,
-  `AskUserQuestion` comes back as a refusal with no answer. That is the decline
-  *When the user declines a question* describes.
+  `AskUserQuestion` comes back as a refusal with no answer. In an interactive
+  session that is the decline *When the user declines a question* describes;
+  in a non-interactive run (`claude -p`) there is no person, so it is not.
 
 ## Working alongside superpowers
 
