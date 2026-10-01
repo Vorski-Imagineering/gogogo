@@ -168,9 +168,11 @@ Only the user delegates. Never offer "you decide" as your own decision, and
 never read silence or a refusal as delegation.
 
 A decline is a person's act: the question reached them and they turned it
-down. When there is no person to ask (the run is non-interactive, or the
-question tool is not available at all), nothing was declined. Do not show the
-menu: stop without posting, and report the question as unanswered.
+down. When the question tool is not available, or fails with an error rather
+than a refusal, there is no person to ask: do not show the menu; stop without
+posting, and report the question as unanswered. When you cannot tell, show the
+menu once: if it too comes back refused, that is choice 4, so the run stops
+without posting either way.
 
 ## Hard-stop verdict
 
@@ -354,8 +356,9 @@ order, checking each step before starting the next:
    until the gate is cleared.
 8. **Offer to move the card to the queue.** Only when step 7 applied the label,
    the profile has both `tracker.tool` and `tracker.queue`, and
-   `tracker.queue` is a column on the board rather than a label; otherwise skip
-   this step without a word.
+   `tracker.queue` is one of the board's columns (`<tracker.tool> fields
+   --check` lists them; a queue that is a label is not); otherwise skip this
+   step without a word.
    1. Read the card's column: `<tracker.tool> show <N>` (for `shared`,
       `python3 "${CLAUDE_PLUGIN_ROOT}/scripts/tracker.py" show <N>`, and the
       same command for `move` below). When it is already in `tracker.queue`,
@@ -430,8 +433,9 @@ Listed in one place so an adapter for another agent knows what to replace.
   or wording, its option previews settle it faster than prose.
 - **A declined question**: when the user declines or interrupts it,
   `AskUserQuestion` comes back as a refusal with no answer. In an interactive
-  session that is the decline *When the user declines a question* describes;
-  in a non-interactive run (`claude -p`) there is no person, so it is not.
+  session that is the decline *When the user declines a question* describes.
+  A run with no person (`claude -p`) gets the same refusal, which is why that
+  subsection shows the menu once and stops when the menu is refused too.
 
 ## Working alongside superpowers
 
