@@ -46,6 +46,6 @@ Column arguments may also be the profile's role keys: `queue`, and the keys of
 fails naming any column the profile uses that the live board lacks.
 
 A repo may name its own tool instead, as long as it meets this contract. A repo
-whose CI also moves cards (for example on deploy) keeps whatever that CI
-imports until it can import a pinned copy of `tracker.py`; the skills still use
-`tracker.py`.
+whose CI also moves cards (for example on deploy) imports a pinned copy of
+`tracker.py` and runs a pinned `stage_sync.py` beside it (see
+`references/stage-sync.md`); the skills still use `tracker.py`.
