@@ -602,10 +602,6 @@ class BoardViews(unittest.TestCase):
         self.assertTrue(rep.rows and not rep.failed())
 
 
-if __name__ == "__main__":
-    unittest.main()
-
-
 class ConfigHeader(unittest.TestCase):
     """The `config:` block at the top of setup_check's output (issue #12)."""
     NAMES = ["config: board", "config: tracker", "config: release", "config: hard stops",
@@ -684,6 +680,26 @@ class ConfigHeader(unittest.TestCase):
                                          capture_output=True, text=True).stdout)
         self.assertEqual([r["check"] for r in rows[:7]], self.NAMES)
 
+    def test_wrong_typed_profile_values_do_not_crash(self):
+        s = self.settings()
+        s.update(verify="dev", integration="pr-squash", gates=["make lint"], stages="x")
+        s["tracker"]["columns"] = "In progress"
+        s["environments"][0]["roles"] = "production"
+        rows, order, _ = self.header(s)
+        self.assertEqual(order, self.NAMES)
+        self.assertIn("(production)", rows["config: release"])
+
+    def test_unset_tool_is_missing_not_an_own_tool(self):
+        s = self.settings()
+        del s["tracker"]["tool"]
+        rows, _, calls = self.header(s)
+        self.assertEqual(rows["config: board"], "missing")
+        self.assertEqual(calls, [])
+
     def test_setup_skill_mentions_header(self):
         text = (ROOT / "plugins" / "gogogo" / "skills" / "setup" / "SKILL.md").read_text(encoding="utf-8")
         self.assertIn("config:", text)
+
+
+if __name__ == "__main__":
+    unittest.main()

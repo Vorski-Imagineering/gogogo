@@ -538,14 +538,25 @@ def check_release_shape(settings, rep):
 
 
 def _joined(values, sep=", "):
+    if isinstance(values, str):
+        values = [values]
     return sep.join(str(v) for v in values or []) or "missing"
+
+
+def _list(value):
+    return value if isinstance(value, list) else []
+
+
+def _table(value):
+    """A profile table, or {} when the profile has something else there (profile_check reports it)."""
+    return value if isinstance(value, dict) else {}
 
 
 def config_header(root, settings, rep, profile=None):
     """The repo's setup as written, for the top of the output. Only reads, never judges:
     the checks below it do that. `profile`: the parsed profile's path, or None."""
-    tracker = settings.get("tracker") or {}
-    if not settings:
+    tracker = _table(settings.get("tracker"))
+    if not settings or not tracker.get("tool"):
         board = "missing"
     elif tracker.get("tool") != "shared":
         board = f"not shown: the repo's own tool {tracker.get('tool') or 'missing'}"
@@ -562,27 +573,27 @@ def config_header(root, settings, rep, profile=None):
         return v if v not in (None, "", [], {}) else "missing"
 
     if settings:
-        columns = tracker.get("columns") or {}
+        columns = _table(tracker.get("columns"))
         rep.info("config: tracker",
                  f"issues {val(tracker.get('issues_repo'))}, code {val(tracker.get('code_repo'))}, "
                  f"ready label \"{val(tracker.get('ready_marker'))}\", queue \"{val(tracker.get('queue'))}\", "
                  f"in progress \"{val(columns.get('in_progress'))}\", tool {val(tracker.get('tool'))}")
-        envs = [e for e in settings.get("environments") or [] if isinstance(e, dict)]
-        stages = [x for x in settings.get("stages") or [] if isinstance(x, dict)]
-        verify = settings.get("verify") or {}
-        integration = settings.get("integration") or {}
+        envs = [e for e in _list(settings.get("environments")) if isinstance(e, dict)]
+        stages = [x for x in _list(settings.get("stages")) if isinstance(x, dict)]
+        verify = _table(settings.get("verify"))
+        integration = _table(settings.get("integration"))
         rep.info("config: release",
                  "environments " + _joined(f"{e.get('name')} ({_joined(e.get('roles'))})" for e in envs)
                  + "; stages " + _joined(f"{x.get('code_is')} -> {x.get('environment')} / {x.get('column')}"
                                          for x in stages)
                  + f"; verify agent {_joined(verify.get('agent'))}, human {val(verify.get('human'))}"
                  + f"; integration {val(integration.get('strategy'))} into {val(integration.get('base'))}")
-        stops = settings.get("hard_stops") or {}
+        stops = _table(settings.get("hard_stops"))
         rep.info("config: hard stops", f"{val(stops.get('source'))}: {_joined(stops.get('items'))}")
-        lanes = [x for x in settings.get("lanes") or [] if isinstance(x, dict)]
+        lanes = [x for x in _list(settings.get("lanes")) if isinstance(x, dict)]
         rep.info("config: lanes",
                  _joined(f"{x.get('name')}: {x.get('run') or x.get('env') or 'missing'}" for x in lanes)
-                 + "; always: " + _joined((settings.get("gates") or {}).get("always"), "; "))
+                 + "; always: " + _joined(_table(settings.get("gates")).get("always"), "; "))
     else:
         for name in ("tracker", "release", "hard stops", "lanes"):
             rep.info(f"config: {name}", "missing")
@@ -592,12 +603,12 @@ def config_header(root, settings, rep, profile=None):
         install = "settings file absent"
     else:
         try:
-            data = json.loads(path.read_text(encoding="utf-8"))
-            market = (data.get("extraKnownMarketplaces") or {}).get(MARKETPLACE) or {}
-            enabled = (data.get("enabledPlugins") or {}).get(PLUGIN) is True
+            data = _table(json.loads(path.read_text(encoding="utf-8")))
+            market = _table(_table(data.get("extraKnownMarketplaces")).get(MARKETPLACE))
+            enabled = _table(data.get("enabledPlugins")).get(PLUGIN) is True
             install = (f"settings file present, plugin enabled {'yes' if enabled else 'no'}, "
                        f"auto-update {'on' if market.get('autoUpdate') else 'off'}")
-        except (ValueError, AttributeError):
+        except (ValueError, OSError):
             install = "settings file unreadable"
     rep.info("config: install", install)
 

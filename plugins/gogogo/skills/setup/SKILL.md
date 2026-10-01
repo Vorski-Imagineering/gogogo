@@ -20,7 +20,8 @@ the checks: each line is `PASS`, `FAIL` (with the fix after `->`), `WARN` or
 `INFO`. Show the user the whole list, grouped: what is fine, what is broken,
 what to look at. Exit 0 means nothing failed.
 
-Its first check line, after the block and the `repo` line, is `git: clean main`. Setup commits to the repo, so it starts
+Among the checks after the block, the one that decides whether setup can go on
+is `git: clean main`. Setup commits to the repo, so it starts
 on the default branch with nothing uncommitted and level with origin. If that
 line fails, stop and tell the user what it found. Do not stash, reset, switch
 or pull over their work for them; it may be someone's work in progress. Go on
