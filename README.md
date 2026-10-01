@@ -150,6 +150,24 @@ claude plugin update gogogo@vorski-skills --scope project
 **Changing the process.** Anything specific to one repo goes in that repo's
 `.agents/dev-process.md`. A change to how every repo works is a PR here.
 
+## Using gogogo, or working on it
+
+There are two ways to have gogogo on a machine, for two different jobs.
+
+| | **Using the skills** | **Working on gogogo itself** |
+|---|---|---|
+| Who | Anyone running the skills in an adopting repo, on any machine | Someone changing a skill or script here |
+| What you need | Nothing beyond the repo: its `.claude/settings.json` installs the plugin from GitHub when you open it | A clone of this repo |
+| Where the skills load from | Claude Code's plugin cache (`~/.claude/plugins/cache/…`), one copy per repo | Your clone: `claude --plugin-dir <clone>/plugins/gogogo` |
+| Who keeps it current | Claude Code: `autoUpdate` refreshes it when an interactive session starts. Before a headless or unattended run, update by hand (above) | You: `git pull`. Nothing updates a clone for you |
+| Sees unmerged changes | No: only what is merged to `main` | Yes: whatever the clone has checked out |
+
+Use the first for everything except developing gogogo. A clone is not needed to
+run any skill, and a clone left behind on an old commit quietly runs old
+skills. When a repo needs gogogo's code outside a skill (for example a script its
+CI imports), it vendors a pinned copy fetched from GitHub at a commit, not from a
+local clone.
+
 ## Working on this repo
 
 ```bash
