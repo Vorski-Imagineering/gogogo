@@ -138,10 +138,41 @@ asking until pre-post check question 1 answers *"none"*.
 - Ask the highest-leverage fork first; its answer often deletes the rest.
 - **"You decide" is an answer.** Record it (`Chosen: delegated — <what you
   picked>`), pick, state it, move on. The loop must never hang on a user who
-  does not want to choose.
+  does not want to choose. Only an answer the user gives counts; a declined
+  question does not (below).
 - Only an **external unknown** (something nobody knows yet, awaiting a person
   or a measurement) may ship unresolved, named in Approvals as a block with who
   can answer it and when. A decision the user could make today is never that.
+
+### When the user declines a question
+
+A question the user declines, interrupts or skips is **not an answer**, and
+never an instruction to decide. Do not pick for them, do not file or label
+anything, and do not carry on to the next fork.
+
+Stop and offer these four choices as a short list, in whatever words suit the
+question. All four are always offered:
+
+1. **Explain the question more**: what it is really asking, and why it matters.
+2. **The impact on users**: who sees what, and what changes for them, under
+   each option.
+3. **You decide**: you pick the option you recommend, say why, and record it
+   as `Chosen: delegated — <what was picked>`.
+4. **Leave it open**: stop, post nothing, apply no label, and say what remains.
+
+After choice 1 or 2, ask the original question again. After 3, continue the
+round. After 4, stop. A declined menu is choice 4: stop, and do not offer it
+again.
+
+Only the user delegates. Never offer "you decide" as your own decision, and
+never read silence or a refusal as delegation.
+
+A decline is a person's act: the question reached them and they turned it
+down. When the question tool is not available, or fails with an error rather
+than a refusal, there is no person to ask: do not show the menu; stop without
+posting, and report the question as unanswered. When you cannot tell, show the
+menu once: if it too comes back refused, that is choice 4, so the run stops
+without posting either way.
 
 ## Hard-stop verdict
 
@@ -323,6 +354,23 @@ order, checking each step before starting the next:
 
    A spec that stops at a gate is still worth posting; it just is not ready
    until the gate is cleared.
+8. **Offer to move the card to the queue.** Only when step 7 applied the label,
+   the profile has both `tracker.tool` and `tracker.queue`, and
+   `tracker.queue` is one of the board's columns (`<tracker.tool> fields
+   --check` lists them; a queue that is a label is not); otherwise skip this
+   step without a word.
+   1. Read the card's column: `<tracker.tool> show <N>` (for `shared`,
+      `python3 "${CLAUDE_PLUGIN_ROOT}/scripts/tracker.py" show <N>`, and the
+      same command for `move` below). When it is already in `tracker.queue`,
+      skip. When the issue has no card on the board, say so and skip.
+   2. Otherwise ask the user whether to move the card from its current column
+      to `tracker.queue`, naming both columns.
+   3. On yes: `<tracker.tool> move <N> --to "<tracker.queue>"`, and report the
+      result. Only its zero exit counts as moved; on any other exit, say it
+      failed and leave the card where it is.
+   4. On no, a decline, or when no one can answer: do not move it, and say
+      which column the card stays in. The four-choice menu for a declined
+      question is not used here.
 
 Which report to keep:
 
@@ -370,8 +418,9 @@ Then read `## Verify by hand` as the reporter, who has no technical context:
 Then as the tracker:
 
 9. Is the spec in the issue **body**?
-10. Does the issue carry the ready label, or did I say which withholding case
-    applies?
+10. Does the issue carry the ready label, and was the move to the queue
+    offered or skipped for a reason Posting step 8 names? Or did I say which
+    withholding case applies?
 
 Any "no" is a rewrite.
 
@@ -382,6 +431,11 @@ Listed in one place so an adapter for another agent knows what to replace.
 - **Asking the user** uses `AskUserQuestion`, which takes at most 4 questions
   per call. Five forks means at least two rounds. When a fork is about layout
   or wording, its option previews settle it faster than prose.
+- **A declined question**: when the user declines or interrupts it,
+  `AskUserQuestion` comes back as a refusal with no answer. In an interactive
+  session that is the decline *When the user declines a question* describes.
+  A run with no person (`claude -p`) gets the same refusal, which is why that
+  subsection shows the menu once and stops when the menu is refused too.
 
 ## Working alongside superpowers
 
