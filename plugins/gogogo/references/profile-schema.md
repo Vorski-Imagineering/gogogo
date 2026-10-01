@@ -60,7 +60,7 @@ no skill requires it; a skill that finds it uses it.
 | `tracker.code_repo` | str | all | owner/repo that holds the code. |
 | `tracker.public` | bool | all | True if the tracker is readable by the public. |
 | `tracker.ready_marker` | str | `spec`, `auto-dev` | Label that marks an issue as specced and pickable. |
-| `tracker.tool` | str | `dev`, `auto-dev`, `auto-test` | 'shared' for the plugin's tracker.py, or a command for the repo's own tool meeting references/tracker-contract.md. |
+| `tracker.tool` | str | `dev`, `auto-dev`, `auto-test`, `roadmap` | 'shared' for the plugin's tracker.py, or a command for the repo's own tool meeting references/tracker-contract.md. |
 | `tracker.project_owner` | str | optional | Owner of the GitHub project board. |
 | `tracker.project_number` | int | optional | Number of the GitHub project board. |
 | `tracker.queue` | str | `auto-dev` | Column or label the loop works. |
@@ -73,6 +73,7 @@ no skill requires it; a skill that finds it uses it.
 | `hard_stops.two_licence` | list | optional | Changes that need a design approval and an apply approval. |
 | `design.placement_rule` | str | optional | Where the repo says which layer or folder new code belongs in. |
 | `technology.register` | str | optional | Path of the technology decisions register, from the repo root. |
+| `roadmap.file` | str | optional | Path of the roadmap document, from the folder holding `.agents/`; it may sit in another git repo checked out inside this one. |
 | `lanes` | list | `spec`, `dev`, `auto-dev` | Test lanes: name, plus run/focused/env/ci. |
 | `verify.agent` | list | `dev`, `auto-dev` | Environments where the implementing agent checks its work. |
 | `verify.human` | str | `spec`, `auto-test` | Environment where a person confirms a fix. |
@@ -238,6 +239,21 @@ The table is the opt-in. A profile without it is not checked for `auto-test`
 when `profile_check.py` runs with no `--for`, and `/gogogo:setup` reports it
 as not set up rather than as a failure. A profile with it also needs a
 `## Test data` section (below).
+
+### Roadmap
+
+`roadmap.file` is read only by `/gogogo:roadmap`, which keeps a roadmap
+document's state marks in step with the board. That skill also needs
+`tracker.kind = "github-project"` and `tracker.tool = "shared"`: it reads
+columns through the plugin's own `tracker.py`, in-process. It needs
+`tracker.ready_marker` when the document's legend uses `ready label`. What each
+mark means lives in the document's own legend (its `Covers` column), not in the
+profile. Unset, the repo has no roadmap document and the skill stops.
+
+```toml
+[roadmap]
+file = "docs/roadmap.md"
+```
 
 ## Sections
 

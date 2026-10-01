@@ -45,6 +45,9 @@ placement_rule = "CLAUDE.md#layers"
 [technology]
 register = "docs/technology-decisions.md"
 
+[roadmap]
+file = "docs/roadmap.md"
+
 [[lanes]]
 name = "automated"
 run = "make test"
@@ -194,6 +197,17 @@ class MissingFields(unittest.TestCase):
         settings, sections = parse()
         errors, _ = pc.check(drop(settings, "observability"), sections)
         self.assertEqual(errors, [])
+
+    def test_no_roadmap_file_is_not_an_error_for_any_skill(self):
+        # roadmap.file is optional: a repo without a roadmap must still pass the
+        # all-skills check that wrap-up and setup run.
+        settings, sections = parse()
+        self.assertEqual(pc.check(drop(settings, "roadmap.file"), sections)[0], [])
+
+    def test_roadmap_needs_the_tracker_tool(self):
+        settings, sections = parse()
+        errors, _ = pc.check(drop(settings, "tracker.tool"), sections, pc.ROADMAP)
+        self.assertTrue(any(e.startswith("tracker.tool: missing") for e in errors), errors)
 
     def test_for_skill_ignores_other_skills_fields(self):
         settings, sections = parse()

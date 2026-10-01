@@ -33,7 +33,8 @@ ONE = "dev"
 LOOP = "auto-dev"
 TEST = "auto-test"
 TECH = "tech-eval"
-SKILLS = (SPEC, ONE, LOOP, TEST, TECH)
+ROADMAP = "roadmap"
+SKILLS = (SPEC, ONE, LOOP, TEST, TECH, ROADMAP)
 
 # Dotted path -> (type, skills that require it, one-line meaning).
 # `references/profile-schema.md` documents the same paths; a test keeps the two
@@ -45,7 +46,7 @@ FIELDS = {
     "tracker.code_repo": (str, SKILLS, "owner/repo that holds the code."),
     "tracker.public": (bool, SKILLS, "True if the tracker is readable by the public."),
     "tracker.ready_marker": (str, (SPEC, LOOP), "Label that marks an issue as specced and pickable."),
-    "tracker.tool": (str, (ONE, LOOP, TEST), "'shared' for the plugin's tracker.py, or a command for the repo's own tool meeting references/tracker-contract.md."),
+    "tracker.tool": (str, (ONE, LOOP, TEST, ROADMAP), "'shared' for the plugin's tracker.py, or a command for the repo's own tool meeting references/tracker-contract.md."),
     "tracker.project_owner": (str, (), "Owner of the GitHub project board."),
     "tracker.project_number": (int, (), "Number of the GitHub project board."),
     "tracker.queue": (str, (LOOP,), "Column or label the loop works."),
@@ -58,6 +59,7 @@ FIELDS = {
     "hard_stops.two_licence": (list, (), "Changes that need a design approval and an apply approval."),
     "design.placement_rule": (str, (), "Where the repo says which layer or folder new code belongs in."),
     "technology.register": (str, (), "Path of the technology decisions register, from the repo root."),
+    "roadmap.file": (str, (), "Path of the roadmap document, from the folder holding .agents/; it may sit in another git repo checked out inside this one."),
     "lanes": (list, (SPEC, ONE, LOOP), "Test lanes: name, plus run/focused/env/ci."),
     "verify.agent": (list, (ONE, LOOP), "Environments where the implementing agent checks its work."),
     "verify.human": (str, (SPEC, TEST), "Environment where a person confirms a fix."),

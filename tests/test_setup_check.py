@@ -90,6 +90,12 @@ class LocalSkillsAndClaudeMd(unittest.TestCase):
         self.assertEqual(levels(rep, "local skills"), ["WARN"])
         self.assertIn("fix-issue", rep.rows[0]["detail"])
 
+    def test_the_local_roadmap_skill_warns_by_name(self):
+        rep = sc.Report()
+        sc.check_local_skills(repo({".claude/skills/update-milestone-doc/SKILL.md": "x"}), rep)
+        self.assertEqual(levels(rep, "local skills"), ["WARN"])
+        self.assertIn("update-milestone-doc", rep.rows[0]["detail"])
+
     def test_a_retired_skill_does_not_warn(self):
         rep = sc.Report()
         sc.check_local_skills(repo({".claude/skills-retired/fix-issue/SKILL.md": "x"}), rep)
