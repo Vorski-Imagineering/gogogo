@@ -1,8 +1,10 @@
 import json
+import os
 import subprocess
 import sys
 import tempfile
 import unittest
+from unittest import mock
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -602,3 +604,86 @@ class BoardViews(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class ConfigHeader(unittest.TestCase):
+    """The `config:` block at the top of setup_check's output (issue #12)."""
+    NAMES = ["config: board", "config: tracker", "config: release", "config: hard stops",
+             "config: lanes", "config: install", "config: profile"]
+
+    def settings(self, **tracker):
+        import profile_check
+        from test_profile_check import COMPLETE
+        settings, _ = profile_check.split_profile(COMPLETE)
+        settings["tracker"].update({"tool": "shared"}, **tracker)
+        return settings
+
+    def header(self, settings, files=None, gh=None, profile=".agents/dev-process.md"):
+        root = repo(files if files is not None else {".claude/settings.json": GOOD_SETTINGS})
+        gh = gh or subprocess.CompletedProcess([], 0, "https://github.com/orgs/acme/projects/2\n", "")
+        calls = []
+        rep = sc.Report()
+        with mock.patch.object(sc, "run", lambda *a, **k: calls.append(a) or gh):
+            sc.config_header(root, settings, rep, root / profile if profile else None)
+        return {r["check"]: r["detail"] for r in rep.rows}, [r["check"] for r in rep.rows], calls
+
+    def test_rows_in_order_with_values(self):
+        rows, order, _ = self.header(self.settings())
+        self.assertEqual(order, self.NAMES)
+        self.assertEqual(rows["config: board"], "https://github.com/orgs/acme/projects/2")
+        for check, text in [("config: tracker", '"dev ready"'), ("config: tracker", '"Dev Priority"'),
+                            ("config: tracker", "acme/issues"), ("config: release", "integration "),
+                            ("config: hard stops", "schema, auth"), ("config: lanes", "make test"),
+                            ("config: lanes", "always: make lint"), ("config: profile", ".agents/dev-process.md")]:
+            self.assertIn(text, rows[check], check)
+
+    def test_no_profile_prints_missing(self):
+        rows, order, calls = self.header({}, profile=None)
+        self.assertEqual(order, self.NAMES)
+        for name in self.NAMES:
+            if name != "config: install":
+                self.assertEqual(rows[name], "missing", name)
+        self.assertIn("settings file present", rows["config: install"])
+        self.assertEqual(calls, [])
+
+    def test_gh_failure_is_unreadable_not_empty(self):
+        failed = subprocess.CompletedProcess([], 1, "", "HTTP 404: not found\nmore\n")
+        rows, order, _ = self.header(self.settings(), gh=failed)
+        self.assertEqual(rows["config: board"], "unreadable (HTTP 404: not found)")
+        self.assertEqual(order, self.NAMES)
+
+    def test_own_tool_not_shown(self):
+        rows, _, calls = self.header(self.settings(tool="bespoke"))
+        self.assertEqual(rows["config: board"], "not shown: the repo's own tool bespoke")
+        self.assertEqual(calls, [])
+
+    def test_install_row(self):
+        s = self.settings()
+        off = json.dumps({"extraKnownMarketplaces": {"vorski-skills": {"autoUpdate": False}},
+                          "enabledPlugins": {"gogogo@vorski-skills": False}})
+        for files, words in [({}, "settings file absent"),
+                             ({".claude/settings.json": "{not json"}, "settings file unreadable"),
+                             ({".claude/settings.json": off}, "plugin enabled no, auto-update off"),
+                             ({".claude/settings.json": GOOD_SETTINGS}, "plugin enabled yes, auto-update on")]:
+            self.assertIn(words, self.header(s, files=files)[0]["config: install"], words)
+
+    def test_header_comes_first_in_real_output(self):
+        from test_profile_check import COMPLETE
+        root = repo({".agents/dev-process.md": COMPLETE, ".claude/settings.json": GOOD_SETTINGS})
+        bin_dir = Path(tempfile.mkdtemp())
+        (bin_dir / "gh").write_text("#!/bin/sh\necho 'offline' >&2\nexit 1\n")
+        (bin_dir / "gh").chmod(0o755)
+        env = {**os.environ, "PATH": f"{bin_dir}:{os.environ['PATH']}"}
+        script = ROOT / "plugins" / "gogogo" / "scripts" / "setup_check.py"
+        out = subprocess.run([sys.executable, str(script)], cwd=root, env=env,
+                             capture_output=True, text=True).stdout.splitlines()
+        self.assertEqual([line.split(":")[0] + ":" + line.split(":")[1] for line in out[:7]],
+                         [f"INFO  {n}" for n in self.NAMES])
+        self.assertFalse(any(line.startswith("INFO  config:") for line in out[7:]))
+        rows = json.loads(subprocess.run([sys.executable, str(script), "--json"], cwd=root, env=env,
+                                         capture_output=True, text=True).stdout)
+        self.assertEqual([r["check"] for r in rows[:7]], self.NAMES)
+
+    def test_setup_skill_mentions_header(self):
+        text = (ROOT / "plugins" / "gogogo" / "skills" / "setup" / "SKILL.md").read_text(encoding="utf-8")
+        self.assertIn("config:", text)

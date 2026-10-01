@@ -13,11 +13,14 @@ From anywhere in the repo:
 python3 "${CLAUDE_PLUGIN_ROOT}/scripts/setup_check.py"
 ```
 
-It only reads. Each line is `PASS`, `FAIL` (with the fix after `->`), `WARN`
-or `INFO`. Show the user the whole list, grouped: what is fine, what is broken,
+It only reads. It opens with a `config:` block: the board's address and the
+repo's settings as the profile and `.claude/settings.json` give them, `missing`
+where there are none. Show that block to the user first, as printed. Then come
+the checks: each line is `PASS`, `FAIL` (with the fix after `->`), `WARN` or
+`INFO`. Show the user the whole list, grouped: what is fine, what is broken,
 what to look at. Exit 0 means nothing failed.
 
-Its first line is `git: clean main`. Setup commits to the repo, so it starts
+Its first check line, after the block and the `repo` line, is `git: clean main`. Setup commits to the repo, so it starts
 on the default branch with nothing uncommitted and level with origin. If that
 line fails, stop and tell the user what it found. Do not stash, reset, switch
 or pull over their work for them; it may be someone's work in progress. Go on
