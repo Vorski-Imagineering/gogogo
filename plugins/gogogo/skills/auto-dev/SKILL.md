@@ -46,16 +46,22 @@ means finished work sits unverified while you go and ask.
    read the base branch's CI. A red base makes every verdict in the run
    meaningless. An empty CI result is **not** a pass: it means nothing ran.
 4. **What a merge deploys.** Read the profile's `stages`. If the first stage
-   after a merge has an environment whose roles include `production`, **this
-   run never merges**: it stops each issue at an open PR for a person to merge,
-   whatever else the profile says. A merge that is a release is a person's call.
-5. **Unattended mode, when this run merges.** If the profile sets
+   after a merge has an environment whose roles include `production`, a merge
+   is a release. The run still merges, but only an issue that cleared every
+   gate: every rung in `verify.rungs`, a review that ended with nothing
+   unreviewed, the gates in §5, and the PR's checks in §6. Any other issue stops
+   at an open PR, and the run report says which gate it failed. Say in the run
+   report that each merge released.
+5. **Unattended mode.** Every run that may merge runs this,
+   straight-to-production repos included. If the profile sets
    `integration.mode_check`, run it and stop the whole run on a non-zero exit;
    otherwise run the plugin's check:
    ```bash
    sh "${CLAUDE_PLUGIN_ROOT}/scripts/require_unattended.sh"
    ```
-   It fails closed. Do not look for a way around it.
+   It fails closed. Do not look for a way around it. On a failure, stop before
+   any issue and tell the user to restart the session with
+   `claude --permission-mode bypassPermissions`.
 6. **The board has the columns this run moves cards into:**
    `<tracker.tool> fields --check` must exit 0, and every column in the
    profile's `stages` and `tracker.columns` must be in its output. A missing
@@ -171,6 +177,12 @@ raise a budget, or stop the issue and hand its card back to
 Re-run the unattended-mode check immediately before every merge, chained so
 the merge is unreachable when it fails. The mode can change mid-session.
 
+**The PR's checks.** Before a `gh` merge, run `gh pr checks <pr> --watch`. A
+failing check stops that issue at its PR. A PR with no checks is a failure
+under `run-branch-pr` or when `integration.ci_before_merge` is true, and
+otherwise merges on the suite §4 ran. Read the output, not only the exit code:
+`gh pr checks` exits non-zero when a PR has no checks.
+
 **The link, when a merge is yours.** When you merge with `gh` and the profile
 uses the `Ships-issue` link (`/gogogo:dev`'s *When you merge with `gh`*
 subsection says when), the squash body ends with the output of the same
@@ -192,14 +204,16 @@ and the merge is `gh pr merge ... --body-file` with the body built as
   a PR: `gh pr create --base <run branch>`, `gh pr checks --watch`, then
   `gh pr merge --squash --delete-branch`, with the link's body when it
   applies. **Zero checks is a failure**, not a pass. At the end, one PR from
-  the run branch to `integration.final_target` carries the whole run. When the
+  the run branch to `integration.final_target` carries the whole run. When a
+  merge is a release (§Preflight 4), merge that final PR too, with a merge
+  commit, once its checks pass and every issue in it cleared its gates;
+  otherwise it waits for a person. When the
   link applies, the final PR's description says it must be merged with a merge
   commit, not squashed: a squash leaves the issue commits out of the target's
   history, and the stage sync then finds no link. The close-run report (§9)
   repeats it.
-- **`pr-squash`**: open the PR and **stop there** when §Preflight 4 said a
-  merge is a release. Otherwise squash-merge it, with the link's body when it
-  applies.
+- **`pr-squash`**: open the PR, wait for its checks (above), then squash-merge
+  it, with the link's body when it applies.
 
 Never hand-roll a merge around a failed integration step, and never use a
 script the profile marks forbidden.

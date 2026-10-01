@@ -48,7 +48,7 @@ writes = "through a PR for anything under a Hard Stop"
 code_is = "merged to main"
 environment = "main"
 column = "Released"
-moved_by = "the loop or /gogogo:dev, after the merge is verified; but see integration below"
+moved_by = "the loop or /gogogo:dev, after the merge is verified"
 
 [verify]
 agent = ["local"]
@@ -64,7 +64,7 @@ always = ["python3 -m unittest discover -s tests", "the project-name grep in CLA
 [integration]
 strategy = "pr-squash"
 base = "main"
-ci_before_merge = false
+ci_before_merge = true
 
 [handback]
 reporter = "none"

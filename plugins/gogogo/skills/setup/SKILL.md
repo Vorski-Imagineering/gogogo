@@ -76,8 +76,9 @@ What each fix involves:
       `[[stages]]` entry: `code_is = "merged to main"`, `environment` = the
       production environment, `column = "Released"`. `verify.agent` names the
       pre-merge environment only, never production; `verify.human` names
-      production. The loop then stops each issue at a PR (`auto-dev` §4), and
-      the draft says so.
+      production. `auto-dev` then merges each issue that clears every gate,
+      and every merge is a release; the draft says so, and that a run needs
+      bypass permissions to merge.
     - *Staged:* an environment with the role `pre-production`, and one stage per
       step in the order code travels, as `references/profile-schema.md` shows.
   - `[release]`: ask whether production deploys should be numbered and tagged
