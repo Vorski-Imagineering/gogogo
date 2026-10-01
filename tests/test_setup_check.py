@@ -290,7 +290,7 @@ class Audit(unittest.TestCase):
         self.assertTrue(off.rows[0]["detail"].startswith("not enabled: Auto-add to project."))
         on = sc.Report()
         sc.check_board_workflows([{"name": n, "enabled": True} for n in sc.BOARD_WORKFLOWS], on)
-        self.assertEqual([r["level"] for r in on.rows], ["PASS"])
+        self.assertEqual([r["level"] for r in on.rows], ["PASS", "INFO"])
 
     def test_unreadable_workflows_say_so_without_failing(self):
         rep = sc.Report()
@@ -331,6 +331,94 @@ class Audit(unittest.TestCase):
         sc.check_board_hygiene([{"number": 1, "status": "Backlog", "state": "OPEN"}], [], ["Backlog"],
                                {"backlog"}, rep)
         self.assertEqual(rep.rows, [])
+
+    # check_board_origin: where the cards come from (issue #11)
+    OWN = ("Vorski-Imagineering/gogogo",)
+
+    @staticmethod
+    def _card(n, repo, status, state="OPEN", kind="Issue"):
+        return {"kind": kind, "number": n, "repo": repo, "state": state, "status": status}
+
+    def _origin(self, cards, queue="Dev Ready", own=OWN):
+        rep = sc.Report()
+        sc.check_board_origin(cards, own, queue, rep)
+        return rep
+
+    def test_the_2026_10_01_board_warns_on_foreign_and_closed_queue_cards(self):
+        cards = [self._card(i, "Vorski-Imagineering/gogogo", "Backlog") for i in range(3)]
+        cards += [self._card(100 + i, "Vorski-Imagineering/old", "Released", "CLOSED") for i in range(22)]
+        cards += [self._card(200 + i, "Vorski-Imagineering/old", "Dev Ready", "CLOSED") for i in range(2)]
+        rep = self._origin(cards)
+        by = {r["check"]: r for r in rep.rows}
+        foreign = by["tracker: cards from another repo"]
+        self.assertEqual(foreign["level"], "WARN")
+        for text in ("24 of 27", "Vorski-Imagineering/old ×24", "Released ×22", "Dev Ready ×2"):
+            self.assertIn(text, foreign["detail"])
+        closed = by["tracker: closed cards in the queue"]["detail"]
+        self.assertIn("Vorski-Imagineering/old#200", closed)
+        self.assertIn("Vorski-Imagineering/old#201", closed)
+
+    def test_own_repos_pass_whatever_their_case(self):
+        own = ("Vorski-Imagineering/gogogo", "Vorski-Imagineering/code")
+        cards = [self._card(1, "vorski-imagineering/Gogogo", "Backlog"),
+                 self._card(2, "VORSKI-IMAGINEERING/code", "Backlog")]
+        self.assertEqual(self._origin(cards, own=own).rows, [])
+
+    def test_drafts_are_not_foreign(self):
+        self.assertEqual(self._origin([self._card(None, None, "Backlog", None, "DraftIssue")]).rows, [])
+
+    def test_unreadable_cards_are_reported_not_passed(self):
+        import tracker
+        for kind in ("ISSUE", "PULL_REQUEST", "REDACTED", None):
+            card = tracker.flatten({"id": "i", "type": kind, "content": None,
+                                    "fieldValueByName": {"name": "Backlog"}})
+            rep = self._origin([card])
+            self.assertEqual([(r["level"], r["check"]) for r in rep.rows],
+                             [("INFO", "tracker: card origin")], kind)
+
+    def test_closed_own_cards_in_the_queue_warn_and_others_do_not(self):
+        cards = [self._card(1, self.OWN[0], "Dev Ready", "CLOSED"),
+                 self._card(2, self.OWN[0], "Dev Ready", "MERGED", "PullRequest"),
+                 self._card(3, self.OWN[0], "Dev Ready"),
+                 self._card(4, self.OWN[0], "Released", "CLOSED")]
+        rep = self._origin(cards)
+        self.assertEqual([r["check"] for r in rep.rows], ["tracker: closed cards in the queue"])
+        self.assertIn("#1", rep.rows[0]["detail"])
+        self.assertIn("#2", rep.rows[0]["detail"])
+        self.assertNotIn("#3", rep.rows[0]["detail"])
+        self.assertNotIn("#4", rep.rows[0]["detail"])
+        new = self._origin([self._card(5, self.OWN[0], "\u26a1\ufe0f New", "CLOSED")], queue="\u26a1 New")
+        self.assertEqual([r["check"] for r in new.rows], ["tracker: closed cards in the queue"])
+
+    def test_origin_reads_the_fields_flatten_writes(self):
+        import tracker
+        item = {"id": "i1", "type": "ISSUE", "fieldValueByName": {"name": "Released"},
+                "content": {"__typename": "Issue", "number": 7, "state": "CLOSED",
+                            "repository": {"nameWithOwner": "other/repo"}}}
+        rep = self._origin([tracker.flatten(item)])
+        self.assertEqual([r["check"] for r in rep.rows], ["tracker: cards from another repo"])
+
+    def test_no_queue_gives_no_closed_row_but_foreign_still_warns(self):
+        rep = self._origin([self._card(1, "other/x", "Dev Ready", "CLOSED")], queue="")
+        self.assertEqual([r["check"] for r in rep.rows], ["tracker: cards from another repo"])
+
+    def test_auto_add_row_names_the_repo_and_says_the_api_is_blind(self):
+        rep = sc.Report()
+        sc.check_board_workflows([{"name": n, "enabled": True} for n in sc.BOARD_WORKFLOWS], rep, ("a/b",))
+        info = [r for r in rep.rows if r["check"] == "tracker: Auto-add repository"]
+        self.assertEqual(len(info), 1)
+        self.assertIn("a/b", info[0]["detail"])
+        self.assertIn("does not say", info[0]["detail"])
+        off = sc.Report()
+        sc.check_board_workflows([{"name": "Auto-add to project", "enabled": False}], off, ("a/b",))
+        self.assertNotIn("tracker: Auto-add repository", [r["check"] for r in off.rows])
+
+    def test_origin_checks_never_fail(self):
+        rep = sc.Report()
+        worst = [self._card(1, "x/y", "Dev Ready", "CLOSED"), self._card(None, None, None, None, "Unknown")]
+        sc.check_board_origin(worst, self.OWN, "Dev Ready", rep)
+        sc.check_board_workflows([{"name": "Auto-add to project", "enabled": True}], rep, self.OWN)
+        self.assertTrue(rep.rows and not rep.failed())
 
     def test_audit_checks_never_fail(self):
         rep = sc.Report()

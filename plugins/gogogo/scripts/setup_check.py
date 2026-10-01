@@ -16,6 +16,7 @@ changed or moved. `/gogogo:setup` uses it and does the fixing, with approval.
 import argparse
 import json
 import re
+from collections import Counter
 import subprocess
 import sys
 from pathlib import Path
@@ -179,6 +180,7 @@ def check_tracker(root, settings, rep):
     repo = tracker.get("issues_repo")
     if not repo:
         return
+    own_repos = tuple({r.lower(): r for r in (repo, tracker.get("code_repo")) if r}.values())
     if run("gh", "auth", "status").returncode != 0:
         rep.fail("tracker: gh login", "gh is not logged in", "`gh auth login`, then `gh auth setup-git`")
         return
@@ -227,6 +229,7 @@ def check_tracker(root, settings, rep):
         expected = ({"future", "⚡ new", "new", "backlog", "done"}
                     | {c.name.replace("\ufe0f", "").strip().lower() for c in shared.COLUMNS.values()})
         check_board_hygiene(cards, recovered, meta["options"], expected, rep)
+        check_board_origin(cards, own_repos, tracker.get("queue"), rep)
     except shared.BoardError as exc:
         rep.info("tracker: board hygiene", f"could not read the cards ({exc})")
     try:
@@ -234,7 +237,7 @@ def check_tracker(root, settings, rep):
                  ["repositoryOwner"]["projectV2"]["workflows"]["nodes"])
     except (shared.BoardError, KeyError, TypeError):
         nodes = None
-    check_board_workflows(nodes, rep)
+    check_board_workflows(nodes, rep, own_repos)
     try:
         views = _views(shared.graphql(VIEWS_QUERY, org=shared.ORG, number=shared.PROJECT_NUMBER)
                        ["repositoryOwner"]["projectV2"]["views"]["nodes"])
@@ -271,8 +274,9 @@ query($org: String!, $number: Int!) {
 """
 
 
-def check_board_workflows(workflows, rep):
-    """`workflows` is a list of {name, enabled}, or None when it could not be read."""
+def check_board_workflows(workflows, rep, repos=()):
+    """`workflows` is a list of {name, enabled}, or None when it could not be read.
+    `repos`: the repos the board is for, named in the Auto-add row."""
     if workflows is None:
         rep.info("tracker: board workflows", "could not be read; check ⋯ → Workflows on the board by hand")
         return
@@ -284,6 +288,11 @@ def check_board_workflows(workflows, rep):
                  "(Item added to project sets Status to the new-issue column), or new issues never reach it")
     else:
         rep.ok("tracker: board workflows", ", ".join(BOARD_WORKFLOWS))
+    if "Auto-add to project" in on:
+        rep.info("tracker: Auto-add repository",
+                 "the API does not say which repo Auto-add to project watches; open the board, "
+                 f"⋯ → Workflows → Auto-add to project, and check it is {' and '.join(repos) or 'this repo'}. "
+                 "Cards from another repo (above) are the sign it is wrong")
 
 
 VIEWS_QUERY = """
@@ -374,6 +383,41 @@ def check_board_hygiene(cards, recovered, options, expected, rep):
     if no_status:
         rep.warn("tracker: cards without a column", f"{len(no_status)} open card(s) have no Status: "
                  + ", ".join(f"#{c['number']}" for c in no_status[:10]))
+
+
+def _counted(names):
+    """'a ×2, b ×1': most common first, then by name."""
+    return ", ".join(f"{n} ×{k}" for n, k in sorted(Counter(names).items(), key=lambda kv: (-kv[1], kv[0])))
+
+
+def check_board_origin(cards, own_repos, queue, rep):
+    """Where the board's cards come from, which the workflow check cannot say. `cards`: flattened
+    cards; `own_repos`: issues_repo and code_repo; `queue`: the queue column, or empty."""
+    own = {r.lower() for r in own_repos}
+    owned = " and ".join(own_repos)
+    # Content this login cannot read comes back null, so flatten takes the kind from the item's
+    # type (ISSUE, PULL_REQUEST, REDACTED) and has no repo. Only a draft has no repo by design.
+    unreadable = [c for c in cards if not c.get("repo") and c.get("kind") not in ("DraftIssue", "DRAFT_ISSUE")]
+    if unreadable:
+        rep.info("tracker: card origin", f"{len(unreadable)} card(s) have no content this login can read "
+                 "(deleted, or in a repo it cannot see), so their repo is unknown")
+    # Drafts and unreadable cards have no repo (tracker.flatten), so they are never foreign.
+    foreign = [c for c in cards if c.get("repo") and c["repo"].lower() not in own]
+    if foreign:
+        rep.warn("tracker: cards from another repo",
+                 f"{len(foreign)} of {len(cards)} card(s) belong to a repo other than {owned}: "
+                 f"{_counted(c['repo'] for c in foreign)}; in columns "
+                 f"{_counted(c.get('status') or 'no status' for c in foreign)}. Archive them on the board "
+                 f"(card ⋯ → Archive; restorable), then check that Auto-add to project watches {owned}")
+    if queue:
+        closed = [c for c in cards if _norm(c.get("status") or "") == _norm(queue)
+                  and c.get("state") not in (None, "OPEN")]
+        if closed:
+            names = [f"{c.get('repo') or '?'}#{c.get('number')}" for c in closed]
+            rep.warn("tracker: closed cards in the queue",
+                     f"{len(closed)} closed or merged card(s) sit in '{queue}', where auto-dev reads them "
+                     f"as queue rows: {', '.join(names[:10])}{', ...' if len(names) > 10 else ''}. "
+                     "Move them out of the queue or archive them")
 
 
 def check_profile_skills(settings, sections, rep):
