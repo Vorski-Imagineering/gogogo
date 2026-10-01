@@ -182,23 +182,26 @@ the merge is unreachable when it fails. The mode can change mid-session.
 **The PR's checks, when a merge is a release** (§Preflight 4). Before the `gh`
 merge, two steps:
 
+Every re-run below is `sleep 30; <the same command>`, as one command.
+
 1. **Wait**, in the foreground (§4): `gh pr checks <pr> --watch --fail-fast`,
-   with the longest timeout your tool allows.
+   with the longest timeout your tool allows. Then, by what it printed:
+   - cut off by the tool's time limit while checks still run: re-run it;
+   - `no checks reported` (CI may not have registered yet): re-run it until
+     checks appear, for up to three minutes;
+   - any other error from `gh` (an HTTP, network or auth message): re-run it,
+     at most three times;
+   - a table of checks, or a budget above spent: go on to Judge.
 2. **Judge** by each check's state, never by the watch's exit code:
-   `gh pr checks <pr> --json name,bucket`.
+   `gh pr checks <pr> --json name,bucket`. When it exits non-zero with any
+   message other than `no checks reported`, re-run it, at most three times.
    - Every check `pass` or `skipping`, and at least one `pass`: passed.
    - `no checks reported`, or every check `skipping`: no CI ran. A failure
      under `run-branch-pr` or when `integration.ci_before_merge` is true;
      otherwise the PR merges on the suite §4 ran.
-   - Anything else (a check in `fail`, `cancel` or `pending`, or `gh` still
-     erroring): a failure.
-
-**Re-runs.** Every re-run here is `sleep 30; <the same command>`, as one
-command. Re-run the watch when the tool's limit cuts it off, and when it
-prints `no checks reported` (CI may not have registered yet), for up to three
-minutes in all. Re-run either command when `gh` itself errors (a message and
-no checks table, such as an HTTP or auth error), at most three times. When a
-budget is spent, go on to Judge with what you have.
+   - A check in `fail` or `cancel` (a check failed), a check in `pending`
+     (CI still running), or `gh` still erroring (the checks cannot be read):
+     a failure, for that reason.
 
 A failure stops that issue at its PR, handed back to
 `tracker.columns.needs_human` as `/gogogo:dev` §8 says for a gate you could not
