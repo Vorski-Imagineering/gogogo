@@ -105,6 +105,51 @@ def check_settings(root, rep):
                  "(check .gitignore; `git add -f` if .claude/ is ignored)")
 
 
+def check_git_state(root, rep):
+    """Setup commits to the default branch, so it starts there: nothing uncommitted and
+    level with origin. `git ls-remote` asks origin without fetching, so this still only reads."""
+    head = run("git", "symbolic-ref", "--quiet", "--short", "HEAD", cwd=root).stdout.strip()
+    problems, default, remote_sha = [], None, None
+    if run("git", "remote", "get-url", "origin", cwd=root).returncode != 0:
+        rep.info("git: origin", "no origin remote; cannot compare with it")
+    else:
+        sym = run("git", "ls-remote", "--symref", "origin", "HEAD", cwd=root)
+        m = re.search(r"^ref: refs/heads/(\S+)\s+HEAD", sym.stdout, re.M)
+        if m:
+            default = m.group(1)
+            line = run("git", "ls-remote", "origin", f"refs/heads/{default}", cwd=root).stdout.split()
+            remote_sha = line[0] if line else None
+        else:
+            rep.info("git: origin", "could not read origin's default branch")
+    if not head:
+        problems.append("HEAD is detached")
+    elif default and head != default:
+        problems.append(f"on {head!r}, not {default!r}")
+    status = run("git", "status", "--porcelain", cwd=root).stdout.splitlines()
+    tracked = [s for s in status if not s.startswith("??")]
+    untracked = [s[3:] for s in status if s.startswith("??")]
+    if tracked:
+        problems.append(f"{len(tracked)} uncommitted change(s)")
+    if remote_sha and head and head == default:
+        local = run("git", "rev-parse", "HEAD", cwd=root).stdout.strip()
+        if local != remote_sha:
+            known = run("git", "cat-file", "-e", f"{remote_sha}^{{commit}}", cwd=root).returncode == 0
+            ahead = known and run("git", "merge-base", "--is-ancestor", remote_sha, "HEAD",
+                                  cwd=root).returncode == 0
+            problems.append(f"has commits origin/{default} lacks" if ahead
+                            else f"is not level with origin/{default}")
+    if untracked:
+        rep.warn("git: untracked files", ", ".join(untracked[:10]) + ("..." if len(untracked) > 10 else "")
+                 + ". Setup commits only the files it writes; these stay as they are")
+    branch = default or head or "the default branch"
+    if problems:
+        rep.fail("git: clean main", "; ".join(problems),
+                 f"commit, push or set aside that work yourself, then `git switch {branch} && "
+                 "git pull --ff-only`; setup starts from a clean, current default branch")
+    else:
+        rep.ok("git: clean main", f"on {branch}, clean" + (", level with origin" if remote_sha else ""))
+
+
 def check_hard_stop_source(root, source, rep):
     # "CLAUDE.md § Heading" or "CLAUDE.md#anchor"
     m = re.match(r"\s*([^\s§#]+)\s*(?:§\s*(.+)|#(.+))?$", source or "")
@@ -189,6 +234,13 @@ def check_tracker(root, settings, rep):
     except (shared.BoardError, KeyError, TypeError):
         nodes = None
     check_board_workflows(nodes, rep)
+    try:
+        views = _views(shared.graphql(VIEWS_QUERY, org=shared.ORG, number=shared.PROJECT_NUMBER)
+                       ["repositoryOwner"]["projectV2"]["views"]["nodes"])
+    except (shared.BoardError, KeyError, TypeError):
+        views = None
+    stages = [s.get("column") for s in settings.get("stages") or [] if isinstance(s, dict) and s.get("column")]
+    check_board_views(views, tracker.get("ready_marker"), stages, rep)
 
 
 def check_marketplace_source(market, rep):
@@ -231,6 +283,67 @@ def check_board_workflows(workflows, rep):
                  "(Item added to project sets Status to the new-issue column), or new issues never reach it")
     else:
         rep.ok("tracker: board workflows", ", ".join(BOARD_WORKFLOWS))
+
+
+VIEWS_QUERY = """
+query($org: String!, $number: Int!) {
+  repositoryOwner(login: $org) {
+    ... on ProjectV2Owner {
+    projectV2(number: $number) { views(first: 50) { nodes {
+      name layout filter
+      fields(first: 50) { nodes { ... on ProjectV2FieldCommon { name } } }
+      sortByFields(first: 5) { nodes { direction field { ... on ProjectV2FieldCommon { name } } } }
+    } } }
+    }
+  }
+}
+"""
+
+
+def _status_list(names):
+    return ",".join(f'"{n}"' if " " in n else n for n in names)
+
+
+def _shows_label(filt, label):
+    filt = filt or ""
+    return f'label:"{label}"' in filt or (" " not in label and re.search(rf"label:{re.escape(label)}\b", filt))
+
+
+def check_board_views(views, ready, stage_columns, rep):
+    """The two kanban views setup creates (SKILL.md): Backlog, and the queue filtered on the
+    ready label. `views`: [{name, layout, filter, fields, sort: [(field, direction)]}], or None."""
+    if views is None:
+        rep.info("tracker: board views", "could not be read; check the board's views by hand")
+        return
+    boards = [v for v in views if v.get("layout") == "BOARD_LAYOUT"]
+    queue = [v for v in boards if ready and _shows_label(v.get("filter"), ready)]
+    backlog = [v for v in boards if "label:" not in (v.get("filter") or "")]
+    problems = []
+    if not backlog:
+        problems.append("no Backlog kanban: add a board-layout view 'Backlog' filtered "
+                        "`-status:Done,Future`, sorted by Created, newest first")
+    elif not any(("Created", "DESC") in [tuple(x) for x in v.get("sort") or []] for v in backlog):
+        problems.append(f"'{backlog[0]['name']}' is not sorted newest first (View → Sort by → Created, descending)")
+    if ready and not queue:
+        problems.append(f"no {ready!r} kanban: add a board-layout view filtered "
+                        f"`-status:{_status_list(['Done', 'Future', *stage_columns])} label:\"{ready}\"`")
+    if problems:
+        rep.warn("tracker: board views", "; ".join(problems))
+    unlabelled = [v["name"] for v in boards if "Labels" not in (v.get("fields") or [])]
+    if unlabelled:
+        rep.warn("tracker: labels in board views",
+                 "without Labels: " + ", ".join(f"'{n}'" for n in unlabelled) + ". A card carrying the "
+                 "ready label looks unlabelled there; View → Fields → Labels, then Save view")
+    if not problems and not unlabelled:
+        rep.ok("tracker: board views", ", ".join(v["name"] for v in backlog[:1] + queue[:1]))
+
+
+def _views(nodes):
+    return [{"name": n.get("name"), "layout": n.get("layout"), "filter": n.get("filter"),
+             "fields": [f.get("name") for f in (n.get("fields") or {}).get("nodes") or [] if f],
+             "sort": [((s.get("field") or {}).get("name"), s.get("direction"))
+                      for s in (n.get("sortByFields") or {}).get("nodes") or []]}
+            for n in nodes]
 
 
 def _norm(name):
@@ -342,6 +455,7 @@ def main(argv=None):
         return 1
     root = Path(top.stdout.strip())
     rep.info("repo", str(root))
+    check_git_state(root, rep)
 
     check_settings(root, rep)
 

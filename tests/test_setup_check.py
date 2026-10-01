@@ -254,5 +254,121 @@ class Audit(unittest.TestCase):
         self.assertTrue(rep.rows and not rep.failed())
 
 
+def git(*args, cwd):
+    return subprocess.run(["git", *args], cwd=cwd, check=True, capture_output=True, text=True).stdout.strip()
+
+
+def origin_and_clone():
+    """A bare origin whose default branch is main, and a clone of it level with origin."""
+    base = Path(tempfile.mkdtemp()).resolve()
+    seed = base / "seed"
+    git("init", "-q", "-b", "main", str(seed), cwd=base)
+    git("-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "--allow-empty", "-m", "seed", cwd=seed)
+    git("clone", "-q", "--bare", str(seed), str(base / "origin.git"), cwd=base)
+    git("clone", "-q", str(base / "origin.git"), str(base / "work"), cwd=base)
+    return base / "origin.git", base / "work"
+
+
+def commit(cwd, msg="c"):
+    git("-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "--allow-empty", "-m", msg, cwd=cwd)
+
+
+class GitState(unittest.TestCase):
+    def check(self, work):
+        rep = sc.Report()
+        sc.check_git_state(work, rep)
+        return [(r["level"], r["check"]) for r in rep.rows]
+
+    def test_clean_default_branch_level_with_origin_passes(self):
+        _, work = origin_and_clone()
+        self.assertEqual(self.check(work), [("PASS", "git: clean main")])
+
+    def test_another_branch_fails(self):
+        _, work = origin_and_clone()
+        git("switch", "-q", "-c", "feature", cwd=work)
+        self.assertIn(("FAIL", "git: clean main"), self.check(work))
+
+    def test_uncommitted_tracked_change_fails_and_untracked_only_warns(self):
+        _, work = origin_and_clone()
+        (work / "f").write_text("x")
+        self.assertEqual(self.check(work), [("WARN", "git: untracked files"), ("PASS", "git: clean main")])
+        git("add", "f", cwd=work)
+        self.assertIn(("FAIL", "git: clean main"), self.check(work))
+
+    def test_behind_origin_fails(self):
+        origin, work = origin_and_clone()
+        other = work.parent / "other"
+        git("clone", "-q", str(origin), str(other), cwd=work.parent)
+        commit(other)
+        git("push", "-q", "origin", "main", cwd=other)
+        self.assertIn(("FAIL", "git: clean main"), self.check(work))
+
+    def test_ahead_of_origin_fails(self):
+        _, work = origin_and_clone()
+        commit(work)
+        self.assertIn(("FAIL", "git: clean main"), self.check(work))
+
+    def test_detached_head_fails(self):
+        _, work = origin_and_clone()
+        git("switch", "-q", "--detach", cwd=work)
+        self.assertIn(("FAIL", "git: clean main"), self.check(work))
+
+    def test_no_origin_says_so_and_still_checks_the_tree(self):
+        tmp = repo({"f": "x"})
+        git("add", "f", cwd=tmp)
+        rows = self.check(tmp)
+        self.assertIn(("INFO", "git: origin"), rows)
+        self.assertIn(("FAIL", "git: clean main"), rows)
+
+
+def view(name, layout="BOARD_LAYOUT", filt="", fields=("Title", "Status", "Labels"), sort=()):
+    return {"name": name, "layout": layout, "filter": filt, "fields": list(fields), "sort": list(sort)}
+
+
+BACKLOG = view("Backlog", filt="-status:Done,Future", sort=[("Created", "DESC")])
+READY = view("Dev Ready", filt='-status:Done,Future,Released label:"dev ready"')
+
+
+class BoardViews(unittest.TestCase):
+    def check(self, views, ready="dev ready", stages=("Released",)):
+        rep = sc.Report()
+        sc.check_board_views(views, ready, list(stages), rep)
+        return rep
+
+    def test_both_kanban_views_pass(self):
+        rep = self.check([view("View 1", layout="TABLE_LAYOUT", fields=("Title",)), BACKLOG, READY])
+        self.assertEqual([r["level"] for r in rep.rows], ["PASS"])
+
+    def test_missing_ready_view_names_its_filter(self):
+        rep = self.check([BACKLOG], stages=("In Dev", "In Production"))
+        self.assertEqual([r["check"] for r in rep.rows], ["tracker: board views"])
+        self.assertIn('-status:Done,Future,"In Dev","In Production" label:"dev ready"', rep.rows[0]["detail"])
+
+    def test_missing_backlog_view_warns(self):
+        rep = self.check([READY])
+        self.assertEqual([r["level"] for r in rep.rows], ["WARN"])
+        self.assertIn("-status:Done,Future", rep.rows[0]["detail"])
+
+    def test_a_table_filtered_on_the_label_is_not_the_kanban(self):
+        rep = self.check([BACKLOG, view("Dev Ready", layout="TABLE_LAYOUT", filt='label:"dev ready"')])
+        self.assertEqual([r["level"] for r in rep.rows], ["WARN"])
+
+    def test_a_board_view_without_labels_warns_by_name(self):
+        rep = self.check([BACKLOG, view("Dev Ready", filt='label:"dev ready"', fields=("Title",))])
+        self.assertEqual([r["check"] for r in rep.rows], ["tracker: labels in board views"])
+        self.assertIn("'Dev Ready'", rep.rows[0]["detail"])
+
+    def test_backlog_not_newest_first_warns(self):
+        rep = self.check([view("Backlog", filt="-status:Done,Future"), READY])
+        self.assertEqual([r["check"] for r in rep.rows], ["tracker: board views"])
+        self.assertIn("newest first", rep.rows[0]["detail"])
+
+    def test_unreadable_views_say_so_and_views_never_fail(self):
+        rep = self.check(None)
+        self.assertEqual([r["level"] for r in rep.rows], ["INFO"])
+        rep = self.check([])
+        self.assertTrue(rep.rows and not rep.failed())
+
+
 if __name__ == "__main__":
     unittest.main()

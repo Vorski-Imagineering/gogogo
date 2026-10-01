@@ -1,6 +1,6 @@
 ---
 name: setup
-description: Use when onboarding a repo onto the gogogo skills, or checking that a repo's setup is still right — the plugin settings, the process profile, the Hard Stop source, the tracker board and its columns, the ready label, and local skills the shared ones replace. Also when a gogogo skill stopped on a missing setting and the user wants it fixed.
+description: Use when onboarding a repo onto the gogogo skills, or checking that a repo's setup is still right — the plugin settings, the process profile, the Hard Stop source, the tracker board, its columns and kanban views, the ready label, and local skills the shared ones replace. Also when a gogogo skill stopped on a missing setting and the user wants it fixed.
 ---
 
 # setup: onboard a repo onto the gogogo skills, or check it still is
@@ -16,6 +16,12 @@ python3 "${CLAUDE_PLUGIN_ROOT}/scripts/setup_check.py"
 It only reads. Each line is `PASS`, `FAIL` (with the fix after `->`), `WARN`
 or `INFO`. Show the user the whole list, grouped: what is fine, what is broken,
 what to look at. Exit 0 means nothing failed.
+
+Its first line is `git: clean main`. Setup commits to the repo, so it starts
+on the default branch with nothing uncommitted and level with origin. If that
+line fails, stop and tell the user what it found. Do not stash, reset, switch
+or pull over their work for them; it may be someone's work in progress. Go on
+once they have cleared it and the line passes.
 
 ## 2. Fix, one thing at a time, with approval
 
@@ -90,7 +96,27 @@ What each fix involves:
   `<tracker.tool> list` before and after. An option sent without its `id` is
   recreated, and every card in it loses its column.
 
-  Two things only the board's web page can set. Do them yourself with the
+  Create the two kanban views with the REST API (owner `orgs/<owner>`, or
+  `users/<owner>` for a personal board). Read the field ids with
+  `gh api orgs/<owner>/projectsV2/<n>/fields -q '.[]|"\(.id) \(.name)"'`,
+  then for each view:
+
+  ```bash
+  gh api -X POST orgs/<owner>/projectsV2/<n>/views --input - <<<'{"name": "<name>",
+    "layout": "board", "filter": "<filter>", "visible_fields": [<ids>]}'
+  ```
+
+  | View | Filter |
+  |---|---|
+  | `Backlog` | `-status:Done,Future` |
+  | the queue column's name (`Dev Ready`) | `-status:Done,Future,<each stage column> label:"<tracker.ready_marker>"` (quote a column name that has a space) |
+
+  `visible_fields` holds the ids of Title, Assignees, Status, **Labels**,
+  Linked pull requests and Sub-issues progress. The API creates a view but
+  cannot change or delete one, so get it right the first time; a wrong view is
+  removed on the web page. A board layout groups by Status on its own.
+
+  Three things only the board's web page can set. Do them yourself with the
   Claude in Chrome tools (load the `claude-in-chrome` skill and its tools in
   one `ToolSearch` call), signed in as the user; say what you are about to
   change first, as for any other write, and read the page back afterwards.
@@ -103,10 +129,13 @@ What each fix involves:
     and turn on. Open **Item added to project** → Edit: set the value to
     Status = the new-issue column (`⚡️ New`), Save and turn on. The check
     reads both back.
-  - **Labels in each view.** In every view, **View → Fields** and tick
-    **Labels**, then **Save view** and confirm; with it off, a card carrying
-    the ready label looks unlabelled. The check cannot see this: read the
-    column header (or a card's label chip) back in each view.
+  - **Backlog newest first.** In the `Backlog` view, **View → Sort by →
+    Created**, descending, then **Save view** and confirm.
+  - **Labels in each view.** In any view that does not show **Labels** (the
+    board's default table, or a view created without it), **View → Fields**
+    and tick **Labels**, then **Save view** and confirm; with it off, a card
+    carrying the ready label looks unlabelled. The check reads the board views
+    back.
   Then set `tracker.tool = "shared"`.
 - **No ready label.** The check prints the `gh label create` command.
 - **Local skills the shared ones replace.** Move each to
@@ -125,6 +154,8 @@ ones the user approves:
 
 - `marketplace source` names an old repo name → set `source.repo` to the
   current one in `.claude/settings.json`.
+- `board views`, `labels in board views` → create a missing view with the
+  API as above; sort and Labels on the web page.
 - `board workflows`, `issues missing from the board`, `cards without a column`
   → the web steps above (done in the browser), then `<tracker.tool> move` for stray cards; add
   missing issues with `gh project item-add`.
@@ -150,8 +181,13 @@ Report what was set up, what was left as a warning and why, and anything the
 user still has to do on their own machine (for example `gh auth setup-git`, so
 a private marketplace can be fetched without a prompt).
 
-## Changes go through the repo's own path
+## Changes land on the default branch, and the repo is left clean
 
-Commit the setup changes on a branch and merge them the way the profile's
-`integration` says, like any other change. Do not push to a protected main
-branch directly.
+Commit the setup changes on the default branch and push them. If the push is
+refused because the branch is protected, put the same commit on a branch, open
+a PR, merge it once the user approves, and delete the branch on origin and
+locally.
+
+Either way, finish on the default branch with nothing uncommitted, level with
+origin, and no setup branch left behind. Re-run the check to show it:
+`git: clean main` passes.
