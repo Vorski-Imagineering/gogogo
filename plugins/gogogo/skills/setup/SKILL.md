@@ -93,6 +93,13 @@ What each fix involves:
 
   Show the draft to the user before writing it. It describes how their project
   works; they approve it.
+- **A profile missing a setting the skills now require.** Add it with the
+  value the board uses, shown to the user first. `tracker.columns.needs_human`
+  is `"Human!Help!"`, and the board needs that column too (below). When the
+  profile sets `roadmap.file`, that document's legend needs a row covering the
+  new column, as `/gogogo:roadmap` shows; offer to add it. When the
+  check warns that a setting is unknown (a key retired from the profile
+  format, such as a column role no skill reads any more), offer to remove it.
 - **No board, or missing columns.** Every board uses the same Status
   columns, in this order:
 
@@ -101,8 +108,9 @@ What each fix involves:
   | `Future` | Kept for later; not in the working backlog. |
   | `⚡️ New` | Just arrived; a human triages it into Backlog or Future. |
   | `Backlog` | Filed; not yet specced or not yet chosen. |
-  | `Dev Ready` | Specced and chosen: the queue (`tracker.queue`, and `columns.back_to_queue`). |
+  | `Dev Ready` | Specced and chosen: the queue (`tracker.queue`). |
   | `In progress` | Being worked (`columns.in_progress`). |
+  | `Human!Help!` | Stopped and waiting for a person: an unreviewed fix, a decision, or verification that gave up (`columns.needs_human`). A person moves it on; no skill does. |
   | one per stage | The profile's `stages`, in order, named in the repo's words. |
   | `Done` | Closed. `/gogogo:auto-test` moves a card here on a pass, and `tracker.py tidy --apply`, run by a person, moves closed issues here. No other skill moves a card here. |
 
@@ -115,7 +123,11 @@ What each fix involves:
   adding a new one: send every option back with its `id` in one
   `updateProjectV2Field` call, change only the name, and compare
   `<tracker.tool> list` before and after. An option sent without its `id` is
-  recreated, and every card in it loses its column.
+  recreated, and every card in it loses its column. A missing column: the
+  check's own fix is for a person to add it in the board's Status field
+  settings in the GitHub UI, which has no such risk. Offer that first. If the
+  user wants setup to add it, use the same call: every existing option with
+  its `id`, plus the new one without, in the table's order.
 
   Create the two kanban views with the REST API (owner `orgs/<owner>`, or
   `users/<owner>` for a personal board). Read the field ids with

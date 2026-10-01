@@ -639,7 +639,8 @@ def config_header(root, settings, rep, profile=None):
         rep.info("config: tracker",
                  f"issues {val(tracker.get('issues_repo'))}, code {val(tracker.get('code_repo'))}, "
                  f"ready label \"{val(tracker.get('ready_marker'))}\", queue \"{val(tracker.get('queue'))}\", "
-                 f"in progress \"{val(columns.get('in_progress'))}\", tool {val(tracker.get('tool'))}")
+                 f"in progress \"{val(columns.get('in_progress'))}\", needs human \"{val(columns.get('needs_human'))}\", "
+                 f"tool {val(tracker.get('tool'))}")
         envs = [e for e in _list(settings.get("environments")) if isinstance(e, dict)]
         stages = [x for x in _list(settings.get("stages")) if isinstance(x, dict)]
         verify = _table(settings.get("verify"))

@@ -50,7 +50,8 @@ board columns (as the profile names them, any case) and these keywords:
 The script refuses the legend (exit 2) unless:
 
 - `closed`, `not planned` and `none` are each covered;
-- `tracker.columns.in_progress` and each column in `stages` are each covered;
+- `tracker.columns.in_progress`, `tracker.columns.needs_human` and each column
+  in `stages` are each covered;
 - no keyword or column is covered by two marks (each exactly once);
 - `by hand` is the only entry in its cell;
 - every entry is a keyword or a column the profile names.
@@ -75,12 +76,14 @@ A repo starting a legend can begin from this one:
 | ⛔ | **blocked** | held back; the note names what on | by hand |
 | 🔵 | **ready** | carries the ready label | ready label |
 | 🟡 | **in progress** | being built | In progress |
+| 🆘 | **needs you** | stopped; waiting for a person | Human!Help! |
 | 🟠 | **released** | on its last stage, not yet closed | Released |
 | ✅ | **Closed** | closed as completed | closed |
 | ⚫ | **dropped** | closed as not planned | not planned |
 ```
 
-Replace `In progress` with the profile's `tracker.columns.in_progress`, and `Released`
+Replace `In progress` with the profile's `tracker.columns.in_progress`, `Human!Help!`
+with its `tracker.columns.needs_human` (or drop that row when the profile has none), and `Released`
 with each column in `stages` (a mark may cover several, comma-separated). To change what
 a mark means, edit its `Covers` cell; the script reads it on every run.
 

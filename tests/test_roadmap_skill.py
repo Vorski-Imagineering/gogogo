@@ -71,12 +71,15 @@ class Skill(unittest.TestCase):
         keep_tracker_globals(self)
         with tempfile.TemporaryDirectory() as tmp:
             profile = Path(tmp) / "dev-process.md"
-            profile.write_text(profile_text(stages=("Released",)), encoding="utf-8")
+            text = profile_text(stages=("Released",)).replace(
+                'back_to_queue = "Dev Ready"', 'needs_human = "Human!Help!"')
+            self.assertIn("Human!Help!", text)
+            profile.write_text(text, encoding="utf-8")
             tracker.configure(str(profile))
             settings, _ = pc.split_profile(profile.read_text(encoding="utf-8"))
         lines = templates[0].splitlines(keepends=True)
         legend = rs.read_legend(rs.find_tables(lines), settings)
-        self.assertEqual(len(legend.marks), 8)
+        self.assertEqual(len(legend.marks), 9)
 
     def test_names_every_keyword(self):
         text = skill_text()

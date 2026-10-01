@@ -100,8 +100,10 @@ The profile's `## Recon traps` lists what this codebase specifically hides.
 - **Thread a change through every consumer.** If you change a value, a flag or
   a rule, find every place that reads it and every path that re-renders it. A
   partial thread is the "two things must agree, nothing enforces it" failure.
-- **A Hard Stop discovered mid-change → stop** and present the repo's proposal
-  format. Do not negotiate with yourself about whether it is "small".
+- **A Hard Stop, or a decision that belongs to a person and is not in the
+  issue body, discovered mid-change → stop** and present the repo's proposal
+  format. Do not negotiate with yourself about whether it is "small". Hand
+  back as *stopped for a person* (§8).
 - **Do not commit or push unless asked.** Leave the change in the working tree
   and say which branch it is on. (`auto-dev` overrides this.)
 
@@ -127,10 +129,12 @@ JSON. How many rounds depends on what the change is:
   corrections. After the second round, apply nothing except a correctness fix;
   its other findings are listed in the report as follow-ups. If it found a
   correctness defect, fix it and **stop before merging**: the change goes to a
-  person with the fix marked unreviewed. Do not start a third round.
+  person with the fix marked unreviewed, handed back as *stopped for a person*
+  (§8). Do not start a third round.
 - A change that mixes the two is code.
 - Findings you disagree with may be declined, with the reason. Correctness
-  findings may not: fix them or stop.
+  findings may not: fix them, or stop and hand back as *stopped for a person*
+  (§8).
 - When the spec moves content unchanged, findings about that content are not
   part of the move: list them in the report as follow-ups. A correctness
   finding there still means fix or stop.
@@ -199,15 +203,45 @@ Write the body to a file and pass `--body-file`; inline `--body` mangles markdow
 ## 8. Hand back: move the card as far as the code has got
 
 The card moves to the column of the **stage the code has actually reached**,
-and no further:
+and no further. Take the first case that fits:
 
-- not committed, or on a branch awaiting review → `tracker.columns.in_progress`;
+- **stopped for a person**: a review fix no round has reviewed, a correctness
+  finding you could not fix, a decision or Hard Stop found mid-change (§4), a
+  gate you could not make pass, or verification that gave up →
+  `tracker.columns.needs_human`, whether or not
+  the work sits on a branch or PR. The §7 report's first line is
+  `**Needs you:**` and one sentence saying what the person must do, followed
+  by the branch or PR link: for example, read commit `<sha>` and merge; decide
+  `<question>`; read the attempts and re-spec or requeue. When nothing is
+  committed (this skill commits only when asked, §4), ask the person whether
+  to commit and push the work first, so the card links to something; if they
+  decline, say "in the working tree of <path>";
+- not committed, or on a branch or PR awaiting review, or stopped at an open
+  PR only because the merge is a release or a two-licence apply row is
+  missing → `tracker.columns.in_progress`;
 - merged → the first of the profile's `stages`, and only after the merge is
   verified (`verify_merged.py`, below).
+
+Nothing sweeps cards out of `tracker.columns.needs_human`, and no run takes an
+issue from there: a person moves it on once they have done what it asked, or
+starts `/gogogo:dev` on it, which then moves the card as for any issue. Also
+remove `tracker.ready_marker` from an issue you move to `needs_human`, and
+`tracker.queue` too when the queue is a label
+(`gh issue edit <n> --repo <tracker.issues_repo> --remove-label "<label>"`):
+the ready label means the issue needs nothing from anyone, and a queue label
+would let the next run take it. The person puts them back when the issue is
+ready again. In a session with the person present, a question they answer
+there is not a stop once the answer is in the issue body (§2: a sign-off in
+chat or a comment does not count): record it with `/gogogo:spec`, then carry
+on.
 
 ```bash
 <tracker.tool> move <n> --to "<column>"
 ```
+
+`<column>` is a role key (`in_progress`, `needs_human`) or a stage column's
+name. Pass the role key, not the name, for those two: a `!` in a name, as in
+`Human!Help!`, is expanded by an interactive shell inside double quotes.
 
 A zero exit is the confirmation: the tool read the card back. Anything else is
 a failed move; say so, do not retry blind.

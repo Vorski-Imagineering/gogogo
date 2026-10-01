@@ -351,6 +351,23 @@ column = "Merged"
         self.assertEqual(board.column("Merged"), "Merged")
         self.assertEqual(sorted({c.name for c in board.COLUMNS.values()}), ["Doing", "Merged", "Ready"])
 
+    def test_the_needs_human_column_is_a_role_and_a_required_column(self):
+        # gogogo#26: skills pass the role key (the name has "!", which an
+        # interactive shell expands), and a board lacking it is named.
+        path = self.write("""+++
+profile = 1
+[tracker]
+project_owner = "someone"
+project_number = 7
+issues_repo = "someone/tracker"
+columns = { in_progress = "Doing", needs_human = "Human!Help!" }
++++
+""")
+        board.configure(path)
+        self.assertEqual(board.column("needs_human"), "Human!Help!")
+        self.assertEqual(board.missing_columns({"options": ["Doing"]}), ["Human!Help!"])
+        self.assertEqual(board.missing_columns({"options": ["Doing", "human!help!"]}), [])
+
     def test_a_profile_without_a_board_is_refused(self):
         path = self.write('+++\nprofile = 1\n[tracker]\nissues_repo = "a/b"\n+++\n')
         with self.assertRaises(board.ProfileMissing):

@@ -179,9 +179,10 @@ one step at a time, asking before anything is written:
   isn't one, it stops and asks. Which changes need sign-off is the owner's
   call, never the skill's.
 - **The board.** A GitHub Project with the standard columns: `Future` ·
-  `⚡️ New` · `Backlog` · `Dev Ready` · `In progress` · one per stage (for
-  example "In Dev", "In Staging", "Released") · `Done`. New issues land in
-  ⚡️ New for you to triage; the loop works Dev Ready. It can create the board,
+  `⚡️ New` · `Backlog` · `Dev Ready` · `In progress` · `Human!Help!` · one
+  per stage (for example "In Dev", "In Staging", "Released") · `Done`. New
+  issues land in ⚡️ New for you to triage; the loop works Dev Ready, and moves
+  an issue that stopped and needs you to Human!Help!. It can create the board,
   or check the one you have.
 - **The ready label** (`dev ready` by default).
 - **Local skills this replaces.** Their project-specific text moves into the

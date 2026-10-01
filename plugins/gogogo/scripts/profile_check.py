@@ -50,7 +50,9 @@ FIELDS = {
     "tracker.project_owner": (str, (), "Owner of the GitHub project board."),
     "tracker.project_number": (int, (), "Number of the GitHub project board."),
     "tracker.queue": (str, (LOOP,), "Column or label the loop works."),
-    "tracker.columns": (dict, (ONE, LOOP), "Columns before any code moves: in_progress, back_to_queue."),
+    "tracker.columns.in_progress": (str, (ONE, LOOP), "Column of an issue being worked now."),
+    "tracker.columns.needs_human": (str, (ONE, LOOP), "Column of an issue stopped for a person: an unreviewed fix, "
+                                    "a decision or Hard Stop found mid-change, or verification that gave up."),
     "environments": (list, SKILLS, "Where code runs: name, roles, and url/serves/reached_by/data/writes."),
     "stages": (list, (ONE, LOOP, TEST), "The path a change takes after it merges: code_is, column, environment."),
     "hard_stops.source": (str, SKILLS, "Where the repo's Hard Stop rules live (file#anchor)."),
@@ -103,6 +105,14 @@ TEST_DATA_HEADINGS = ("Running build", "Finding the change", "Sandbox and fixtur
                       "Optional lanes", "Extra step rules", "Never call")
 
 ROLES = ("pre-merge", "pre-production", "production")
+
+# Settings a profile may still carry that no skill reads any more: each warns.
+# Other keys of `tracker.columns` are column roles a repo may add for its own
+# tool (references/tracker-contract.md), so they do not warn.
+RETIRED = {"tracker.columns.back_to_queue": "retired: no skill reads it since gogogo#26"}
+
+# The `tracker.columns` roles the profile format defines, from FIELDS.
+COLUMN_ROLES = tuple(p.split(".", 2)[2] for p in FIELDS if p.startswith("tracker.columns."))
 
 # The keys a stage may have (`stages` is a list, so FIELDS cannot name them).
 STAGE_KEYS = ("code_is", "environment", "column", "moved_by", "tag")
@@ -301,7 +311,11 @@ def check(settings, sections, skill=None):
     else:
         wanted = tuple(s for s in SKILLS if s != TEST or "auto_test" in settings)
 
+    columns, columns_present = _lookup(settings, "tracker.columns")
+    columns_bad = columns_present and not isinstance(columns, dict)
     for path, (kind, required_by, meaning) in FIELDS.items():
+        if columns_bad and path.startswith("tracker.columns."):
+            continue  # one error for the whole table, below
         value, present = _lookup(settings, path)
         required = any(s in required_by for s in wanted)
         if not present:
@@ -330,6 +344,15 @@ def check(settings, sections, skill=None):
             elif not (lane.get("run") or lane.get("env")):
                 errors.append(f"lanes[{i}] ({lane['name']}): needs run (a command) or env (where it is checked)")
 
+    if columns_bad:
+        errors.append(f"tracker.columns: expected a table of role = column name, found {type(columns).__name__}")
+    elif columns_present:
+        for role, name in columns.items():
+            if any(e.startswith(f"tracker.columns.{role}:") for e in errors):
+                continue  # FIELDS above already named it
+            if not isinstance(name, str) or not name.strip():
+                errors.append(f"tracker.columns.{role}: expected a column name, found {name!r}")
+
     errors.extend(_check_environments(settings))
     stage_errors, stage_warnings = _check_stages(settings)
     errors.extend(stage_errors)
@@ -341,7 +364,9 @@ def check(settings, sections, skill=None):
         errors.extend(_check_auto_test(settings, sections))
 
     for path in _leaf_paths(settings):
-        if path not in FIELDS:
+        if path in RETIRED:
+            warnings.append(f"{path}: unknown setting ({RETIRED[path]}); remove it")
+        elif path not in FIELDS and path != "tracker.columns" and not path.startswith("tracker.columns."):
             warnings.append(f"{path}: unknown setting (typo, or not in this profile version)")
 
     for title, needed_by in SECTIONS.items():

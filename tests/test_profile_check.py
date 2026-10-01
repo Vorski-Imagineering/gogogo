@@ -28,7 +28,7 @@ tool = "python3 tools/board.py"
 project_owner = "acme"
 project_number = 2
 queue = "Dev Priority"
-columns = { in_progress = "In progress", back_to_queue = "New" }
+columns = { in_progress = "In progress", needs_human = "Human!Help!" }
 
 [hard_stops]
 source = "CLAUDE.md#hard-stops"
@@ -230,6 +230,79 @@ class MissingFields(unittest.TestCase):
         settings, sections = parse()
         errors, _ = pc.check(settings, {**sections, "Recon traps": ""})
         self.assertIn("section '## Recon traps': empty", errors)
+
+
+class Columns(unittest.TestCase):
+    """tracker.columns: the keys dev and auto-dev move cards to (gogogo#26)."""
+
+    def test_needs_human_is_required_by_dev_and_auto_dev_only(self):
+        settings, sections = parse()
+        dropped = drop(settings, "tracker.columns.needs_human")
+        for skill in (pc.ONE, pc.LOOP):
+            errors, _ = pc.check(dropped, sections, skill)
+            self.assertTrue(any(e.startswith("tracker.columns.needs_human: missing") for e in errors), skill)
+        for skill in (pc.SPEC, pc.TECH, pc.ROADMAP):
+            errors, _ = pc.check(dropped, sections, skill)
+            self.assertEqual(errors, [], skill)
+
+    def test_back_to_queue_warns_but_passes(self):
+        settings, sections = parse()
+        settings["tracker"]["columns"]["back_to_queue"] = "Dev Ready"
+        errors, warnings = pc.check(settings, sections)
+        self.assertEqual(errors, [])
+        self.assertTrue(any(w.startswith("tracker.columns.back_to_queue: unknown setting") for w in warnings),
+                        warnings)
+
+    def test_columns_must_be_a_table_of_names(self):
+        settings, sections = parse()
+        settings["tracker"]["columns"] = "In progress"
+        errors, _ = pc.check(settings, sections, pc.ROADMAP)
+        self.assertTrue(any(e.startswith("tracker.columns: expected a table") for e in errors), errors)
+        settings, sections = parse()
+        settings["tracker"]["columns"]["in_review"] = 5
+        errors, _ = pc.check(settings, sections)
+        self.assertTrue(any(e.startswith("tracker.columns.in_review: expected a column name") for e in errors),
+                        errors)
+
+    def test_a_bad_required_column_is_one_error(self):
+        settings, sections = parse()
+        settings["tracker"]["columns"]["in_progress"] = 5
+        errors, _ = pc.check(settings, sections)
+        self.assertEqual([e for e in errors if e.startswith("tracker.columns.in_progress")],
+                         ["tracker.columns.in_progress: expected str, found int"])
+        settings["tracker"]["columns"] = "In progress"
+        _, warnings = pc.check(settings, sections, pc.ROADMAP)
+        self.assertEqual([w for w in warnings if w.startswith("tracker.columns")], [])
+
+    def test_a_columns_value_that_is_not_a_table_is_one_error(self):
+        settings, sections = parse()
+        settings["tracker"]["columns"] = "In progress"
+        errors, _ = pc.check(settings, sections, pc.ONE)
+        self.assertEqual([e for e in errors if e.startswith("tracker.columns")],
+                         ["tracker.columns: expected a table of role = column name, found str"])
+
+    def test_a_blank_required_column_name_is_an_error(self):
+        settings, sections = parse()
+        settings["tracker"]["columns"]["needs_human"] = "  "
+        errors, _ = pc.check(settings, sections, pc.ONE)
+        self.assertEqual([e for e in errors if e.startswith("tracker.columns")],
+                         ["tracker.columns.needs_human: expected a column name, found '  '"])
+
+    def test_an_empty_column_name_is_an_error_for_every_skill(self):
+        settings, sections = parse()
+        settings["tracker"]["columns"]["needs_human"] = ""
+        for skill in (pc.ONE, pc.ROADMAP):
+            errors, _ = pc.check(settings, sections, skill)
+            self.assertEqual(len([e for e in errors if e.startswith("tracker.columns.needs_human")]), 1,
+                             (skill, errors))
+
+    def test_column_roles_come_from_fields(self):
+        self.assertEqual(pc.COLUMN_ROLES, ("in_progress", "needs_human"))
+
+    def test_another_column_role_is_allowed(self):
+        settings, sections = parse()
+        settings["tracker"]["columns"]["in_review"] = "In review"
+        self.assertEqual(pc.check(settings, sections), ([], []))
 
 
 class WrongValues(unittest.TestCase):

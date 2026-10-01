@@ -85,7 +85,7 @@ class Column:
 
 #: Filled by configure(): tracker.queue, tracker.columns and every stage's
 #: column. Keys are the roles the skills use ("queue", "in_progress",
-#: "back_to_queue", and each stage's column name); values carry the live name.
+#: "needs_human", and each stage's column name); values carry the live name.
 #: `fields --check` fails when the live board lacks one of these.
 COLUMNS: dict[str, Column] = {}
 
