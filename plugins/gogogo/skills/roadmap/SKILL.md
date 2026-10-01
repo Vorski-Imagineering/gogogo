@@ -97,7 +97,10 @@ git rev-parse --show-toplevel
   `git -C "$D" status -sb`. Stop and report if the document has uncommitted changes
   (another session's edit), or the branch has no upstream. If it is behind,
   `git -C "$D" pull --ff-only`; stop and report if that refuses.
-- **The same repo:** stop if the document has uncommitted changes.
+- **The same repo:** `git fetch`, then `git status -sb`. The current branch must be
+  `integration.base` (or the default branch when it is unset): stop and report if it is
+  another branch, or if the document has uncommitted changes. Then `git pull --ff-only`;
+  stop and report if that refuses. The run starts from that up-to-date checkout.
 
 ## 2. Report
 
@@ -162,10 +165,10 @@ point at.
   git -C "$D" commit -m "roadmap: refresh marks from the tracker (<#n A → B>, ...)"
   git -C "$D" push
   ```
-- **The same repo:** commit on a new branch `roadmap-refresh-<YYYY-MM-DD>` cut from
-  `integration.base` (or the default branch), push it, and report the branch for the
-  repo's own integration path (`integration.strategy`). This skill never merges into the
-  base itself.
+- **The same repo:** from the up-to-date checkout of step 1, carrying the edits,
+  `git switch -c roadmap-refresh-<YYYY-MM-DD>`, commit the document there, push the
+  branch, and report it for the repo's own integration path (`integration.strategy`).
+  This skill never merges into the base itself.
 
 ## 8. Report
 
