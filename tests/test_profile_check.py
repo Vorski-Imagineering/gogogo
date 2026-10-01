@@ -73,6 +73,7 @@ column = "In Dev"
 code_is = "deployed"
 environment = "production"
 column = "In Production"
+tag = "deploy-*"
 
 [verify]
 agent = ["dev"]
@@ -282,6 +283,46 @@ class Environments(unittest.TestCase):
         errors = self.check(lambda s: s["verify"].update(human="staging", agent=["dev", "preview"]))
         self.assertIn("verify.human: 'staging' is not in environments", errors)
         self.assertIn("verify.agent: 'preview' is not in environments", errors)
+
+    def test_each_bad_stage_tag_is_one_error(self):
+        def third_stage(s):
+            s["stages"].append({"code_is": "again", "environment": "production",
+                                "column": "Again", "tag": "deploy-*"})
+        cases = {
+            "first stage": lambda s: s["stages"][0].update(tag="dev-*"),
+            "empty": lambda s: s["stages"][1].update(tag=""),
+            "not a string": lambda s: s["stages"][1].update(tag=3),
+            "no environment": lambda s: s["stages"][1].pop("environment"),
+            "a slash": lambda s: s["stages"][1].update(tag="deploy/*"),
+            "on two stages": third_stage,
+        }
+        for name, mutate in cases.items():
+            with self.subTest(name):
+                errors = [e for e in self.check(mutate) if e.startswith("stages[")]
+                self.assertEqual(len(errors), 1, errors)
+        self.assertIn("stages[0] (In Dev): tag is not allowed on the first stage (a merge puts a card "
+                      "there, not a tag)", self.check(cases["first stage"]))
+
+    def test_unknown_stage_key_warns(self):
+        settings, sections = parse()
+        settings["stages"][1]["tags"] = "deploy-*"
+        errors, warnings = pc.check(settings, sections)
+        self.assertEqual(errors, [])
+        self.assertEqual([w for w in warnings if w.startswith("stages[")],
+                         ["stages[1] (In Production): unknown key 'tags' (typo, or not in this profile version)"])
+
+    def test_trailer_reporter_without_a_tagged_stage_warns(self):
+        settings, sections = parse()
+        del settings["stages"][1]["tag"]
+        _, warnings = pc.check(settings, sections)
+        self.assertTrue(any(w.startswith("handback.reporter: 'trailer', but no stage has a tag") for w in warnings))
+        settings["handback"]["reporter"] = "none"
+        self.assertEqual(pc.check(settings, sections), ([], []))
+
+    def test_this_repos_own_profile_is_clean_for_every_skill(self):
+        settings, sections = pc.split_profile((ROOT / ".agents" / "dev-process.md").read_text(encoding="utf-8"))
+        for skill in (None, *pc.SKILLS):
+            self.assertEqual(pc.check(settings, sections, skill), ([], []), skill)
 
 
 class FrontMatter(unittest.TestCase):
