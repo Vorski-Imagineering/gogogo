@@ -78,7 +78,7 @@ def major(profile: stage_sync.Profile) -> int:
 
 
 def version(profile: stage_sync.Profile, build_number: int) -> str:
-    # minor: fixed at 0 until #14 decides how it is derived
+    # minor: fixed at 0 until Vorski-Imagineering/gogogo#14 decides how it is derived
     return f"{major(profile)}.0.{build_number}"
 
 
@@ -89,12 +89,22 @@ def production(profile: stage_sync.Profile) -> str:
     raise ProfileProblem("environments: no environment has the role production")
 
 
-def body(name: str, ref: str, profile: stage_sync.Profile, titles: bool) -> str:
-    """The notes for `name` at `ref`: what it ships since the previous deploy-* tag."""
-    prev = stage_sync.previous_tag(ref, GLOB)
+def previous(name: str, sha: str) -> str | None:
+    """The deploy-* tag before `name`. A deploy-* tag already on the same commit (an old
+    date-named one, before `name` exists) is that release, so nothing is listed twice."""
+    if not subprocess.run(["git", "rev-parse", "--verify", "--quiet", f"refs/tags/{name}"],
+                          capture_output=True).returncode:
+        return stage_sync.previous_tag(name, GLOB)
+    on_commit = git("tag", "--points-at", sha, "--list", GLOB, "--sort=creatordate").split()
+    return on_commit[-1] if on_commit else stage_sync.previous_tag(sha, GLOB)
+
+
+def body(name: str, sha: str, profile: stage_sync.Profile, titles: bool) -> str:
+    """The notes for `name` at `sha`: what it ships since the previous deploy-* tag."""
+    prev = previous(name, sha)
     if prev is None:
         return FIRST + "\n"
-    result = stage_sync.shipped(ref, prev, profile.known)
+    result = stage_sync.shipped(sha, prev, profile.known)
     names = stage_sync.fetch_titles(result.links) if titles else None
     return stage_sync.render_shipped(name, production(profile), result, names)
 
@@ -126,28 +136,25 @@ def cmd_tag(args, profile_path) -> int:
                       "on the base branch (fetch first if it is)")
     existing = subprocess.run(["git", "rev-parse", "--verify", "--quiet", f"refs/tags/{name}^{{commit}}"],
                               capture_output=True, text=True).stdout.strip()
-    if existing == sha:
-        print(f"already tagged: {name}")
-        return EXIT_OK
-    if existing:
+    if existing and existing != sha:
         raise Refused(f"{name} already names {existing[:7]}; history was rewritten")
+    if existing:
+        print(f"already tagged: {name}")
+    else:
+        if args.dry_run:
+            print(f"{name}\n\n{message(name, sha, release, environment, profile)}", end="")
+            return EXIT_OK
+        with tempfile.NamedTemporaryFile("w", suffix=".txt", delete=False, encoding="utf-8") as fh:
+            fh.write(message(name, sha, release, environment, profile))
+        try:
+            git("tag", "-a", name, "-F", fh.name, sha)
+        finally:
+            Path(fh.name).unlink(missing_ok=True)
+        print(f"tagged {name} ({release})")
 
-    when = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M")
-    message = (f"Release {release} · {sha[:7]}\nDeployed {when} UTC to {environment}\n\n"
-               + body(name, sha, profile, titles=False))
-    if args.dry_run:
-        print(f"{name}\n\n{message}", end="")
-        return EXIT_OK
-
-    with tempfile.NamedTemporaryFile("w", suffix=".txt", delete=False, encoding="utf-8") as fh:
-        fh.write(message)
-    try:
-        git("tag", "-a", name, "-F", fh.name, sha)
-    finally:
-        Path(fh.name).unlink(missing_ok=True)
-    print(f"tagged {name} ({release})")
-
-    if args.push:
+    # Pushed again when already tagged: a retry after a failed push must still reach the
+    # remote, and a push of a tag the remote already has changes nothing there.
+    if args.push and not args.dry_run:
         pushed = subprocess.run(["git", "push", args.push, f"refs/tags/{name}"], capture_output=True, text=True)
         if pushed.returncode != 0:
             print(f"error: tagged {name} locally but the push failed; retry: "
@@ -155,6 +162,12 @@ def cmd_tag(args, profile_path) -> int:
             return EXIT_NOT_PUSHED
         print(f"pushed {name} to {args.push}")
     return EXIT_OK
+
+
+def message(name: str, sha: str, release: str, environment: str, profile: stage_sync.Profile) -> str:
+    when = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M")
+    return (f"Release {release} · {sha[:7]}\nDeployed {when} UTC to {environment}\n\n"
+            + body(name, sha, profile, titles=False))
 
 
 def cmd_notes(args, profile_path) -> int:

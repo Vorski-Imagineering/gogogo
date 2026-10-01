@@ -488,17 +488,30 @@ class Audit(unittest.TestCase):
         self.assertEqual([(r["level"], r["check"]) for r in rows], [("INFO", "release")])
         self.assertIn("not adopted", rows[0]["detail"])
 
+    PROD = [{"name": "prod", "roles": ["production"]}, {"name": "stage", "roles": ["pre-production"]}]
+
     def test_release_warns_on_a_stage_tag_deploy_tags_never_match(self):
-        stage = {"column": "In Production", "tag": "v*"}
-        rows = self._release({"release": {"major": 1}, "stages": [stage]})
+        stage = {"column": "In Production", "environment": "prod", "tag": "v*"}
+        rows = self._release({"release": {"major": 1}, "stages": [stage], "environments": self.PROD})
         self.assertIn(("WARN", "release: stage sync"), [(r["level"], r["check"]) for r in rows])
         stage["tag"] = "deploy-*"
-        rows = self._release({"release": {"major": 1}, "stages": [stage]})
+        rows = self._release({"release": {"major": 1}, "stages": [stage], "environments": self.PROD})
         self.assertNotIn("release: stage sync", [r["check"] for r in rows])
+
+    def test_release_ignores_tags_on_stages_before_production(self):
+        stages = [{"column": "Staging", "environment": "stage", "tag": "staging-*"},
+                  {"column": "In Production", "environment": "prod", "tag": "deploy-*"}]
+        rows = self._release({"release": {"major": 1}, "stages": stages, "environments": self.PROD})
+        self.assertNotIn("release: stage sync", [r["check"] for r in rows])
+
+    def test_release_table_without_major_warns(self):
+        rows = self._release({"release": {}, "stages": []})
+        self.assertIn(("WARN", "release: major"), [(r["level"], r["check"]) for r in rows])
 
     def test_release_warns_on_a_shallow_clone_and_never_fails(self):
         rep = sc.Report()
-        sc.check_release({"release": {"major": 1}, "stages": [{"tag": "v*"}]}, rep, shallow=True)
+        sc.check_release({"release": {"major": 1}, "stages": [{"tag": "v*", "environment": "prod"}],
+                          "environments": self.PROD}, rep, shallow=True)
         self.assertIn("release: build number", [r["check"] for r in rep.rows])
         self.assertFalse(rep.failed())
 

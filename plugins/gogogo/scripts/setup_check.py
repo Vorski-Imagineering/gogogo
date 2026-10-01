@@ -485,8 +485,16 @@ def check_release(settings, rep, shallow=None):
                  "(references/versioning.md)")
         return
     rep.info("release", f"tags deploy-<build>, version {release.get('major', '<major>')}.0.<build>")
+    if "major" not in release:
+        rep.warn("release: major", "[release] has no major, so release.py cannot version or tag a deploy; "
+                 "set major = 1 (references/versioning.md)")
+    production = {e.get("name") for e in settings.get("environments") or []
+                  if isinstance(e, dict) and "production" in (e.get("roles") or [])}
+    # Only production is tagged deploy-<build>; another stage may follow tags of its own.
     for stage in settings.get("stages") or []:
-        glob = stage.get("tag") if isinstance(stage, dict) else None
+        if not isinstance(stage, dict) or stage.get("environment") not in production:
+            continue
+        glob = stage.get("tag")
         if isinstance(glob, str) and glob and not fnmatch.fnmatchcase("deploy-1", glob):
             rep.warn("release: stage sync",
                      f"{stage.get('column')} moves on tags matching {glob}, which deploy-<build> tags never match")

@@ -154,6 +154,16 @@ class Tag(ReleaseRepo):
                                 capture_output=True, text=True, check=True).stdout
         self.assertIn("refs/tags/deploy-3", remote)
 
+    def test_a_rerun_after_a_failed_push_pushes_the_tag(self):
+        self.assertEqual(self.run_main("tag", "--push", "nowhere")[0], release.EXIT_NOT_PUSHED)
+        code, out, err = self.run_main("tag", "--push", "origin")
+        self.assertEqual(code, 0, err)
+        self.assertIn("already tagged", out)
+        remote = subprocess.run(["git", "ls-remote", "--tags", self.origin.name],
+                                capture_output=True, text=True, check=True).stdout
+        self.assertIn("refs/tags/deploy-3", remote)
+        self.assertEqual(self.tags(), ["deploy-3"])
+
     def test_a_failed_push_keeps_the_local_tag_and_says_how_to_retry(self):
         code, _, err = self.run_main("tag", "--push", "nowhere")
         self.assertEqual(code, release.EXIT_NOT_PUSHED)
@@ -201,6 +211,18 @@ class LegacyTag(ReleaseRepo):
         self.assertEqual(code, 0, err)
         self.assertIn("#9", self.message("deploy-3"))
         self.assertNotIn("first deploy-* release", self.message("deploy-3"))
+
+
+    def test_a_date_named_tag_on_the_same_commit_is_the_previous_release(self):
+        self.repo.git("tag", "-a", "deploy-2026Sep29-07.08", "-m", "old", self.shas[0])
+        self.repo.commit("Fix it\n\nShips-issue: acme/issues#9\n")
+        self.repo.git("tag", "-a", "deploy-2026Sep30-07.08", "-m", "old", "HEAD")
+        self.push_main()
+        code, _, err = self.run_main("tag")
+        self.assertEqual(code, 0, err)
+        self.assertNotIn("#9", self.message("deploy-3"))
+        code, out, _ = self.run_main("notes", "--tag", "deploy-3")
+        self.assertNotIn("#9", out)
 
 
 class Reference(unittest.TestCase):

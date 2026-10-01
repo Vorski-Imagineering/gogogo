@@ -45,7 +45,8 @@ Each production deploy gets one annotated tag, `deploy-<build>`:
 `<major>.<minor>.<build>`:
 
 - `major` is `release.major`, raised by a person, never automatically;
-- `minor` is `0` until issue #14 decides how it is worked out;
+- `minor` is `0` until Vorski-Imagineering/gogogo#14 decides how it is worked
+  out;
 - the build never resets, so every release sorts above the last.
 
 `release.py version` prints it. It is generated into built artefacts at build
@@ -127,3 +128,10 @@ these steps in the same job.
 The CI job that deploys checks out with `fetch-depth: 0` and runs
 `release.py tag --push origin` as its last step, after the deploy has
 succeeded.
+
+An annotated tag needs a tagger: a CI runner or a fresh deploy box with no git
+identity fails at `git tag`. Set one first (`git config user.name` and
+`user.email`, or `GIT_COMMITTER_NAME` and `GIT_COMMITTER_EMAIL`).
+
+A re-run after a failed push pushes the existing tag again; the remote is
+unchanged when it already has it.
