@@ -442,6 +442,12 @@ def check_release_shape(settings, rep):
             rep.warn("release shape: stages", f"stages ({columns or 'none'}) do not reach every pre-production "
                      "environment and production")
 
+    for previous, stage in zip(stages, stages[1:]):
+        if isinstance(stage.get("tag"), str) and stage["tag"]:
+            rep.info("release shape: stage sync",
+                     f"{stage.get('column')} moves on tags matching {stage['tag']}, from {previous.get('column')}; "
+                     "the repo's CI runs stage_sync.py sync on each such tag (references/stage-sync.md)")
+
 
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])

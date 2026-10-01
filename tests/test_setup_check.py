@@ -168,6 +168,14 @@ class ReleaseShape(unittest.TestCase):
         shape_rows(dict(STRAIGHT, verify="agent"))
         shape_rows(dict(STRAIGHT, environments=[LOCAL, dict(PRODUCTION, name=["x"])]))
 
+    def test_a_tagged_stage_gets_a_stage_sync_row(self):
+        tagged = dict(STAGED, stages=[STAGED["stages"][0], dict(STAGED["stages"][1], tag="deploy-*")])
+        rows = [r for r in shape_rows(tagged) if r["check"] == "release shape: stage sync"]
+        self.assertEqual([r["level"] for r in rows], ["INFO"])
+        for needle in ("In Production", "deploy-*", "from In Staging"):
+            self.assertIn(needle, rows[0]["detail"])
+        self.assertEqual([r for r in shape_rows(STAGED) if r["check"] == "release shape: stage sync"], [])
+
     def test_never_fails(self):
         for s in (STRAIGHT, STAGED, dict(STRAIGHT, stages=[]),
                   dict(STRAIGHT, verify={"agent": ["production"]})):
