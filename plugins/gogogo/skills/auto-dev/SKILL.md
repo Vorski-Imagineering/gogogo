@@ -181,10 +181,11 @@ the merge is unreachable when it fails. The mode can change mid-session.
 
 **The PR's checks, when a merge is a release** (§Preflight 4). Before the `gh`
 merge, run `gh pr checks <pr> --watch`. Just after `gh pr create`, CI may not
-have registered yet: when it reports no checks, run it again every 30 seconds
-for up to three minutes before counting the PR as having none. A failing check
-stops that issue at its PR, handed back to `tracker.columns.needs_human` as
-`/gogogo:dev` §8 says. A PR with no checks is a failure when
+have registered yet: when it reports no checks, run it again every 30 seconds,
+in the foreground (§4), for up to three minutes before counting the PR as
+having none. A failing check stops that issue at its PR, handed back to
+`tracker.columns.needs_human` as `/gogogo:dev` §8 says for a gate you could not
+make pass. A PR with no checks is a failure under `run-branch-pr` or when
 `integration.ci_before_merge` is true, and otherwise merges on the suite §4
 ran. Read the output, not only the exit code: `gh pr checks` exits non-zero
 when a PR has no checks.
@@ -213,7 +214,8 @@ and the merge is `gh pr merge ... --body-file` with the body built as
   the run branch to `integration.final_target` carries the whole run. When
   that final PR is a release (§Preflight 4), merge it too, with a merge
   commit, once its checks pass (above) and every issue in it cleared its
-  gates; otherwise it waits for a person. When the
+  gates. Otherwise, or when a check on it fails, it waits for a person and
+  the cards stay where they are. When the
   link applies, the final PR's description says it must be merged with a merge
   commit, not squashed: a squash leaves the issue commits out of the target's
   history, and the stage sync then finds no link. The close-run report (§9)
