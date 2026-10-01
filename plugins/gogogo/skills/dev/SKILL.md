@@ -225,13 +225,11 @@ and no further. Take the first case that fits:
 Nothing sweeps cards out of `tracker.columns.needs_human`, and no run takes an
 issue from there: a person moves it on once they have done what it asked, or
 starts `/gogogo:dev` on it, which then moves the card as for any issue. Also
-remove `tracker.ready_marker` from an issue you move to `needs_human`, and
-`tracker.queue` too when the queue is a label
+remove `tracker.ready_marker` from an issue you move to `needs_human`
 (`gh issue edit <n> --repo <tracker.issues_repo> --remove-label "<label>"`):
-the ready label means the issue needs nothing from anyone, and a queue label
-would let the next run take it. The person puts them back when the issue is
-ready again. In a session with the person present, a question they answer
-there is not a stop once the answer is in the issue body (§2: a sign-off in
+the ready label means the issue needs nothing from anyone. The person puts it
+back when the issue is ready again. In a session with the person present, a
+question they answer there is not a stop once the answer is in the issue body (§2: a sign-off in
 chat or a comment does not count): record it with `/gogogo:spec`, then carry
 on.
 

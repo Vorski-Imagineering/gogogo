@@ -504,7 +504,7 @@ class Profile(Case):
         self.assertIn("tracker.tool:", err)
 
     def test_not_a_project_board(self):
-        err = self.unusable(profile_text(**{'kind = "github-project"': 'kind = "github-label"'}))
+        err = self.unusable(profile_text(**{'kind = "github-project"': 'kind = "todo-file"'}))
         self.assertIn("tracker.kind:", err)
 
     def test_no_roadmap_file(self):
