@@ -1,9 +1,17 @@
 # gogogo
 
-**From a report in a tracker to verified code on a real environment, run
-the same way in every repo.**
+**Let Claude work on its own for hours, not minutes: through a queue of
+issues, from a report to verified code on a real environment, stopping only
+where a person has to decide.**
 
 ## Why it exists
+
+Left to itself, Claude Code works for a few minutes and then stops: to ask a
+question, to wait for a permission, or because the request is done and the
+next one is still in your head. gogogo is built to make that stretch much
+longer. Decisions are made up front, the work is queued, and the rules for
+when to stop are written down, so Claude can carry on through issue after
+issue without you.
 
 A coding agent is slow at the scale of a person's attention. One request
 (read the issue, find the cause, change the code, run the tests, review)
@@ -28,6 +36,40 @@ gogogo is that workflow, written down as Claude Code skills:
 `/gogogo:auto-dev` works the queue unattended and stops where a person has to
 decide, and the other skills keep the board, the tests and the hand-back
 honest.
+
+## Start here
+
+You need Claude Code, a GitHub repo with Issues, and the `gh` CLI logged in
+with project access (`gh auth refresh -s project`). Install the plugin in the
+repo first ([Adopting it in a repo](#adopting-it-in-a-repo), step 1).
+
+**First: one idea, with you watching.**
+
+1. **`/gogogo:setup`**: checks the repo and sets up what is missing (the
+   profile that describes your project, the board and its columns, the ready
+   label). It asks before writing anything.
+2. **`/gogogo:spec`**: give it your idea (an issue number, or describe it and
+   ask it to file the issue). It asks you questions until every decision is
+   made, writes the spec into the issue, marks it ready and offers to put it in
+   the `Dev Ready` column.
+3. **`/gogogo:dev <issue>`**: builds that one issue end to end. It finds the
+   cause, changes the code, reviews it, verifies it on a real environment,
+   reports on the issue and moves its card. Watch what it does.
+
+**Then: many ideas, without you.**
+
+1. **`/gogogo:spec`** on each idea. This is where your time goes: answering
+   its questions now is what lets the run go on later without asking.
+2. **`/gogogo:auto-dev`** in a session started without permission prompts:
+   ```bash
+   claude --permission-mode bypassPermissions "/gogogo:auto-dev"
+   ```
+   It takes every issue in `Dev Ready`, one at a time: branch, build, test,
+   review, verify, merge, move the card, next. An issue it cannot finish alone
+   (a failed check, a fix it could not prove) goes to the `Human!Help!` column
+   with a note saying what you need to do; one still missing a decision is
+   skipped and named in the run's report. Preview the run first with
+   `/gogogo:auto-dev --triage-only`, which changes nothing.
 
 ## Who it is for
 
@@ -197,16 +239,10 @@ Run it again at any time to check that a repo is still set up right.
 and none of the retired ones, and `/gogogo:auto-dev --triage-only` reads the
 queue and changes nothing.
 
-**4. Start small.** Spec one issue with `/gogogo:spec <n>`. Build it attended
-with `/gogogo:dev <n>` and watch what it does. Once that looks right, let the
-loop work the queue:
-
-```bash
-claude --dangerously-skip-permissions "/gogogo:auto-dev"
-```
-
-The loop refuses to start in a session that would stop for permission prompts.
-Give it a checkout of its own, so it never shares a working tree with you.
+**4. Start small**, as in [Start here](#start-here): one issue attended with
+`/gogogo:dev`, then the queue with `/gogogo:auto-dev`. The loop refuses to
+start in a session that would stop for permission prompts. Give it a checkout
+of its own, so it never shares a working tree with you.
 
 **Keeping it current.** `autoUpdate` refreshes the plugin when an interactive
 session starts. To update by hand:
