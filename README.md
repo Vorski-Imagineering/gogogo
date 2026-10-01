@@ -102,8 +102,10 @@ commands, the environments, the Hard Stop rules) lives in one file per repo,
 - **Hard Stops.** Changes the repo's owner must approve (schema, auth, money,
   shared data…) are listed in the repo's `CLAUDE.md`. A spec approves them one
   at a time. Anything not approved, the loop stops on.
-- **Production is never merged to unattended.** If a merge deploys to
-  production, the loop stops at a pull request.
+- **A release only after every gate.** Where a merge deploys to production,
+  the loop merges an issue only when every check passed, its review ended clean
+  and its pull request's tests are green, in a session started in bypass mode.
+  Anything else waits at a pull request.
 - **Every card move is read back**, and every merge is checked against the base
   branch before anyone is told it landed.
 - **It gives up properly.** At most three attempts per issue, each with a
