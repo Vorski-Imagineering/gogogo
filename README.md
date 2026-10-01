@@ -25,7 +25,8 @@ commands, the environments, the Hard Stop rules) lives in one file per repo,
    check**. A linter blocks the ready label until the spec holds together.
 2. **Build.** The agent reads the issue, finds the real cause (often data or
    configuration rather than code), makes the change, runs `/code-review`
-   twice, and watches the new test fail before trusting that it passes.
+   until a round has nothing to apply (two rounds at most for a prose-only
+   change), and watches the new test fail before trusting that it passes.
 3. **Verify.** "Done" means the path was run on real data in the pre-merge
    environment. A green test suite alone only counts as "written".
 4. **Hand back.** A comment in the reporter's words, and the card moves only as
