@@ -73,7 +73,7 @@ class Skill(unittest.TestCase):
             profile = Path(tmp) / "dev-process.md"
             text = profile_text(stages=("Released",)).replace(
                 'back_to_queue = "Dev Ready"', 'needs_human = "Human!Help!"')
-            assert "Human!Help!" in text
+            self.assertIn("Human!Help!", text)
             profile.write_text(text, encoding="utf-8")
             tracker.configure(str(profile))
             settings, _ = pc.split_profile(profile.read_text(encoding="utf-8"))

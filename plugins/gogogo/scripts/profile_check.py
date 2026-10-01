@@ -337,6 +337,14 @@ def check(settings, sections, skill=None):
             elif not (lane.get("run") or lane.get("env")):
                 errors.append(f"lanes[{i}] ({lane['name']}): needs run (a command) or env (where it is checked)")
 
+    columns, present = _lookup(settings, "tracker.columns")
+    if present and not isinstance(columns, dict):
+        errors.append(f"tracker.columns: expected a table of role = column name, found {type(columns).__name__}")
+    elif present:
+        for role, name in columns.items():
+            if not isinstance(name, str) or not name.strip():
+                errors.append(f"tracker.columns.{role}: expected a column name, found {name!r}")
+
     errors.extend(_check_environments(settings))
     stage_errors, stage_warnings = _check_stages(settings)
     errors.extend(stage_errors)

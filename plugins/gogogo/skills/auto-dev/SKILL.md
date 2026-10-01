@@ -137,8 +137,8 @@ Push the branch as soon as it has its first commit (`git push -u origin
   tracker, and record the stop for the run report.
 - A Hard Stop, or a decision that belongs to a person and is not in the body,
   discovered mid-change → stop **that issue**: commit what the change has so
-  far to its branch, marked as stopped and naming the question in the commit
-  message, push it, leave it unmerged, move its card to
+  far, and nothing else, to its branch, marked as stopped and naming the
+  question in the commit message within the rule for a public tracker, push it, leave it unmerged, move its card to
   `tracker.columns.needs_human` with the Needs-you line, record it, carry on
   with the next.
 - **When verification fails, fix forward, bounded.** Up to three attempts, and
@@ -147,9 +147,8 @@ Push the branch as soon as it has its first commit (`git push -u origin
   bound: abandon the branch unmerged, move the card to
   `tracker.columns.needs_human`, put what each attempt ruled out in the issue
   report under the Needs-you line, and go on to the next issue. One stubborn issue does not end the run. **An issue abandoned or
-  skipped in this run is not taken again in the same run**: an abandoned one
-  has left the queue, and a skipped one is still in it, so §1 will list it
-  again.
+  skipped in this run is not taken again in the same run**, even when §1 lists
+  it again.
 - A change that needs a two-licence apply (for example a migration on a shared
   environment) is applied only with its apply row, by the profile's procedure
   for it, never improvised.

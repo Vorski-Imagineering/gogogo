@@ -205,8 +205,9 @@ Write the body to a file and pass `--body-file`; inline `--body` mangles markdow
 The card moves to the column of the **stage the code has actually reached**,
 and no further:
 
-- being worked now, or stopped at an open PR only because the merge is a
-  release or a two-licence apply row is missing → `tracker.columns.in_progress`;
+- not committed, or on a branch or PR awaiting review, or stopped at an open
+  PR only because the merge is a release or a two-licence apply row is
+  missing → `tracker.columns.in_progress`;
 - **stopped for a person**: a review fix no round has reviewed, a correctness
   finding you could not fix, a decision or Hard Stop found mid-change (§4), or
   verification that gave up → `tracker.columns.needs_human`. The §7 report's
@@ -217,16 +218,21 @@ and no further:
 - merged → the first of the profile's `stages`, and only after the merge is
   verified (`verify_merged.py`, below).
 
-No skill moves a card out of `tracker.columns.needs_human`; a person does,
-once they have done what it asked.
+Nothing sweeps cards out of `tracker.columns.needs_human`, and no run takes an
+issue from there: a person moves it on once they have done what it asked, or
+starts `/gogogo:dev` on it, which then moves the card as for any issue. When
+the queue is a label, not a column, also remove `tracker.ready_marker` from an
+issue you move to `needs_human`, so the next run does not take it. In a
+session with the person present, a question they answer there is not a stop:
+carry on.
 
 ```bash
-<tracker.tool> move <n> --to "<role key, or a stage column's name>"
+<tracker.tool> move <n> --to '<role key, or a stage column's name>'
 ```
 
-For `in_progress` and `needs_human`, pass the role key, never the column's
-name: a name such as `Human!Help!` is expanded by an interactive shell inside
-double quotes.
+Pass `in_progress` and `needs_human` as role keys. Single-quote the value: a
+`!` in a column's name, as in `Human!Help!`, is expanded by an interactive
+shell inside double quotes.
 
 A zero exit is the confirmation: the tool read the card back. Anything else is
 a failed move; say so, do not retry blind.

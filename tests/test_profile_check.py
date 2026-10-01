@@ -253,6 +253,17 @@ class Columns(unittest.TestCase):
         self.assertTrue(any(w.startswith("tracker.columns.back_to_queue: unknown setting") for w in warnings),
                         warnings)
 
+    def test_columns_must_be_a_table_of_names(self):
+        settings, sections = parse()
+        settings["tracker"]["columns"] = "In progress"
+        errors, _ = pc.check(settings, sections, pc.ROADMAP)
+        self.assertTrue(any(e.startswith("tracker.columns: expected a table") for e in errors), errors)
+        settings, sections = parse()
+        settings["tracker"]["columns"]["in_review"] = 5
+        errors, _ = pc.check(settings, sections)
+        self.assertTrue(any(e.startswith("tracker.columns.in_review: expected a column name") for e in errors),
+                        errors)
+
     def test_another_column_role_is_allowed(self):
         settings, sections = parse()
         settings["tracker"]["columns"]["in_review"] = "In review"

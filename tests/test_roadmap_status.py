@@ -232,7 +232,7 @@ class NeedsHuman(Case):
     def setUp(self):
         super().setUp()
         text = profile_text()
-        assert self.COLUMNS in text
+        self.assertIn(self.COLUMNS, text)
         self.profile.write_text(text.replace(self.COLUMNS, self.WITH_IT), encoding="utf-8")
 
     def test_uncovered_needs_human_column_makes_the_legend_unusable(self):
