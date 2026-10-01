@@ -12,8 +12,9 @@
 (a hash of the skill, this script and the profile's `## Test data`), and on
 stderr where the plugin came from. `last` prints the newest verdict marker on
 an issue. `render` writes `<run-dir>/comment-<n>.md` from a JSON spec. `apply`
-checks the board has both destination columns, that the card is still in the
-column under test and the issue still open, then posts that comment, labels,
+checks (with the shared tracker) that the board has the column this verdict
+moves the card to, that the card is still in the column under test and the
+issue still open, then posts that comment, labels,
 closes and moves the card as the profile's `[auto_test]` says, and reads the
 issue back.
 
@@ -48,6 +49,7 @@ from urllib.parse import urlparse
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
 import profile_check  # noqa: E402
+import tracker as shared_tracker  # noqa: E402
 
 EXIT_OK, EXIT_STOP = 0, 2
 VERDICTS = {"PASS": "✅ PASS", "FAIL": "❌ FAIL", "NEEDS_HUMAN": "🧑 NEEDS HUMAN"}
@@ -137,23 +139,36 @@ def tracker_cmd(settings, profile_path):
     return shlex.split(tool)
 
 
-def cell(value):
-    """A value made safe for one markdown table cell."""
-    return str(value).replace("|", "\\|").replace("\r\n", "\n").replace("\n", "<br>")
+def cell(value, code=False):
+    """A value made safe for one markdown table cell; `code` when it sits in backticks."""
+    text = str(value).replace("\\", "\\\\").replace("|", "\\|").replace("\r\n", "\n")
+    return text.replace("\n", " " if code else "<br>")
 
 
-def _norm(name):
-    """Column names compare case-insensitively and without emoji variation selectors."""
-    return name.replace("\ufe0f", "").strip().lower()
+def board_has(profile_path, name):
+    """Whether the shared tracker's `move --to <name>` finds a column, by move's own rule."""
+    try:
+        shared_tracker.configure(str(profile_path))
+        meta = shared_tracker.board_meta()
+    except (shared_tracker.ProfileMissing, shared_tracker.BoardError) as exc:
+        raise Stop(f"could not read the board's columns: {exc}") from None
+    try:
+        shared_tracker.resolve_option(meta, shared_tracker.column(name))
+    except shared_tracker.BoardError:
+        return False
+    return True
 
 
-def on_board(fields_output, name):
-    """True when the tracker's `fields` output lists the column `name`."""
-    want = _norm(name)
-    return any(_norm(line) == want or _norm(line).endswith("  " + want) for line in fields_output.splitlines())
+def issue_number(n):
+    """The spec's `n` as an int: 7, "7" or "#7"; anything else is refused."""
+    if isinstance(n, int) and not isinstance(n, bool):
+        return n
+    if isinstance(n, str) and re.fullmatch(r"#?\d+", n.strip()):
+        return int(n.strip().lstrip("#"))
+    raise Stop(f"spec: n must be the issue number (7, \"7\" or \"#7\"), found {n!r}")
 
 
-def _check_spec(spec, public, issue):
+def _check_spec(spec, public, issue, host=None):
     if not isinstance(spec, dict):
         raise Stop("spec: expected a JSON object")
     verdict = spec.get("verdict")
@@ -163,7 +178,7 @@ def _check_spec(spec, public, issue):
         if spec.get(key) in (None, ""):
             raise Stop(f"spec: {key} is missing" + (" (record the role preflight saw; never guess it)"
                                                     if key == "role" else ""))
-    if spec["n"] != issue:
+    if issue_number(spec["n"]) != issue:
         raise Stop(f"spec: n is {spec['n']!r}, but this is issue {issue}")
     if spec.get("mention") and verdict != "PASS":
         raise Stop(f"spec: mention is for a PASS only, and this is {verdict}")
@@ -184,6 +199,8 @@ def _check_spec(spec, public, issue):
         raise Stop("spec: NEEDS_HUMAN with no checks; list what ran and what could not")
     if public:
         for key, value in _strings(spec):
+            if host and host.lower() in value.lower():
+                raise Stop(f"spec: {key} holds the environment's host {host}, and this tracker is public")
             for pattern, what in SECRETS:
                 if pattern.search(value):
                     raise Stop(f"spec: {key} holds {what}, and this tracker is public")
@@ -202,14 +219,14 @@ def _strings(node, key=""):
 
 def render(settings, sections, run_dir, issue, build, model, spec, plugin_root):
     public = settings["tracker"]["public"] is True
-    _check_spec(spec, public, issue)
+    env = profile_check.environment(settings, settings["verify"]["human"])
+    host = urlparse(env["url"]).hostname or env["url"]
+    _check_spec(spec, public, issue, host)
     run_dir = Path(run_dir).resolve()
     if not run_dir.is_dir():
         raise Stop(f"run folder {run_dir} does not exist")
     auto = settings["auto_test"]
-    env = profile_check.environment(settings, settings["verify"]["human"])
-    host = urlparse(env["url"]).hostname or env["url"]
-    run_id, n, verdict = run_dir.name, spec["n"], spec["verdict"]
+    run_id, n, verdict = run_dir.name, issue, spec["verdict"]
     skill = stamp(plugin_root, sections.get("Test data", ""))
     now = datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%d %H:%M")
 
@@ -220,8 +237,8 @@ def render(settings, sections, run_dir, issue, build, model, spec, plugin_root):
                    "reopen if it still isn't what you reported.")
     out += ["", "### Build tested", "| | |", "|---|---|",
             # A public comment names the environment only: its host may be internal.
-            f"| Environment | {cell(env['name'])} |" if public else f"| Environment | {cell(env['name'])}: `{cell(host)}` |",
-            f"| Running build | `{cell(build)}` |"]
+            f"| Environment | {cell(env['name'])} |" if public else f"| Environment | {cell(env['name'])}: `{cell(host, code=True)}` |",
+            f"| Running build | `{cell(build, code=True)}` |"]
     out += [f"| Change under test | {cell(c)} |" for c in spec["commits"] or ["none found"]]
     out += [f"| Kind | {cell(spec['kind'])} |", "",
             "### How it was tested", "| | |", "|---|---|",
@@ -287,13 +304,11 @@ def apply(settings, profile_path, run_dir, issue, verdict, repo):
     gh = ["--repo", repo]
     n = str(issue)
 
-    board = run([*tool, "fields"])
-    if board.returncode != 0:
-        raise Stop(f"#{issue}: could not read the board's columns (tracker exit {board.returncode}): "
-                   f"{board.stderr.strip()}")
-    missing = [c for c in (auto["pass_column"], auto["fail_column"]) if not on_board(board.stdout, c)]
-    if missing:
-        raise Stop(f"#{issue}: the board has no column {', '.join(repr(c) for c in missing)}: nothing written")
+    # Only the shared tool can be asked in-process, by the rule its move uses; a repo's
+    # own tool is covered by preflight's `fields --check`.
+    to = {"PASS": auto["pass_column"], "FAIL": auto["fail_column"]}.get(verdict)
+    if to and settings["tracker"]["tool"] == "shared" and not board_has(profile_path, to):
+        raise Stop(f"#{issue}: the board has no column {to!r}: nothing written")
 
     shown = run([*tool, "show", n, "--expect", col, *card_repo])
     # 3 is the contract's "in a different column"; the shared tool also exits 1 for "not on the board".

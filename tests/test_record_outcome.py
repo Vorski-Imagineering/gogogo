@@ -70,9 +70,6 @@ class FakeWorld:
                 return "show", lambda: 0 if issue["column"] == expect else 3
             if sub == "move":
                 return "move", lambda: issue.update(column=rest[rest.index("--to") + 1])
-            if sub == "fields":
-                return "fields", lambda: "Board (#2) — 9 items\n" + "".join(f"  OPT_{i}  {name}\n"
-                                                                            for i, name in enumerate(self.board))
             return sub, lambda: ""
         action = cmd[2]
         if action == "comment":
@@ -117,12 +114,26 @@ def marker_comment(d, n, verdict):
         "## Auto-test\n")
 
 
+def board_meta(world):
+    """The shared tracker's board_meta, over the fake's columns."""
+    def fake():
+        world.calls.append(("board", None))
+        if world.fail.get("board"):
+            raise ro.shared_tracker.BoardError("project not visible")
+        return {"options": {name: f"OPT_{i}" for i, name in enumerate(world.board)}}
+    return fake
+
+
 def call(world, *argv, stdin=""):
     out, err = io.StringIO(), io.StringIO()
     with mock.patch.object(ro, "run", world), mock.patch.object(sys, "stdin", io.StringIO(stdin)), \
+            mock.patch.object(ro.shared_tracker, "board_meta", board_meta(world)), \
             redirect_stdout(out), redirect_stderr(err):
         code = ro.main([str(a) for a in argv])
     return code, out.getvalue(), err.getvalue()
+
+
+SHARED = COMPLETE.replace('tool = "python3 tools/board.py"', 'tool = "shared"')
 
 
 SPEC = {
@@ -151,8 +162,7 @@ class Apply(unittest.TestCase):
         world = FakeWorld(labels={"test fail", "test needs human", "bug"})
         code, _, err = self.apply(world, "PASS")
         self.assertEqual(code, 0, err)
-        self.assertEqual(world.verbs(), ["fields", "show", "state", "comment", "label-", "label-", "close", "move",
-                                         "view"])
+        self.assertEqual(world.verbs(), ["show", "state", "comment", "label-", "label-", "close", "move", "view"])
         self.assertEqual(world.issue["state"], "CLOSED")
         self.assertEqual(world.issue["labels"], {"bug"})
         self.assertEqual(world.issue["column"], "Done")
@@ -183,19 +193,21 @@ class Apply(unittest.TestCase):
         self.assertEqual((world.issue["column"], world.issue["state"]), (COLUMN, "OPEN"))
 
     def test_a_card_no_longer_in_the_column_gets_nothing_written(self):
-        shared = COMPLETE.replace('tool = "python3 tools/board.py"', 'tool = "shared"')
-        for rc, text in ((3, COMPLETE), (3, shared), (1, shared)):
-            world = FakeWorld()
-            world.fail["show"] = rc
-            code, _, _ = self.apply(world, "PASS", text=text)
-            self.assertEqual(code, 0, rc)
-            self.assertEqual(world.verbs(), ["fields", "show"], rc)
-            self.assertIn("nothing written", self.run_md())
+        for rc, text, before in ((3, COMPLETE, ["show"]), (3, SHARED, ["board", "show"]),
+                                 (1, SHARED, ["board", "show"])):
+            with self.subTest(rc=rc, shared=text is SHARED):
+                self.dir = run_dir(tempfile.mkdtemp(dir=self.tmp))  # each case reads its own run.md
+                world = FakeWorld()
+                world.fail["show"] = rc
+                code, _, _ = self.apply(world, "PASS", text=text)
+                self.assertEqual(code, 0)
+                self.assertEqual(world.verbs(), before)
+                self.assertIn("nothing written", self.run_md())
         world = FakeWorld()
         world.fail["show"] = 2
         code, _, _ = self.apply(world, "PASS")
         self.assertEqual(code, 2)
-        self.assertEqual(world.verbs(), ["fields", "show"])
+        self.assertEqual(world.verbs(), ["show"])
         self.assertEqual(world.issue["comments"], [])
 
     def test_comment_first(self):
@@ -203,7 +215,7 @@ class Apply(unittest.TestCase):
         world.fail["comment"] = 1
         code, _, _ = self.apply(world, "FAIL")
         self.assertEqual(code, 2)
-        self.assertEqual(world.verbs(), ["fields", "show", "state", "comment"])
+        self.assertEqual(world.verbs(), ["show", "state", "comment"])
         self.assertEqual(world.issue["labels"], set())
 
     def test_the_read_back_is_the_confirmation(self):
@@ -233,7 +245,7 @@ class Apply(unittest.TestCase):
         code, out, _ = self.apply(world, "FAIL")
         self.assertEqual(code, 0)
         self.assertIn("closed: nothing written", out)
-        self.assertEqual(world.verbs(), ["fields", "show", "state"])
+        self.assertEqual(world.verbs(), ["show", "state"])
         self.assertIn("closed: nothing written", self.run_md())
 
     def test_the_comment_must_be_for_this_issue(self):
@@ -251,19 +263,40 @@ class Apply(unittest.TestCase):
         world.fail["show"] = 1  # the repo's own tool: exit 1 is not "moved"
         code, _, _ = self.apply(world, "PASS")
         self.assertEqual(code, 2)
-        self.assertEqual(world.verbs(), ["fields", "show"])
+        self.assertEqual(world.verbs(), ["show"])
         self.assertNotIn("nothing written", self.run_md())
 
-    def test_both_destination_columns_must_be_on_the_board(self):
-        world = FakeWorld(board=("In progress", "In Dev", COLUMN, "Done"))
-        code, _, err = self.apply(world, "PASS")
+    def test_the_shared_tool_must_find_the_column_this_verdict_moves_to(self):
+        no_new = ("In progress", "In Dev", COLUMN, "Done")
+        world = FakeWorld(board=no_new)
+        code, _, err = self.apply(world, "FAIL", text=SHARED)
         self.assertEqual(code, 2)
-        self.assertEqual(world.verbs(), ["fields"])
+        self.assertEqual(world.verbs(), ["board"])
         self.assertIn("New", err)
+        # PASS moves to Done, which is there; NEEDS_HUMAN moves nowhere.
+        self.assertEqual(self.apply(FakeWorld(board=no_new), "PASS", text=SHARED)[0], 0)
+        world = FakeWorld(board=no_new)
+        self.assertEqual(self.apply(world, "NEEDS_HUMAN", text=SHARED)[0], 0)
+        self.assertNotIn("board", world.verbs())
+        # A board that cannot be read is a stop.
         world = FakeWorld()
-        world.fail["fields"] = 2
-        self.assertEqual(self.apply(world, "PASS")[0], 2)
-        self.assertEqual(world.verbs(), ["fields"])
+        world.fail["board"] = True
+        self.assertEqual(self.apply(world, "PASS", text=SHARED)[0], 2)
+        self.assertEqual(world.verbs(), ["board"])
+
+    def test_the_column_check_matches_as_the_move_does(self):
+        # move matches case-insensitively and nothing more: an emoji selector is a different name.
+        selector = SHARED.replace('fail_column = "New"', 'fail_column = "\u26a1 New"')
+        world = FakeWorld(board=("\u26a1\ufe0f New", COLUMN, "Done"))
+        self.assertEqual(self.apply(world, "FAIL", text=selector)[0], 2)
+        self.assertEqual(world.verbs(), ["board"])
+        world = FakeWorld(board=("NEW", COLUMN, "Done"))
+        self.assertEqual(self.apply(world, "FAIL", text=SHARED)[0], 0)
+
+    def test_the_repos_own_tool_is_not_board_checked_by_apply(self):
+        world = FakeWorld(board=("In progress", COLUMN))
+        self.assertEqual(self.apply(world, "FAIL")[0], 0)
+        self.assertNotIn("board", world.verbs())
 
     def test_the_repos_own_tool_and_the_card_repo(self):
         path = profile(self.tmp)
@@ -274,17 +307,17 @@ class Apply(unittest.TestCase):
         self.assertEqual(show[:2], ["python3", "tools/board.py"])
         self.assertNotIn("--repo", show)
         self.assertTrue(all(cmd[cmd.index("--repo") + 1] == "acme/issues"
-                            for v, cmd in world.calls if v not in ("show", "fields")))
+                            for v, cmd in world.calls if v != "show"))
 
         world = FakeWorld()
         self.assertEqual(call(world, "--profile", path, "apply", self.dir, 7, "NEEDS_HUMAN",
                               "--repo", "acme/code")[0], 0)
         show = next(cmd for v, cmd in world.calls if v == "show")
         self.assertEqual(show[show.index("--repo") + 1], "acme/code")
-        self.assertTrue(all(cmd[cmd.index("--repo") + 1] == "acme/code" for v, cmd in world.calls if v != "fields"))
+        self.assertTrue(all(cmd[cmd.index("--repo") + 1] == "acme/code" for _, cmd in world.calls))
 
     def test_the_shared_tool_is_this_folders_tracker(self):
-        path = profile(self.tmp, COMPLETE.replace('tool = "python3 tools/board.py"', 'tool = "shared"'))
+        path = profile(self.tmp, SHARED)
         marker_comment(self.dir, 7, "NEEDS_HUMAN")
         world = FakeWorld()
         self.assertEqual(call(world, "--profile", path, "apply", self.dir, 7, "NEEDS_HUMAN")[0], 0)
@@ -341,6 +374,19 @@ class Render(unittest.TestCase):
         self.assertRegex(lines[0], rf"^<!-- auto-test v1 run={RUN} issue=7 verdict=PASS build=deploy-2 "
                                    rf"skill=c-[0-9a-f]{{12}} -->$")
 
+    def test_a_public_spec_may_not_carry_the_environments_host(self):
+        internal = COMPLETE.replace('url = "https://app.example.org"', 'url = "https://staging.internal.example"')
+        check = [*SPEC["checks"][0][:4], "loaded staging.internal.example/board", "✅"]
+        code, _, err = self.render({**SPEC, "checks": [check]}, text=internal)
+        self.assertEqual(code, 2)
+        self.assertIn("checks[0][4]", err)
+        self.assertFalse(self.written())
+        code, _, err = self.render({**SPEC, "summary": "On STAGING.internal.example it works."}, text=internal)
+        self.assertEqual(code, 2)
+        self.assertIn("summary", err)
+        quiet = internal.replace("public = true", "public = false")
+        self.assertEqual(self.render({**SPEC, "checks": [check]}, text=quiet)[0], 0)
+
     def test_a_public_comment_names_the_environment_not_its_host(self):
         internal = COMPLETE.replace('url = "https://app.example.org"', 'url = "https://staging.internal.example"')
         self.assertEqual(self.render(SPEC, text=internal)[0], 0)
@@ -354,6 +400,15 @@ class Render(unittest.TestCase):
         self.assertEqual(self.render(SPEC, issue=8)[0], 2)
         self.assertFalse(self.written())
         self.assertFalse((self.dir / "comment-8.md").exists())
+        for n in ("7", "#7"):
+            self.assertEqual(self.render({**SPEC, "n": n})[0], 0, n)
+            self.assertTrue(self.written(), n)
+            (self.dir / "comment-7.md").unlink()
+        for n in ("seven", "#7a", 7.0, True, None, [7]):
+            code, _, err = self.render({**SPEC, "n": n})
+            self.assertEqual(code, 2, n)
+            self.assertIn("spec: n", err, n)
+            self.assertFalse(self.written(), n)
 
     def test_a_mention_only_on_pass(self):
         spec = {**SPEC, "verdict": "NEEDS_HUMAN", "human": "- [ ] check it", "blocked": "needs a login.",
@@ -363,6 +418,18 @@ class Render(unittest.TestCase):
         self.assertIn("mention", err)
         self.assertFalse(self.written())
         self.assertEqual(self.render({**SPEC, "mention": "someone"})[0], 0)
+
+    def test_backslashes_and_code_spans_are_escaped(self):
+        check = ["a\\|b", "body", "s", "x", "y", "✅"]
+        path = profile(self.tmp)
+        code, _, err = call(FakeWorld(), "--profile", path, "render", self.dir, 7, "--build", "dep|loy\nx",
+                            "--model", "m\nodel", stdin=json.dumps({**SPEC, "checks": [check]}))
+        self.assertEqual(code, 0, err)
+        comment = (self.dir / "comment-7.md").read_text()
+        self.assertIn("| 1 | a\\\\\\|b |", comment)
+        self.assertIn("| Running build | `dep\\|loy x` |", comment)
+        self.assertNotIn("<br>", comment.split("### Checks")[0].split("| Running build |")[1].splitlines()[0])
+        self.assertIn("· m<br>odel |", comment)
 
     def test_table_cells_are_escaped(self):
         check = ["a | b", "body", "line one\nline two", "x", "y", "✅"]

@@ -332,11 +332,14 @@ recorded it), `commits` (one string per commit: sha, subject, "in `<ref>`"),
 `not_tested`, `repro` (FAIL) and `human` plus `blocked` (NEEDS HUMAN). `render`
 refuses a spec whose `n` is not the issue named, a PASS with no checks or with
 any check not ✅, a FAIL with no ❌, a NEEDS HUMAN with no checks, a missing
-role, and, when `tracker.public` is true, a value holding a URL with a query
-string or a password, or an IP address. A public comment names the
-environment, never its host.
+role, and, when `tracker.public` is true, a value holding the `verify.human`
+environment's host, a URL with a query string or a password, or an IP
+address. A public comment names the environment, never its host.
 
-`apply` checks the board still has both destination columns, then re-reads
+`apply` first checks, with the shared tracker's own column rule, that the
+board has the column this verdict moves the card to; with a repo's own
+tracker tool it does not, and preflight step 2's `fields --check` is that
+check. Then it re-reads
 the card and the issue (moved by a person mid-test, or closed: nothing is
 written), comments **first** so a partial failure always leaves the explanation, then
 labels, closes and moves as the outcome table says, then reads the issue
