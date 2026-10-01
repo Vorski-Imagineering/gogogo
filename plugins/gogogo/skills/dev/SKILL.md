@@ -184,7 +184,7 @@ Comment in the reporter's language, not the codebase's:
   `pr` is the pull request the change went through, or `none` when there is
   none yet. `applied`, `declined` and `correctness` have one number per round,
   in order; `correctness` counts the applied findings that were correctness
-  defects. `stopped=yes` only when a prose review stopped before merging (§5).
+  defects. `stopped=yes` only when the review stopped the change before merging (§5).
 - **Anything they still own**: data, configuration, a decision left open.
 - **Where it is now, and only what is true when you post**: in the working
   tree, on a branch, or merged. Name the stage in the repo's words (the
