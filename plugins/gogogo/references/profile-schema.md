@@ -55,7 +55,7 @@ no skill requires it; a skill that finds it uses it.
 | Setting | Type | Required by | Meaning |
 |---|---|---|---|
 | `profile` | int | all | Profile format version. |
-| `tracker.kind` | str | all | github-project / github-label / todo-file. |
+| `tracker.kind` | str | all | github-project / todo-file. |
 | `tracker.issues_repo` | str | all | owner/repo that holds the issues. |
 | `tracker.code_repo` | str | all | owner/repo that holds the code. |
 | `tracker.public` | bool | all | True if the tracker is readable by the public. |
@@ -63,7 +63,7 @@ no skill requires it; a skill that finds it uses it.
 | `tracker.tool` | str | `dev`, `auto-dev`, `auto-test`, `roadmap` | 'shared' for the plugin's tracker.py, or a command for the repo's own tool meeting references/tracker-contract.md. |
 | `tracker.project_owner` | str | optional | Owner of the GitHub project board. |
 | `tracker.project_number` | int | optional | Number of the GitHub project board. |
-| `tracker.queue` | str | `auto-dev` | Column or label the loop works. |
+| `tracker.queue` | str | `auto-dev` | Board column the loop works. |
 | `tracker.columns.in_progress` | str | `dev`, `auto-dev` | Column of an issue being worked now. |
 | `tracker.columns.needs_human` | str | `dev`, `auto-dev` | Column of an issue stopped for a person: an unreviewed fix, a decision or Hard Stop found mid-change, or verification that gave up. |
 | `environments` | list | all | Where code runs: name, roles, and url/serves/reached_by/data/writes. |

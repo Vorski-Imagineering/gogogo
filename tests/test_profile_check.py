@@ -338,6 +338,13 @@ class WrongValues(unittest.TestCase):
         errors, _ = pc.check(settings, sections)
         self.assertTrue(any(e.startswith("integration.strategy: 'yolo' is not one of") for e in errors))
 
+    def test_label_tracker_is_not_a_kind(self):
+        # The queue is a board column; a label-only tracker is not supported.
+        settings, sections = parse()
+        settings["tracker"]["kind"] = "github-label"
+        errors, _ = pc.check(settings, sections)
+        self.assertTrue(any(e.startswith("tracker.kind: 'github-label' is not one of") for e in errors))
+
     def test_unsupported_version(self):
         settings, sections = parse()
         settings["profile"] = 2

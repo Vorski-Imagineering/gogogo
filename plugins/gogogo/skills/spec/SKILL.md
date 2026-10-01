@@ -357,7 +357,7 @@ order, checking each step before starting the next:
 8. **Offer to move the card to the queue.** Only when step 7 applied the label,
    the profile has both `tracker.tool` and `tracker.queue`, and
    `tracker.queue` is one of the board's columns (`<tracker.tool> fields
-   --check` lists them; a queue that is a label is not); otherwise skip this
+   --check` lists them); otherwise skip this
    step without a word.
    1. Read the card's column: `<tracker.tool> show <N>` (for `shared`,
       `python3 "${CLAUDE_PLUGIN_ROOT}/scripts/tracker.py" show <N>`, and the

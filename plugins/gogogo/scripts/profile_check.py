@@ -41,7 +41,7 @@ SKILLS = (SPEC, ONE, LOOP, TEST, TECH, ROADMAP)
 # in step. Paths required by no skill are known-but-optional.
 FIELDS = {
     "profile": (int, SKILLS, "Profile format version."),
-    "tracker.kind": (str, SKILLS, "github-project | github-label | todo-file."),
+    "tracker.kind": (str, SKILLS, "github-project | todo-file."),
     "tracker.issues_repo": (str, SKILLS, "owner/repo that holds the issues."),
     "tracker.code_repo": (str, SKILLS, "owner/repo that holds the code."),
     "tracker.public": (bool, SKILLS, "True if the tracker is readable by the public."),
@@ -49,7 +49,7 @@ FIELDS = {
     "tracker.tool": (str, (ONE, LOOP, TEST, ROADMAP), "'shared' for the plugin's tracker.py, or a command for the repo's own tool meeting references/tracker-contract.md."),
     "tracker.project_owner": (str, (), "Owner of the GitHub project board."),
     "tracker.project_number": (int, (), "Number of the GitHub project board."),
-    "tracker.queue": (str, (LOOP,), "Column or label the loop works."),
+    "tracker.queue": (str, (LOOP,), "Board column the loop works."),
     "tracker.columns.in_progress": (str, (ONE, LOOP), "Column of an issue being worked now."),
     "tracker.columns.needs_human": (str, (ONE, LOOP), "Column of an issue stopped for a person: an unreviewed fix, "
                                     "a decision or Hard Stop found mid-change, or verification that gave up."),
@@ -118,7 +118,7 @@ COLUMN_ROLES = tuple(p.split(".", 2)[2] for p in FIELDS if p.startswith("tracker
 STAGE_KEYS = ("code_is", "environment", "column", "moved_by", "tag")
 
 ENUMS = {
-    "tracker.kind": {"github-project", "github-label", "todo-file"},
+    "tracker.kind": {"github-project", "todo-file"},
     "hard_stops.form": {"categories", "questions"},
     "integration.strategy": {"merge-script", "run-branch-pr", "pr-squash"},
     "handback.reporter": {"trailer", "assign", "none"},
