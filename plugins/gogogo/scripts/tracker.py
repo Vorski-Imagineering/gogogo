@@ -760,7 +760,7 @@ def untidy(repo: str) -> tuple[list[dict], list[dict]]:
         {"number": i["number"], "title": i["title"],
          "repo": (i.get("repository") or {}).get("nameWithOwner") or repo}
         for i in open_issues(repo)
-        if not any(not n.get("isArchived") and (n.get("project") or {}).get("number") == PROJECT_NUMBER
+        if not any((n.get("project") or {}).get("number") == PROJECT_NUMBER
                    for n in (i.get("projectItems") or {}).get("nodes") or [])
     ]
     return closed, off_board
@@ -807,7 +807,7 @@ def cmd_tidy(args: argparse.Namespace) -> int:
     for item, to, add in moves:
         try:
             code = move_card(item["number"], item["repo"], to, add_missing=add, meta=meta)
-        except BoardError as exc:
+        except (BoardError, KeyError, TypeError) as exc:
             # One card that cannot be moved must not leave the rest unattempted.
             print(f"FAILED {item['repo']}#{item['number']} -> {to}: {exc}", file=sys.stderr)
             code = 2

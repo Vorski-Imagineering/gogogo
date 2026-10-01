@@ -274,18 +274,17 @@ def check_board_tidiness(shared, repo, rep):
     """The board stays current: views hide closed issues, and no card is left behind. Only warns."""
     tool = '"${CLAUDE_PLUGIN_ROOT}/scripts/tracker.py"'
     try:
-        views = shared.board_views()
+        showing = shared.views_showing_closed(shared.board_views())
         closed, off_board = shared.untidy(repo)
-    except (shared.BoardError, KeyError, TypeError) as exc:
+    except (shared.BoardError, KeyError, TypeError, AttributeError) as exc:
         rep.info("tracker: views and cards", f"could not be read ({exc!r})")
         return
 
-    showing = shared.views_showing_closed(views)
     if showing:
         rep.warn("tracker: views", "show closed issues: " + ", ".join(repr(v["name"]) for v in showing)
                  + f". Run `python3 {tool} views --hide-closed`")
     else:
-        rep.ok("tracker: views", "every view hides closed issues")
+        rep.ok("tracker: views", "every working view hides closed issues")
 
     if closed or off_board:
         detail = []

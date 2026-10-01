@@ -798,6 +798,11 @@ class BoardTidiness(unittest.TestCase):
         sc.check_board_tidiness(fake, "a/b", rep)
         self.assertEqual([r["level"] for r in rep.rows], ["INFO"])
 
+    def test_a_null_view_is_info_not_a_crash(self):
+        rep = sc.Report()
+        sc.check_board_tidiness(self.shared([None]), "a/b", rep)
+        self.assertEqual([r["level"] for r in rep.rows], ["INFO"])
+
     def test_the_index_row_does_not_claim_the_issues_have_no_card(self):
         rep = sc.Report()
         sc.check_board_hygiene([], [{"number": 9}], ["Backlog"], {"backlog"}, rep)

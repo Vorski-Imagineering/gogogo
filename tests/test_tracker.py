@@ -507,12 +507,14 @@ class KeepingTheBoardCurrent(unittest.TestCase):
         views = [{"name": "Shipped", "filter": "is:closed"}, {"name": "Not open", "filter": "-is:open label:x"}]
         self.assertEqual(board.views_showing_closed(views), [])
 
-    def test_an_archived_card_does_not_count_as_on_the_board(self):
-        issues = [{"number": 8, "title": "t", "repository": {"nameWithOwner": "acme/issues"},
-                   "projectItems": {"nodes": [{"isArchived": True, "project": {"number": 2}}]}}]
-        with mock.patch.object(board, "fetch_items", return_value=[]), \
-             mock.patch.object(board, "open_issues", return_value=iter(issues)):
-            self.assertEqual([i["number"] for i in board.untidy("acme/issues")[1]], [8])
+    def test_a_card_with_an_odd_shape_does_not_stop_the_rest(self):
+        closed = [{"number": 1, "repo": "a/b", "status": "Released"}, {"number": 2, "repo": "a/b", "status": "Released"}]
+        with mock.patch.object(board, "untidy", return_value=(closed, [])), \
+             mock.patch.object(board, "board_meta", return_value={"options": {}}), \
+             mock.patch.object(board, "move_card", side_effect=[TypeError("None"), 0]) as moved, \
+             mock.patch("builtins.print"):
+            self.assertEqual(board.cmd_tidy(Namespace(repo="a/b", apply=True)), 2)
+        self.assertEqual(moved.call_count, 2)
 
     def test_tidy_without_apply_writes_nothing(self):
         with mock.patch.object(board, "untidy", return_value=([{"number": 1, "repo": "a/b", "status": None}], [])), \
