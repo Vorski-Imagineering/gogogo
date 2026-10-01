@@ -34,6 +34,12 @@ python3 "${CLAUDE_PLUGIN_ROOT}/scripts/profile_check.py" --for auto-dev --show
 `<tracker.tool>` below means the profile's `tracker.tool`; when that is
 `shared`, it is `python3 "${CLAUDE_PLUGIN_ROOT}/scripts/tracker.py"`.
 
+`<base>` below is the branch each issue branch is cut from and merges into:
+`integration.base`, or under `run-branch-pr` the run branch (§6). Before the
+run starts the run branch may not exist yet, so the preflight checks the branch
+it will be cut from: `integration.run_from` under `run-branch-pr`,
+`integration.base` otherwise.
+
 Then confirm all of these before touching an issue. Discovering a gap mid-run
 means finished work sits unverified while you go and ask.
 
@@ -43,8 +49,9 @@ means finished work sits unverified while you go and ask.
    authorisation for the branch switching it describes; any `CLAUDE.md` rule
    against switching branches still holds for anything outside this loop.
 3. **The base is healthy.** Run the profile's lanes that are cheap enough, or
-   read the base branch's CI. A red base makes every verdict in the run
-   meaningless. An empty CI result is **not** a pass: it means nothing ran.
+   read the CI of the branch the preflight checks (above). A red base makes
+   every verdict in the run meaningless. An empty CI result is **not** a pass:
+   it means nothing ran.
 4. **What a merge deploys.** Read the profile's `stages`. If the first stage
    after a merge has an environment whose roles include `production`, **this
    run never merges**: it stops each issue at an open PR for a person to merge,
@@ -67,7 +74,7 @@ means finished work sits unverified while you go and ask.
    the session is.
 8. **Stranded work, reported, not acted on:**
    ```bash
-   python3 "${CLAUDE_PLUGIN_ROOT}/scripts/stranded_work.py" --base <integration.base>
+   python3 "${CLAUDE_PLUGIN_ROOT}/scripts/stranded_work.py" --base <the branch the preflight checks>
    ```
    List what it prints at the top of the run report. Never delete, merge or
    rebase any of it.
@@ -100,7 +107,7 @@ proceed with, so a reader can check the call.
 ## 3. Branch from a fresh base
 
 ```bash
-git switch <integration.base> && git pull --ff-only
+git switch <base> && git pull --ff-only
 git switch -c fix/<issue-number>-<short-slug>
 ```
 
@@ -157,12 +164,16 @@ the merge is unreachable when it fails. The mode can change mid-session.
 - **`merge-script`**: run `integration.command` for this issue. Know what the
   script does and does not check (the profile says); if it does not run the
   suite, §4 was the only thing standing between a broken suite and the base.
-- **`run-branch-pr`**: the first issue creates the run branch
-  (`integration.base`, dated) from the main line. Each issue merges into it by
-  a PR: `gh pr create --base <run branch>`, `gh pr checks --watch`, then
+- **`run-branch-pr`**: before the first issue, create the run branch:
+  `integration.run_branch` with `<date>` replaced by today's date
+  (YYYY-MM-DD), cut from a freshly pulled `integration.run_from`, and pushed.
+  If it already exists, stop and ask: it holds an earlier run's work. Each
+  issue branch is cut from the run branch and merges into it by a PR:
+  `gh pr create --base <run branch>`, `gh pr checks --watch`, then
   `gh pr merge --squash --delete-branch`. **Zero checks is a failure**, not a
   pass. At the end, one PR from the run branch to
-  `integration.final_target` carries the whole run.
+  `integration.final_target` carries the whole run; its body is the §9
+  report.
 - **`pr-squash`**: open the PR and **stop there** when §Preflight 4 said a
   merge is a release. Otherwise squash-merge it.
 
@@ -202,16 +213,24 @@ new tests went red, what review found, what the real run showed, the merge
 commit, the card's new column. The user is not watching every step; this log is
 how they stay able to stop you. Then return to §1: the board may have moved.
 
-When the profile has `notify`, send one short message per change of state (a
-skip, an issue started, a merge verified, a retreat, the run closed), only
-**after** the thing is true. A failed send never stops the run and is never
-silent. Never echo a token.
+When the profile's `notify` is set and is not `none`, send one short message
+per change of state (a skip, an issue started, a merge verified, a retreat, the
+run closed), only **after** the thing is true. Send it the way the profile's
+`## Notifications` says, in its format for that change. A failed send never
+stops the run and is never silent: say so in the log and in the §9 report.
+Never echo a token.
 
 ## 9. Close the run
 
 One report: every issue taken with its outcome and merge commit, every issue
 skipped with the reason, anything left half-done with its branch, the stranded
-work from preflight, and anything the profile's `stop.extra` checks raised.
+work from preflight, anything the profile's `stop.extra` checks raised, and any
+notification that failed to send.
+
+Under `run-branch-pr` this report is the body of the run's PR into
+`integration.final_target`. Add the `url` of each environment whose roles
+include `pre-merge`, where the profile gives one, so a reviewer can try the run
+there.
 
 ## Stop the whole run and ask when
 

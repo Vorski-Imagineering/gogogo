@@ -153,7 +153,9 @@ class CompleteProfile(unittest.TestCase):
         settings, _ = parse()
         for path in pc.FIELDS:
             _, present = pc._lookup(settings, path)
-            if path == "gates.when" or path == "integration.final_target":
+            # The fixture is merge-script; RunBranchPr covers the run-branch-pr settings.
+            if path in ("gates.when", "integration.final_target",
+                        "integration.run_branch", "integration.run_from"):
                 continue
             self.assertTrue(present, path)
 
@@ -284,6 +286,90 @@ class Environments(unittest.TestCase):
         self.assertIn("verify.agent: 'preview' is not in environments", errors)
 
 
+def as_run_branch_pr(settings):
+    out = copy.deepcopy(settings)
+    out["integration"] = {"strategy": "run-branch-pr", "run_branch": "auto/<date>",
+                          "run_from": "main", "final_target": "staging",
+                          "ci_before_merge": True}
+    return out
+
+
+class StrategySettings(unittest.TestCase):
+    """auto-dev needs different integration settings under each strategy."""
+
+    EXPECTED = {
+        "merge-script": {"integration.base"},
+        "pr-squash": {"integration.base"},
+        "run-branch-pr": {"integration.run_branch", "integration.run_from", "integration.final_target"},
+    }
+
+    def test_each_strategy_names_its_missing_settings(self):
+        settings, sections = parse()
+        self.assertEqual({k: set(v) for k, v in pc.STRATEGY_FIELDS.items()}, self.EXPECTED)
+        for strategy, paths in self.EXPECTED.items():
+            base = as_run_branch_pr(settings) if strategy == "run-branch-pr" else settings
+            base = copy.deepcopy(base)
+            base["integration"]["strategy"] = strategy
+            base["integration"].setdefault("base", "main")
+            for path in paths:
+                errors, _ = pc.check(drop(base, path), sections, pc.LOOP)
+                self.assertTrue(any(e.startswith(f"{path}: missing") for e in errors),
+                                f"{strategy}: {path} removed but not named in {errors}")
+
+    def test_run_branch_pr_profile_passes(self):
+        settings, sections = parse()
+        errors, warnings = pc.check(as_run_branch_pr(settings), sections, pc.LOOP)
+        self.assertEqual(errors, [])
+        self.assertEqual(warnings, [])
+
+    def test_run_branch_pr_without_base_is_not_an_error(self):
+        settings, sections = parse()
+        self.assertNotIn("integration.base", as_run_branch_pr(settings)["integration"])
+        self.assertEqual(pc.check(as_run_branch_pr(settings), sections, pc.LOOP)[0], [])
+
+    def test_base_under_run_branch_pr_warns(self):
+        settings, sections = parse()
+        s = as_run_branch_pr(settings)
+        s["integration"]["base"] = "auto"
+        errors, warnings = pc.check(s, sections, pc.LOOP)
+        self.assertEqual(errors, [])
+        self.assertTrue(any(w.startswith("integration.base:") for w in warnings))
+
+    def test_run_branch_needs_the_date(self):
+        settings, sections = parse()
+        s = as_run_branch_pr(settings)
+        s["integration"]["run_branch"] = "auto/run"
+        errors, _ = pc.check(s, sections, pc.LOOP)
+        self.assertTrue(any(e.startswith("integration.run_branch:") for e in errors))
+
+    def test_other_skills_ignore_strategy_settings(self):
+        settings, sections = parse()
+        s = drop(as_run_branch_pr(settings), "integration.run_from")
+        self.assertEqual(pc.check(s, sections, pc.SPEC)[0], [])
+
+
+class NotificationsSection(unittest.TestCase):
+    def test_notify_set_needs_the_section_for_auto_dev(self):
+        settings, sections = parse()
+        settings["notify"] = "telegram"
+        errors, _ = pc.check(settings, sections, pc.LOOP)
+        self.assertTrue(any(e.startswith("section '## Notifications': missing") for e in errors))
+        errors, _ = pc.check(settings, {**sections, "Notifications": ""}, pc.LOOP)
+        self.assertTrue(any(e.startswith("section '## Notifications': empty") for e in errors))
+        errors, _ = pc.check(settings, {**sections, "Notifications": "send with ./notify.sh"}, pc.LOOP)
+        self.assertEqual(errors, [])
+
+    def test_notify_none_or_absent_needs_no_section(self):
+        settings, sections = parse()
+        self.assertEqual(pc.check(settings, sections, pc.LOOP)[0], [])
+        self.assertEqual(pc.check(drop(settings, "notify"), sections, pc.LOOP)[0], [])
+
+    def test_other_skills_do_not_need_the_section(self):
+        settings, sections = parse()
+        settings["notify"] = "telegram"
+        self.assertEqual(pc.check(settings, sections, pc.ONE)[0], [])
+
+
 class FrontMatter(unittest.TestCase):
     def test_no_opening_fence(self):
         with self.assertRaises(pc.ProfileError):
@@ -367,6 +453,13 @@ class SchemaDoc(unittest.TestCase):
         table = doc.split("| Setting | Type | Required by | Meaning |")[1].split("\n### ")[0]
         documented = {line.split("`")[1] for line in table.splitlines() if line.startswith("| `")}
         self.assertEqual(documented, set(pc.FIELDS))
+
+    def test_doc_lists_every_section_the_checker_requires(self):
+        doc = (PLUGIN / "references" / "profile-schema.md").read_text()
+        table = doc.split("| Section | Read by |")[1].split("\n\n")[0]
+        documented = {line.split("`## ")[1].split("`")[0] for line in table.splitlines()
+                      if line.startswith("| `## ")}
+        self.assertLessEqual({*pc.SECTIONS, pc.NOTIFICATIONS}, documented)
 
     def test_doc_example_is_valid_toml(self):
         doc = (PLUGIN / "references" / "profile-schema.md").read_text()

@@ -82,9 +82,11 @@ no skill requires it; a skill that finds it uses it.
 | `gates.always` | list | `auto-dev` | Checks run before every merge. |
 | `gates.when` | dict | optional | Path pattern -> extra checks. |
 | `integration.strategy` | str | `auto-dev` | merge-script / run-branch-pr / pr-squash. |
-| `integration.base` | str | `auto-dev` | Branch issue branches are cut from. |
+| `integration.base` | str | `auto-dev`, for merge-script and pr-squash | Branch issue branches are cut from, for merge-script and pr-squash. |
 | `integration.command` | str | optional | Merge command, for merge-script. |
-| `integration.final_target` | str | optional | Branch the run's PR targets, for run-branch-pr. |
+| `integration.run_branch` | str | `auto-dev`, for run-branch-pr | Run branch name with `<date>` (YYYY-MM-DD), for run-branch-pr. |
+| `integration.run_from` | str | `auto-dev`, for run-branch-pr | Branch the run branch is cut from, for run-branch-pr. |
+| `integration.final_target` | str | `auto-dev`, for run-branch-pr | Branch the run's PR targets, for run-branch-pr. |
 | `integration.mode_check` | str | optional | Command that proves unattended mode is on. |
 | `integration.ci_before_merge` | bool | `auto-dev` | True if CI must pass on each issue before it merges. |
 | `handback.reporter` | str | `dev`, `auto-dev` | trailer / assign / none. |
@@ -198,6 +200,36 @@ moved_by = "the loop, once the run PR shows MERGED"
 A card moves only as far as the code has. A skill checks the code is at a stage
 before it moves the card there, and names the column, never a stored id.
 
+### Integration
+
+`integration.strategy` says how an issue's change reaches the main line, and
+which other `integration` settings `/gogogo:auto-dev` needs.
+
+- **`merge-script`** and **`pr-squash`**: each issue branch is cut from
+  `integration.base` and merges back into it.
+- **`run-branch-pr`**: the run gets its own branch, named by
+  `integration.run_branch` with `<date>` replaced by the run's date and cut
+  from `integration.run_from`. Each issue branch is cut from the run branch and
+  merges into it by a PR. At the end, one PR takes the run branch into
+  `integration.final_target`. `integration.base` is not read; a profile that
+  still sets it gets a warning.
+
+```toml
+[integration]
+strategy = "run-branch-pr"
+run_branch = "auto/<date>"
+run_from = "main"
+final_target = "staging"
+ci_before_merge = true
+
+[preflight]
+extra = ["the CI workflow named tests is green on main; no runs is a failure"]
+```
+
+Before a run, the base health check and the stranded-work check use
+`integration.run_from` under run-branch-pr, and `integration.base` otherwise:
+the branch that exists before the run starts.
+
 ### Two-licence changes
 
 `hard_stops.two_licence` lists changes where approving the design and approving
@@ -220,6 +252,7 @@ procedure = "Applying a migration to dev"
 | `## superpowers boundary` | all |
 | `## Technology evaluation` | `tech-eval` (optional) |
 | `## Wrap-up checks` | `wrap-up` (optional) |
+| `## Notifications` | `auto-dev`, when `notify` is not `none` |
 
 - **Recon traps**: what this codebase hides. The table of traps and the worked
   examples.
@@ -234,6 +267,13 @@ procedure = "Applying a migration to dev"
   its own list, as a `| Check | How |` table (other repos this one depends on,
   a database a session may have changed, a docs site a push deploys), which of
   them block closing, and where this repo's learnings go.
+
+- **Notifications** (needed by `/gogogo:auto-dev` when `notify` is set to
+  anything but `none`): how this repo sends a message. The command or shell
+  function that sends one, the names of the environment variables or the
+  gitignored file that hold the credentials (never the values), and the
+  message format for each change of state: issue started, issue skipped, merge
+  verified, retreat, run closed.
 
 A profile may add more sections (for example a procedure that
 `two_licence.procedure` names). Unknown sections are fine; unknown settings

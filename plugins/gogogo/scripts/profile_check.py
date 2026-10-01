@@ -65,8 +65,10 @@ FIELDS = {
     "gates.always": (list, (LOOP,), "Checks run before every merge."),
     "gates.when": (dict, (), "Path pattern -> extra checks."),
     "integration.strategy": (str, (LOOP,), "merge-script | run-branch-pr | pr-squash."),
-    "integration.base": (str, (LOOP,), "Branch issue branches are cut from."),
+    "integration.base": (str, (), "Branch issue branches are cut from, for merge-script and pr-squash."),
     "integration.command": (str, (), "Merge command, for merge-script."),
+    "integration.run_branch": (str, (), "Run branch name with <date> (YYYY-MM-DD), for run-branch-pr."),
+    "integration.run_from": (str, (), "Branch the run branch is cut from, for run-branch-pr."),
     "integration.final_target": (str, (), "Branch the run's PR targets, for run-branch-pr."),
     "integration.mode_check": (str, (), "Command that proves unattended mode is on."),
     "integration.ci_before_merge": (bool, (LOOP,), "True if CI must pass on each issue before it merges."),
@@ -76,12 +78,23 @@ FIELDS = {
     "notify": (str, (), "none | telegram."),
 }
 
+# Settings auto-dev needs under each integration.strategy. Under run-branch-pr
+# issue branches are cut from the run branch, so integration.base is not read.
+STRATEGY_FIELDS = {
+    "merge-script": ("integration.base",),
+    "pr-squash": ("integration.base",),
+    "run-branch-pr": ("integration.run_branch", "integration.run_from", "integration.final_target"),
+}
+
 # Body sections (## headings) a skill reads, by skill.
 SECTIONS = {
     "Recon traps": (SPEC, ONE),
     "Lane constraints": (SPEC, ONE),
     "superpowers boundary": SKILLS,
 }
+
+# How auto-dev sends a message; required by auto-dev when notify is not none.
+NOTIFICATIONS = "Notifications"
 
 ROLES = ("pre-merge", "pre-production", "production")
 
@@ -238,6 +251,9 @@ def check(settings, sections, skill=None):
 
     errors.extend(_check_environments(settings))
 
+    if LOOP in wanted:
+        _check_strategy(settings, sections, errors, warnings)
+
     for path in _leaf_paths(settings):
         if path not in FIELDS:
             warnings.append(f"{path}: unknown setting (typo, or not in this profile version)")
@@ -249,6 +265,35 @@ def check(settings, sections, skill=None):
             elif not sections[title]:
                 errors.append(f"section '## {title}': empty")
     return errors, warnings
+
+
+def _check_strategy(settings, sections, errors, warnings):
+    """What auto-dev needs on top of FIELDS: the strategy's settings, and how to notify."""
+    strategy, _ = _lookup(settings, "integration.strategy")
+    if not isinstance(strategy, str):
+        strategy = None
+    for path in STRATEGY_FIELDS.get(strategy, ()):
+        value, present = _lookup(settings, path)
+        meaning = FIELDS[path][2]
+        if not present:
+            errors.append(f"{path}: missing. {meaning}")
+        elif isinstance(value, str) and not value:
+            errors.append(f"{path}: empty. {meaning}")
+    if strategy == "run-branch-pr":
+        name, present = _lookup(settings, "integration.run_branch")
+        if present and isinstance(name, str) and name and "<date>" not in name:
+            errors.append(f"integration.run_branch: '{name}' has no <date>; each run needs its own branch")
+        if _lookup(settings, "integration.base")[1]:
+            warnings.append("integration.base: not read under run-branch-pr; issue branches are cut "
+                            "from integration.run_branch, which is cut from integration.run_from")
+
+    notify, present = _lookup(settings, "notify")
+    if present and isinstance(notify, str) and notify != "none":
+        if NOTIFICATIONS not in sections:
+            errors.append(f"section '## {NOTIFICATIONS}': missing. notify is '{notify}'; "
+                          "say how to send, where the credentials live, and the message formats")
+        elif not sections[NOTIFICATIONS]:
+            errors.append(f"section '## {NOTIFICATIONS}': empty")
 
 
 def find_profile(start=None):
