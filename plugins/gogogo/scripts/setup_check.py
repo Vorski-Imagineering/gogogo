@@ -537,6 +537,91 @@ def check_release_shape(settings, rep):
                  "the repo's CI runs stage_sync.py sync on each such tag (references/stage-sync.md)")
 
 
+def _joined(values, sep=", "):
+    if isinstance(values, (str, int, float)):  # a scalar where a list belongs (bool is an int)
+        values = [values]
+    return sep.join(str(v) for v in values or []) or "missing"
+
+
+def _list(value):
+    return value if isinstance(value, list) else []
+
+
+def _table(value):
+    """A profile table, or {} when the profile has something else there (profile_check reports it)."""
+    return value if isinstance(value, dict) else {}
+
+
+def config_header(root, settings, rep, profile=None):
+    """The repo's setup as written, for the top of the output. Only reads, never judges:
+    the checks below it do that. `profile`: the parsed profile's path, or None."""
+    tracker = _table(settings.get("tracker"))
+    if not settings or not tracker.get("tool"):
+        board = "missing"
+    elif tracker.get("tool") != "shared":
+        board = f"not shown: the repo's own tool {tracker.get('tool') or 'missing'}"
+    elif not (tracker.get("project_number") and tracker.get("project_owner")):
+        board = "missing"
+    else:
+        view = run("gh", "project", "view", str(tracker["project_number"]), "--owner",
+                   str(tracker["project_owner"]), "--format", "json", "-q", ".url")
+        board = (view.stdout.strip() if view.returncode == 0
+                 else f"unreadable ({(view.stderr.strip().splitlines() or ['gh failed'])[0]})")
+    rep.info("config: board", board)
+
+    def val(v):
+        return v if v not in (None, "", [], {}) else "missing"
+
+    if settings:
+        columns = _table(tracker.get("columns"))
+        rep.info("config: tracker",
+                 f"issues {val(tracker.get('issues_repo'))}, code {val(tracker.get('code_repo'))}, "
+                 f"ready label \"{val(tracker.get('ready_marker'))}\", queue \"{val(tracker.get('queue'))}\", "
+                 f"in progress \"{val(columns.get('in_progress'))}\", tool {val(tracker.get('tool'))}")
+        envs = [e for e in _list(settings.get("environments")) if isinstance(e, dict)]
+        stages = [x for x in _list(settings.get("stages")) if isinstance(x, dict)]
+        verify = _table(settings.get("verify"))
+        integration = _table(settings.get("integration"))
+        rep.info("config: release",
+                 "environments " + _joined(f"{e.get('name')} ({_joined(e.get('roles'))})" for e in envs)
+                 + "; stages " + _joined(f"{x.get('code_is')} -> {x.get('environment')} / {x.get('column')}"
+                                         for x in stages)
+                 + f"; verify agent {_joined(verify.get('agent'))}, human {val(verify.get('human'))}"
+                 + f"; integration {val(integration.get('strategy'))} into {val(integration.get('base'))}")
+        stops = _table(settings.get("hard_stops"))
+        rep.info("config: hard stops", f"{val(stops.get('source'))}: {_joined(stops.get('items'))}")
+        lanes = [x for x in _list(settings.get("lanes")) if isinstance(x, dict)]
+        rep.info("config: lanes",
+                 _joined(f"{x.get('name')}: {x.get('run') or x.get('env') or 'missing'}" for x in lanes)
+                 + "; always: " + _joined(_table(settings.get("gates")).get("always"), "; "))
+    else:
+        for name in ("tracker", "release", "hard stops", "lanes"):
+            rep.info(f"config: {name}", "missing")
+
+    path = root / ".claude" / "settings.json"
+    if not path.is_file():
+        install = "settings file absent"
+    else:
+        try:
+            data = _table(json.loads(path.read_text(encoding="utf-8")))
+            market = _table(_table(data.get("extraKnownMarketplaces")).get(MARKETPLACE))
+            enabled = _table(data.get("enabledPlugins")).get(PLUGIN) is True
+            install = (f"settings file present, plugin enabled {'yes' if enabled else 'no'}, "
+                       f"auto-update {'on' if market.get('autoUpdate') else 'off'}")
+        except (ValueError, OSError):
+            install = "settings file unreadable"
+    rep.info("config: install", install)
+
+    if settings and profile:
+        try:
+            shown = str(Path(profile).resolve().relative_to(Path(root).resolve()))
+        except ValueError:
+            shown = str(profile)
+    else:
+        shown = "missing"
+    rep.info("config: profile", shown)
+
+
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--json", action="store_true")
@@ -572,6 +657,10 @@ def main(argv=None):
         check_tracker(root, settings, rep)
     check_local_skills(root, rep)
     check_claude_md(root, rep)
+
+    header = Report()
+    config_header(root, settings, header, path if settings else None)
+    rep.rows = header.rows + rep.rows
 
     if args.json:
         json.dump(rep.rows, sys.stdout, indent=2)
