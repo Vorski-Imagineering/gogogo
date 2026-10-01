@@ -48,10 +48,10 @@ repo first ([Adopting it in a repo](#adopting-it-in-a-repo), step 1).
 1. **`/gogogo:setup`**: checks the repo and sets up what is missing (the
    profile that describes your project, the board and its columns, the ready
    label). It asks before writing anything.
-2. **`/gogogo:spec`**: give it your idea (an issue number, or describe it and
-   ask it to file the issue). It asks you questions until every decision is
-   made, writes the spec into the issue, marks it ready and offers to put it in
-   the `Dev Ready` column.
+2. **`/gogogo:spec`**: describe your idea, or give it an existing issue. It
+   asks you questions until every decision is made, writes the spec into the
+   issue (filing one if there isn't one yet), marks it ready and offers to put
+   it in the `Dev Ready` column.
 3. **`/gogogo:dev <issue>`**: builds that one issue end to end. It finds the
    cause, changes the code, reviews it, verifies it on a real environment,
    reports on the issue and moves its card. Watch what it does.
