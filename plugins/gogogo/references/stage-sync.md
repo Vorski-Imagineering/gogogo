@@ -48,7 +48,8 @@ Co-Authored-By: Someone <someone@example.org>
   (`pr-squash`, `run-branch-pr`) and the profile uses the link
   (`handback.reporter = "trailer"`, or any stage has a `tag`). The recipe is in
   `/gogogo:dev` §8; `verify_merged.py --ships` then reads the link back from
-  the merge commit.
+  the merge commit, with this script's reader (so it takes the profile, for the
+  short form's repo names).
 - Under `run-branch-pr`, the run's final PR must be merged with a **merge
   commit**, not squashed: a squash leaves the issue commits out of the
   target's history, and no tag cut from it carries their links.
@@ -90,10 +91,14 @@ explicitly in CI.
 | 2 | nothing trustworthy to act on (no such tag, no stage matches it, an unreadable board or profile), or a comment or move failed |
 | 3 | `trailer --verify`: every issue exists, but a reporter cannot be assigned. Retry without the login |
 
-A crash exits 2, never 1. The comment carries a marker,
-`<!-- stage-sync tag=<tag> shas=<sha8>,… -->`, keyed on the commits: a sync
-that commented and then failed to move moves the card on the next tag without
-commenting again.
+A crash exits 2, never 1. A failed comment leaves that card where it is (no
+assignment, no move), the other cards still move, and the run exits 2 naming
+it. The comment carries a marker, `<!-- stage-sync tag=<tag> shas=<sha8>,… -->`:
+a marker for the same commits whose tag matches the stage's glob counts as
+already posted, so a sync that commented and then failed to move moves the card
+on the next tag without commenting again, and each stage is still announced
+once. `sync` reads the board once per run, so a card moves at most one stage
+per run.
 
 ## Running it in CI
 

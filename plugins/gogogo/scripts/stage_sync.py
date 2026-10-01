@@ -21,7 +21,8 @@ and move goes through `tracker.py`, given that same profile.
 
 Exit codes: 0 ok; 1 (`sync`) every possible move was made and something needs
 a look (a card with no linked commit, or a reporter that could not be
-assigned); 2 nothing trustworthy to act on, or a comment or move failed;
+assigned); 2 nothing trustworthy to act on, or a comment or move failed (a
+failed comment leaves that card unmoved and the others still move);
 3 (`trailer --verify`) every issue exists but a reporter cannot be assigned.
 An unexpected crash exits 2, never 1.
 
@@ -78,11 +79,11 @@ class Profile:
 
     @property
     def known(self) -> dict[str, str]:
-        """Repo name -> owner/name for the legacy short form, issues repo first."""
+        """Repo name (lower case) -> owner/name for the legacy short form, issues repo first."""
         known: dict[str, str] = {}
         for repo in (self.issues_repo, self.tracker.get("code_repo") or ""):
             if "/" in repo:
-                known.setdefault(repo.split("/", 1)[1], repo)
+                known.setdefault(repo.split("/", 1)[1].lower(), repo)
         return known
 
     @property
@@ -131,13 +132,18 @@ class IssueLink:
 
     @property
     def key(self) -> tuple[str, int]:
-        return (self.repo, self.number)
+        """What a link and a card meet on. GitHub names are case-insensitive."""
+        return link_key(self.repo, self.number)
 
     def ref(self) -> str:
         return f"{self.repo}#{self.number}"
 
     def short(self) -> str:
         return f"{self.repo.split('/', 1)[-1]}#{self.number}"
+
+
+def link_key(repo: str, number: int) -> tuple[str, int]:
+    return (repo.lower(), number)
 
 
 _LOGIN = r"[A-Za-z0-9](?:[A-Za-z0-9-]{0,38})"
@@ -159,7 +165,7 @@ def _repo(match: re.Match, known: dict[str, str], default: str | None) -> str | 
     if match["owner"]:
         return f"{match['owner']}/{match['name']}"
     if match["name"]:
-        return known.get(match["name"])
+        return known.get(match["name"].lower())
     return default
 
 
@@ -382,8 +388,8 @@ class Decision:
         return f"{self.key[0]}#{self.key[1]}"
 
 
-def card_key(card: dict, issues_repo: str) -> tuple[str, int]:
-    return (card.get("repo") or issues_repo, card["number"])
+def card_repo(card: dict, issues_repo: str) -> str:
+    return card.get("repo") or issues_repo
 
 
 def plan(card: dict, links: dict[tuple[str, int], Linked], is_shipped, issues_repo: str) -> Decision:
@@ -393,8 +399,8 @@ def plan(card: dict, links: dict[tuple[str, int], Linked], is_shipped, issues_re
     failed check adds one. A card whose newest fix has not shipped is not done
     at that stage, whatever the older commits say.
     """
-    key = card_key(card, issues_repo)
-    linked = links.get(key)
+    key = (card_repo(card, issues_repo), card["number"])
+    linked = links.get(link_key(*key))
     if not linked or not linked.shas:
         return Decision(UNLINKED, key)
     missing = tuple(s for s in linked.shas if not is_shipped(s))
@@ -438,15 +444,18 @@ def marker(tag: str, decision: Decision) -> str:
 #: The markers an earlier sync may have left. `board-sync` is the older name of
 #: this script's marker, still on issues it announced.
 MARKER_PREFIXES = ("<!-- stage-sync ", "<!-- board-sync ")
+_MARKER_TAG = re.compile(r"<!-- (?:stage|board)-sync tag=(\S+) ")
 
 
-def already_announced(repo: str, number: str, decision: Decision) -> bool:
-    """Whether an earlier sync already posted the comment for these commits.
+def already_announced(repo: str, number: str, decision: Decision, glob: str) -> bool:
+    """Whether an earlier sync already posted this stage's comment for these commits.
 
     A sync that commented and then failed to move leaves the card where it was,
     and the next tag plans it again; without this it would comment again on
-    every tag. Keyed on the shas, not the tag: the same fix is announced once.
-    A failed read answers False — a duplicate comment beats a missing one.
+    every tag. A marker counts when its shas are these commits **and** its tag
+    matches this stage's glob: the same fix is announced once per stage, so a
+    comment for an earlier stage does not stand in for this one. A failed read
+    answers False — a duplicate comment beats a missing one.
     """
     tail = _marker_tail(decision)
     proc = subprocess.run(
@@ -454,10 +463,15 @@ def already_announced(repo: str, number: str, decision: Decision) -> bool:
          "-q", ".comments[].body"],
         capture_output=True, text=True,
     )
-    return proc.returncode == 0 and any(
-        any(p in line for p in MARKER_PREFIXES) and line.rstrip().endswith(tail)
-        for line in proc.stdout.splitlines()
-    )
+    if proc.returncode != 0:
+        return False
+    for line in proc.stdout.splitlines():
+        line = line.rstrip()
+        match = _MARKER_TAG.search(line)
+        if (match and any(p in line for p in MARKER_PREFIXES) and line.endswith(tail)
+                and fnmatch.fnmatchcase(match[1], glob)):
+            return True
+    return False
 
 
 def live_comment(tag: str, decision: Decision, where: str, mention: bool) -> str:
@@ -490,10 +504,10 @@ def apply_move(move: Move, decision: Decision, card: dict, me: str | None) -> st
     """Check, comment, assign, move — in that order.
 
     Returns "moved", "moved-unassigned" (the reporter could not be assigned;
-    the comment already mentions them) or "skipped" (a person moved the card
-    first). Raises on a failed comment or move: a card must never reach its new
-    column without its comment. A failed assignment does not raise — it would
-    fail again on every tag and block every card behind this one.
+    the comment already mentions them), "comment-failed" (nothing assigned or
+    moved: a card must never reach its new column without its comment) or
+    "skipped" (a person moved the card first). Neither a failed comment nor a
+    failed assignment stops the other cards. A failed move raises.
     """
     repo, number = decision.key[0], str(decision.key[1])
     ref = decision.ref()
@@ -504,13 +518,14 @@ def apply_move(move: Move, decision: Decision, card: dict, me: str | None) -> st
     if code != 0:
         raise SyncError(f"{ref}: could not confirm the card is in {move.source} (exit {code})")
 
-    if not already_announced(repo, number, decision):
+    if not already_announced(repo, number, decision, move.glob):
         mention = move.profile.reporter_mode == "trailer"
         with tempfile.NamedTemporaryFile("w", suffix=".md", delete=False, encoding="utf-8") as body:
             body.write(live_comment(move.tag, decision, move.where, mention))
         try:
             if run(["gh", "issue", "comment", number, "--repo", repo, "--body-file", body.name]):
-                raise SyncError(f"{ref}: comment failed; card not moved")
+                print(f"{ref}: comment failed; card not moved", file=sys.stderr)
+                return "comment-failed"
         finally:
             Path(body.name).unlink(missing_ok=True)
 
@@ -564,15 +579,17 @@ def sync(profile: Profile, tag: str, main_ref: str, dry_run: bool) -> int:
         tracker.require_columns(meta, [move.source, move.target])
 
     links = trailer_links(main_ref, profile.known)
-    me, me_read = None, False
-    unassigned, unlinked_total = [], 0
-
+    # One read of the board, and every matched stage planned from it: a card
+    # moved into one stage in this run is not a source for the next one.
+    cards, _recovered, _total = tracker.list_cards(
+        open_only=True, issues_only=True, repo=tracker.DEFAULT_REPO
+    )
+    plans = []
     for move in moves:
-        cards, _recovered, _total = tracker.list_cards(
-            status=move.source, open_only=True, issues_only=True, repo=tracker.DEFAULT_REPO
-        )
+        in_source = [c for c in cards if (c.get("status") or "").lower() == move.source.lower()]
         decisions = [(plan(c, links, lambda s: is_ancestor(s, tag), profile.issues_repo), c)
-                     for c in cards]
+                     for c in in_source]
+        plans.append((move, decisions))
 
         print(f"stage {move.target} (tag {move.glob}): cards in {move.source}")
         for decision, _card in decisions:
@@ -581,27 +598,32 @@ def sync(profile: Profile, tag: str, main_ref: str, dry_run: bool) -> int:
                     if decision.missing else "")
             print(f"{decision.kind:<8}  {decision.ref()}  {shas}{note}")
 
-        if dry_run:
-            print("dry run: nothing written")
-        else:
-            for decision, card in decisions:
-                if decision.kind != MOVE:
-                    continue
-                if not me_read:
-                    me, me_read = authenticated_login(), True
-                    if me is None:
-                        print("warning: could not read the login gh is authenticated as; "
-                              "nobody is unassigned", file=sys.stderr)
-                outcome = apply_move(move, decision, card, me)
-                ref = decision.ref()
-                if outcome == "skipped":
-                    print(f"{ref}: no longer in {move.source} (moved by a person) - nothing written")
-                    continue
-                print(f"{ref}: {move.source} -> {move.target}")
-                if outcome == "moved-unassigned":
-                    unassigned.append(ref)
-                    print(f"{ref}: could not assign {', '.join(decision.reporters)}; "
-                          "the comment mentions them: assign by hand", file=sys.stderr)
+    me, me_read = None, False
+    unassigned, comment_failed, unlinked_total = [], [], 0
+    if dry_run:
+        print("dry run: nothing written")
+    for move, decisions in plans:
+        for decision, card in decisions:
+            if dry_run or decision.kind != MOVE:
+                continue
+            if not me_read:
+                me, me_read = authenticated_login(), True
+                if me is None:
+                    print("warning: could not read the login gh is authenticated as; "
+                          "nobody is unassigned", file=sys.stderr)
+            outcome = apply_move(move, decision, card, me)
+            ref = decision.ref()
+            if outcome == "skipped":
+                print(f"{ref}: no longer in {move.source} (moved by a person) - nothing written")
+                continue
+            if outcome == "comment-failed":
+                comment_failed.append(ref)
+                continue
+            print(f"{ref}: {move.source} -> {move.target}")
+            if outcome == "moved-unassigned":
+                unassigned.append(ref)
+                print(f"{ref}: could not assign {', '.join(decision.reporters)}; "
+                      "the comment mentions them: assign by hand", file=sys.stderr)
 
         unlinked = [d.ref() for d, _ in decisions if d.kind == UNLINKED]
         if unlinked:
@@ -609,6 +631,10 @@ def sync(profile: Profile, tag: str, main_ref: str, dry_run: bool) -> int:
             print(f"{len(unlinked)} card(s) in {move.source} have no linked commit; "
                   f"move them by hand: {', '.join(unlinked)}", file=sys.stderr)
 
+    if comment_failed:
+        print(f"{len(comment_failed)} card(s) not moved, their comment failed: "
+              f"{', '.join(comment_failed)}", file=sys.stderr)
+        return 2
     return 1 if unlinked_total or unassigned else 0
 
 

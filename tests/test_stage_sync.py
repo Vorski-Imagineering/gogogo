@@ -37,7 +37,7 @@ profile = 1
 
 [tracker]
 kind = "github-project"
-issues_repo = "acme/issues"
+issues_repo = "{issues}"
 code_repo = "acme/code"
 public = true
 tool = "shared"
@@ -69,7 +69,7 @@ column = "Merged"
 code_is = "in a deploy tag"
 environment = "production"
 column = "Released"
-tag = "deploy-*"
+tag = "{deploy_tag}"
 
 [handback]
 reporter = "{reporter}"
@@ -81,14 +81,17 @@ STAGING_STAGE = """
 code_is = "in a staging tag"
 environment = "staging"
 column = "In Staging"
-tag = "staging-*"
+tag = "{staging_tag}"
 """
 
 
-def profile_text(reporter="trailer", three_stages=False, url=True):
+def profile_text(reporter="trailer", three_stages=False, url=True, issues="acme/issues",
+                 staging_tag="staging-*", deploy_tag="deploy-*"):
     return PROFILE.format(
         reporter=reporter,
-        middle=STAGING_STAGE if three_stages else "",
+        issues=issues,
+        deploy_tag=deploy_tag,
+        middle=STAGING_STAGE.format(staging_tag=staging_tag) if three_stages else "",
         production_url='url = "https://app.example.org"' if url else "",
     )
 
@@ -325,9 +328,9 @@ class SquashRecipe(RepoTestCase):
 # --------------------------------------------------------------------------
 
 
-def card(number, repo="acme/issues", assignees=("maint",)):
+def card(number, repo="acme/issues", assignees=("maint",), status="Merged"):
     return {"number": number, "repo": repo, "state": "OPEN", "kind": "Issue",
-            "status": "Merged", "assignees": list(assignees), "title": f"issue {number}"}
+            "status": status, "assignees": list(assignees), "title": f"issue {number}"}
 
 
 class Plan(unittest.TestCase):
@@ -350,6 +353,19 @@ class Plan(unittest.TestCase):
         self.assertEqual(self.plan(card(406, repo="acme/code"), links).kind, ss.MOVE)
         self.assertEqual(self.plan(card(406), links).kind, ss.UNLINKED)
 
+    def test_repo_names_meet_cards_case_insensitively(self):
+        """GitHub owner and repo names are case-insensitive; a card's spelling
+        and a trailer's must still meet, in the full and the short form."""
+        known = ss.Profile(Path("p"), {"tracker": {"issues_repo": "acme-corp/app",
+                                                   "code_repo": "acme-corp/code"}}).known
+        for value in ("acme-corp/app#5", "Acme-Corp/App#5", "App#5", "app#5"):
+            with self.subTest(value=value):
+                link = ss.parse_trailer(value, known)
+                links = {link.key: ss.Linked(["abc"], [])}
+                decision = ss.plan(card(5, repo="Acme-Corp/app"), links, lambda s: True, "acme-corp/app")
+                self.assertEqual(decision.kind, ss.MOVE)
+                self.assertEqual(decision.ref(), "Acme-Corp/app#5")
+
 
 # --------------------------------------------------------------------------
 # the sync
@@ -364,7 +380,9 @@ class Sync(TrackerState):
 
     def _sync(self, cards, links=LINKED, *, tag="deploy-x", shipped=lambda sha: True,
               results=None, dry_run=False, tag_ok=True, announced=False, list_error=None,
-              board_meta=BOARD, me="maint", source="Merged", profile=None):
+              board_meta=BOARD, me="maint", profile=None, fail=None, comments=None):
+        """`comments`: the issue's comment bodies, read by the real
+        already_announced; None fakes already_announced with `announced`."""
         self.profile = profile or self.write_profile()
         calls, self.statuses, self.bodies = [], [], []
         results = results or {}
@@ -375,14 +393,14 @@ class Sync(TrackerState):
             if not repo:
                 raise ValueError("list_cards needs repo=tracker.DEFAULT_REPO")
             self.statuses.append(status)
-            if source is not None and status != source:
-                raise AssertionError(f"read the wrong column: {status!r}")
-            return (cards if not callable(cards) else cards(status)), [], 0
+            return cards, [], 0
 
         def fake_run(cmd):
             calls.append(cmd)
             if "--body-file" in cmd:
                 self.bodies.append(Path(cmd[cmd.index("--body-file") + 1]).read_text())
+            if fail and fail(cmd):
+                return 1
             for verb, code in results.items():
                 if verb in cmd:
                     return code
@@ -401,8 +419,12 @@ class Sync(TrackerState):
         self.board_meta = mock.Mock(return_value=board_meta)
         self.list_cards = mock.Mock(**listing)
         argv = ["--profile", self.profile, "sync", "--tag", tag] + (["--dry-run"] if dry_run else [])
-        with mock.patch.object(ss, "resolve_tag", side_effect=fake_resolve), \
-             mock.patch.object(ss, "already_announced", return_value=announced), \
+        if comments is None:
+            announcing = mock.patch.object(ss, "already_announced", return_value=announced)
+        else:
+            announcing = mock.patch.object(ss.subprocess, "run",
+                                           return_value=mock.Mock(returncode=0, stdout=comments))
+        with mock.patch.object(ss, "resolve_tag", side_effect=fake_resolve), announcing, \
              mock.patch.object(ss, "trailer_links", return_value=links), \
              mock.patch.object(ss.tracker, "list_cards", self.list_cards), \
              mock.patch.object(ss.tracker, "board_meta", self.board_meta), \
@@ -480,6 +502,18 @@ class Sync(TrackerState):
         self.assertNotIn("move", self.verbs(calls))
         self.assertIn("comment failed; card not moved", self.err)
 
+    def test_a_failed_comment_does_not_stop_the_other_cards(self):
+        links = {**LINKED, ("acme/issues", 451): ss.Linked(["bbbb"], [])}
+        code, calls = self._sync([card(450), card(451)], links,
+                                 fail=lambda cmd: "comment" in cmd and "450" in cmd)
+        self.assertEqual(code, 2)
+        self.assertEqual(self.verbs(calls), [
+            "show --expect", "issue comment",
+            "show --expect", "issue comment", "move",
+        ])
+        self.assertIn("acme/issues#451: Merged -> Released", self.out)
+        self.assertRegex(self.err, r"(?m)^1 card\(s\) not moved, their comment failed: acme/issues#450$")
+
     def test_dry_run_makes_no_call_at_all(self):
         code, calls = self._sync([card(450)], dry_run=True)
         self.assertEqual(code, 0)
@@ -522,25 +556,56 @@ class Sync(TrackerState):
                 self.assertEqual((code, calls), (2, []))
                 self.list_cards.assert_not_called()
 
-    def test_reads_the_source_column_with_a_repo(self):
-        code, _ = self._sync([card(450)])
+    def moves(self, calls):
+        """{issue number: --to column} for every move written."""
+        return {cmd[5]: cmd[cmd.index("--to") + 1] for cmd in self.writes(calls)
+                if cmd[0] != "gh" and cmd[4] == "move"}
+
+    def test_reads_the_board_once_and_plans_only_the_source_column(self):
+        links = {**LINKED, ("acme/issues", 451): ss.Linked(["bbbb"], [])}
+        code, calls = self._sync([card(450), card(451, status="Released")], links)
         self.assertEqual(code, 0, self.err)
-        self.assertEqual(self.statuses, ["Merged"])
+        self.assertEqual(self.list_cards.call_count, 1)
+        self.assertEqual(self.moves(calls), {"450": "Released"})
 
     def test_three_stages_each_tag_reads_the_stage_before_it(self):
         profile = self.write_profile(three_stages=True)
-        code, calls = self._sync([card(450)], tag="staging-1", source="Merged", profile=profile)
+        links = {**LINKED, ("acme/issues", 451): ss.Linked(["bbbb"], [])}
+        cards = [card(450), card(451, status="In Staging")]
+        code, calls = self._sync(cards, links, tag="staging-1", profile=profile)
         self.assertEqual(code, 0, self.err)
-        self.assertEqual(self.statuses, ["Merged"])
-        move = self.writes(calls)[-1]
-        self.assertEqual(move[move.index("--to") + 1], "In Staging")
+        self.assertEqual(self.moves(calls), {"450": "In Staging"})
 
-        code, calls = self._sync([card(450)], tag="deploy-1", source="In Staging", profile=profile)
+        code, calls = self._sync(cards, links, tag="deploy-1", profile=profile)
         self.assertEqual(code, 0, self.err)
-        self.assertEqual(self.statuses, ["In Staging"])
-        move = self.writes(calls)[-1]
-        self.assertEqual(move[move.index("--to") + 1], "Released")
+        self.assertEqual(self.moves(calls), {"451": "Released"})
         self.assertIn("https://app.example.org", self.bodies[0])
+
+    def test_overlapping_globs_read_once_and_move_a_card_one_stage(self):
+        """`deploy-prod-1` matches both stages: one board read, every card
+        planned from it, and a card moved into In Staging is not then moved on."""
+        profile = self.write_profile(three_stages=True, staging_tag="deploy-*", deploy_tag="deploy-prod-*")
+        links = {**LINKED, ("acme/issues", 451): ss.Linked(["bbbb"], [])}
+        code, calls = self._sync([card(450), card(451, status="In Staging")], links,
+                                 tag="deploy-prod-1", profile=profile)
+        self.assertEqual(code, 0, self.err)
+        self.assertEqual(self.list_cards.call_count, 1)
+        self.assertEqual(self.moves(calls), {"450": "In Staging", "451": "Released"})
+        self.assertEqual(self.verbs(calls).count("move"), 2)
+
+    def test_a_comment_for_another_stage_does_not_count(self):
+        """A card announced for staging-1 is announced again when deploy-1 ships it."""
+        profile = self.write_profile(three_stages=True)
+        staged = ss.Decision(ss.MOVE, ("acme/issues", 450), ("1a6e11b7ffff",))
+        body = ss.live_comment("staging-1", staged, "https://staging.example.org", False)
+        code, calls = self._sync([card(450, status="In Staging")], tag="deploy-1",
+                                 profile=profile, comments=body)
+        self.assertEqual(code, 0, self.err)
+        self.assertIn("issue comment", self.verbs(calls))
+
+        code, calls = self._sync([card(450)], tag="staging-2", profile=profile, comments=body)
+        self.assertEqual(code, 0, self.err)
+        self.assertNotIn("issue comment", self.verbs(calls))
 
     def test_reporter_none_neither_assigns_nor_mentions(self):
         code, calls = self._sync([card(450)], profile=self.write_profile(reporter="none"))
@@ -583,11 +648,13 @@ class AlreadyAnnounced(unittest.TestCase):
         self.assertNotEqual(posted, old)
         for body in (posted, old):
             with mock.patch.object(ss.subprocess, "run", return_value=mock.Mock(returncode=0, stdout=body)):
-                self.assertTrue(ss.already_announced("acme/issues", "450", decision))
-                self.assertFalse(ss.already_announced("acme/issues", "450", other))
+                self.assertTrue(ss.already_announced("acme/issues", "450", decision, "deploy-*"))
+                self.assertFalse(ss.already_announced("acme/issues", "450", other, "deploy-*"))
+                # The same commits announced for another stage's tag.
+                self.assertFalse(ss.already_announced("acme/issues", "450", decision, "staging-*"))
         failed = mock.Mock(returncode=1, stdout=posted)
         with mock.patch.object(ss.subprocess, "run", return_value=failed):
-            self.assertFalse(ss.already_announced("acme/issues", "450", decision))
+            self.assertFalse(ss.already_announced("acme/issues", "450", decision, "deploy-*"))
 
 
 class LiveComment(unittest.TestCase):
@@ -718,18 +785,17 @@ class SharedFiles(unittest.TestCase):
             self.assertIn(needle, blocks[0])
 
     def test_the_dev_skill_carries_the_merge_recipe(self):
-        text = (PLUGIN / "skills" / "dev" / "SKILL.md").read_text(encoding="utf-8")
-        blocks = fenced(text)
-        self.assertTrue(any(all(n in b for n in ('stage_sync.py" --profile', "trailer", "--verify",
-                                                 "--co-authors-from")) for b in blocks))
+        """Commands, not sentences: the trailer command, the merge that takes
+        its body, and the merge check that reads it back."""
+        blocks = fenced((PLUGIN / "skills" / "dev" / "SKILL.md").read_text(encoding="utf-8"))
+        self.assertTrue(any(re.search(r'stage_sync\.py" .*\btrailer\b', b) and "--co-authors-from" in b
+                            for b in blocks))
         self.assertTrue(any("gh pr merge" in b and "--body-file" in b for b in blocks))
-        for needle in ("--ships", "handback.reporter", "`tag`"):
-            self.assertTrue(needle in text, needle)
 
-    def test_auto_dev_points_at_the_recipe(self):
+    def test_auto_dev_runs_the_same_commands(self):
         text = (PLUGIN / "skills" / "auto-dev" / "SKILL.md").read_text(encoding="utf-8")
-        for needle in ("--ships", "/gogogo:dev` §8"):
-            self.assertTrue(needle in text, needle)
+        self.assertRegex(text, r'stage_sync\.py" .*\btrailer\b')
+        self.assertRegex(text, r"verify_merged\.py.*--ships")
 
 
 if __name__ == "__main__":
