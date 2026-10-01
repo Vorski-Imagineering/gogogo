@@ -48,6 +48,9 @@ register = "docs/technology-decisions.md"
 [roadmap]
 file = "docs/roadmap.md"
 
+[release]
+major = 1
+
 [[lanes]]
 name = "automated"
 run = "make test"
@@ -241,6 +244,20 @@ class WrongValues(unittest.TestCase):
         settings["profile"] = True
         errors, _ = pc.check(settings, sections)
         self.assertIn("profile: expected int, found bool", errors)
+
+    def test_release_major_must_be_a_whole_number_of_1_or_more(self):
+        settings, sections = parse()
+        settings["release"] = {"major": "1"}
+        self.assertIn("release.major: expected int, found str", pc.check(settings, sections)[0])
+        settings["release"] = {"major": 0}
+        self.assertIn("release.major: must be 1 or more", pc.check(settings, sections)[0])
+        settings["release"] = {"major": 1}
+        self.assertEqual(pc.check(settings, sections), ([], []))
+
+    def test_no_release_table_is_neither_error_nor_warning(self):
+        settings, sections = parse()
+        settings.pop("release", None)
+        self.assertEqual(pc.check(settings, sections), ([], []))
 
     def test_value_outside_enum_is_named(self):
         settings, sections = parse()

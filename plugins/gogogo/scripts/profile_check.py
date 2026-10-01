@@ -60,6 +60,7 @@ FIELDS = {
     "design.placement_rule": (str, (), "Where the repo says which layer or folder new code belongs in."),
     "technology.register": (str, (), "Path of the technology decisions register, from the repo root."),
     "roadmap.file": (str, (), "Path of the roadmap document, from the folder holding .agents/; it may sit in another git repo checked out inside this one."),
+    "release.major": (int, (), "Hand-set major version. A production release is tagged deploy-<build> and versioned <major>.0.<build>; see references/versioning.md."),
     "lanes": (list, (SPEC, ONE, LOOP), "Test lanes: name, plus run/focused/env/ci."),
     "verify.agent": (list, (ONE, LOOP), "Environments where the implementing agent checks its work."),
     "verify.human": (str, (SPEC, TEST), "Environment where a person confirms a fix."),
@@ -333,6 +334,9 @@ def check(settings, sections, skill=None):
     stage_errors, stage_warnings = _check_stages(settings)
     errors.extend(stage_errors)
     warnings.extend(stage_warnings)
+    major, present = _lookup(settings, "release.major")
+    if present and isinstance(major, int) and not isinstance(major, bool) and major < 1:
+        errors.append("release.major: must be 1 or more")
     if TEST in wanted:
         errors.extend(_check_auto_test(settings, sections))
 

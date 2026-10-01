@@ -477,6 +477,43 @@ class Audit(unittest.TestCase):
         text = (ROOT / "plugins" / "gogogo" / "skills" / "setup" / "SKILL.md").read_text(encoding="utf-8")
         self.assertIn(sc.READY_LABEL_COLOUR_CHECK, text)
         self.assertIn("gh label edit", text)
+    # check_release: references/versioning.md (issue #15)
+    def _release(self, settings):
+        rep = sc.Report()
+        sc.check_release(settings, rep, shallow=False)
+        return rep.rows
+
+    def test_release_not_adopted_is_info(self):
+        rows = self._release({"stages": []})
+        self.assertEqual([(r["level"], r["check"]) for r in rows], [("INFO", "release")])
+        self.assertIn("not adopted", rows[0]["detail"])
+
+    PROD = [{"name": "prod", "roles": ["production"]}, {"name": "stage", "roles": ["pre-production"]}]
+
+    def test_release_warns_on_a_stage_tag_deploy_tags_never_match(self):
+        stage = {"column": "In Production", "environment": "prod", "tag": "v*"}
+        rows = self._release({"release": {"major": 1}, "stages": [stage], "environments": self.PROD})
+        self.assertIn(("WARN", "release: stage sync"), [(r["level"], r["check"]) for r in rows])
+        stage["tag"] = "deploy-*"
+        rows = self._release({"release": {"major": 1}, "stages": [stage], "environments": self.PROD})
+        self.assertNotIn("release: stage sync", [r["check"] for r in rows])
+
+    def test_release_ignores_tags_on_stages_before_production(self):
+        stages = [{"column": "Staging", "environment": "stage", "tag": "staging-*"},
+                  {"column": "In Production", "environment": "prod", "tag": "deploy-*"}]
+        rows = self._release({"release": {"major": 1}, "stages": stages, "environments": self.PROD})
+        self.assertNotIn("release: stage sync", [r["check"] for r in rows])
+
+    def test_release_table_without_major_warns(self):
+        rows = self._release({"release": {}, "stages": []})
+        self.assertIn(("WARN", "release: major"), [(r["level"], r["check"]) for r in rows])
+
+    def test_release_warns_on_a_shallow_clone_and_never_fails(self):
+        rep = sc.Report()
+        sc.check_release({"release": {"major": 1}, "stages": [{"tag": "v*", "environment": "prod"}],
+                          "environments": self.PROD}, rep, shallow=True)
+        self.assertIn("release: build number", [r["check"] for r in rep.rows])
+        self.assertFalse(rep.failed())
 
     def test_audit_checks_never_fail(self):
         rep = sc.Report()
