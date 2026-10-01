@@ -190,7 +190,8 @@ one command.
      checks appear, for up to three minutes;
    - any other error from `gh` (an HTTP, network or auth message): re-run it,
      at most three times;
-   - otherwise (the watch followed its checks to the end), or once a budget
+   - otherwise (the checks finished, or one failed and `--fail-fast` ended the
+     watch), or once a budget
      above is spent: go on to Judge.
 2. **Judge** by each check's state, never by the watch's exit code:
    `gh pr checks <pr> --json name,bucket`. When it exits non-zero with any
@@ -232,7 +233,7 @@ and the merge is `gh pr merge ... --body-file` with the body built as
   that final PR is a release (§Preflight 4), merge it too, with a merge
   commit, once its checks pass (above); on a failure there (above), the run
   is not cleared to release: stop the whole run and ask, giving
-  the Judge step's reason, and leave the
+  the Judge step's reasons, and leave the
   cards where they are. When it is not a release, it waits for a person.
   When the link applies, the final PR's description says it must be merged
   with a merge commit, not squashed: a squash leaves the issue commits out of
