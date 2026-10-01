@@ -181,19 +181,22 @@ the merge is unreachable when it fails. The mode can change mid-session.
 
 **The PR's checks, when a merge is a release** (§Preflight 4). Before the `gh`
 merge, wait in the foreground (§4) with `gh pr checks <pr> --watch
---fail-fast`, giving the command the longest timeout your tool allows. Just
-after `gh pr create`, CI may not have registered yet: while it prints `no
-checks reported`, run `sleep 30; gh pr checks <pr> --watch --fail-fast` as one
-command, for up to three minutes, before counting the PR as having none. Read
-the output, not only the exit code: `gh pr checks` exits non-zero when a check
-fails, when a PR has no checks, and when `gh` itself fails. An error from `gh`
-is not a check result: run it again, at most three times, then stop that
-issue. A PR with no checks is a failure under `run-branch-pr` or when
-`integration.ci_before_merge` is true, and otherwise merges on the suite §4
-ran. A failure (a failing check, or no checks when that is a failure) stops
-that issue at its PR, handed back to `tracker.columns.needs_human` as
-`/gogogo:dev` §8 says for a gate you could not make pass. For the run's final
-PR, see `run-branch-pr` below.
+--fail-fast`, giving the command the longest timeout your tool allows; if the
+limit cuts it off while checks are still running, run it again. `gh pr checks`
+exits non-zero in three cases, so read the output, not only the exit code:
+
+- **No checks reported.** Just after `gh pr create`, CI may not have
+  registered yet: run `sleep 30; gh pr checks <pr> --watch --fail-fast` as one
+  command, for up to three minutes. Still none: that is a failure under
+  `run-branch-pr` or when `integration.ci_before_merge` is true, and otherwise
+  the PR merges on the suite §4 ran.
+- **An error from `gh` itself.** Not a check result: run it again the same
+  way, at most three times. Still erroring: a failure.
+- **A failing check.** A failure.
+
+A failure stops that issue at its PR, handed back to
+`tracker.columns.needs_human` as `/gogogo:dev` §8 says for a gate you could not
+make pass. For the run's final PR, see `run-branch-pr` below.
 
 **The link, when a merge is yours.** When you merge with `gh` and the profile
 uses the `Ships-issue` link (`/gogogo:dev`'s *When you merge with `gh`*
@@ -218,8 +221,8 @@ and the merge is `gh pr merge ... --body-file` with the body built as
   applies. **Zero checks is a failure**, not a pass. At the end, one PR from
   the run branch to `integration.final_target` carries the whole run. When
   that final PR is a release (§Preflight 4), merge it too, with a merge
-  commit, once its checks pass (above); when its checks fail, or it has
-  none, the run branch is red: stop the whole run and ask, and leave the
+  commit, once its checks pass (above); on a failure there (above), the run
+  branch is red: stop the whole run and ask, and leave the
   cards where they are. When it is not a release, it waits for a person.
   When the link applies, the final PR's description says it must be merged
   with a merge commit, not squashed: a squash leaves the issue commits out of
