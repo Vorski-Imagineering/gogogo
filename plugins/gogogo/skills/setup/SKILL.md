@@ -47,8 +47,20 @@ What each fix involves:
     scripts and CI to fill in names, URLs and `reached_by`; if what is read
     contradicts the answer, say so and ask again, do not pick.
   - `hard_stops`: the repo's own Hard Stop rules, usually a `CLAUDE.md`
-    section. Name its items word for word. If the repo has none, **stop and
-    ask**: Hard Stops are the owner's decision, never the skill's.
+    section. Name its items word for word. Hard Stops are the owner's
+    decision, never the skill's, so if the repo has none, do not write any.
+    Look instead for the nearest list it already has of what an agent must
+    ask about first (a section on what stays with the person, what to ask
+    before, what never to do). Then put two things to the user together:
+    - use that list as an interim `hard_stops.source`, with its items word
+      for word;
+    - file an issue in the repo recommending it define its own
+      `## Hard Stops` section, naming the kinds of change that cost most
+      there (what reaches every user, security, identity, data).
+
+    With a yes to both, file the issue, use the interim list, and name the
+    issue in the draft and the commit. If the repo has no such list either,
+    **stop and ask**.
   - `lanes`: the test commands the repo actually uses (`package.json`
     scripts, `Makefile`, the CI workflow, `CLAUDE.md`).
   - `environments` and `stages`: where code runs before and after a merge, and
