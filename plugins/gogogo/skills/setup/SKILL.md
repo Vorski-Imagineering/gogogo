@@ -129,13 +129,13 @@ What each fix involves:
 
   | View | Filter |
   |---|---|
-  | `Backlog` | `-status:Done,Future` |
-  | the queue column's name (`Dev Ready`) | `-status:Done,Future,<each stage column> label:"<tracker.ready_marker>"` (quote a column name that has a space) |
+  | `Backlog` | `is:open -status:Done,Future` |
+  | the queue column's name (`Dev Ready`) | `is:open -status:Done,Future,<each stage column> label:"<tracker.ready_marker>"` (quote a column name that has a space) |
 
   `visible_fields` holds the ids of Title, Assignees, Status, **Labels**,
-  Linked pull requests and Sub-issues progress. The API creates a view but
-  cannot change or delete one, so get it right the first time; a wrong view is
-  removed on the web page. A board layout groups by Status on its own.
+  Linked pull requests and Sub-issues progress. Get the filter right the first
+  time; `<tracker.tool> views --hide-closed` adds `is:open` to a view that
+  lacks it, and a view that is wrong in another way is fixed on the web page. A board layout groups by Status on its own.
 
   Three things only the board's web page can set. Do them yourself with the
   Claude in Chrome tools (load the `claude-in-chrome` skill and its tools in

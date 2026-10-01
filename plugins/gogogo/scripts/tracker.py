@@ -740,10 +740,14 @@ def board_views() -> list[dict]:
     return project["views"]["nodes"]
 
 
+#: A view whose filter has one of these is meant to show closed work: leave it alone.
+CLOSED_FILTERS = ("is:closed", "-is:open")
+
+
 def views_showing_closed(views: list[dict]) -> list[dict]:
-    """Views whose filter lets closed issues through."""
+    """Views whose filter lets closed issues through, other than views made to show them."""
     return [v for v in views
-            if not any(token in OPEN_FILTERS for token in (v.get("filter") or "").split())]
+            if not any(token in OPEN_FILTERS + CLOSED_FILTERS for token in (v.get("filter") or "").split())]
 
 
 def untidy(repo: str) -> tuple[list[dict], list[dict]]:
@@ -756,7 +760,7 @@ def untidy(repo: str) -> tuple[list[dict], list[dict]]:
         {"number": i["number"], "title": i["title"],
          "repo": (i.get("repository") or {}).get("nameWithOwner") or repo}
         for i in open_issues(repo)
-        if not any(n["project"]["number"] == PROJECT_NUMBER
+        if not any(not n.get("isArchived") and (n.get("project") or {}).get("number") == PROJECT_NUMBER
                    for n in (i.get("projectItems") or {}).get("nodes") or [])
     ]
     return closed, off_board
@@ -781,6 +785,10 @@ def cmd_views(args: argparse.Namespace) -> int:
     return 0
 
 
+def _bare(name: str) -> str:
+    return name.replace("\ufe0f", "").strip().lower()
+
+
 def cmd_tidy(args: argparse.Namespace) -> int:
     closed, off_board = untidy(args.repo)
     for c in closed:
@@ -792,11 +800,18 @@ def cmd_tidy(args: argparse.Namespace) -> int:
     if not args.apply:
         return 0
     meta = board_meta()
+    # The board's own spelling of New: "⚡️ New" and "⚡ New" differ only by a variation selector.
+    new = next((o for o in meta.get("options") or {} if _bare(o) == _bare(NEW_COLUMN)), NEW_COLUMN)
+    moves = [(c, DONE_COLUMN, False) for c in closed] + [(i, new, True) for i in off_board]
     worst = 0
-    for c in closed:
-        worst = max(worst, move_card(c["number"], c["repo"], DONE_COLUMN, meta=meta))
-    for i in off_board:
-        worst = max(worst, move_card(i["number"], i["repo"], NEW_COLUMN, add_missing=True, meta=meta))
+    for item, to, add in moves:
+        try:
+            code = move_card(item["number"], item["repo"], to, add_missing=add, meta=meta)
+        except BoardError as exc:
+            # One card that cannot be moved must not leave the rest unattempted.
+            print(f"FAILED {item['repo']}#{item['number']} -> {to}: {exc}", file=sys.stderr)
+            code = 2
+        worst = max(worst, code)
     return worst
 
 

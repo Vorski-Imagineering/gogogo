@@ -276,8 +276,8 @@ def check_board_tidiness(shared, repo, rep):
     try:
         views = shared.board_views()
         closed, off_board = shared.untidy(repo)
-    except shared.BoardError as exc:
-        rep.info("tracker: views and cards", f"could not be read ({exc})")
+    except (shared.BoardError, KeyError, TypeError) as exc:
+        rep.info("tracker: views and cards", f"could not be read ({exc!r})")
         return
 
     showing = shared.views_showing_closed(views)
@@ -382,12 +382,12 @@ def check_board_views(views, ready, stage_columns, rep):
     problems = []
     if not backlog:
         problems.append("no Backlog kanban: add a board-layout view 'Backlog' filtered "
-                        "`-status:Done,Future`, sorted by Created, newest first")
+                        "`is:open -status:Done,Future`, sorted by Created, newest first")
     elif not any(("Created", "DESC") in [tuple(x) for x in v.get("sort") or []] for v in backlog):
         problems.append(f"'{backlog[0]['name']}' is not sorted newest first (View → Sort by → Created, descending)")
     if ready and not queue:
         problems.append(f"no {ready!r} kanban: add a board-layout view filtered "
-                        f"`-status:{_status_list(['Done', 'Future', *stage_columns])} label:\"{ready}\"`")
+                        f"`is:open -status:{_status_list(['Done', 'Future', *stage_columns])} label:\"{ready}\"`")
     if problems:
         rep.warn("tracker: board views", "; ".join(problems))
     unlabelled = [v["name"] for v in boards if "Labels" not in (v.get("fields") or [])]
