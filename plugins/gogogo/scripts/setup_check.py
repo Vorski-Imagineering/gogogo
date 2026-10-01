@@ -538,7 +538,7 @@ def check_release_shape(settings, rep):
 
 
 def _joined(values, sep=", "):
-    if values is not None and not isinstance(values, (list, tuple)):
+    if isinstance(values, (str, int, float)):  # a scalar where a list belongs (bool is an int)
         values = [values]
     return sep.join(str(v) for v in values or []) or "missing"
 
