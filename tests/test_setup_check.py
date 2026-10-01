@@ -477,6 +477,30 @@ class Audit(unittest.TestCase):
         text = (ROOT / "plugins" / "gogogo" / "skills" / "setup" / "SKILL.md").read_text(encoding="utf-8")
         self.assertIn(sc.READY_LABEL_COLOUR_CHECK, text)
         self.assertIn("gh label edit", text)
+    # check_release: references/versioning.md (issue #15)
+    def _release(self, settings):
+        rep = sc.Report()
+        sc.check_release(settings, rep, shallow=False)
+        return rep.rows
+
+    def test_release_not_adopted_is_info(self):
+        rows = self._release({"stages": []})
+        self.assertEqual([(r["level"], r["check"]) for r in rows], [("INFO", "release")])
+        self.assertIn("not adopted", rows[0]["detail"])
+
+    def test_release_warns_on_a_stage_tag_deploy_tags_never_match(self):
+        stage = {"column": "In Production", "tag": "v*"}
+        rows = self._release({"release": {"major": 1}, "stages": [stage]})
+        self.assertIn(("WARN", "release: stage sync"), [(r["level"], r["check"]) for r in rows])
+        stage["tag"] = "deploy-*"
+        rows = self._release({"release": {"major": 1}, "stages": [stage]})
+        self.assertNotIn("release: stage sync", [r["check"] for r in rows])
+
+    def test_release_warns_on_a_shallow_clone_and_never_fails(self):
+        rep = sc.Report()
+        sc.check_release({"release": {"major": 1}, "stages": [{"tag": "v*"}]}, rep, shallow=True)
+        self.assertIn("release: build number", [r["check"] for r in rep.rows])
+        self.assertFalse(rep.failed())
 
     def test_audit_checks_never_fail(self):
         rep = sc.Report()

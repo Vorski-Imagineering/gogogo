@@ -105,6 +105,9 @@ per run.
 
 ## Running it in CI
 
+The `deploy-*` tags it reacts to are cut by `release.py tag`
+(`references/versioning.md`).
+
 ### Vendoring
 
 The workflow runs a pinned copy, not the plugin: CI must not follow gogogo's

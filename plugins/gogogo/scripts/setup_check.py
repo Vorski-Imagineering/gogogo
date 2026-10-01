@@ -14,6 +14,7 @@ Exit 0 when nothing FAILs, 1 otherwise. It only reads: nothing is created,
 changed or moved. `/gogogo:setup` uses it and does the fixing, with approval.
 """
 import argparse
+import fnmatch
 import json
 import re
 from collections import Counter
@@ -475,6 +476,26 @@ def check_claude_md(root, rep):
         rep.ok("CLAUDE.md", "points at the profile")
 
 
+def check_release(settings, rep, shallow=None):
+    """Whether the repo follows references/versioning.md. Never FAILs. `shallow`: whether this
+    clone is shallow, or None to ask git."""
+    release = settings.get("release")
+    if not isinstance(release, dict):
+        rep.info("release", "not adopted: production deploys are not tagged deploy-<build> "
+                 "(references/versioning.md)")
+        return
+    rep.info("release", f"tags deploy-<build>, version {release.get('major', '<major>')}.0.<build>")
+    for stage in settings.get("stages") or []:
+        glob = stage.get("tag") if isinstance(stage, dict) else None
+        if isinstance(glob, str) and glob and not fnmatch.fnmatchcase("deploy-1", glob):
+            rep.warn("release: stage sync",
+                     f"{stage.get('column')} moves on tags matching {glob}, which deploy-<build> tags never match")
+    if shallow is None:
+        shallow = run("git", "rev-parse", "--is-shallow-repository").stdout.strip() == "true"
+    if shallow:
+        rep.warn("release: build number", "this clone is shallow; the build number needs full history")
+
+
 def check_release_shape(settings, rep):
     """Say whether the profile is staged or straight to production, and warn when it
     contradicts itself. Reads the profile only; never FAILs. No evidence, no row."""
@@ -653,6 +674,7 @@ def main(argv=None):
             check_profile_skills(settings, sections, rep)
     if settings:
         check_release_shape(settings, rep)
+        check_release(settings, rep)
         check_hard_stop_source(root, (settings.get("hard_stops") or {}).get("source"), rep)
         check_tracker(root, settings, rep)
     check_local_skills(root, rep)

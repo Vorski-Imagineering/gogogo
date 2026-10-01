@@ -74,6 +74,7 @@ no skill requires it; a skill that finds it uses it.
 | `design.placement_rule` | str | optional | Where the repo says which layer or folder new code belongs in. |
 | `technology.register` | str | optional | Path of the technology decisions register, from the repo root. |
 | `roadmap.file` | str | optional | Path of the roadmap document, from the folder holding `.agents/`; it may sit in another git repo checked out inside this one. |
+| `release.major` | int | optional | Hand-set major version. A production release is tagged `deploy-<build>` and versioned `<major>.0.<build>`; see `references/versioning.md`. |
 | `lanes` | list | `spec`, `dev`, `auto-dev` | Test lanes: name, plus run/focused/env/ci. |
 | `verify.agent` | list | `dev`, `auto-dev` | Environments where the implementing agent checks its work. |
 | `verify.human` | str | `spec`, `auto-test` | Environment where a person confirms a fix. |
@@ -233,6 +234,19 @@ tag = "deploy-*"
 `profile_check.py` warns on any other key in a stage (a typo there would
 otherwise be silent), and when `handback.reporter` is `trailer` but no stage
 has a `tag`.
+
+### Release
+
+A repo adopts the release standard by having a `[release]` table: each
+production deploy is then tagged `deploy-<build>` and versioned
+`<major>.0.<build>`, the build being the commit count. `release.major` is set
+by a person and never raised automatically. The standard, and where a deploy
+calls `release.py tag`, is `references/versioning.md`.
+
+```toml
+[release]
+major = 1
+```
 
 ### Two-licence changes
 

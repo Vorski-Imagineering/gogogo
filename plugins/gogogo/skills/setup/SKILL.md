@@ -80,6 +80,11 @@ What each fix involves:
       the draft says so.
     - *Staged:* an environment with the role `pre-production`, and one stage per
       step in the order code travels, as `references/profile-schema.md` shows.
+  - `[release]`: ask whether production deploys should be numbered and tagged
+    by the standard (`references/versioning.md`). On a yes, write `major = 1`,
+    or one above a version a store already holds, and say in the draft where
+    the deploy should call `release.py tag`. On a no, leave the table out; the
+    check then reports it as not adopted.
   - `tracker`: the issues repo, the ready label, and the board.
   - The sections `## Recon traps`, `## Lane constraints` and
     `## superpowers boundary`. When the repo already has local skills being
