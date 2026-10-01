@@ -191,8 +191,7 @@ one command.
    - any other error from `gh` (an HTTP, network or auth message): re-run it,
      at most three times;
    - otherwise (the checks finished, or one failed and `--fail-fast` ended the
-     watch), or once a budget
-     above is spent: go on to Judge.
+     watch), or once a budget above is spent: go on to Judge.
 2. **Judge** by each check's state, never by the watch's exit code:
    `gh pr checks <pr> --json name,bucket`. When it exits non-zero with any
    message other than `no checks reported`, re-run it, at most three times.
