@@ -111,19 +111,26 @@ The profile's `## Recon traps` lists what this codebase specifically hides.
 /code-review high
 ```
 
-Run it on the working tree before reporting anything; a change that is only
-prose (instructions, docs) is reviewed at `medium`, because prose always has
-another ambiguity to find. Apply findings deliberately rather than with
-`--fix`, then **run it once more on the corrections**: rounds of corrections
-are where defects enter. Render findings as markdown, never raw JSON.
+Run it on the working tree before reporting anything. Apply findings
+deliberately rather than with `--fix`, then **review the corrections**: rounds
+of corrections are where defects enter. Render findings as markdown, never raw
+JSON. How many rounds depends on what the change is:
 
+- **Code** is any change that is not prose only, including configuration
+  inside a Markdown file (a profile's settings block). Review at `high`. Review
+  each round's corrections, round after round, until a round applies nothing:
+  it found nothing, or every finding was declined with a reason. Nothing merges
+  unreviewed. There is no round limit.
+- **Prose only** means every changed file is Markdown or plain text and no
+  configuration in it changed. Review at `medium`, because prose always has
+  another ambiguity to find. **Two rounds at most**: the change, then its
+  corrections. After the second round, apply nothing except a correctness fix;
+  its other findings are listed in the report as follow-ups. If it found a
+  correctness defect, fix it and **stop before merging**: the change goes to a
+  person with the fix marked unreviewed. Do not start a third round.
+- A change that mixes the two is code.
 - Findings you disagree with may be declined, with the reason. Correctness
   findings may not: fix them or stop.
-- **Two rounds at most**: the change, then its corrections. After the second
-  round, apply nothing except a correctness fix; its other findings are listed
-  in the report as follow-ups. If it found a correctness defect, fix it and
-  **stop before merging**: the change goes to a person with the fix marked
-  unreviewed. Do not start a third round.
 - When the spec moves content unchanged, findings about that content are not
   part of the move: list them in the report as follow-ups. A correctness
   finding there still means fix or stop.
@@ -168,6 +175,16 @@ Comment in the reporter's language, not the codebase's:
 - **What changed**: user-visible effects, as bullets.
 - **How it was verified**: which rungs ran, how many new tests went red, what
   the real run showed.
+- **How it was reviewed**: code or prose only (§5), the review level, and the
+  number of rounds. Then one line per round: how many findings were applied
+  and how many declined, and the most important applied finding in a few words
+  (say "correctness" when it was one). End the comment with the record on one
+  line, with no spaces inside a value:
+  `<!-- gogogo:review pr=<n|none> kind=<code|prose> level=<high|medium> rounds=<n> applied=<a1,a2,…> declined=<d1,d2,…> correctness=<c1,c2,…> stopped=<yes|no> -->`
+  `pr` is the pull request the change went through, or `none` when there is
+  none yet. `applied`, `declined` and `correctness` have one number per round,
+  in order; `correctness` counts the applied findings that were correctness
+  defects. `stopped=yes` only when a prose review stopped before merging (§5).
 - **Anything they still own**: data, configuration, a decision left open.
 - **Where it is now, and only what is true when you post**: in the working
   tree, on a branch, or merged. Name the stage in the repo's words (the

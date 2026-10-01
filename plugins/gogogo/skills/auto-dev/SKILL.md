@@ -121,11 +121,12 @@ Push the branch as soon as it has its first commit (`git push -u origin
 - **Every rung in `verify.rungs` is mandatory** for every issue.
 - The regression test must be seen failing, then the whole suite green. Record
   how many new tests went red.
-- `/code-review` as `/gogogo:dev` §5 says: `high`, or `medium` for a change
-  that is only prose; two rounds at most. A correctness defect in the second
-  round stops **that issue** after fixing it: commit and push the fix to its
-  branch, marked unreviewed in the commit message, leave the branch unmerged,
-  record it, carry on with the next.
+- `/code-review` as `/gogogo:dev` §5 says. **Code**: review each round's
+  corrections until a round applies nothing; there is no round limit, and the
+  review never stops the issue. **Prose only**: `medium`, two rounds at most. A
+  correctness defect in the second round stops **that issue** after fixing it:
+  commit and push the fix to its branch, marked unreviewed in the commit
+  message, leave the branch unmerged, record it, and carry on with the next.
 - A Hard Stop discovered mid-change → stop **that issue**, leave its branch,
   record it, carry on with the next.
 - **When verification fails, fix forward, bounded.** Up to three attempts, and
