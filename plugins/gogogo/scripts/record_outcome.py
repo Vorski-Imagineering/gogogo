@@ -4,7 +4,7 @@
     record_outcome.py [--profile FILE] column
     record_outcome.py [--profile FILE] version
     record_outcome.py [--profile FILE] last <issue> [--repo owner/name]
-    record_outcome.py [--profile FILE] render <run-dir> --build <ref> --model <id> < spec.json
+    record_outcome.py [--profile FILE] render <run-dir> <issue> --build <ref> --model <id> < spec.json
     record_outcome.py [--profile FILE] apply <run-dir> <issue> <PASS|FAIL|NEEDS_HUMAN> [--repo owner/name]
 
 `column` prints the column under test: the `column` of the one stage whose
@@ -12,8 +12,10 @@
 (a hash of the skill, this script and the profile's `## Test data`), and on
 stderr where the plugin came from. `last` prints the newest verdict marker on
 an issue. `render` writes `<run-dir>/comment-<n>.md` from a JSON spec. `apply`
-posts that comment, then labels, closes and moves the card as the profile's
-`[auto_test]` says, then reads the issue back.
+checks the board has both destination columns, that the card is still in the
+column under test and the issue still open, then posts that comment, labels,
+closes and moves the card as the profile's `[auto_test]` says, and reads the
+issue back.
 
 Why a script rather than steps in the skill: recording an outcome is several
 writes for one change, and retyping them per issue is how they went wrong.
@@ -135,7 +137,23 @@ def tracker_cmd(settings, profile_path):
     return shlex.split(tool)
 
 
-def _check_spec(spec, public):
+def cell(value):
+    """A value made safe for one markdown table cell."""
+    return str(value).replace("|", "\\|").replace("\r\n", "\n").replace("\n", "<br>")
+
+
+def _norm(name):
+    """Column names compare case-insensitively and without emoji variation selectors."""
+    return name.replace("\ufe0f", "").strip().lower()
+
+
+def on_board(fields_output, name):
+    """True when the tracker's `fields` output lists the column `name`."""
+    want = _norm(name)
+    return any(_norm(line) == want or _norm(line).endswith("  " + want) for line in fields_output.splitlines())
+
+
+def _check_spec(spec, public, issue):
     if not isinstance(spec, dict):
         raise Stop("spec: expected a JSON object")
     verdict = spec.get("verdict")
@@ -145,6 +163,10 @@ def _check_spec(spec, public):
         if spec.get(key) in (None, ""):
             raise Stop(f"spec: {key} is missing" + (" (record the role preflight saw; never guess it)"
                                                     if key == "role" else ""))
+    if spec["n"] != issue:
+        raise Stop(f"spec: n is {spec['n']!r}, but this is issue {issue}")
+    if spec.get("mention") and verdict != "PASS":
+        raise Stop(f"spec: mention is for a PASS only, and this is {verdict}")
     if not isinstance(spec["commits"], list):
         raise Stop("spec: commits must be a list (one entry per commit)")
     checks = spec["checks"]
@@ -156,6 +178,10 @@ def _check_spec(spec, public):
         marks = [str(c[5]).strip() for c in checks]
         if any(m != "✅" for m in marks):
             raise Stop(f"spec: PASS with a check not marked ✅ ({', '.join(marks)})")
+    if verdict == "FAIL" and not any(str(c[5]).strip() == "❌" for c in checks):
+        raise Stop("spec: FAIL with no check marked ❌; say which criterion failed")
+    if verdict == "NEEDS_HUMAN" and not checks:
+        raise Stop("spec: NEEDS_HUMAN with no checks; list what ran and what could not")
     if public:
         for key, value in _strings(spec):
             for pattern, what in SECRETS:
@@ -174,8 +200,9 @@ def _strings(node, key=""):
             yield from _strings(v, f"{key}[{i}]")
 
 
-def render(settings, sections, run_dir, build, model, spec, plugin_root):
-    _check_spec(spec, settings["tracker"]["public"] is True)
+def render(settings, sections, run_dir, issue, build, model, spec, plugin_root):
+    public = settings["tracker"]["public"] is True
+    _check_spec(spec, public, issue)
     run_dir = Path(run_dir).resolve()
     if not run_dir.is_dir():
         raise Stop(f"run folder {run_dir} does not exist")
@@ -186,25 +213,26 @@ def render(settings, sections, run_dir, build, model, spec, plugin_root):
     skill = stamp(plugin_root, sections.get("Test data", ""))
     now = datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%d %H:%M")
 
-    out = [f"<!-- auto-test v1 run={run_id} verdict={verdict} build={build} skill={skill} -->",
+    out = [f"<!-- auto-test v1 run={run_id} issue={n} verdict={verdict} build={build} skill={skill} -->",
            f"## Auto-test: {VERDICTS[verdict]}", "", spec["summary"]]
     if spec.get("mention"):
         out.append(f"@{spec['mention'].lstrip('@')}: this passed an automated check on {env['name']}; "
                    "reopen if it still isn't what you reported.")
     out += ["", "### Build tested", "| | |", "|---|---|",
-            f"| Environment | {env['name']}: `{host}` |",
-            f"| Running build | `{build}` |"]
-    out += [f"| Change under test | {c} |" for c in spec["commits"] or ["none found"]]
-    out += [f"| Kind | {spec['kind']} |", "",
+            # A public comment names the environment only: its host may be internal.
+            f"| Environment | {cell(env['name'])} |" if public else f"| Environment | {cell(env['name'])}: `{cell(host)}` |",
+            f"| Running build | `{cell(build)}` |"]
+    out += [f"| Change under test | {cell(c)} |" for c in spec["commits"] or ["none found"]]
+    out += [f"| Kind | {cell(spec['kind'])} |", "",
             "### How it was tested", "| | |", "|---|---|",
-            f"| Tester | `auto-test` @ `{skill}` ({source(plugin_root)}) · {model} |",
-            f"| Account role | {spec['role']} |",
+            f"| Tester | `auto-test` @ `{skill}` ({source(plugin_root)}) · {cell(model)} |",
+            f"| Account role | {cell(spec['role'])} |",
             "| Method | Browser, hard reload per page; console and failed requests captured per step |",
             f"| When | finished {now} UTC · run `{run_id}` |", "",
             "### Checks",
             "| # | Criterion | Source | Steps (route · action) | Expected | Observed | |",
             "|---|---|---|---|---|---|---|"]
-    out += [f"| {i} | " + " | ".join(str(cell) for cell in c) + " |" for i, c in enumerate(spec["checks"], 1)]
+    out += [f"| {i} | " + " | ".join(cell(v) for v in c) + " |" for i, c in enumerate(spec["checks"], 1)]
     out += ["", f"Signals: {spec.get('signals', 'no console errors, no 4xx/5xx')}", "",
             "### Test data", spec.get("data", "None created. No fixtures used."), "",
             "### Not tested", spec.get("not_tested", "Nothing.")]
@@ -251,21 +279,43 @@ def apply(settings, profile_path, run_dir, issue, verdict, repo):
         raise Stop(f"#{issue}: no {comment}; render it first")
     first = (comment.read_text(encoding="utf-8").splitlines() or [""])[0]
     fields = parse_marker(first)
-    if fields is None or fields.get("verdict") != verdict:
-        raise Stop(f"#{issue}: {comment.name} does not start with a marker saying verdict={verdict}")
+    if fields is None or fields.get("verdict") != verdict or fields.get("issue") != str(issue):
+        raise Stop(f"#{issue}: {comment.name} does not start with a marker saying issue={issue} verdict={verdict}")
 
     tool = tracker_cmd(settings, profile_path)
     card_repo = ["--repo", repo] if repo != issues_repo else []
     gh = ["--repo", repo]
     n = str(issue)
 
+    board = run([*tool, "fields"])
+    if board.returncode != 0:
+        raise Stop(f"#{issue}: could not read the board's columns (tracker exit {board.returncode}): "
+                   f"{board.stderr.strip()}")
+    missing = [c for c in (auto["pass_column"], auto["fail_column"]) if not on_board(board.stdout, c)]
+    if missing:
+        raise Stop(f"#{issue}: the board has no column {', '.join(repr(c) for c in missing)}: nothing written")
+
     shown = run([*tool, "show", n, "--expect", col, *card_repo])
-    if shown.returncode in (1, 3):
+    # 3 is the contract's "in a different column"; the shared tool also exits 1 for "not on the board".
+    moved = (3, 1) if settings["tracker"]["tool"] == "shared" else (3,)
+    if shown.returncode in moved:
         print(f"#{issue} is no longer in {col}: nothing written")
         _append(run_dir, f"| #{issue} | no longer in {col}: nothing written |")
         return
     if shown.returncode != 0:
         raise Stop(f"#{issue}: could not read the card (tracker exit {shown.returncode}): {shown.stderr.strip()}")
+
+    state = run(["gh", "issue", "view", n, *gh, "--json", "state"])
+    try:
+        current = json.loads(state.stdout).get("state") if state.returncode == 0 else None
+    except (json.JSONDecodeError, AttributeError):
+        current = None
+    if current is None:
+        raise Stop(f"#{issue}: could not read the issue's state: {state.stderr.strip()}")
+    if current != "OPEN":
+        print(f"#{issue} is {current.lower()}: nothing written")
+        _append(run_dir, f"| #{issue} | closed: nothing written |")
+        return
 
     def must(cmd, what):
         result = run(cmd)
@@ -327,6 +377,7 @@ def main(argv=None):
     p.add_argument("--repo")
     p = sub.add_parser("render", help="write <run-dir>/comment-<n>.md from a JSON spec on stdin")
     p.add_argument("run_dir")
+    p.add_argument("issue", type=int)
     p.add_argument("--build", required=True)
     p.add_argument("--model", required=True)
     p = sub.add_parser("apply", help="comment, then labels, close and card, then read the issue back")
@@ -353,7 +404,7 @@ def main(argv=None):
                 spec = json.load(sys.stdin)
             except json.JSONDecodeError as exc:
                 raise Stop(f"spec: not valid JSON ({exc})") from None
-            print(render(settings, sections, args.run_dir, args.build, args.model, spec, plugin_root))
+            print(render(settings, sections, args.run_dir, args.issue, args.build, args.model, spec, plugin_root))
         elif args.command == "apply":
             apply(settings, path, args.run_dir, args.issue, args.verdict, repo)
     except Stop as exc:

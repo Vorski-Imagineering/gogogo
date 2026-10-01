@@ -31,6 +31,7 @@ MARKETPLACE_REPO = "Vorski-Imagineering/gogogo"
 REPLACED_LOCAL_SKILLS = [
     "spec-to-issue", "spec", "dev", "auto-dev", "fix-issue", "fix-reported-issue",
     "gogogo-auto-dev", "auto-issue-gogo", "wrap-up", "gogogo-auto-test",
+    "auto-test",
 ]
 
 

@@ -104,6 +104,12 @@ class LocalSkillsAndClaudeMd(unittest.TestCase):
         sc.check_local_skills(repo({".claude/skills-retired/gogogo-auto-test/SKILL.md": "x"}), rep)
         self.assertEqual(levels(rep, "local skills"), ["PASS"])
 
+    def test_a_local_skill_named_auto_test_warns(self):
+        rep = sc.Report()
+        sc.check_local_skills(repo({".claude/skills/auto-test/SKILL.md": "x"}), rep)
+        self.assertEqual(levels(rep, "local skills"), ["WARN"])
+        self.assertIn("auto-test", rep.rows[0]["detail"])
+
     def test_claude_md_without_a_pointer_warns(self):
         rep = sc.Report()
         sc.check_claude_md(repo({"CLAUDE.md": "# x\n"}), rep)

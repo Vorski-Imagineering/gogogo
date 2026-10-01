@@ -61,8 +61,9 @@ Reads first; the one write (labels) comes last.
    must never be one `git add` away from a commit.
 2. **Tooling.** `gh auth status`; the tracker tool's `fields --check` exits 0
    and its output lists the columns `auto_test.pass_column` and
-   `auto_test.fail_column` name; the script's `column` prints the column under
-   test; `git fetch origin --tags --prune --quiet`.
+   `auto_test.fail_column` name (either missing stops the run: a verdict could
+   not move its card); the script's `column` prints the column under test;
+   `git fetch origin --tags --prune --quiet`.
 3. **Stamp and model.** The script's `version` prints the stamp (and, on
    stderr, where the plugin came from). Record both, and the **model id**, in
    `run.md`.
@@ -320,21 +321,24 @@ Never by retyped `gh` or tracker commands. Write `spec-<n>.json`, render,
 **read the rendered file**, then apply:
 
 ```bash
-python3 "${CLAUDE_PLUGIN_ROOT}/scripts/record_outcome.py" render <run folder> --build <build ref> --model <model id> < <run folder>/spec-<n>.json
+python3 "${CLAUDE_PLUGIN_ROOT}/scripts/record_outcome.py" render <run folder> <n> --build <build ref> --model <model id> < <run folder>/spec-<n>.json
 python3 "${CLAUDE_PLUGIN_ROOT}/scripts/record_outcome.py" apply <run folder> <n> <PASS|FAIL|NEEDS_HUMAN> --repo <card repo>
 ```
 
 The spec's keys are `n`, `verdict`, `kind`, `summary`, `role` (as preflight
 recorded it), `commits` (one string per commit: sha, subject, "in `<ref>`"),
 `checks` (rows of `[criterion, source, steps, expected, observed, mark]`, mark
-✅, ❌ or ⏭), and optionally `mention`, `signals`, `data`, `not_tested`, `repro`
-(FAIL) and `human` plus `blocked` (NEEDS HUMAN). `render` refuses a PASS with
-no checks or with any check not ✅, a missing role, and, when `tracker.public`
-is true, a value holding a URL with a query string or a password, or an IP
-address.
+✅, ❌ or ⏭), and optionally `mention` (PASS only), `signals`, `data`,
+`not_tested`, `repro` (FAIL) and `human` plus `blocked` (NEEDS HUMAN). `render`
+refuses a spec whose `n` is not the issue named, a PASS with no checks or with
+any check not ✅, a FAIL with no ❌, a NEEDS HUMAN with no checks, a missing
+role, and, when `tracker.public` is true, a value holding a URL with a query
+string or a password, or an IP address. A public comment names the
+environment, never its host.
 
-`apply` re-reads the card (moved by a person mid-test: nothing is written),
-comments **first** so a partial failure always leaves the explanation, then
+`apply` checks the board still has both destination columns, then re-reads
+the card and the issue (moved by a person mid-test, or closed: nothing is
+written), comments **first** so a partial failure always leaves the explanation, then
 labels, closes and moves as the outcome table says, then reads the issue
 back. A non-zero exit **stops the run**: the board and the issue may now
 disagree, and the comment says what was meant.

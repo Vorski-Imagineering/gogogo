@@ -36,8 +36,10 @@ RUN = "20261001-1200-abcd"
 class FakeWorld:
     """`gh` and the tracker, over a dict. Records every call as (verb, cmd)."""
 
-    def __init__(self, labels=(), column=COLUMN, comments=()):
-        self.issue = {"labels": set(labels), "state": "OPEN", "column": column, "comments": list(comments)}
+    def __init__(self, labels=(), column=COLUMN, comments=(), state="OPEN",
+                 board=("New", "In progress", "In Dev", COLUMN, "Done")):
+        self.issue = {"labels": set(labels), "state": state, "column": column, "comments": list(comments)}
+        self.board = board
         self.calls = []
         self.fail = {}      # verb -> exit code
         self.inert = set()  # verbs that exit 0 and change nothing
@@ -68,6 +70,9 @@ class FakeWorld:
                 return "show", lambda: 0 if issue["column"] == expect else 3
             if sub == "move":
                 return "move", lambda: issue.update(column=rest[rest.index("--to") + 1])
+            if sub == "fields":
+                return "fields", lambda: "Board (#2) — 9 items\n" + "".join(f"  OPT_{i}  {name}\n"
+                                                                            for i, name in enumerate(self.board))
             return sub, lambda: ""
         action = cmd[2]
         if action == "comment":
@@ -81,6 +86,8 @@ class FakeWorld:
             return "label-", lambda: issue["labels"].discard(label)
         if action == "close":
             return "close", lambda: issue.update(state="CLOSED")
+        if action == "view" and cmd[cmd.index("--json") + 1] == "state":
+            return "state", lambda: json.dumps({"state": issue["state"]})
         if action == "view" and "comments" in cmd[cmd.index("--json") + 1]:
             return "comments", lambda: json.dumps({"comments": issue["comments"]})
         if action == "view":
@@ -106,7 +113,8 @@ def run_dir(tmp):
 
 def marker_comment(d, n, verdict):
     (d / f"comment-{n}.md").write_text(
-        f"<!-- auto-test v1 run={RUN} verdict={verdict} build=deploy-2 skill=c-000000000000 -->\n## Auto-test\n")
+        f"<!-- auto-test v1 run={RUN} issue={n} verdict={verdict} build=deploy-2 skill=c-000000000000 -->\n"
+        "## Auto-test\n")
 
 
 def call(world, *argv, stdin=""):
@@ -130,8 +138,8 @@ class Apply(unittest.TestCase):
         self.addCleanup(shutil.rmtree, self.tmp)
         self.dir = run_dir(self.tmp)
 
-    def apply(self, world, verdict, marker=None, **auto_test):
-        path = profile(self.tmp, **auto_test)
+    def apply(self, world, verdict, marker=None, text=COMPLETE, **auto_test):
+        path = profile(self.tmp, text, **auto_test)
         marker_comment(self.dir, 7, marker or verdict)
         return call(world, "--profile", path, "apply", self.dir, 7, verdict)
 
@@ -143,7 +151,8 @@ class Apply(unittest.TestCase):
         world = FakeWorld(labels={"test fail", "test needs human", "bug"})
         code, _, err = self.apply(world, "PASS")
         self.assertEqual(code, 0, err)
-        self.assertEqual(world.verbs(), ["show", "comment", "label-", "label-", "close", "move", "view"])
+        self.assertEqual(world.verbs(), ["fields", "show", "state", "comment", "label-", "label-", "close", "move",
+                                         "view"])
         self.assertEqual(world.issue["state"], "CLOSED")
         self.assertEqual(world.issue["labels"], {"bug"})
         self.assertEqual(world.issue["column"], "Done")
@@ -174,18 +183,19 @@ class Apply(unittest.TestCase):
         self.assertEqual((world.issue["column"], world.issue["state"]), (COLUMN, "OPEN"))
 
     def test_a_card_no_longer_in_the_column_gets_nothing_written(self):
-        for rc in (3, 1):
+        shared = COMPLETE.replace('tool = "python3 tools/board.py"', 'tool = "shared"')
+        for rc, text in ((3, COMPLETE), (3, shared), (1, shared)):
             world = FakeWorld()
             world.fail["show"] = rc
-            code, _, _ = self.apply(world, "PASS")
+            code, _, _ = self.apply(world, "PASS", text=text)
             self.assertEqual(code, 0, rc)
-            self.assertEqual(world.verbs(), ["show"], rc)
+            self.assertEqual(world.verbs(), ["fields", "show"], rc)
             self.assertIn("nothing written", self.run_md())
         world = FakeWorld()
         world.fail["show"] = 2
         code, _, _ = self.apply(world, "PASS")
         self.assertEqual(code, 2)
-        self.assertEqual(world.verbs(), ["show"])
+        self.assertEqual(world.verbs(), ["fields", "show"])
         self.assertEqual(world.issue["comments"], [])
 
     def test_comment_first(self):
@@ -193,7 +203,7 @@ class Apply(unittest.TestCase):
         world.fail["comment"] = 1
         code, _, _ = self.apply(world, "FAIL")
         self.assertEqual(code, 2)
-        self.assertEqual(world.verbs(), ["show", "comment"])
+        self.assertEqual(world.verbs(), ["fields", "show", "state", "comment"])
         self.assertEqual(world.issue["labels"], set())
 
     def test_the_read_back_is_the_confirmation(self):
@@ -218,29 +228,67 @@ class Apply(unittest.TestCase):
         self.assertEqual(code, 2)
         self.assertEqual(world.calls, [])
 
+    def test_a_closed_issue_gets_nothing_written(self):
+        world = FakeWorld(state="CLOSED")
+        code, out, _ = self.apply(world, "FAIL")
+        self.assertEqual(code, 0)
+        self.assertIn("closed: nothing written", out)
+        self.assertEqual(world.verbs(), ["fields", "show", "state"])
+        self.assertIn("closed: nothing written", self.run_md())
+
+    def test_the_comment_must_be_for_this_issue(self):
+        path = profile(self.tmp)
+        marker_comment(self.dir, 8, "PASS")
+        (self.dir / "comment-7.md").write_text((self.dir / "comment-8.md").read_text())
+        world = FakeWorld()
+        code, _, err = call(world, "--profile", path, "apply", self.dir, 7, "PASS")
+        self.assertEqual(code, 2)
+        self.assertEqual(world.calls, [])
+        self.assertIn("issue", err)
+
+    def test_only_a_moved_card_is_nothing_written_and_exit_1_only_from_the_shared_tool(self):
+        world = FakeWorld()
+        world.fail["show"] = 1  # the repo's own tool: exit 1 is not "moved"
+        code, _, _ = self.apply(world, "PASS")
+        self.assertEqual(code, 2)
+        self.assertEqual(world.verbs(), ["fields", "show"])
+        self.assertNotIn("nothing written", self.run_md())
+
+    def test_both_destination_columns_must_be_on_the_board(self):
+        world = FakeWorld(board=("In progress", "In Dev", COLUMN, "Done"))
+        code, _, err = self.apply(world, "PASS")
+        self.assertEqual(code, 2)
+        self.assertEqual(world.verbs(), ["fields"])
+        self.assertIn("New", err)
+        world = FakeWorld()
+        world.fail["fields"] = 2
+        self.assertEqual(self.apply(world, "PASS")[0], 2)
+        self.assertEqual(world.verbs(), ["fields"])
+
     def test_the_repos_own_tool_and_the_card_repo(self):
         path = profile(self.tmp)
         marker_comment(self.dir, 7, "NEEDS_HUMAN")
         world = FakeWorld()
         self.assertEqual(call(world, "--profile", path, "apply", self.dir, 7, "NEEDS_HUMAN")[0], 0)
-        show = world.calls[0][1]
+        show = next(cmd for v, cmd in world.calls if v == "show")
         self.assertEqual(show[:2], ["python3", "tools/board.py"])
         self.assertNotIn("--repo", show)
-        self.assertTrue(all(cmd[cmd.index("--repo") + 1] == "acme/issues" for v, cmd in world.calls if v != "show"))
+        self.assertTrue(all(cmd[cmd.index("--repo") + 1] == "acme/issues"
+                            for v, cmd in world.calls if v not in ("show", "fields")))
 
         world = FakeWorld()
         self.assertEqual(call(world, "--profile", path, "apply", self.dir, 7, "NEEDS_HUMAN",
                               "--repo", "acme/code")[0], 0)
-        show = world.calls[0][1]
+        show = next(cmd for v, cmd in world.calls if v == "show")
         self.assertEqual(show[show.index("--repo") + 1], "acme/code")
-        self.assertTrue(all(cmd[cmd.index("--repo") + 1] == "acme/code" for _, cmd in world.calls))
+        self.assertTrue(all(cmd[cmd.index("--repo") + 1] == "acme/code" for v, cmd in world.calls if v != "fields"))
 
     def test_the_shared_tool_is_this_folders_tracker(self):
         path = profile(self.tmp, COMPLETE.replace('tool = "python3 tools/board.py"', 'tool = "shared"'))
         marker_comment(self.dir, 7, "NEEDS_HUMAN")
         world = FakeWorld()
         self.assertEqual(call(world, "--profile", path, "apply", self.dir, 7, "NEEDS_HUMAN")[0], 0)
-        show = world.calls[0][1]
+        show = next(cmd for v, cmd in world.calls if v == "show")
         self.assertEqual(show[:4], [sys.executable, str(PLUGIN / "scripts" / "tracker.py"), "--profile", str(path.resolve())])
 
 
@@ -259,7 +307,7 @@ class EmptyColumn(unittest.TestCase):
                 d = run_dir(tmp)
                 marker_comment(d, 7, "PASS")
                 for argv in (["column"], ["version"], ["last", 7],
-                             ["render", d, "--build", "b", "--model", "m"], ["apply", d, 7, "PASS"]):
+                             ["render", d, 7, "--build", "b", "--model", "m"], ["apply", d, 7, "PASS"]):
                     world = FakeWorld()
                     code, _, _ = call(world, "--profile", path, *argv, stdin=json.dumps(SPEC))
                     self.assertEqual(code, 2, (name, argv))
@@ -278,9 +326,9 @@ class Render(unittest.TestCase):
         self.addCleanup(shutil.rmtree, self.tmp)
         self.dir = run_dir(self.tmp)
 
-    def render(self, spec, **kw):
-        path = profile(self.tmp, **kw)
-        return call(FakeWorld(), "--profile", path, "render", self.dir, "--build", "deploy-2",
+    def render(self, spec, issue=7, text=COMPLETE, **kw):
+        path = profile(self.tmp, text, **kw)
+        return call(FakeWorld(), "--profile", path, "render", self.dir, issue, "--build", "deploy-2",
                     "--model", "claude-test", stdin=json.dumps(spec))
 
     def written(self):
@@ -290,8 +338,54 @@ class Render(unittest.TestCase):
         code, _, err = self.render(SPEC)
         self.assertEqual(code, 0, err)
         lines = (self.dir / "comment-7.md").read_text().splitlines()
-        self.assertRegex(lines[0], rf"^<!-- auto-test v1 run={RUN} verdict=PASS build=deploy-2 skill=c-[0-9a-f]{{12}} -->$")
-        self.assertIn("app.example.org", "\n".join(lines))
+        self.assertRegex(lines[0], rf"^<!-- auto-test v1 run={RUN} issue=7 verdict=PASS build=deploy-2 "
+                                   rf"skill=c-[0-9a-f]{{12}} -->$")
+
+    def test_a_public_comment_names_the_environment_not_its_host(self):
+        internal = COMPLETE.replace('url = "https://app.example.org"', 'url = "https://staging.internal.example"')
+        self.assertEqual(self.render(SPEC, text=internal)[0], 0)
+        comment = (self.dir / "comment-7.md").read_text()
+        self.assertNotIn("staging.internal.example", comment)
+        self.assertIn("| Environment | production |", comment)
+        self.assertEqual(self.render(SPEC, text=internal.replace("public = true", "public = false"))[0], 0)
+        self.assertIn("staging.internal.example", (self.dir / "comment-7.md").read_text())
+
+    def test_the_spec_must_be_for_the_issue_named(self):
+        self.assertEqual(self.render(SPEC, issue=8)[0], 2)
+        self.assertFalse(self.written())
+        self.assertFalse((self.dir / "comment-8.md").exists())
+
+    def test_a_mention_only_on_pass(self):
+        spec = {**SPEC, "verdict": "NEEDS_HUMAN", "human": "- [ ] check it", "blocked": "needs a login.",
+                "mention": "someone"}
+        code, _, err = self.render(spec)
+        self.assertEqual(code, 2)
+        self.assertIn("mention", err)
+        self.assertFalse(self.written())
+        self.assertEqual(self.render({**SPEC, "mention": "someone"})[0], 0)
+
+    def test_table_cells_are_escaped(self):
+        check = ["a | b", "body", "line one\nline two", "x", "y", "✅"]
+        self.assertEqual(self.render({**SPEC, "checks": [check], "kind": "behaviour | refactor",
+                                      "commits": ["`abc` one\ntwo"]})[0], 0)
+        comment = (self.dir / "comment-7.md").read_text()
+        self.assertIn("| 1 | a \\| b | body | line one<br>line two | x | y | ✅ |", comment)
+        self.assertIn("| Kind | behaviour \\| refactor |", comment)
+        self.assertIn("| Change under test | `abc` one<br>two |", comment)
+
+    def test_fail_needs_a_failed_check_and_needs_human_needs_a_check(self):
+        fail = {**SPEC, "verdict": "FAIL", "repro": "1. open it"}
+        self.assertEqual(self.render(fail)[0], 2)
+        self.assertFalse(self.written())
+        bad = [*SPEC["checks"][0][:5], "❌"]
+        self.assertEqual(self.render({**fail, "checks": [SPEC["checks"][0], bad]})[0], 0)
+        (self.dir / "comment-7.md").unlink()
+        human = {**SPEC, "verdict": "NEEDS_HUMAN", "human": "- [ ] check it", "blocked": "needs a login.",
+                 "checks": []}
+        self.assertEqual(self.render(human)[0], 2)
+        self.assertFalse(self.written())
+        skipped = [*SPEC["checks"][0][:5], "⏭"]
+        self.assertEqual(self.render({**human, "checks": [skipped]})[0], 0)
 
     def test_no_evidence_is_a_failure(self):
         self.assertEqual(self.render({**SPEC, "checks": []})[0], 2)
@@ -315,8 +409,8 @@ class Render(unittest.TestCase):
             self.assertIn("checks[0][4]", err)
             self.assertFalse(self.written())
         check = [*SPEC["checks"][0][:4], "https://x.example/a?token=abc", "✅"]
-        text = COMPLETE.replace("public = true", "public = false")
-        code, _, err = self.render({**SPEC, "checks": [check]}, text=text)
+        public_off = COMPLETE.replace("public = true", "public = false")
+        code, _, err = self.render({**SPEC, "checks": [check]}, text=public_off)
         self.assertEqual(code, 0, err)
 
 
@@ -331,7 +425,7 @@ class Last(unittest.TestCase):
     def test_newest_marker_either_prefix(self):
         with tempfile.TemporaryDirectory() as tmp:
             d = run_dir(tmp)
-            code, _, err = call(FakeWorld(), "--profile", profile(tmp), "render", d, "--build", "deploy-2",
+            code, _, err = call(FakeWorld(), "--profile", profile(tmp), "render", d, 7, "--build", "deploy-2",
                                 "--model", "m", stdin=json.dumps(SPEC))
             self.assertEqual(code, 0, err)
             rendered = (d / "comment-7.md").read_text()
