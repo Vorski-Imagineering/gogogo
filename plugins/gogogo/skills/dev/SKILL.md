@@ -100,8 +100,10 @@ The profile's `## Recon traps` lists what this codebase specifically hides.
 - **Thread a change through every consumer.** If you change a value, a flag or
   a rule, find every place that reads it and every path that re-renders it. A
   partial thread is the "two things must agree, nothing enforces it" failure.
-- **A Hard Stop discovered mid-change → stop** and present the repo's proposal
-  format. Do not negotiate with yourself about whether it is "small".
+- **A Hard Stop, or a decision that belongs to a person and is not in the
+  issue body, discovered mid-change → stop** and present the repo's proposal
+  format. Do not negotiate with yourself about whether it is "small". Hand
+  back as *stopped for a person* (§8).
 - **Do not commit or push unless asked.** Leave the change in the working tree
   and say which branch it is on. (`auto-dev` overrides this.)
 
@@ -127,10 +129,12 @@ JSON. How many rounds depends on what the change is:
   corrections. After the second round, apply nothing except a correctness fix;
   its other findings are listed in the report as follow-ups. If it found a
   correctness defect, fix it and **stop before merging**: the change goes to a
-  person with the fix marked unreviewed. Do not start a third round.
+  person with the fix marked unreviewed, handed back as *stopped for a person*
+  (§8). Do not start a third round.
 - A change that mixes the two is code.
 - Findings you disagree with may be declined, with the reason. Correctness
-  findings may not: fix them or stop.
+  findings may not: fix them, or stop and hand back as *stopped for a person*
+  (§8).
 - When the spec moves content unchanged, findings about that content are not
   part of the move: list them in the report as follow-ups. A correctness
   finding there still means fix or stop.
@@ -201,13 +205,27 @@ Write the body to a file and pass `--body-file`; inline `--body` mangles markdow
 The card moves to the column of the **stage the code has actually reached**,
 and no further:
 
-- not committed, or on a branch awaiting review → `tracker.columns.in_progress`;
+- being worked now, or stopped at an open PR only because the merge is a
+  release or a two-licence apply row is missing → `tracker.columns.in_progress`;
+- **stopped for a person**: a review fix no round has reviewed, a correctness
+  finding you could not fix, a decision or Hard Stop found mid-change (§4), or
+  verification that gave up → `tracker.columns.needs_human`. The §7 report's
+  first line is `**Needs you:**` and one sentence saying what the person must
+  do, followed by the branch or PR link: for example, read commit `<sha>` and
+  merge; decide `<question>`; read the attempts and re-spec or requeue;
 - merged → the first of the profile's `stages`, and only after the merge is
   verified (`verify_merged.py`, below).
 
+No skill moves a card out of `tracker.columns.needs_human`; a person does,
+once they have done what it asked.
+
 ```bash
-<tracker.tool> move <n> --to "<column>"
+<tracker.tool> move <n> --to <role key or stage column>
 ```
+
+Pass `in_progress` or `needs_human` as the role key, never the column's name:
+a name such as `Human!Help!` is expanded by an interactive shell inside double
+quotes.
 
 A zero exit is the confirmation: the tool read the card back. Anything else is
 a failed move; say so, do not retry blind.

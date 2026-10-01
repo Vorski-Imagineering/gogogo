@@ -268,9 +268,10 @@ def read_legend(tables: list[Table], settings: dict) -> Legend:
 
     tracker_settings = settings.get("tracker") or {}
     required = [CLOSED, NOT_PLANNED, NONE]
-    in_progress = (tracker_settings.get("columns") or {}).get("in_progress")
-    if in_progress:
-        required.append(in_progress)
+    columns_settings = tracker_settings.get("columns") or {}
+    for role in ("in_progress", "needs_human"):
+        if columns_settings.get(role):
+            required.append(columns_settings[role])
     for stage in settings.get("stages") or []:
         if isinstance(stage, dict) and stage.get("column"):
             required.append(stage["column"])

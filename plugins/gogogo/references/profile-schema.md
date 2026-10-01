@@ -64,7 +64,8 @@ no skill requires it; a skill that finds it uses it.
 | `tracker.project_owner` | str | optional | Owner of the GitHub project board. |
 | `tracker.project_number` | int | optional | Number of the GitHub project board. |
 | `tracker.queue` | str | `auto-dev` | Column or label the loop works. |
-| `tracker.columns` | dict | `dev`, `auto-dev` | Columns before any code moves: in_progress, back_to_queue. |
+| `tracker.columns.in_progress` | str | `dev`, `auto-dev` | Column of an issue being worked now. |
+| `tracker.columns.needs_human` | str | `dev`, `auto-dev` | Column of an issue stopped for a person: an unreviewed fix, a decision or Hard Stop found mid-change, or verification that gave up. |
 | `environments` | list | all | Where code runs: name, roles, and url/serves/reached_by/data/writes. |
 | `stages` | list | `dev`, `auto-dev`, `auto-test` | The path a change takes after it merges: code_is, column, environment. |
 | `hard_stops.source` | str | all | Where the repo's Hard Stop rules live (file#anchor). |

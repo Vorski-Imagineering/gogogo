@@ -11,7 +11,7 @@ tool = "shared"
 project_owner = "Vorski-Imagineering"
 project_number = 5
 queue = "Dev Ready"
-columns = { in_progress = "In progress", back_to_queue = "Dev Ready" }
+columns = { in_progress = "In progress", needs_human = "Human!Help!" }
 
 [hard_stops]
 source = "CLAUDE.md § Hard Stops: ask before changing"

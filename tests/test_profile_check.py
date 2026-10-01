@@ -28,7 +28,7 @@ tool = "python3 tools/board.py"
 project_owner = "acme"
 project_number = 2
 queue = "Dev Priority"
-columns = { in_progress = "In progress", back_to_queue = "New" }
+columns = { in_progress = "In progress", needs_human = "Human!Help!" }
 
 [hard_stops]
 source = "CLAUDE.md#hard-stops"
@@ -230,6 +230,28 @@ class MissingFields(unittest.TestCase):
         settings, sections = parse()
         errors, _ = pc.check(settings, {**sections, "Recon traps": ""})
         self.assertIn("section '## Recon traps': empty", errors)
+
+
+class Columns(unittest.TestCase):
+    """tracker.columns: the keys dev and auto-dev move cards to (gogogo#26)."""
+
+    def test_needs_human_is_required_by_dev_and_auto_dev_only(self):
+        settings, sections = parse()
+        dropped = drop(settings, "tracker.columns.needs_human")
+        for skill in (pc.ONE, pc.LOOP):
+            errors, _ = pc.check(dropped, sections, skill)
+            self.assertTrue(any(e.startswith("tracker.columns.needs_human: missing") for e in errors), skill)
+        for skill in (pc.SPEC, pc.TECH, pc.ROADMAP):
+            errors, _ = pc.check(dropped, sections, skill)
+            self.assertEqual(errors, [], skill)
+
+    def test_back_to_queue_warns_but_passes(self):
+        settings, sections = parse()
+        settings["tracker"]["columns"]["back_to_queue"] = "Dev Ready"
+        errors, warnings = pc.check(settings, sections)
+        self.assertEqual(errors, [])
+        self.assertTrue(any(w.startswith("tracker.columns.back_to_queue: unknown setting") for w in warnings),
+                        warnings)
 
 
 class WrongValues(unittest.TestCase):

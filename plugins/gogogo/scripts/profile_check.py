@@ -50,7 +50,9 @@ FIELDS = {
     "tracker.project_owner": (str, (), "Owner of the GitHub project board."),
     "tracker.project_number": (int, (), "Number of the GitHub project board."),
     "tracker.queue": (str, (LOOP,), "Column or label the loop works."),
-    "tracker.columns": (dict, (ONE, LOOP), "Columns before any code moves: in_progress, back_to_queue."),
+    "tracker.columns.in_progress": (str, (ONE, LOOP), "Column of an issue being worked now."),
+    "tracker.columns.needs_human": (str, (ONE, LOOP), "Column of an issue stopped for a person: an unreviewed fix, "
+                                    "a decision or Hard Stop found mid-change, or verification that gave up."),
     "environments": (list, SKILLS, "Where code runs: name, roles, and url/serves/reached_by/data/writes."),
     "stages": (list, (ONE, LOOP, TEST), "The path a change takes after it merges: code_is, column, environment."),
     "hard_stops.source": (str, SKILLS, "Where the repo's Hard Stop rules live (file#anchor)."),

@@ -128,19 +128,23 @@ Push the branch as soon as it has its first commit (`git push -u origin
 - **When the review stops an issue** (a correctness finding you cannot fix,
   or, for prose, a correctness defect in the second round, fixed): commit
   everything the change produced, and nothing else, to its branch and push it,
-  leave the branch unmerged, and carry on with the next. The commit message
+  leave the branch unmerged, move its card to `tracker.columns.needs_human`
+  with `/gogogo:dev` §8's Needs-you line, and carry on with the next. The
+  commit message
   says each that applies: *unreviewed* for a fix no round has reviewed, and
   *known defect* with the finding for one you could not fix. Name the finding
   in the issue's `/gogogo:dev` §7 report, within its rule for a public
   tracker, and record the stop for the run report.
-- A Hard Stop discovered mid-change → stop **that issue**, leave its branch,
-  record it, carry on with the next.
+- A Hard Stop, or a decision that belongs to a person and is not in the body,
+  discovered mid-change → stop **that issue**, leave its branch, move its card
+  to `tracker.columns.needs_human` with the Needs-you line, record it, carry
+  on with the next.
 - **When verification fails, fix forward, bounded.** Up to three attempts, and
   each must name a hypothesis that differs from the last. If you cannot say what
   is different about an attempt, stop there, whatever budget remains. After the
-  bound: abandon the branch unmerged, record what each attempt ruled out, move
-  the card back to `tracker.columns.back_to_queue`, and go on to the next
-  issue. One stubborn issue does not end the run. **An issue abandoned or
+  bound: abandon the branch unmerged, move the card to
+  `tracker.columns.needs_human`, put what each attempt ruled out in the issue
+  report under the Needs-you line, and go on to the next issue. One stubborn issue does not end the run. **An issue abandoned or
   skipped in this run is not taken again in the same run**, even though §1
   re-reads the queue and will list it.
 - A change that needs a two-licence apply (for example a migration on a shared
@@ -248,7 +252,8 @@ silent. Never echo a token.
 ## 9. Close the run
 
 One report: every issue taken with its outcome and merge commit, every issue
-skipped with the reason, anything left half-done with its branch, the stranded
+skipped with the reason, anything left half-done with its branch, every card
+moved to `tracker.columns.needs_human` with its Needs-you line, the stranded
 work from preflight, and anything the profile's `stop.extra` checks raised.
 
 ## Stop the whole run and ask when

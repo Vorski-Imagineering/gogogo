@@ -42,7 +42,7 @@ version, so the skills translate it into
 `python3 "${CLAUDE_PLUGIN_ROOT}/scripts/tracker.py"`.
 
 Column arguments may also be the profile's role keys: `queue`, and the keys of
-`tracker.columns` such as `in_progress` and `back_to_queue`. `fields --check`
+`tracker.columns` such as `in_progress` and `needs_human`. `fields --check`
 fails naming any column the profile uses that the live board lacks.
 
 A repo may name its own tool instead, as long as it meets this contract. A repo

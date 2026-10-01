@@ -222,6 +222,32 @@ class Legend(Case):
         self.assertIn("nothing covers 'none'", err)
 
 
+class NeedsHuman(Case):
+    """A profile naming tracker.columns.needs_human (gogogo#26) needs it covered."""
+
+    COLUMNS = 'columns = { in_progress = "In progress", back_to_queue = "Dev Ready" }'
+    WITH_IT = 'columns = { in_progress = "In progress", needs_human = "Human!Help!" }'
+    ROW = "| 🆘 | **needs you** | stopped; waiting for a person | Human!Help! |"
+
+    def setUp(self):
+        super().setUp()
+        text = profile_text()
+        assert self.COLUMNS in text
+        self.profile.write_text(text.replace(self.COLUMNS, self.WITH_IT), encoding="utf-8")
+
+    def test_uncovered_needs_human_column_makes_the_legend_unusable(self):
+        self.write(document([*ISSUE_HEADER, row("Work", 1, "⚪ —")]))
+        code = self.run_main({1: issue()})
+        self.assertEqual(code, rs.EXIT_UNUSABLE, self.out + self.err)
+        self.assertIn("nothing covers 'Human!Help!'", self.err)
+
+    def test_a_card_in_the_column_gets_its_mark(self):
+        legend = [*LEGEND_ROWS[:5], self.ROW, *LEGEND_ROWS[5:]]
+        self.write(document([*ISSUE_HEADER, row("Work", 1, "🆘 **needs you**")], legend=legend))
+        found = issue(column="Human!Help!", labels=["dev ready"])
+        self.assertEqual(self.run_main({1: found}), rs.EXIT_OK, self.out + self.err)
+
+
 class Derivation(Case):
     def says(self, state, found, *argv, **kw):
         code = self.check_row(state, found, *argv, **kw)
