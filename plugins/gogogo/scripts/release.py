@@ -13,10 +13,12 @@ an existing tag. The standard is references/versioning.md.
 
 The build needs full history and the base branch: a shallow clone counts only
 what it has, and a commit on another branch can share a count with one on the
-base. Both are refused. A re-run on an already tagged commit is a no-op.
+base. Both are refused. A re-run on an already tagged commit creates nothing;
+with --push it pushes the existing tag again, so a retry after a failed push
+still reaches the remote, and a remote that already has it is left as it is.
 
 Exit codes: 0 ok (including "already tagged"); 2 profile or usage error;
-3 refused; 4 tag created but not pushed.
+3 refused; 4 the tag exists here but not on the remote.
 
 Standard library only; the notes come from stage_sync.py's readers, imported.
 """
@@ -156,12 +158,24 @@ def cmd_tag(args, profile_path) -> int:
     # remote, and a push of a tag the remote already has changes nothing there.
     if args.push and not args.dry_run:
         pushed = subprocess.run(["git", "push", args.push, f"refs/tags/{name}"], capture_output=True, text=True)
+        if pushed.returncode != 0 and remote_commit(args.push, name) == sha:
+            # The remote has a tag of that name on this commit (another machine cut it): released.
+            print(f"{name} is already on {args.push}")
+            return EXIT_OK
         if pushed.returncode != 0:
             print(f"error: tagged {name} locally but the push failed; retry: "
                   f"git push {args.push} refs/tags/{name}\n{pushed.stderr.strip()}", file=sys.stderr)
             return EXIT_NOT_PUSHED
         print(f"pushed {name} to {args.push}")
     return EXIT_OK
+
+
+def remote_commit(remote: str, name: str) -> str | None:
+    """The commit `name` names on `remote`, or None when it has no such tag or cannot be read."""
+    proc = subprocess.run(["git", "ls-remote", remote, f"refs/tags/{name}^{{}}", f"refs/tags/{name}"],
+                          capture_output=True, text=True)
+    refs = dict(reversed(line.split("\t")) for line in proc.stdout.splitlines() if "\t" in line)
+    return refs.get(f"refs/tags/{name}^{{}}") or refs.get(f"refs/tags/{name}") if proc.returncode == 0 else None
 
 
 def message(name: str, sha: str, release: str, environment: str, profile: stage_sync.Profile) -> str:

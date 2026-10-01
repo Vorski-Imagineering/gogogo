@@ -164,6 +164,15 @@ class Tag(ReleaseRepo):
         self.assertIn("refs/tags/deploy-3", remote)
         self.assertEqual(self.tags(), ["deploy-3"])
 
+    def test_a_tag_another_machine_pushed_for_this_commit_is_released(self):
+        self.repo.git("tag", "-a", "deploy-3", "-m", "cut elsewhere")
+        self.repo.git("push", "-q", "origin", "refs/tags/deploy-3")
+        self.repo.git("tag", "-d", "deploy-3")
+        self.repo.git("tag", "-a", "deploy-3", "-m", "cut here")
+        code, out, err = self.run_main("tag", "--push", "origin")
+        self.assertEqual(code, 0, err)
+        self.assertIn("already on origin", out)
+
     def test_a_failed_push_keeps_the_local_tag_and_says_how_to_retry(self):
         code, _, err = self.run_main("tag", "--push", "nowhere")
         self.assertEqual(code, release.EXIT_NOT_PUSHED)

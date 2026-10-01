@@ -29,12 +29,14 @@ Each production deploy gets one annotated tag, `deploy-<build>`:
 - cut by `release.py tag --push origin`, **after** the deploy has succeeded
   (migrations, checks and static files all passed). The tag announces the
   release; a deploy that fails after tagging has already announced itself;
-- a re-run on the same commit is a no-op: the name is taken by that commit, so
-  it prints `already tagged` and exits 0, creating and pushing nothing. The
-  name taken by a *different* commit means history was rewritten, and is
+- a re-run on the same commit creates nothing: the name is taken by that
+  commit, so it prints `already tagged`. With `--push` it pushes that tag
+  again, so a re-run after a failed push still reaches the remote; a remote
+  that already has the tag on that commit is left as it is, and it exits 0.
+  The name taken by a *different* commit means history was rewritten, and is
   refused;
-- a failed push exits 4 with the local tag kept; the caller decides whether
-  that fails its deploy;
+- a push that fails exits 4 with the local tag kept; the caller decides
+  whether that fails its deploy;
 - a staging or dev deploy is not tagged;
 - older date-named `deploy-*` tags stay where they are. The first
   `deploy-<build>` release finds the newest of them as its previous tag, so its
@@ -132,6 +134,3 @@ succeeded.
 An annotated tag needs a tagger: a CI runner or a fresh deploy box with no git
 identity fails at `git tag`. Set one first (`git config user.name` and
 `user.email`, or `GIT_COMMITTER_NAME` and `GIT_COMMITTER_EMAIL`).
-
-A re-run after a failed push pushes the existing tag again; the remote is
-unchanged when it already has it.
