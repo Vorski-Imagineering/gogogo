@@ -8,6 +8,10 @@ lines (the settings), followed by `## ` sections (project knowledge the skills
 point at). A skill runs this before doing anything else, so a missing setting
 is a named error instead of a guess.
 
+With no --for it checks what every skill needs, except that `auto-test` is
+checked only when the profile has an [auto_test] table: a repo that never
+adopted auto-test still passes.
+
 Exit codes: 0 ok (warnings allowed), 2 no profile file, 3 profile unreadable or
 incomplete. Problems go to stderr, one per line, each naming the field.
 
@@ -41,7 +45,7 @@ FIELDS = {
     "tracker.code_repo": (str, SKILLS, "owner/repo that holds the code."),
     "tracker.public": (bool, SKILLS, "True if the tracker is readable by the public."),
     "tracker.ready_marker": (str, (SPEC, LOOP), "Label that marks an issue as specced and pickable."),
-    "tracker.tool": (str, (ONE, LOOP), "'shared' for the plugin's tracker.py, or a command for the repo's own tool meeting references/tracker-contract.md."),
+    "tracker.tool": (str, (ONE, LOOP, TEST), "'shared' for the plugin's tracker.py, or a command for the repo's own tool meeting references/tracker-contract.md."),
     "tracker.project_owner": (str, (), "Owner of the GitHub project board."),
     "tracker.project_number": (int, (), "Number of the GitHub project board."),
     "tracker.queue": (str, (LOOP,), "Column or label the loop works."),
@@ -74,6 +78,11 @@ FIELDS = {
     "preflight.extra": (list, (), "Extra checks before a run."),
     "stop.extra": (list, (), "Extra conditions that stop a whole run."),
     "notify": (str, (), "none | telegram."),
+    "auto_test.pass_column": (str, (TEST,), "Column a card moves to on PASS."),
+    "auto_test.fail_column": (str, (TEST,), "Column a card moves to on FAIL."),
+    "auto_test.fail_label": (str, (TEST,), "Label added on FAIL."),
+    "auto_test.human_label": (str, (TEST,), "Label added on NEEDS HUMAN."),
+    "auto_test.pass_closes": (bool, (TEST,), "True if PASS closes the issue."),
 }
 
 # Body sections (## headings) a skill reads, by skill.
@@ -81,7 +90,12 @@ SECTIONS = {
     "Recon traps": (SPEC, ONE),
     "Lane constraints": (SPEC, ONE),
     "superpowers boundary": SKILLS,
+    "Test data": (TEST,),
 }
+
+# The `### ` headings `## Test data` must have; each may say "None".
+TEST_DATA_HEADINGS = ("Running build", "Finding the change", "Sandbox and fixtures",
+                      "Optional lanes", "Extra step rules", "Never call")
 
 ROLES = ("pre-merge", "pre-production", "production")
 
@@ -202,10 +216,42 @@ def environment(settings, name):
     return None
 
 
+def _check_auto_test(settings, sections):
+    """auto-test tests on the `verify.human` environment, in the column of its one stage."""
+    errors = []
+    verify = settings.get("verify") if isinstance(settings.get("verify"), dict) else {}
+    name = verify.get("human")
+    env = environment(settings, name) if isinstance(name, str) else None
+    if env is not None:
+        for key in ("url", "writes"):
+            if not env.get(key):
+                errors.append(f"verify.human: environment '{name}' has no {key}")
+        stages = settings.get("stages") if isinstance(settings.get("stages"), list) else []
+        held = [s for s in stages if isinstance(s, dict) and s.get("environment") == name]
+        if not held:
+            errors.append(f"stages: no stage has environment '{name}', so there is no column to test")
+        elif len(held) > 1:
+            errors.append(f"stages: {len(held)} stages have environment '{name}'; auto-test needs exactly one")
+    text = sections.get("Test data")
+    if text:
+        headings = {line[4:].strip() for line in text.splitlines() if line.startswith("### ")}
+        for heading in TEST_DATA_HEADINGS:
+            if heading not in headings:
+                errors.append(f"section '## Test data': no '### {heading}'")
+    return errors
+
+
 def check(settings, sections, skill=None):
-    """Return (errors, warnings); each entry starts with the field it is about."""
+    """Return (errors, warnings); each entry starts with the field it is about.
+
+    With no skill, every skill's needs are checked, and auto-test's only when the
+    settings have an [auto_test] table (a repo that never adopted it must pass).
+    """
     errors, warnings = [], []
-    wanted = (skill,) if skill else SKILLS
+    if skill:
+        wanted = (skill,)
+    else:
+        wanted = tuple(s for s in SKILLS if s != TEST or "auto_test" in settings)
 
     for path, (kind, required_by, meaning) in FIELDS.items():
         value, present = _lookup(settings, path)
@@ -237,6 +283,8 @@ def check(settings, sections, skill=None):
                 errors.append(f"lanes[{i}] ({lane['name']}): needs run (a command) or env (where it is checked)")
 
     errors.extend(_check_environments(settings))
+    if TEST in wanted:
+        errors.extend(_check_auto_test(settings, sections))
 
     for path in _leaf_paths(settings):
         if path not in FIELDS:
@@ -270,7 +318,8 @@ def find_profile(start=None):
 def main(argv=None):
     parser = argparse.ArgumentParser(description="Check a repo's process profile.")
     parser.add_argument("--for", dest="skill", choices=SKILLS,
-                        help="check only what this skill needs (default: every skill)")
+                        help="check only what this skill needs (default: every skill, and auto-test "
+                             "only when the profile has [auto_test])")
     parser.add_argument("--path", help=f"profile file (default: the nearest {DEFAULT_PATH} at or "
                                        "above this folder, within the repo)")
     parser.add_argument("--show", action="store_true", help="print the settings as JSON on stdout")
