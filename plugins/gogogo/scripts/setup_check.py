@@ -16,6 +16,7 @@ changed or moved. `/gogogo:setup` uses it and does the fixing, with approval.
 import argparse
 import json
 import re
+from collections import Counter
 import subprocess
 import sys
 from pathlib import Path
@@ -177,9 +178,9 @@ def check_hard_stop_source(root, source, rep):
 def check_tracker(root, settings, rep):
     tracker = settings.get("tracker") or {}
     repo = tracker.get("issues_repo")
-    own_repos = tuple(dict.fromkeys(r for r in (tracker.get("issues_repo"), tracker.get("code_repo")) if r))
     if not repo:
         return
+    own_repos = tuple({r.lower(): r for r in (repo, tracker.get("code_repo")) if r}.values())
     if run("gh", "auth", "status").returncode != 0:
         rep.fail("tracker: gh login", "gh is not logged in", "`gh auth login`, then `gh auth setup-git`")
         return
@@ -386,19 +387,17 @@ def check_board_hygiene(cards, recovered, options, expected, rep):
 
 def _counted(names):
     """'a ×2, b ×1': most common first, then by name."""
-    counts = {}
-    for n in names:
-        counts[n] = counts.get(n, 0) + 1
-    return ", ".join(f"{n} ×{k}" for n, k in sorted(counts.items(), key=lambda kv: (-kv[1], kv[0])))
+    return ", ".join(f"{n} ×{k}" for n, k in sorted(Counter(names).items(), key=lambda kv: (-kv[1], kv[0])))
 
 
 def check_board_origin(cards, own_repos, queue, rep):
     """Where the board's cards come from, which the workflow check cannot say. `cards`: flattened
     cards; `own_repos`: issues_repo and code_repo; `queue`: the queue column, or empty."""
-    own = {r.lower() for r in own_repos if r}
+    own = {r.lower() for r in own_repos}
     owned = " and ".join(own_repos)
-    unreadable = [c for c in cards if c.get("kind") == "Unknown"
-                  or (c.get("kind") in ("Issue", "PullRequest") and not c.get("repo"))]
+    # Content this login cannot read comes back null, so flatten takes the kind from the item's
+    # type (ISSUE, PULL_REQUEST, REDACTED) and has no repo. Only a draft has no repo by design.
+    unreadable = [c for c in cards if not c.get("repo") and c.get("kind") not in ("DraftIssue", "DRAFT_ISSUE")]
     if unreadable:
         rep.info("tracker: card origin", f"{len(unreadable)} card(s) have no content this login can read "
                  "(deleted, or in a repo it cannot see), so their repo is unknown")

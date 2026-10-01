@@ -368,8 +368,13 @@ class Audit(unittest.TestCase):
         self.assertEqual(self._origin([self._card(None, None, "Backlog", None, "DraftIssue")]).rows, [])
 
     def test_unreadable_cards_are_reported_not_passed(self):
-        rep = self._origin([self._card(None, None, "Backlog", None, "Unknown")])
-        self.assertEqual([(r["level"], r["check"]) for r in rep.rows], [("INFO", "tracker: card origin")])
+        import tracker
+        for kind in ("ISSUE", "PULL_REQUEST", "REDACTED", None):
+            card = tracker.flatten({"id": "i", "type": kind, "content": None,
+                                    "fieldValueByName": {"name": "Backlog"}})
+            rep = self._origin([card])
+            self.assertEqual([(r["level"], r["check"]) for r in rep.rows],
+                             [("INFO", "tracker: card origin")], kind)
 
     def test_closed_own_cards_in_the_queue_warn_and_others_do_not(self):
         cards = [self._card(1, self.OWN[0], "Dev Ready", "CLOSED"),
