@@ -37,16 +37,18 @@ gh issue list --repo <tracker.issues_repo> --state open --search "<two to four k
 When one is a likely match, show it and ask with `AskUserQuestion`: **add these
 findings as a comment on #<n>**, or **file a new issue**.
 
-- Comment: write the body (step 2's layout, step 3's removals) to a file, show
-  it, and on the person's yes run
-  `gh issue comment <n> --repo <tracker.issues_repo> --body-file <file>`. Then
+- Comment: write the body (step 2's layout, step 3's removals) to a file and
+  show and ask as step 4 does. On **post it**, run
+  `gh issue comment <n> --repo <tracker.issues_repo> --body-file <file>`, then
+  report the comment's link and what step 3 removed, and stop. On **don't
+  post** or a declined question, post nothing, say where the file is, and
   stop. Never edit another issue's body; it may be a spec.
-- File new: go on.
+- File new, or the question declined: go on.
 
 ## 2. Draft
 
-Write the draft to a file in the scratchpad. The title is `<area>: <what>`, in
-the style of the tracker's existing titles. The body has these headings and no
+Write the draft to a file in the scratchpad. The title is `<area>: <what>`,
+in the style of the titles step 1's search returned, if it returned any. The body has these headings and no
 others, in this order:
 
 ```markdown
@@ -75,11 +77,16 @@ this body over as the issue's original report, unchanged.
 ## 3. Public trackers
 
 When `tracker.public` is true, remove from the title and the body, before the
-person sees the draft:
+person sees the draft, and again after every change to it:
 
-- absolute local paths (`/Users/`, `/home/`, `C:\`);
-- any `owner/repo` other than `tracker.issues_repo` and `tracker.code_repo`;
-- hostnames and IP addresses;
+- any path outside this repo: absolute (`/Users/`, `/home/`, `/tmp/`,
+  `/private/`, `C:\`), home-relative (`~/`), or into another checkout. Paths
+  inside this repo are written relative to its root;
+- other repos and projects, by any name: an `owner/repo` other than
+  `tracker.issues_repo` and `tracker.code_repo`, or a bare repo, project or
+  folder name the session met outside this repo;
+- hostnames and IP addresses of machines and services. Links to public
+  documentation stay;
 - anything that looks like a token or key, and email addresses;
 - people's names (use their role).
 
@@ -90,7 +97,7 @@ Keep a list of what you removed. It goes in your reply, never in the issue.
 Show the title and the whole body, then ask with `AskUserQuestion`: **file
 it**, **change something**, or **don't file**.
 
-- Change something: edit the draft and ask again.
+- Change something: edit the draft, run step 3 on it again, and ask again.
 - Don't file, or the question is declined: file nothing, say where the draft
   file is, and stop.
 
@@ -114,8 +121,12 @@ python3 "${CLAUDE_PLUGIN_ROOT}/scripts/tracker.py" show <n>
 ```
 
 Run it up to six times, five seconds apart, until it prints a `column:` line
-that is not `on board, no status`. Still `not on project …` after that: add it,
-then read it back the same way.
+that is not `on board, no status`. Then, by what the last run printed:
+
+- a column: report it;
+- still `on board, no status`: report that the board has not placed it yet;
+- still `not on project …`: add it, then read it back the same way;
+- a non-zero exit with any other message: report that line and add nothing.
 
 ```bash
 gh project item-add <tracker.project_number> --owner <tracker.project_owner> --url <issue url>
