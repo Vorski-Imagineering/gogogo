@@ -48,7 +48,7 @@ in its place in the report, and the others still run.
    git rev-parse --show-toplevel        # its basename is <repo>
    git --no-optional-locks status --porcelain=v2 --branch
    ```
-   Its `# branch.head` line is `<branch>` (`(detached)` on a detached HEAD),
+   Its `# branch.head` line is `<branch>`,
    `# branch.oid` the commit (its first 7 characters), `# branch.upstream`
    `<upstream>`, and `# branch.ab +<a> -<b>` the counts. Every line not
    starting `#` is one uncommitted change. On a detached HEAD the branch reads
@@ -124,8 +124,9 @@ These rules apply, in order.
 
 ## Template
 
-The report follows this layout line for line. A section with nothing to show
-prints `none`. `Worktrees, detached:` is left out when there are none.
+The report follows this layout line for line. The first line's ending after
+the uncommitted count is the one Gather step 1 picks; the template shows the
+case with counts. A section with nothing to show prints `none`. `Worktrees, detached:` is left out when there are none.
 
 ```
 <repo> · <branch> @ <short sha> · <n> uncommitted · <a> ahead / <b> behind <upstream>, as last fetched
