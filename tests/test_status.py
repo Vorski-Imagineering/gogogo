@@ -75,6 +75,7 @@ class Skill(unittest.TestCase):
         self.assertIn("tracker.columns.in_progress", pc.FIELDS)
         stage_keys = re.findall(r"`stages\[\]\.([a-z_]+)`", skill_text())
         self.assertIn("column", stage_keys)
+        self.assertIn("environment", stage_keys)
         for key in stage_keys:
             self.assertIn(key, pc.STAGE_KEYS, key)
         for setting in sorted(named):
