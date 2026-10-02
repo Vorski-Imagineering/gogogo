@@ -250,11 +250,40 @@ card enters a stage with a `tag`; `assign` means assign them now; `none` means
 leave assignees alone. Leave the issue **open**, and never move a card to Done
 yourself. Close only when asked.
 
-When you did merge, confirm it landed before commenting or moving anything:
+### Name the issue without closing it
+
+A closing keyword (`Fixes`, `Closes`, `Resolves` and their forms) in front of
+an issue reference closes the issue when the merge reaches the default branch,
+against "leave it open", and the board may then move the card to Done.
+
+- In every pull request title and body, commit message and squash body, name
+  the issue as `Refs #<n>` (`Refs <tracker.issues_repo>#<n>` when it differs
+  from `tracker.code_repo`). Never put a closing keyword in front of an issue
+  reference, and never link the pull request to the issue in its Development
+  sidebar.
+- Before `gh pr merge`, this must print `[]`:
+  ```bash
+  gh pr view <pr> [--repo <code_repo>] --json closingIssuesReferences -q '[.closingIssuesReferences[].number]'
+  ```
+  If it does not, rewrite the body (`gh pr edit <pr> --body-file`) and read it
+  again. If it is still not `[]` (a sidebar link), merge anyway: the check
+  after the merge reopens the issue.
+
+When you did merge, confirm it landed, and that the issue is still open, before
+commenting or moving anything:
 
 ```bash
-python3 "${CLAUDE_PLUGIN_ROOT}/scripts/verify_merged.py" <pr> <base branch> [--repo <code_repo>]
+python3 "${CLAUDE_PLUGIN_ROOT}/scripts/verify_merged.py" <pr> <base branch> [--repo <code_repo>] --open <tracker.issues_repo>#<n>
 ```
+
+Whatever the exit, reopen every issue a `CLOSED` line names
+(`gh issue reopen <n> --repo <tracker.issues_repo>`) and confirm that
+`gh issue view <n> --repo <tracker.issues_repo> --json state -q .state` reads
+`OPEN`. Exit 4 means the merge landed and the issue was closed: hand back as
+merged, and say in the §7 report how it was closed (the `CLOSED` line's own
+words) and that it was reopened. If the reopen fails, still hand back as
+merged, with `**Needs you:** reopen #<n>` as that report's first line. When the
+output also names a missing `Ships-issue`, also do what exit 3 says (below).
 
 ### When you merge with `gh`: the squash body carries the link
 
@@ -281,8 +310,9 @@ the link itself; never write one around it. Otherwise merge as before.
    { git log --reverse --format='* %s' origin/<base>..HEAD; echo; cat <scratch>/trailers.txt; } > <scratch>/squash-body.txt
    gh pr merge <pr> --squash --delete-branch --body-file <scratch>/squash-body.txt
    ```
-3. Verify with `--ships <tracker.issues_repo>#<n>` added to the
-   `verify_merged.py` call. Exit 3 means the merge landed but the link did not
+3. Verify with `--profile <profile> --ships <tracker.issues_repo>#<n>` added
+   to the `verify_merged.py` call, next to its `--open`. Exit 4 is handled as
+   above. Exit 3 means the merge landed but the link did not
    survive: hand back as merged, and say in the report that this card will not
    move on its own when its tag ships.
 
