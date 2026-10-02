@@ -266,7 +266,8 @@ python3 "${CLAUDE_PLUGIN_ROOT}/scripts/verify_merged.py" <pr> <base branch> [--r
 Confirm **MERGED** before commenting on the issue or moving any card. A run
 that reports six merges and delivered five is worse than one that stops at the
 first failure: the board says done, the branch says otherwise, and nobody looks
-again. NOT-MERGED, or "cannot tell", stops the whole run.
+again. NOT-MERGED, or "cannot tell", stops the whole run, once every issue a
+`CLOSED` line names has been reopened as `/gogogo:dev` §8 says.
 
 When the link was written, add it to the check:
 

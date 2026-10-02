@@ -262,8 +262,9 @@ class Open(Repo):
         sha = self.merge("Fix it\n\nCloses acme/issues#7\nCloses acme/issues#8")
         code, out = self.verify(sha, "--open", "acme/issues#7", "--open", "acme/issues#8")
         self.assertEqual(code, 2, out)
+        self.assertIn("acme/issues#7 is named by a closing reference", out)
         self.assertIn("acme/issues#8 is named by a closing reference", out)
-        self.assertLessEqual(self.slept, vm.CLOSE_WAIT // vm.CLOSE_STEP)
+        self.assertEqual(self.slept, vm.CLOSE_WAIT // vm.CLOSE_STEP)
 
     def test_cannot_tell_does_not_print_merged(self):
         sha = self.merge("Fix it")

@@ -284,7 +284,9 @@ something else did): after the reopen, hand back as merged; when the output
 also names a missing `Ships-issue`, also do what exit 3 says (below). Say in
 the §7 report that the merge closed the issue and it was reopened. If the
 reopen fails, still hand back as merged, with `**Needs you:** reopen #<n>` as
-the report's first line.
+the report's first line. On any other exit, the reopen comes first and the
+exit is then handled as usual; a reopen that failed is named in what you
+report.
 
 ### When you merge with `gh`: the squash body carries the link
 
