@@ -320,11 +320,12 @@ each, `<repo>` being the name part of `tracker.code_repo`:
 - `<repo> #<n> started: <title>`;
 - after the merge is verified: `<repo> #<n> merged (<short sha>) -> <column>`;
 - `<repo> #<n> needs you -> <tracker.columns.needs_human>: <the Needs-you line>`;
-- `<repo> auto-dev: run closed: <a> merged, <b> need you, <c> skipped`, also
-  when a run that tried to send *run started* stops for any reason before §9
-  (a stop in § *Stop the whole run*, or §1's list failing on a re-read), with
-  `, stopped: <reason>` added. Each run sends it once. A run that never got
-  as far as *run started* sends nothing.
+- `<repo> auto-dev: run closed: <a> merged, <b> need you, <c> skipped`,
+  whenever a run that tried to send *run started* ends: at §9, or when it
+  stops (§ *Stop the whole run*, or §1's list failing on a re-read), with
+  `, stopped: <reason>` added. If the person then has it go on, its later
+  messages follow, and §9 closes it again. A run that never got as far as
+  *run started* sends nothing.
 
 A `send` that exits non-zero goes into this report as `notify failed: <its
 line>`, and the run goes on. Never put a token on a command line or in a report.
@@ -335,8 +336,8 @@ One report: every issue taken with its outcome and merge commit, every issue
 skipped with the reason, anything left half-done with its branch, every card
 moved to `tracker.columns.needs_human` with its Needs-you line, the stranded
 work from preflight, and anything the profile's `stop.extra` checks raised.
-Then, when this run tried to send *run started* and has not already sent
-*run closed* for a stop, send *run closed* (§8).
+Then send *run closed* (§8), unless the last message this run tried to send
+was already a *run closed* for a stop.
 
 ## Stop the whole run and ask when
 

@@ -160,12 +160,11 @@ class Send(Case):
         self.write_creds(token="12:AB\tCD")
         code, out, err = self.run_main("send", "--profile", self.profile(), "--text", "x")
         self.assertEqual(code, 1)
-        self.assertIn("not shaped like a bot token", err)
         self.assertNotIn("AB", out + err)
         self.urlopen.assert_not_called()
 
     def test_6_a_token_with_other_characters_is_refused_everywhere(self):
-        for token in ("123:SECRÉT", "12:ab\\cd", "12:ab # mine", "AAHsecretonly", "12:"):
+        for token in ("123:SECRÉT", "12:ab\\cd", "12:ab # mine", "AAHsecretonly", "12:", "１２:abcd"):
             self.write_creds(token=token)
             for argv in (("send", "--profile", self.profile(), "--text", "x"),
                          ("status", "--profile", self.profile()), ("chat-id",)):

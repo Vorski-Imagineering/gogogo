@@ -20,9 +20,10 @@ scrubbed out.
 Exit codes:
   send     0 sent, off, or no credentials; 1 the send failed, or the token cannot be sent;
            2 usage (empty text, no profile, an unknown `notify` value)
-  status   0 off or ready; 1 failed; 3 no credentials; 2 usage
+  status   0 off or ready; 1 failed (a call, or a token that cannot be sent); 3 no credentials; 2 usage
   init     0 created or already there
-  chat-id  0 at least one chat; 1 none, the call failed, or --save named an unlisted chat;
+  chat-id  0 at least one chat; 1 none, the call failed or could not be made, or --save named
+           an unlisted chat;
            2 no token, or an empty --save
 
 Standard library only; imports `profile_check` from this folder, so a vendored
@@ -68,7 +69,7 @@ class UsageError(Exception):
 
 
 class SendError(Exception):
-    """A call to the transport was made and failed."""
+    """A call to the transport failed, or could not be made (a token that cannot be sent)."""
 
 
 def _scrub(text, token):
@@ -105,7 +106,7 @@ def credentials():
 
 # --- transport -------------------------------------------------------------
 
-TOKEN_SHAPE = re.compile(r"\d+:[A-Za-z0-9_-]+")
+TOKEN_SHAPE = re.compile(r"[0-9]+:[A-Za-z0-9_-]+")
 
 
 def _check_token(token):
