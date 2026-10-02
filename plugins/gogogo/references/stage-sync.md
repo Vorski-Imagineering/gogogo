@@ -113,12 +113,12 @@ The `deploy-*` tags it reacts to are cut by `release.py tag`
 The workflow runs a pinned copy, not the plugin: CI must not follow gogogo's
 `main` unpinned, and the board token should not cross repos.
 
-1. Copy `tracker.py`, `profile_check.py` and `stage_sync.py` from **one**
-   gogogo commit into one folder of the repo (they import each other from
-   their own folder).
+1. Copy `tracker.py`, `profile_check.py`, `stage_sync.py` and `notify.py`
+   from **one** gogogo commit into one folder of the repo (they import each
+   other from their own folder).
 2. Record that commit and each file's sha256 in a pin file next to them.
 3. Keep a test in the repo that fails when a copy no longer matches its pin.
-4. To refresh, copy all three again from one newer commit and rewrite the pin.
+4. To refresh, copy all four again from one newer commit and rewrite the pin.
 
 CI needs Python 3.11 or later (`tomllib`).
 
@@ -177,6 +177,21 @@ jobs:
           ARGS=(--profile .agents/dev-process.md sync --tag "$TAG" --main-ref origin/main)
           if [ "$DRY_RUN" = "true" ]; then ARGS+=(--dry-run); fi
           python3 <vendored folder>/stage_sync.py "${ARGS[@]}"
+      - name: Tell a person what shipped
+        if: ${{ github.event.inputs.dry_run != 'true' }}
+        env:
+          TAG: ${{ github.event.inputs.tag || github.ref_name }}
+          GH_TOKEN: ${{ secrets.STAGE_SYNC_TOKEN }}
+          # Unset secrets: notify.py prints why messages are off and passes.
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+        run: |
+          python3 <vendored folder>/stage_sync.py --profile .agents/dev-process.md \
+            shipped --tag "$TAG" --titles > message.txt \
+            || printf 'Tag %s pushed (issue list unavailable)\n' "$TAG" > message.txt
+          # A failed send must never turn the release's run red.
+          python3 <vendored folder>/notify.py send --profile .agents/dev-process.md < message.txt \
+            || echo "::warning::notify failed: the cards moved; the message did not go"
 ```
 
 Replace `<vendored folder>` with the folder from *Vendoring*.
@@ -191,5 +206,13 @@ python3 <vendored folder>/stage_sync.py --profile .agents/dev-process.md \
   || printf 'Tag %s pushed (issue list unavailable)\n' "$TAG" > message.txt
 ```
 
-Then send `message.txt` with the repo's own transport. A listing that fails
-must never cost the notification itself, hence the fallback.
+Then send it with the same sender auto-dev uses:
+
+```bash
+python3 <vendored folder>/notify.py send --profile .agents/dev-process.md < message.txt
+```
+
+It sends by the profile's `notify`, with `TELEGRAM_BOT_TOKEN` and
+`TELEGRAM_CHAT_ID` from the job's secrets; with `notify` off or the secrets
+unset it prints why and exits 0. A listing that fails must never cost the
+notification itself, hence the fallback.

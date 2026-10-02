@@ -18,7 +18,8 @@ repo's settings as the profile and `.claude/settings.json` give them, `missing`
 where there are none. Show that block to the user first, as printed. Then come
 the checks: each line is `PASS`, `FAIL` (with the fix after `->`), `WARN` or
 `INFO`. Show the user the whole list, grouped: what is fine, what is broken,
-what to look at. Exit 0 means nothing failed.
+what to look at. Exit 0 means nothing failed. The `notify` row is always
+"what to look at", never a blocker: a repo runs the same with messages off.
 
 Among the checks after the block, the one that decides whether setup can go on
 is `git: clean main`. Setup commits to the repo, so it starts
@@ -183,6 +184,31 @@ What each fix involves:
 - **`CLAUDE.md` does not point at the profile.** Add a short section saying
   the process skills come from the `gogogo` plugin and this repo's specifics
   are in `.agents/dev-process.md`.
+- **Notifications** (the `notify` row). Telegram messages tell a person when
+  an unattended run starts, changes state and closes. They are optional.
+  - `INFO notify: off`: ask once with `AskUserQuestion`: set up Telegram
+    messages for unattended runs, or no messages. On no, write nothing; say
+    messages stay off and that `/gogogo:setup` can set them up later.
+  - On yes, or on `WARN notify: telegram, but no bot credentials`:
+    1. Run `python3 "${CLAUDE_PLUGIN_ROOT}/scripts/notify.py" init`. Tell the
+       person to make a bot (in Telegram, **@BotFather**, `/newbot`; a bot
+       made for the Telegram channel plugin works too) and to paste its token
+       after `TELEGRAM_BOT_TOKEN=` in the file `init` printed, themselves.
+       Never ask for the token in the chat, and never print or read that
+       file: the transcript is stored on disk.
+    2. Ask them to send the bot any message, then run
+       `python3 "${CLAUDE_PLUGIN_ROOT}/scripts/notify.py" chat-id`. Show the
+       chats it prints; once they say which one is theirs, run
+       `python3 "${CLAUDE_PLUGIN_ROOT}/scripts/notify.py" chat-id --save <its id>`.
+    3. Only when the profile does not already say `notify = "telegram"`: ask,
+       then set it in `.agents/dev-process.md` and commit it like setup's
+       other profile changes.
+    4. Run `python3 "${CLAUDE_PLUGIN_ROOT}/scripts/notify.py" send --text "<repo>: notifications on"`,
+       and re-run the check: the row must be `PASS notify: telegram: bot @… -> …`.
+  - `WARN notify: telegram: <reason>`: show the reason. The usual causes are a
+    wrong token (paste it again) and a chat the bot cannot reach (send the bot
+    a message, then `chat-id`, and `chat-id --save <id>` for the chat the
+    person confirms).
 
 ## Reviewing a repo that is already set up
 

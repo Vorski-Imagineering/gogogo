@@ -265,6 +265,26 @@ def check_tracker(root, settings, rep):
     check_board_tidiness(shared, repo, rep)
 
 
+def check_notify(profile, rep):
+    """How run messages reach a person on this machine. Never sends, never FAILs."""
+    import notify  # noqa: E402  (sibling script)
+    try:
+        state, line, _ = notify.status(str(profile))
+    except notify.UsageError as exc:
+        rep.warn("notify", str(exc))
+        return
+    detail = line.split(": ", 1)[1] if line.startswith("notify: ") else line
+    if state == notify.OFF:
+        rep.info("notify", "off (no messages); /gogogo:setup can set up Telegram")
+    elif state == notify.READY:
+        rep.ok("notify", detail)
+    elif state == notify.NO_CREDENTIALS:
+        rep.warn("notify", "telegram, but no bot credentials on this machine: messages are off here "
+                 "-> /gogogo:setup walks you through it")
+    else:
+        rep.warn("notify", detail)
+
+
 def numbers(items, limit=10):
     shown = ", ".join(f"#{i['number']}" for i in items[:limit])
     return shown + (f" and {len(items) - limit} more" if len(items) > limit else "")
@@ -719,6 +739,7 @@ def main(argv=None):
         check_release(settings, rep)
         check_hard_stop_source(root, (settings.get("hard_stops") or {}).get("source"), rep)
         check_tracker(root, settings, rep)
+        check_notify(path, rep)
     check_local_skills(root, rep)
     check_claude_md(root, rep)
 

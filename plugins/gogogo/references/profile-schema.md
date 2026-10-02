@@ -95,7 +95,7 @@ no skill requires it; a skill that finds it uses it.
 | `handback.reporter` | str | `dev`, `auto-dev` | trailer / assign / none. trailer: each merge writes a Ships-issue trailer naming the reporter, and stage sync assigns them when the card enters a stage with a tag. |
 | `preflight.extra` | list | optional | Extra checks before a run. |
 | `stop.extra` | list | optional | Extra conditions that stop a whole run. |
-| `notify` | str | optional | none / telegram. |
+| `notify` | str | optional | none / telegram. Optional; absent means none. telegram: sent by scripts/notify.py; bot token and chat id from TELEGRAM_BOT_TOKEN and TELEGRAM_CHAT_ID in the environment or ~/.claude/gogogo/notify.env, never in the profile. |
 | `auto_test.pass_column` | str | `auto-test` | Column a card moves to on PASS. |
 | `auto_test.fail_column` | str | `auto-test` | Column a card moves to on FAIL. |
 | `auto_test.fail_label` | str | `auto-test` | Label added on FAIL. |
