@@ -93,16 +93,16 @@ draft, and again after every change to it. Remove:
   wherever it points. The rule on names above applies inside a kept link too;
 - anything that looks like a token or key, and email addresses;
 - people's names (use their role);
-- anything else not known to be safe, such as customer or business data in
+- *anything else* not known to be safe, such as customer or business data in
   command output. The kinds above are the usual ones, not the only ones.
 
 Keep a list of what you removed, in your own reply and never in the draft
 file: each item's kind, where it was, and the removed text. A token, key,
-email address, secret link, or anything removed only because it was not known
-to be safe is named by kind and place only (*a token, in the second
-finding*). Step 4 shows it with the draft. Something the person, having
-seen that list, tells you to keep is theirs to publish: put it back and do not
-remove it again. Tokens, keys and secret links are never put back.
+email address, share, preview, signed or secret link, or an item removed
+under *anything else* is named by kind and place only (*a token, in the
+second finding*), and is never put back. Step 4 shows the list with the draft.
+Any other item the person, having seen it, tells you to keep is theirs to
+publish: put it back and do not remove it again.
 
 ## 4. Show and ask
 
@@ -114,7 +114,8 @@ comment on #<n>*), **change something**, or **don't post**.
 - Change something: edit the draft, or change the target (a new issue then
   needs step 2's title), run step 3 on it again, and ask again.
 - A target outside `tracker.issues_repo`, new issue or comment, is refused:
-  say so and ask again, changing nothing.
+  say so, keep the current target, apply the rest of the change, and ask
+  again.
 - Don't post, or the question is declined: post nothing, say where the draft
   file is, and stop.
 
