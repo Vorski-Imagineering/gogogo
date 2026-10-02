@@ -21,7 +21,7 @@ When invoked with `--triage-only` (or asked for a preview), do the preflight
 checks that read (not the ones that need a browser or bypass mode), run §1 and
 §2, and stop. Report every issue in the queue with **take** or **skip** and the
 reason, citing the Approvals row or the missing decision. Create no branch, move
-no card, post nothing.
+no card, post nothing, send no message.
 
 ## Before anything: preflight
 
@@ -68,18 +68,25 @@ means finished work sits unverified while you go and ask.
    `<tracker.tool> fields --check` must exit 0, and every column in the
    profile's `stages` and `tracker.columns` must be in its output. A missing
    column would make every hand-back fail after its merge.
-7. **A logged-in browser on the pre-merge environment** (`verify.session_url`,
+7. **Messages.**
+   ```bash
+   python3 "${CLAUDE_PLUGIN_ROOT}/scripts/notify.py" status
+   ```
+   Exit 0 with `notify: off`: say nothing. Exit 0 otherwise: messages will
+   send. Exit 1 or 3: put its line once at the top of the run report and go
+   on. Messages are a convenience, never a reason to stop.
+8. **A logged-in browser on the pre-merge environment** (`verify.session_url`,
    or the first `verify.agent` environment's `session_url`). A redirect to a
    login page → stop the whole run and ask. Do not decide that other coverage
    stands in for it; that decision belongs to whoever answers. Note which user
    the session is.
-8. **Stranded work, reported, not acted on:**
+9. **Stranded work, reported, not acted on:**
    ```bash
    python3 "${CLAUDE_PLUGIN_ROOT}/scripts/stranded_work.py" --base <integration.base>
    ```
    List what it prints at the top of the run report. Never delete, merge or
    rebase any of it.
-9. **The profile's `preflight.extra`**, each as it says. A check that says
+10. **The profile's `preflight.extra`**, each as it says. A check that says
    "report only" is reported and never acted on.
 
 ## 1. Select the queue
@@ -290,10 +297,26 @@ new tests went red, what review found, what the real run showed, the merge
 commit, the card's new column. The user is not watching every step; this log is
 how they stay able to stop you. Then return to §1: the board may have moved.
 
-When the profile has `notify`, send one short message per change of state (a
-skip, an issue started, a merge verified, a retreat, the run closed), only
-**after** the thing is true. A failed send never stops the run and is never
-silent. Never echo a token.
+Send one short message per change of state, only **after** the thing is true,
+each with:
+
+```bash
+python3 "${CLAUDE_PLUGIN_ROOT}/scripts/notify.py" send --text "<message>"
+```
+
+The script does nothing when the profile's `notify` is off or this machine has
+no credentials, so call it the same way in every repo. One plain-text line
+each, `<repo>` being the name part of `tracker.code_repo`:
+
+- after preflight passes: `<repo> auto-dev: run started on <hostname>, <k> issues in "<tracker.queue>"`;
+- `<repo> #<n> skipped: <reason>`;
+- `<repo> #<n> started: <title>`;
+- after the merge is verified: `<repo> #<n> merged (<short sha>) -> <column>`;
+- `<repo> #<n> needs you -> <tracker.columns.needs_human>: <the Needs-you line>`;
+- `<repo> auto-dev: run closed: <a> merged, <b> need you, <c> skipped`.
+
+A `send` that exits 1 goes into this report as `notify failed: <its line>`,
+and the run goes on. Never put a token on a command line or in a report.
 
 ## 9. Close the run
 
@@ -328,4 +351,10 @@ integration and merging follow this skill and the profile. See the profile's
 ## Claude-specific
 
 - `require_unattended.sh` reads the session transcript for `bypassPermissions`.
+- **Launching.** A skill cannot name the session it runs in; only `-n` at
+  launch does. Start an unattended run with:
+  ```bash
+  claude -n "$(basename "$(git rev-parse --show-toplevel)")-autodev" --permission-mode bypassPermissions "/gogogo:auto-dev"
+  ```
+  The name is what `/resume` and the terminal title show.
 - `/code-review high` and the `claude-in-chrome` tools, as in `/gogogo:dev`.

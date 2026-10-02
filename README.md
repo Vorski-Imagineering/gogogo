@@ -62,8 +62,11 @@ repo first ([Adopting it in a repo](#adopting-it-in-a-repo), step 1).
    its questions now is what lets the run go on later without asking.
 2. **`/gogogo:auto-dev`** in a session started without permission prompts:
    ```bash
-   claude --permission-mode bypassPermissions "/gogogo:auto-dev"
+   claude -n "$(basename "$(git rev-parse --show-toplevel)")-autodev" --permission-mode bypassPermissions "/gogogo:auto-dev"
    ```
+   The `-n` name is what `/resume` and the terminal title show for the run.
+   Telegram messages when it starts, changes state and closes are optional:
+   `/gogogo:setup` sets them up, and a run without them works the same.
    It takes every issue in `Dev Ready`, one at a time: branch, build, test,
    review, verify, merge, move the card, next. An issue it cannot finish alone
    (a failed check, a fix it could not prove) goes to the `Human!Help!` column
@@ -177,6 +180,7 @@ Scripts the skills call, all in `plugins/gogogo/scripts/`:
 - `verify_merged.py`: confirms a PR's merge is really on the base branch.
 - `stage_sync.py`: writes the `Ships-issue` link at merge, and moves cards to a stage when a tag ships their commits (run by a repo's CI).
 - `stranded_work.py`: finds branches holding work no open issue points to.
+- `notify.py`: sends a run's messages by the profile's `notify` (Telegram today); off, or no credentials on the machine, sends nothing.
 - `require_unattended.sh`: refuses to start the loop unless the session can run without prompts.
 - `setup_check.py`: the read-only check behind `/gogogo:setup`.
 - `roadmap_status.py`: compares a roadmap document's marks with the tracker, and rewrites the ones that disagree with `--write`.

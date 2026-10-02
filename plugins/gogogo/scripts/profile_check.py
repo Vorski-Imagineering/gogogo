@@ -86,7 +86,9 @@ FIELDS = {
                           "stage with a tag."),
     "preflight.extra": (list, (), "Extra checks before a run."),
     "stop.extra": (list, (), "Extra conditions that stop a whole run."),
-    "notify": (str, (), "none | telegram."),
+    "notify": (str, (), "none / telegram. Optional; absent means none. telegram: sent by scripts/notify.py; "
+               "bot token and chat id from TELEGRAM_BOT_TOKEN and TELEGRAM_CHAT_ID in the environment or "
+               "~/.claude/gogogo/notify.env, never in the profile."),
     "auto_test.pass_column": (str, (TEST,), "Column a card moves to on PASS."),
     "auto_test.fail_column": (str, (TEST,), "Column a card moves to on FAIL."),
     "auto_test.fail_label": (str, (TEST,), "Label added on FAIL."),

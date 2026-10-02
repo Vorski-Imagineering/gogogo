@@ -810,5 +810,29 @@ class BoardTidiness(unittest.TestCase):
         self.assertNotIn("have no card", rep.rows[0]["detail"])
 
 
+class Notify(unittest.TestCase):
+    """The notify row: one per state, never a FAIL, so it never changes the exit code."""
+
+    def row(self, state, line):
+        rep = sc.Report()
+        with mock.patch("notify.status", return_value=(state, line, "")):
+            sc.check_notify("profile.md", rep)
+        rows = [r for r in rep.rows if r["check"] == "notify"]
+        self.assertEqual(len(rows), 1)
+        self.assertFalse(rep.failed())
+        return rows[0]
+
+    def test_each_state_gives_its_row(self):
+        import notify
+        off = self.row(notify.OFF, "notify: off")
+        self.assertEqual(off["level"], "INFO")
+        self.assertTrue(off["detail"].startswith("off"))
+        ready = self.row(notify.READY, "notify: telegram: bot @b -> Vic")
+        self.assertEqual((ready["level"], ready["detail"]), ("PASS", "telegram: bot @b -> Vic"))
+        self.assertEqual(self.row(notify.NO_CREDENTIALS, "notify: telegram, but no bot credentials")["level"], "WARN")
+        failed = self.row(notify.FAILED, "notify: telegram: Unauthorized")
+        self.assertEqual((failed["level"], failed["detail"]), ("WARN", "telegram: Unauthorized"))
+
+
 if __name__ == "__main__":
     unittest.main()
