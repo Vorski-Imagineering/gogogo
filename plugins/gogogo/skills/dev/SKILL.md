@@ -95,6 +95,18 @@ The profile's `## Recon traps` lists what this codebase specifically hides.
 
 ## 4. Change
 
+- **Put the work on the issue's branch, before the first edit.** The default
+  branch is `integration.base` when the profile sets it, else
+  `gh repo view <tracker.code_repo> --json defaultBranchRef -q .defaultBranchRef.name`.
+  When `git branch --show-current` prints that name, run
+  `git switch -c fix/<issue-number>-<short-slug>` (the slug: two to five
+  lowercase words from the issue's title, joined by `-`, letters and digits
+  only). Uncommitted changes come along; never stash, reset or pull to do it.
+  On any other branch, or a detached HEAD, stay where you are and say so.
+  When that name already exists, stop and ask which branch to use; never
+  reuse or reset it. When the profile's `## Lane constraints` say where to
+  branch (a worktree, say), do that instead. When the default branch can't be
+  read, create nothing and say why.
 - `CLAUDE.md` is not relaxed because a change is small. Reuse first; follow
   existing patterns.
 - **Thread a change through every consumer.** If you change a value, a flag or

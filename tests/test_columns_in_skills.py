@@ -22,6 +22,22 @@ class ColumnSettingsInSkills(unittest.TestCase):
         self.assertIn("tracker.ready_marker", text)
         self.assertIn("--remove-label", text)
 
+    def test_dev_branches_like_auto_dev_inside_change(self):
+        # dev puts its work on the issue's branch before the first edit, by
+        # the same pattern as auto-dev (gogogo#41).
+        dev = (PLUGIN / "skills" / "dev" / "SKILL.md").read_text(encoding="utf-8")
+        change = dev[dev.index("## 4. Change"):dev.index("## 5. Review")]
+        for needle in ("git switch -c fix/<issue-number>-<short-slug>", "integration.base",
+                       "tracker.code_repo", "defaultBranchRef"):
+            self.assertIn(needle, change)
+        auto_dev = (PLUGIN / "skills" / "auto-dev" / "SKILL.md").read_text(encoding="utf-8")
+        self.assertIn("git switch -c fix/<issue-number>-<short-slug>", auto_dev)
+
+    def test_dev_does_not_read_origin_head(self):
+        # `refs/remotes/origin/HEAD` is not set in every checkout.
+        dev = (PLUGIN / "skills" / "dev" / "SKILL.md").read_text(encoding="utf-8")
+        self.assertNotIn("refs/remotes/origin/HEAD", dev)
+
     def test_no_skill_or_reference_names_back_to_queue(self):
         named = [str(p.relative_to(PLUGIN)) for folder in ("skills", "references")
                  for p in (PLUGIN / folder).rglob("*.md")
