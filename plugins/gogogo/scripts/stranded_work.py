@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""List local branches and worktrees ahead of the base, with work on no remote, that no open issue claims.
+"""List local branches and worktrees ahead of the base, with work on no remote, that no open issue or open pull request claims.
 
     stranded_work.py [--base main]
 
@@ -9,6 +9,12 @@ those commits are on no remote branch or the branch is checked out in a
 worktree (a local copy of a pushed branch is not stranded), and either its name
 carries no issue number, or that number is not an open issue in the profile's
 tracker (checked with `gh issue view` when the profile names a repo).
+
+An open pull request in the profile's `tracker.code_repo` claims its branch,
+unless the branch has commits on no remote. Pull requests in the checkout's
+other GitHub remotes, and closed or merged ones, only add to the line: what
+became of the branch's pull request. A branch that shares no history with the
+base says so in place of a commit count, which would be its whole history.
 
 Exit 0 when nothing is stranded, 1 when something is (each on its own line),
 2 when it cannot read the repo.
@@ -38,19 +44,87 @@ def issue_open(repo, number):
     return json.loads(out.stdout).get("state") == "OPEN"
 
 
+GITHUB_URL = re.compile(r"github\.com[:/]([^/]+)/(.+?)(?:\.git)?/?$")
+
+
+def github_repos(code_repo):
+    """owner/name of `code_repo`, then of each GitHub remote, without repeats."""
+    repos = [code_repo]
+    remotes = git("remote", "-v")
+    for line in remotes.stdout.splitlines() if remotes.returncode == 0 else []:
+        parts = line.split()
+        if len(parts) < 3 or parts[2] != "(fetch)":
+            continue
+        match = GITHUB_URL.search(parts[1])
+        if match:
+            repo = f"{match.group(1)}/{match.group(2)}"
+            if repo.lower() not in (r.lower() for r in repos):
+                repos.append(repo)
+    return repos
+
+
+def pull_requests(repo, branch):
+    """(this repo's PRs from `branch`, None), or (None, why the lookup failed)."""
+    out = subprocess.run(["gh", "pr", "list", "--repo", repo, "--head", branch, "--state", "all",
+                          "--json", "number,state,headRefOid,headRepository", "--limit", "20"],
+                         capture_output=True, text=True)
+    if out.returncode != 0:
+        return None, (out.stderr.strip().splitlines() or [f"gh exited {out.returncode}"])[0]
+    try:
+        prs = json.loads(out.stdout)
+    except json.JSONDecodeError:
+        return None, "gh printed something that is not JSON"
+    # A fork's branch of the same name is someone else's PR.
+    return [p for p in prs if ((p.get("headRepository") or {}).get("nameWithOwner") or "").lower()
+            == repo.lower()], None
+
+
+def chosen(prs):
+    """The open PR, else the newest."""
+    if not prs:
+        return None
+    return next((p for p in prs if p.get("state") == "OPEN"), None) or max(prs, key=lambda p: p["number"])
+
+
+_archived = {}
+
+
+def archived(repo):
+    if repo not in _archived:
+        out = subprocess.run(["gh", "repo", "view", repo, "--json", "isArchived"], capture_output=True, text=True)
+        try:
+            _archived[repo] = json.loads(out.stdout).get("isArchived") if out.returncode == 0 else None
+        except json.JSONDecodeError:
+            _archived[repo] = None
+    return _archived[repo]
+
+
+def pr_part(pr, repo, code_repo, tip, base):
+    where = (f" in {repo}" if repo != code_repo else "") + (" (archived)" if archived(repo) else "")
+    if pr["state"] == "OPEN":
+        return f"PR #{pr['number']} open{where}"
+    moved = (f" (the PR's head was {pr['headRefOid'][:7]}; the branch has moved since)"
+             if pr.get("headRefOid") != tip else "")
+    if pr["state"] == "MERGED":
+        return f"PR #{pr['number']} merged{where}{moved}, so its content may already be in {base}"
+    return f"PR #{pr['number']} closed without merging{where}{moved}"
+
+
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--base", default="main")
     args = parser.parse_args(argv)
 
-    repo = None
+    repo = code_repo = None
     path = profile_check.find_profile()
     if path.is_file():
         try:
             settings, _ = profile_check.split_profile(path.read_text(encoding="utf-8"))
             repo = settings.get("tracker", {}).get("issues_repo")
+            code_repo = settings.get("tracker", {}).get("code_repo")
         except profile_check.ProfileError:
             pass
+    repos = github_repos(code_repo) if code_repo else []
 
     heads = git("for-each-ref", "--format=%(refname)", "refs/heads")
     if heads.returncode != 0:
@@ -84,12 +158,36 @@ def main(argv=None):
                 continue
         where = f" (worktree {worktrees[ref]})" if ref in worktrees else ""
         number = re.search(r"(?:^|[/_-])(\d{1,6})(?:[/_-]|$)", branch)
-        if not number:
-            stranded.append(f"{branch}: {ahead} commit(s) ahead of {args.base}, no issue number in the name{where}")
+        if number and issue_open(repo, number.group(1)) is not False:
             continue
-        state = issue_open(repo, number.group(1))
-        if state is False:
-            stranded.append(f"{branch}: {ahead} commit(s) ahead of {args.base}; issue #{number.group(1)} is not open{where}")
+        # With no common commit, the count is the branch's whole history.
+        shared = git("merge-base", args.base, ref)
+        ahead_part = (f"no history in common with {args.base}" if shared.returncode == 1
+                      else f"{ahead} commit(s) ahead of {args.base}")
+        tip = git("rev-parse", ref).stdout.strip()
+        parts = []
+        for pr_repo in repos:
+            prs, error = pull_requests(pr_repo, branch)
+            if error:
+                parts.append(f"pull requests in {pr_repo} not checked: {error}")
+                continue
+            pr = chosen(prs)
+            if not pr:
+                continue
+            if pr["state"] == "OPEN" and pr_repo == code_repo:
+                local = git("rev-list", "--count", ref, "--not", "--remotes")
+                if local.returncode == 0 and local.stdout.strip() == "0":
+                    break  # claimed
+                count = local.stdout.strip() if local.returncode == 0 else "some"
+                parts.append(f"PR #{pr['number']} open, but {count} commit(s) are on no remote")
+                continue
+            parts.append(pr_part(pr, pr_repo, code_repo, tip, args.base))
+        else:
+            pr_parts = "".join(f"; {part}" for part in parts)
+            if not number:
+                stranded.append(f"{branch}: {ahead_part}, no issue number in the name{pr_parts}{where}")
+            else:
+                stranded.append(f"{branch}: {ahead_part}; issue #{number.group(1)} is not open{pr_parts}{where}")
 
     for line in stranded:
         print(line)
