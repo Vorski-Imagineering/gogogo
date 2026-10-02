@@ -32,6 +32,7 @@ MARKETPLACE_REPO = "Vorski-Imagineering/gogogo"
 READY_LABEL_COLOUR = "0E8A16"
 READY_LABEL_DESCRIPTION = "The spec is in this issue's body and needs nothing further from anyone."
 READY_LABEL_COLOUR_CHECK = "tracker: ready label colour"
+DELETE_BRANCH_CHECK = "code repo: delete merged branches"
 # Local skills that the shared plugin replaces. A copy left in .claude/skills
 # competes with the shared one for the same requests.
 REPLACED_LOCAL_SKILLS = [
@@ -198,6 +199,21 @@ def check_ready_label(repo, label, listing, rep):
                  f"the same in every repo. Fix: gh label edit \"{label}\" --repo {repo} --color {READY_LABEL_COLOUR}")
 
 
+def check_delete_branch(repo, setting, error, rep):
+    """`setting`: the repo's `delete_branch_on_merge` (True/False/None); `error`: gh's message when the read failed."""
+    if error:
+        rep.warn(DELETE_BRANCH_CHECK, f"could not read {repo}'s settings: {error}")
+    elif setting is True:
+        rep.ok(DELETE_BRANCH_CHECK, repo)
+    elif setting is False:
+        rep.fail(DELETE_BRANCH_CHECK, f"{repo} keeps a pull request's branch after it merges",
+                 f"`gh api -X PATCH repos/{repo} -F delete_branch_on_merge=true` (undo: the same with =false)")
+    else:
+        # GitHub shows the field only to a login that can read the repo's settings.
+        rep.warn(DELETE_BRANCH_CHECK, f"{repo} does not show this setting to this gh login; it needs admin access "
+                                      "to read")
+
+
 def check_tracker(root, settings, rep):
     tracker = settings.get("tracker") or {}
     repo = tracker.get("issues_repo")
@@ -213,6 +229,19 @@ def check_tracker(root, settings, rep):
                  "check the name in tracker.issues_repo and your access")
         return
     rep.ok("tracker: issues repo", repo)
+
+    code_repo = tracker.get("code_repo")
+    if code_repo:
+        api = run("gh", "api", f"repos/{code_repo}")
+        setting, error = None, None
+        if api.returncode != 0:
+            error = (api.stderr.strip().splitlines() or [f"gh exited {api.returncode}"])[0]
+        else:
+            try:
+                setting = json.loads(api.stdout).get("delete_branch_on_merge")
+            except (json.JSONDecodeError, AttributeError):
+                error = "gh printed something that is not a JSON object"
+        check_delete_branch(code_repo, setting, error, rep)
 
     label = tracker.get("ready_marker")
     if label:

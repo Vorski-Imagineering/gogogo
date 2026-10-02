@@ -477,6 +477,52 @@ class Audit(unittest.TestCase):
         text = (ROOT / "plugins" / "gogogo" / "skills" / "setup" / "SKILL.md").read_text(encoding="utf-8")
         self.assertIn(sc.READY_LABEL_COLOUR_CHECK, text)
         self.assertIn("gh label edit", text)
+    # check_delete_branch: GitHub deletes a PR's branch when it merges (issue #42)
+    def _delete(self, setting, error=None):
+        rep = sc.Report()
+        sc.check_delete_branch("owner/repo", setting, error, rep)
+        return rep.rows
+
+    def test_delete_branch_on_passes(self):
+        self.assertEqual([(r["level"], r["check"]) for r in self._delete(True)],
+                         [("PASS", "code repo: delete merged branches")])
+
+    def test_delete_branch_off_fails_with_the_patch_and_its_undo(self):
+        rows = self._delete(False)
+        self.assertEqual([r["level"] for r in rows], ["FAIL"])
+        self.assertIn("gh api -X PATCH repos/owner/repo -F delete_branch_on_merge=true", rows[0]["fix"])
+        self.assertIn("=false", rows[0]["fix"])
+
+    def test_delete_branch_unreadable_warns_never_passes(self):
+        self.assertEqual([r["level"] for r in self._delete(None)], ["WARN"])
+
+    def test_delete_branch_read_failure_warns_with_the_reason(self):
+        rows = self._delete(None, error="HTTP 404")
+        self.assertEqual([r["level"] for r in rows], ["WARN"])
+        self.assertIn("HTTP 404", rows[0]["detail"])
+
+    def test_setup_skill_names_the_delete_branch_row(self):
+        text = (ROOT / "plugins" / "gogogo" / "skills" / "setup" / "SKILL.md").read_text(encoding="utf-8")
+        self.assertIn(sc.DELETE_BRANCH_CHECK, text)
+        self.assertIn("gh api -X PATCH", text)
+
+    def test_check_tracker_reads_the_code_repo(self):
+        calls = []
+
+        def fake_run(*cmd, cwd=None):
+            calls.append(cmd)
+            out = json.dumps({"delete_branch_on_merge": False}) if cmd[:2] == ("gh", "api") else ""
+            return subprocess.CompletedProcess(cmd, 0, out, "")
+
+        rep = sc.Report()
+        with mock.patch.object(sc, "run", fake_run):
+            sc.check_tracker(Path("."), {"tracker": {"issues_repo": "o/issues", "code_repo": "o/code"}}, rep)
+        fails = [r for r in rep.rows if r["level"] == "FAIL"]
+        self.assertEqual([r["check"] for r in fails], ["code repo: delete merged branches"])
+        self.assertIn("o/code", fails[0]["detail"])
+        self.assertIn(("gh", "api", "repos/o/code"), calls)
+        self.assertNotIn(("gh", "api", "repos/o/issues"), calls)
+
     # check_release: references/versioning.md (issue #15)
     def _release(self, settings):
         rep = sc.Report()

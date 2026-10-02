@@ -178,6 +178,12 @@ What each fix involves:
   label's colour will change from its current value to the standard one and
   nothing else will, ask, then run the `gh label edit` command the row prints
   and re-run the check. If the user declines, leave it.
+- **Delete merged branches** (`FAIL code repo: delete merged branches`).
+  Say that GitHub will then delete a pull request's branch on GitHub when
+  it merges (local copies stay), and that the row's undo command turns it
+  back off. Ask, then run the `gh api -X PATCH` command the row prints and
+  re-run the check. If the user declines, leave it and say the line will
+  keep failing.
 - **Local skills the shared ones replace.** Move each to
   `.claude/skills-retired/` in the same change that moves its project
   specifics into the profile, and update anything that names it.
