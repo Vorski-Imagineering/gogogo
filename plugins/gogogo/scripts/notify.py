@@ -71,7 +71,10 @@ class SendError(Exception):
 
 def _scrub(text, token):
     text = str(text)
-    return text.replace(token, "<token>") if token else text
+    if token:
+        for form in (token, repr(token)[1:-1]):  # raw, and as an error's repr() shows it
+            text = text.replace(form, "<token>")
+    return text
 
 
 def _say(text, token, stream=None):
@@ -117,9 +120,18 @@ def _call(token, method, params=None):
             raise SendError(_scrub(exc, token)) from None
     except Exception as exc:  # noqa: BLE001 - any failure is a failed call, its text scrubbed
         raise SendError(_scrub(exc, token)) from None
+    if not isinstance(body, dict):
+        raise SendError("Telegram's answer was not a JSON object")
     if not body.get("ok"):
         raise SendError(_scrub(body.get("description") or "Telegram refused the call", token))
-    return body.get("result")
+    result = body.get("result")
+    return result if result is not None else {}
+
+
+def _check_token(token):
+    """A token with spaces or control characters cannot be sent, and would leak in an error."""
+    if any(c.isspace() or not c.isprintable() for c in token):
+        raise SendError(f"{TOKEN_KEY} holds spaces or control characters; paste the token alone")
 
 
 class Telegram:
@@ -131,13 +143,18 @@ class Telegram:
     def missing(self):
         return [key for key, value in ((TOKEN_KEY, self.token), (CHAT_KEY, self.chat)) if not value]
 
+
     def send(self, text):
+        _check_token(self.token)
         _call(self.token, "sendMessage", {"chat_id": self.chat, "text": text,
                                           "disable_web_page_preview": "true"})
 
     def describe(self):
+        _check_token(self.token)
         me = _call(self.token, "getMe")
         chat = _call(self.token, "getChat", {"chat_id": self.chat})
+        if not isinstance(me, dict) or not isinstance(chat, dict):
+            raise SendError("Telegram's answer had no bot or chat")
         who = chat.get("title") or chat.get("first_name") or chat.get("username") or self.chat
         return f"bot @{me.get('username')} -> {who}"
 
@@ -264,14 +281,15 @@ def _save_chat(chat_id):
     if not done:
         out.append(f"{CHAT_KEY}={chat_id}")
     # Write a new file beside it and swap it in, so a failed write never loses
-    # the token the person pasted.
-    CREDENTIALS.parent.mkdir(parents=True, exist_ok=True)
-    fd, tmp = tempfile.mkstemp(dir=CREDENTIALS.parent, prefix=".notify.env.")
+    # the token the person pasted. A symlinked file is updated where it points.
+    target = CREDENTIALS.resolve()
+    target.parent.mkdir(parents=True, exist_ok=True)
+    fd, tmp = tempfile.mkstemp(dir=target.parent, prefix=".notify.env.")
     try:
         with os.fdopen(fd, "w", encoding="utf-8") as handle:
             handle.write("\n".join(out) + "\n")
         os.chmod(tmp, 0o600)
-        os.replace(tmp, CREDENTIALS)
+        os.replace(tmp, target)
     except BaseException:
         Path(tmp).unlink(missing_ok=True)
         raise
@@ -279,11 +297,16 @@ def _save_chat(chat_id):
 
 def cmd_chat_id(args):
     token, _ = credentials()
+    if args.save == "":
+        print("--save needs a chat id from the list, or nothing for the newest")
+        return EXIT_USAGE
     if not token:
         print(f"no bot token: put it after {TOKEN_KEY}= in {CREDENTIALS} (`notify.py init` creates the file)")
         return EXIT_USAGE
     try:
-        chats = _chats(_call(token, "getUpdates") or [])
+        _check_token(token)
+        updates = _call(token, "getUpdates")
+        chats = _chats(updates if isinstance(updates, list) else [])
     except SendError as exc:
         _say(f"getUpdates failed: {exc}", token, sys.stderr)
         return EXIT_FAILED

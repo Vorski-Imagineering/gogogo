@@ -75,9 +75,6 @@ means finished work sits unverified while you go and ask.
    Exit 0 with `notify: off`: say nothing. Exit 0 otherwise: messages will
    send. Any other exit: put its line once at the top of the run report and
    go on. Messages are a convenience, never a reason to stop.
-
-When every check above has passed, send the *run started* message (§8)
-before selecting the queue.
 8. **A logged-in browser on the pre-merge environment** (`verify.session_url`,
    or the first `verify.agent` environment's `session_url`). A redirect to a
    login page → stop the whole run and ask. Do not decide that other coverage
@@ -99,7 +96,8 @@ before selecting the queue.
 ```
 
 A non-zero exit is a **stop**, never an empty column: the tool refuses to print
-a list it could not reconcile. Work only rows that are issues. Take them in the
+a list it could not reconcile. The first time this list is read in a run, send
+the *run started* message (§8) with its count. Work only rows that are issues. Take them in the
 order the user gave; absent one, live user-facing bugs first, refactors after,
 anything large last so it cannot absorb the run.
 
@@ -303,7 +301,8 @@ how they stay able to stop you. Then return to §1: the board may have moved.
 Send one short message per change of state, only **after** the thing is true.
 Pass the text on stdin through a quoted heredoc, never inside a quoted
 argument: titles are user-written, and `$(…)` or a stray `"` in one must stay
-text.
+text. The heredoc expands nothing, so fill in every value (the hostname from
+`hostname`, the counts, the titles) before writing it.
 
 ```bash
 python3 "${CLAUDE_PLUGIN_ROOT}/scripts/notify.py" send <<'MSG'
@@ -315,17 +314,18 @@ The script does nothing when the profile's `notify` is off or this machine has
 no credentials, so call it the same way in every repo. One plain-text line
 each, `<repo>` being the name part of `tracker.code_repo`:
 
-- after preflight passes: `<repo> auto-dev: run started on <hostname>, <k> issues in "<tracker.queue>"`;
+- once preflight has passed and §1 has read the queue: `<repo> auto-dev: run started on <hostname>, <k> issues in "<tracker.queue>"`;
 - the first time an issue is skipped in this run, not on later passes: `<repo> #<n> skipped: <reason>`;
 - `<repo> #<n> started: <title>`;
 - after the merge is verified: `<repo> #<n> merged (<short sha>) -> <column>`;
 - `<repo> #<n> needs you -> <tracker.columns.needs_human>: <the Needs-you line>`;
 - `<repo> auto-dev: run closed: <a> merged, <b> need you, <c> skipped`, also
-  when the whole run stops to ask (§ *Stop the whole run*), with
-  `, stopped: <reason>` added.
+  when a run that sent *run started* stops to ask (§ *Stop the whole run*),
+  with `, stopped: <reason>` added. A run that stops before *run started*
+  sends nothing.
 
-A `send` that exits 1 goes into this report as `notify failed: <its line>`,
-and the run goes on. Never put a token on a command line or in a report.
+A `send` that exits non-zero goes into this report as `notify failed: <its
+line>`, and the run goes on. Never put a token on a command line or in a report.
 
 ## 9. Close the run
 

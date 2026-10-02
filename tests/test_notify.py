@@ -156,6 +156,21 @@ class Send(Case):
             self.assertNotIn(TOKEN, out + err, error)
             self.assertIn("<token>", out + err, error)
 
+    def test_6_a_token_with_a_control_character_is_refused_unsent(self):
+        self.write_creds(token="12:AB\tCD")
+        code, out, err = self.run_main("send", "--profile", self.profile(), "--text", "x")
+        self.assertEqual(code, 1)
+        self.assertIn("control characters", err)
+        self.assertNotIn("AB", out + err)
+        self.urlopen.assert_not_called()
+
+    def test_6_an_answer_that_is_not_an_object_is_a_failed_send(self):
+        self.write_creds()
+        self.urlopen.return_value = Answer([])
+        code, _, err = self.run_main("send", "--profile", self.profile(), "--text", "x")
+        self.assertEqual(code, 1)
+        self.assertIn("not a JSON object", err)
+
     def test_7_long_text_is_cut_to_the_limit(self):
         self.write_creds()
         self.urlopen.return_value = ok({})
@@ -258,6 +273,18 @@ class ChatId(Case):
         self.urlopen.return_value = self.updates(a, b)
         self.assertEqual(self.run_main("chat-id", "--save", "9")[0], 1)
         self.assertIn(f"{notify.CHAT_KEY}=1\n", self.creds.read_text())
+
+    def test_11_save_follows_a_symlink_and_refuses_an_empty_id(self):
+        real = self.tmp / "dotfiles" / "notify.env"
+        real.parent.mkdir()
+        real.write_text(f"{notify.TOKEN_KEY}={TOKEN}\n{notify.CHAT_KEY}=\n")
+        self.creds.parent.mkdir(parents=True, exist_ok=True)
+        self.creds.symlink_to(real)
+        self.urlopen.return_value = self.updates({"id": 5, "first_name": "Ann"})
+        self.assertEqual(self.run_main("chat-id", "--save", "5")[0], 0)
+        self.assertTrue(self.creds.is_symlink())
+        self.assertIn(f"{notify.CHAT_KEY}=5", real.read_text())
+        self.assertEqual(self.run_main("chat-id", "--save", "")[0], 2)
 
     def test_11_no_messages_and_no_token(self):
         self.write_creds(chat="")
