@@ -127,9 +127,14 @@ These rules apply, in order.
 
 ## Template
 
-The report follows this layout line for line. It shows the full case, and
-any rule above wins over it: a block collapsed to one line (`unreadable`,
-`not shown`) prints nothing else, and a part a rule leaves out is left out.
+The report follows this layout line for line. It shows the full case; the
+rules above change it in these places only:
+- the first line ends as Gather step 1 says;
+- the whole BOARD block is its one line when step 2 says so;
+- any other read that fails is one `unreadable` line in place of the lines
+  it would have filled, and the rest still print;
+- an unset setting's line is left out, and a part with no value (a stage's
+  environment, a pull request's issue) is left off its line.
 A section with nothing to show prints `none`. `Worktrees, detached:` is left
 out when there are none.
 
