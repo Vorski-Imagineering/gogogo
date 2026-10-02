@@ -167,6 +167,23 @@ spec and a loop that will not settle goes to a person.
 the sources with the dates we read them, and the rule we settled on
 ([#33](https://github.com/Vorski-Imagineering/gogogo/issues/33)).
 
+**Branches and pull requests.** Every issue gets its own branch,
+`fix/<issue-number>-<slug>`, cut from a freshly pulled base: a stale base would silently undo the
+previous merge, and the issue number ties the branch back to the tracker. The loop takes one issue at a time: branch, build, review, verify,
+then merge by the repo's chosen strategy. That is a pull request per issue
+squashed into the base (`pr-squash`), pull requests into a dated run branch
+that reaches the main line as one final PR (`run-branch-pr`), or the repo's
+own merge script (`merge-script`). A pull request merges only after its
+tests, review rounds, gates and, when the merge is a release or the repo
+requires it, its CI checks have all passed. The squash commit carries a
+`Ships-issue` trailer linking it to the issue, so a later deploy tag can tell
+which issues it shipped. Every merge is read back from the base branch before
+the card moves. An issue that stops (a missing decision, a failed review, a
+fix it could not prove) keeps its branch pushed and unmerged for a person to
+pick up. Branches no open issue claims are reported, never deleted or
+rebased.
+[docs/git-process.md](docs/git-process.md) has the details.
+
 ## Skills
 
 | Command | What it does |
