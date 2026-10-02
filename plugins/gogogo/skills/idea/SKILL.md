@@ -35,10 +35,10 @@ gh issue list --repo <tracker.issues_repo> --state open --search "<two to four k
 ```
 
 When one is a likely match, show it and ask with `AskUserQuestion`: **add these
-findings as a comment on #<n>**, or **file a new issue**. The answer sets the
-*target* for steps 2 to 5: a comment on #<n>, or a new issue. Every target is
-in `tracker.issues_repo`; an answer naming anything else is refused, and the
-question asked again. No likely
+findings as a comment on <tracker.issues_repo>#<n>**, or **file a new issue in
+<tracker.issues_repo>**. The answer sets the *target* for steps 2 to 5. Every
+target is in `tracker.issues_repo`: an answer naming an issue anywhere else is
+refused, and the question asked again. Any other answer counts as declined. No likely
 match: the target is a new issue. A declined question: write the draft as for
 a new issue (steps 2 and 3), post nothing, say where it is and what step 3
 removed, and stop.
@@ -79,7 +79,7 @@ this body over as the issue's original report, unchanged.
 
 When `tracker.public` is true, the title and body keep only what is known to be
 safe to publish. When unsure, remove it. Do this before the person sees the
-draft, and again after every change to it. Remove:
+draft, and again on everything you write after a change. Remove:
 
 - any path outside this checkout: absolute (`/Users/`, `/home/`, `/tmp/`,
   `/private/`, `C:\`), home-relative (`~/`), or into another checkout. A path
@@ -95,19 +95,16 @@ draft, and again after every change to it. Remove:
   wherever it points. The rule on names above applies inside a kept link too;
 - anything that looks like a token or key, and email addresses;
 - people's names (use their role);
-- *anything else* not known to be safe that no rule above names, such as
-  customer or business data in command output. The kinds above are the usual ones, not the only ones.
+- anything else not known to be safe, such as customer or business data in
+  command output, wherever it is, a kept link included. The kinds above are
+  the usual ones, not the only ones.
 
 Keep a list of what you removed, in your own reply and never in the draft
-file: each item's kind, where it was, and the removed text. A token, key,
-email address, share, preview, signed or secret link, or an item removed
-under *anything else* is named by kind and place only (*a token, in the
-second finding*), and is never put back: these are the strict kinds. An item
-that fits a strict kind is treated as strict, even if it fits another kind
-too, and even if it was kept before. Step 4 shows the list with the draft, and
-every later mention of what was removed (step 1, step 7) uses this same form.
-Any other item the person, having seen it, tells you to keep is theirs to
-publish: put it back and do not remove it again.
+file: each item by its kind and where it was (*a hostname, in the second
+finding*), never the removed text. Step 4 shows it with the draft, and every
+later mention of what was removed (step 1, step 7) uses the same form. Nothing
+removed is put back by you. Text the person writes into the draft themselves,
+in a change at step 4, is theirs to publish and is kept as they wrote it.
 
 ## 4. Show and ask
 
@@ -116,11 +113,10 @@ list of removals. Then ask with `AskUserQuestion`: **post it** (naming the
 target: *file it as a new issue in <tracker.issues_repo>* or *post it as a
 comment on <tracker.issues_repo>#<n>*), **change something**, or **don't post**.
 
-- Change something: edit the draft, or change the target (a new issue then
-  needs step 2's title), run step 3 on it again, and ask again.
-- A target outside `tracker.issues_repo`, new issue or comment, is refused
-  with the whole change. Check the target before editing anything; say that
-  nothing was changed, and ask again.
+- Change something: first, when the change names a target outside
+  `tracker.issues_repo`, refuse the whole change, say nothing was changed, and
+  ask again. Otherwise edit the draft, or change the target (a new issue then
+  needs step 2's title), run step 3 on what you wrote, and ask again.
 - Don't post, or the question is declined: post nothing, say where the draft
   file is, and stop.
 
