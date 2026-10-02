@@ -266,7 +266,7 @@ python3 "${CLAUDE_PLUGIN_ROOT}/scripts/verify_merged.py" <pr> <base branch> [--r
 Confirm **MERGED** before commenting on the issue or moving any card. A run
 that reports six merges and delivered five is worse than one that stops at the
 first failure: the board says done, the branch says otherwise, and nobody looks
-again. Every exit first reopens what the output says the merge closed, as
+again. Whatever the exit, first reopen every issue a `CLOSED` line names, as
 `/gogogo:dev` §8 says; then NOT-MERGED, or "cannot tell", stops the whole run.
 
 When the link was written, add it to the check:
@@ -281,8 +281,9 @@ the issue in the between-issues log and the close-run report as one whose card
 must be moved by hand when its tag ships.
 
 Exit 4 (merged, the issue closed) does **not** stop the run either: hand back
-as merged, as `/gogogo:dev` §8 says, and list the issue in the
-between-issues log (§8) and the close-run report as one the merge closed.
+as merged, as `/gogogo:dev` §8 says (with a missing link named too, also as
+for exit 3 above), and list the issue in the
+between-issues log (§8) and the close-run report as one that was closed and reopened.
 
 ## 7. Report and hand back
 
