@@ -127,6 +127,75 @@ the review command's own fix option, and render them as markdown, never raw
 JSON. Nothing merges unreviewed. Configuration inside a Markdown file (a
 profile's settings block) is code, not prose.
 
+**First, the change against its spec.** Before round 1, every numbered item of
+the issue's spec is answered against the change, so a piece never built, or
+built another way than the spec says, is found before the review reads the
+change for bugs. In order:
+
+- **List the items.** Save the issue body to a file and run
+  ```bash
+  python3 "${CLAUDE_PLUGIN_ROOT}/scripts/spec_check.py" items <body file> --base origin/<base>
+  ```
+  from the change's working tree, where `<base>` is the branch the change
+  merges into (`integration.base`, or the repo's default branch when the
+  profile has none); `git fetch origin` first, so files other changes already
+  merged are not counted as this change's. Exit 1 means the body has no spec:
+  skip the rest of this step, and say so in §7. An `unlisted:` line names a
+  section the check could not list item by item; say so in §7.
+- **A reader answers them.** Give a reader that has not seen how the change
+  was made three things and nothing else: where the spec is (the issue
+  number), the item list, and the change (the working tree and its difference
+  from `<base>`). It writes one line per `V`, `A`, `D`, `T` and `N` item to an
+  answers file, as `<id> | <status> | <evidence> | <note>`, and edits nothing.
+  It is told:
+  - `met`: the change does what the item says. Evidence is where: a file and
+    line (`path:line`), or a file and the test's name (`path::name`).
+  - `missing`: nothing in the change does it. `differs`: the change does it
+    another way than the item says; the note gives the spec's words and what
+    the change has.
+  - `na`: only for what cannot be seen in the change (a run in a lane no test
+    reaches, another repo), with the reason.
+  - An item holding several exact rules takes the worst status among them,
+    and the note names each part that is not met.
+  - A `V` step is `met` when the change makes what the step says you will see
+    true. A `T` case is `met` only when a test exists and asserts what the
+    case says. An `A` row is `met` when the change does what was Chosen and
+    nothing that was Rejected. An `N` item is `met` when the change leaves it
+    alone.
+  - It does not judge quality, look for bugs or propose changes.
+
+  When no such reader can be started, answer the list yourself and record
+  `reader=self`.
+- **Check the answers.** Run `spec_check.py verify <body file> <answers file>
+  --base origin/<base>`. On exit 2, give the reader the `error:` lines and have it
+  answer again.
+- **Handle what is not `met`**, each by the first case that fits:
+  - two parts of the spec disagree, so that meeting one item breaks another →
+    the issue stops for a person (§8);
+  - `missing` → build it. An `F:` item that is `missing` → make the change the
+    spec lists for that file;
+  - `differs` → change it to match the spec;
+  - `differs`, and matching the spec is not possible or would be wrong, and
+    the difference is small (it touches no Hard Stop item, adds no
+    user-visible behaviour, setting or message the spec does not have, and
+    stays inside the files the spec lists) → keep it and declare it in §7;
+  - any other `differs`, and a `missing` item that cannot be built → the
+    issue stops for a person (§8);
+  - an `outside` file → take it out of the change, or keep it when a spec
+    item cannot be met without it and declare it in §7 with that item;
+  - `na` → listed in §7.
+- **A misreading.** An answer you believe is a misreading: give the reader the
+  file and line for that item and ask once more. Its second answer stands.
+- **Again, at most three times.** After changing anything, have the reader
+  answer the items that were not `met` again, replacing their lines in the
+  answers file and keeping the rest, and run `verify` again. At most
+  three reader runs. An item still `missing`, or `differs` and not declared,
+  after the third → the issue stops for a person (§8).
+- **Then round 1 starts.** What this step changed is part of the change the
+  review reads. The spec check is not run again after the review.
+
+Then the review, by these rules:
+
 1. **A round.** Round 1 reviews the whole change against the issue's spec, at
    the profile's `review.coverage` (`broad` when unset); a change whose files
    are all prose is reviewed at `precise`. Every later round reviews only what
@@ -230,6 +299,28 @@ Comment in the reporter's language, not the codebase's:
 
 - **What was happening**: the mechanism, one short paragraph, in their terms.
 - **What changed**: user-visible effects, as bullets.
+- **How it matches the spec** (§5's spec check). With no spec in the body,
+  the one sentence "This issue has no spec in its body, so the change was not
+  checked against one." Otherwise: how many items were checked and how many
+  were `met`, `missing` and `differs` at the first reading; what was built or
+  changed to match afterwards; **Differs from the spec**, one line per
+  declared difference with the item, what the spec says, what the change does,
+  why, and any *Verify by hand* step that now reads differently, written out
+  as it now reads (or "Differs from the spec: nothing."); each `outside` file
+  kept, with the item it serves; each `na` item with its reason. A stop names
+  the items left. Put this record on its own line just before the review
+  record, with no spaces inside a value:
+  `<!-- gogogo:spec-check v=1 items=<n> met=<n> missing=<n> differs=<n> na=<n> outside=<n> runs=<n> fixed=<n> declared=<n> reader=<fresh|self|none> end=<clean|declared|stopped|nospec> -->`
+  - `items`, `met`, `missing`, `differs`, `na` and `outside` are the first
+    valid `spec-check:` line `verify` printed. `items` is the sum of the four
+    statuses.
+  - `runs` is the number of reader runs. `fixed` is the number of items not
+    `met` at first and `met` at the last run. `declared` is the number of
+    differences and `outside` files kept and listed.
+  - `end` is `clean` when nothing was declared and nothing is left,
+    `declared` when at least one difference or file was declared, `stopped`
+    when the check stopped the issue, and `nospec` when the body has no spec
+    (then every count is 0 and `reader=none`).
 - **How it was verified**: which rungs ran, how many new tests went red, what
   the real run showed.
 - **How it was reviewed**: the kind (code, prose, or mixed: code with prose
@@ -278,8 +369,10 @@ and no further. Take the first case that fits:
 - **stopped for a person**: a review that ended for a person (§5 rule 8: a
   defect in a finding's third attempt, a reversal the spec does not settle, a
   finding you could not fix, a prose file's second-round fix, or the breaker
-  at round 13), a decision or Hard Stop found mid-change (§4), a
-  gate you could not make pass, or verification that gave up →
+  at round 13), a spec check that stopped (§5: two parts of the spec
+  disagree, a difference that is not small, a piece that could not be built,
+  or items left after the third reading), a decision or Hard Stop found
+  mid-change (§4), a gate you could not make pass, or verification that gave up →
   `tracker.columns.needs_human`, whether or not
   the work sits on a branch or PR. The §7 report's first line is
   `**Needs you:**` and one sentence saying what the person must do, followed
@@ -410,6 +503,9 @@ and integration follow this skill and the repo's merge path. See the profile's
   `exhaustive` is `max`. The target is the change in round 1 (the working
   tree, or the branch against its base) and the corrections in later rounds
   (their commit range, or the files named); the brief is §5 rule 1's.
+- The spec check's reader (§5) is a subagent started with the `Agent` tool,
+  which does not see this conversation. Its prompt is §5's brief for the
+  reader and the item list, and it writes the answers file.
 - In the record, `impl` is the session's model id; `reviewer` is
   `$CLAUDE_CODE_SUBAGENT_MODEL` when it is set, else the same as `impl`.
 - Browser checks use the `claude-in-chrome` tools; load the ones you need in one

@@ -5,8 +5,9 @@
     spec_lint.py - < body.md
 
 It checks what can be checked mechanically: the sections and their order, the
-Approvals table, that the Hard-stop verdict agrees with its own answers, and
-that the human check names real URLs. It cannot judge whether the design is
+Approvals table, that the Hard-stop verdict agrees with its own answers, that
+the human check names real URLs, and that Design and Test cases number their
+items and Files groups its paths, which `spec_check.py` reads. It cannot judge whether the design is
 right; the skill's pre-post check does that.
 
 Output: one `error:` or `warning:` line per finding, then `label: apply` or
@@ -60,6 +61,9 @@ ROW = re.compile(r"\brows?\b", re.I)
 COVERS_ALL = re.compile(r"\b(both|either|all|each|every|two|three)\b", re.I)
 APPROVED = re.compile(r"\bapproved\b", re.I)
 AWAITS = re.compile(r"\bproposal\b|\bawaits? approval\b|\bnot approved\b", re.I)
+ITEM = re.compile(r"^(\d+)[.)]\s+\S")
+GROUP = re.compile(r"^(?:-\s+)?\*\*(create|edit|explicitly not in scope)\b[^*]*\*\*:?\s*", re.I)
+GROUP_KEYS = {"create": "create", "edit": "edit", "explicitly not in scope": "not_in_scope"}
 
 
 def norm(text):
@@ -101,6 +105,45 @@ def table_rows(lines):
             continue
         rows.append(cells)
     return rows[1:] if rows else []  # drop the header
+
+
+def numbered_items(lines):
+    """(number written, line) for each item numbered at the first column, outside code fences."""
+    items, fenced = [], False
+    for line in lines:
+        if line.lstrip().startswith("```"):
+            fenced = not fenced
+            continue
+        match = None if fenced else ITEM.match(line)
+        if match:
+            items.append((int(match.group(1)), line))
+    return items
+
+
+def file_groups(lines):
+    """The non-blank lines under each **Create**, **Edit** and **Explicitly not in scope**
+    marker, up to the next marker, keyed create, edit and not_in_scope. The text after
+    a marker on its own line is the group's first line."""
+    groups, key = {}, None
+    for line in lines:
+        match = GROUP.match(line)
+        if match:
+            key = GROUP_KEYS[match.group(1).lower()]
+            groups.setdefault(key, [])
+            line = line[match.end():]
+        if key and line.strip():
+            groups[key].append(line)
+    return groups
+
+
+def _numbering(title, lines, what):
+    numbers = [n for n, _ in numbered_items(lines)]
+    if not numbers:
+        return [f"## {title}: no numbered items; number each {what} 1., 2., 3. at the start of a line"]
+    if numbers != list(range(1, len(numbers) + 1)):
+        return [f"## {title}: items are numbered {', '.join(map(str, numbers))}; number them 1, 2, 3 in "
+                "order through the section"]
+    return []
 
 
 def lint(body, settings):
@@ -195,6 +238,18 @@ def lint(body, settings):
         if not re.search(r"^\**\s*not approved\s*:", approvals_text, re.I | re.M):
             errors.append("## Approvals: no closing \"Not approved:\" line (write \"Not approved: "
                           "none\" when there is nothing)")
+
+    # --- numbered items and file groups (what spec_check.py reads) ----------
+    if "Design" in by_title:
+        errors.extend(_numbering("Design", by_title["Design"][1], "artefact"))
+    if "Test cases" in by_title:
+        errors.extend(_numbering("Test cases", by_title["Test cases"][1], "case"))
+    if "Files" in by_title:
+        groups = file_groups(by_title["Files"][1])
+        if not any("`" in line for key in ("create", "edit") for line in groups.get(key, [])):
+            errors.append("## Files: no **Create** or **Edit** group naming a file in backticks")
+        if "not_in_scope" not in groups:
+            errors.append("## Files: no **Explicitly not in scope** group")
 
     # --- Test cases -------------------------------------------------------
     if "Test cases" in by_title:

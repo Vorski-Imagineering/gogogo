@@ -95,17 +95,21 @@ Every issue goes through the same checks, in this order, before its merge:
 
 1. **Tests.** The new regression test is seen failing first (stash the change,
    run the one test, see red, pop), then every lane in the profile passes.
-2. **Review.** `/code-review`, applying a finding only on evidence, with three
+2. **Spec check.** Before the review, a reader that has not seen how the
+   change was made answers every numbered item of the spec against it
+   (`spec_check.py`). A missing piece is built, a difference is matched or,
+   when small, declared in the report, and anything larger goes to a person.
+3. **Review.** `/code-review`, applying a finding only on evidence, with three
    attempts per finding and two rounds per prose file, until a round applies
    nothing (a person after 13 rounds). See
    [when-is-enough-enough.md](when-is-enough-enough.md).
-3. **Verify.** The path the issue describes is run on real data in the
+4. **Verify.** The path the issue describes is run on real data in the
    pre-merge environment. A green suite alone counts as "written", not "done".
-4. **Gates.** The profile's `gates.always`, and each `gates.when` whose path
+5. **Gates.** The profile's `gates.always`, and each `gates.when` whose path
    pattern the change touches.
-5. **Unattended mode**, re-checked immediately before every merge and chained
+6. **Unattended mode**, re-checked immediately before every merge and chained
    to it, so the merge cannot run if the check fails.
-6. **The PR's CI checks**, when the merge is a release or
+7. **The PR's CI checks**, when the merge is a release or
    `integration.ci_before_merge` is true. The loop watches them, then judges
    each check's state, never the watch command's exit code. Every check
    passing or skipped, with at least one passing, is a pass. A failed,

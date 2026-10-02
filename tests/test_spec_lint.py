@@ -56,11 +56,16 @@ The view filters on the wrong flag (`views.py:12`). Trap: a dead view looks like
 
 ## Test cases
 
-Automated: `test_pages_listed`, guards the empty list. Browser: open the page as an editor.
+1. Automated: `test_pages_listed`, guards the empty list.
+2. Browser: open the page as an editor.
 
 ## Files
 
-Edit `views.py`. Not in scope: the form.
+**Edit:** `views.py`.
+
+**Explicitly not in scope:**
+
+- The form.
 
 ## Verification
 
@@ -307,7 +312,7 @@ class OtherChecks(unittest.TestCase):
         self.assertTrue(any(w.startswith("line ") and "choose between" in w.lower() for w in warns))
 
     def test_lane_without_a_case_warns(self):
-        body = GOOD.replace(" Browser: open the page as an editor.", "")
+        body = GOOD.replace("\n2. Browser: open the page as an editor.", "")
         _, warns, _ = run(body)
         self.assertTrue(any('lane "browser" has no case' in w for w in warns))
 
@@ -327,6 +332,44 @@ class OtherChecks(unittest.TestCase):
 
     def test_errors_withhold_the_label(self):
         self.assertEqual(run(GOOD.replace("## Files\n", ""))[2], "lint errors")
+
+
+class NumberedItemsAndFileGroups(unittest.TestCase):
+    def withheld(self, body, error):
+        errs, _, label = run(body)
+        self.assertIn(error, errs)
+        self.assertEqual(label, "lint errors")
+
+    def test_design_with_no_numbered_item(self):
+        self.withheld(GOOD.replace("1. Change the filter.", "Change the filter."),
+                      "## Design: no numbered items; number each artefact 1., 2., 3. at the start of a line")
+
+    def test_test_cases_numbered_out_of_order(self):
+        body = GOOD.replace("2. Browser: open the page as an editor.",
+                            "2. Browser: open the page as an editor.\n1. Again.")
+        self.withheld(body, "## Test cases: items are numbered 1, 2, 1; number them 1, 2, 3 in order "
+                            "through the section")
+
+    def test_files_with_no_create_or_edit_group(self):
+        self.withheld(GOOD.replace("**Edit:** `views.py`.", "We edit `views.py`."),
+                      "## Files: no **Create** or **Edit** group naming a file in backticks")
+
+    def test_files_with_no_not_in_scope_group(self):
+        self.withheld(GOOD.replace("**Explicitly not in scope:**", "Leave alone:"),
+                      "## Files: no **Explicitly not in scope** group")
+
+    def test_a_numbered_line_in_a_fence_is_not_an_item(self):
+        body = GOOD.replace("1. Change the filter.", "```\n1. Change the filter.\n```")
+        self.assertIn("## Design: no numbered items; number each artefact 1., 2., 3. at the start of a line",
+                      errors(body))
+
+    def test_the_helpers(self):
+        self.assertEqual(sl.numbered_items(["1. a", "  2. indented", "```", "2. fenced", "```", "3) b"]),
+                         [(1, "1. a"), (3, "3) b")])
+        groups = sl.file_groups(["**Create:** `a.py`", "- **Edit** `b.py`", "more `c.py`",
+                                 "**explicitly not in scope:**", "- x"])
+        self.assertEqual(groups, {"create": ["`a.py`"], "edit": ["`b.py`", "more `c.py`"],
+                                  "not_in_scope": ["- x"]})
 
 
 class CommandLine(unittest.TestCase):

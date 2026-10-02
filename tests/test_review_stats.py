@@ -36,7 +36,7 @@ def autotest(n, verdict):
     return f"<!-- auto-test v1 run=r issue={n} verdict={verdict} build=b skill=s -->\n## Auto-test"
 
 
-class Stats(unittest.TestCase):
+class StatsBase(unittest.TestCase):
     def setUp(self):
         tmp = tempfile.TemporaryDirectory()
         self.addCleanup(tmp.cleanup)
@@ -69,6 +69,8 @@ class Stats(unittest.TestCase):
         self.assertEqual(code, 0, err)
         return json.loads(out)
 
+
+class Stats(StatsBase):
     def test_one_record_gives_one_row_with_its_numbers(self):
         data = self.json_of([(40, v2(pr=7, rounds=2, applied="3,0", declined="1,2", refix="0,0",
                                       applied_as="spec:1,regression:0,bug:2,risk:0,added:0",
@@ -165,6 +167,50 @@ class Stats(unittest.TestCase):
         self.assertIn("1 review records (1 old format", out.splitlines()[0])
         row = self.json_of([(26, old)])["rows"][0]
         self.assertEqual((row["rounds"], row["format"], row["end"]), (4, "old", "clean"))
+
+
+SPEC_CHECK = ("<!-- gogogo:spec-check v=1 items=62 met=57 missing=1 differs=3 na=1 outside=1 runs=2 fixed=2 "
+              "declared=3 reader=fresh end=declared -->")
+
+
+class SpecCheck(StatsBase):
+    def test_a_spec_check_record_fills_its_columns_and_the_summary(self):
+        comments = [(44, SPEC_CHECK + "\n" + v2())]
+        row = self.json_of(comments)["rows"][0]
+        self.assertEqual((row["spec_items"], row["spec_unmet"], row["spec_declared"]), (62, 4, 3))
+        code, out, _ = self.run_stats(comments)
+        self.assertEqual(code, 0)
+        self.assertIn("spec check: 1 records, 62 items, 1 missing, 3 differs, 2 fixed, 3 declared", out)
+        self.assertIn("spec check ended: clean 0, declared 1, stopped 0, nospec 0", out)
+
+    def test_no_spec_check_record_shows_dashes(self):
+        code, out, _ = self.run_stats([(40, v2())])
+        self.assertEqual(code, 0)
+        header = next(line for line in out.splitlines() if line.startswith("issue"))
+        line = next(line for line in out.splitlines() if line.startswith("#40"))
+        self.assertEqual(header.split()[-3:], ["spec_items", "spec_unmet", "spec_declared"])
+        self.assertEqual(line.split()[-3:], ["-", "-", "-"])
+        self.assertIn("spec check: 0 records", out)
+        self.assertNotIn("spec check ended", out)
+
+    def test_a_record_that_does_not_add_up_and_a_template_are_unreadable(self):
+        bad = SPEC_CHECK.replace("items=62", "items=61")
+        template = ("<!-- gogogo:spec-check v=1 items=<n> met=<n> missing=<n> differs=<n> na=<n> outside=<n> "
+                    "runs=<n> fixed=<n> declared=<n> reader=<fresh|self|none> end=<clean|declared|stopped|nospec> -->")
+        code, out, _ = self.run_stats([(40, bad + "\n" + v2()), (41, template + "\n" + v2(pr=2))])
+        self.assertEqual(code, 0)
+        self.assertIn("2 unreadable skipped", out.splitlines()[0])
+        self.assertIn("spec check: 0 records", out)
+
+    def test_json_keys(self):
+        data = self.json_of([(44, SPEC_CHECK + "\n" + v2()), (40, v2(pr=2))])
+        for row in data["rows"]:
+            self.assertTrue({"spec_items", "spec_unmet", "spec_declared"} <= set(row))
+        spec = data["summary"]["spec_check"]
+        self.assertEqual(spec["ends"], {"clean": 0, "declared": 1, "stopped": 0, "nospec": 0})
+        self.assertEqual(spec["readers"], {"fresh": 1, "self": 0, "none": 0})
+        self.assertEqual((spec["records"], spec["items"], spec["missing"], spec["differs"], spec["fixed"],
+                          spec["declared"]), (1, 62, 1, 3, 2, 3))
 
 
 if __name__ == "__main__":
