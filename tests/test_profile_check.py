@@ -48,6 +48,9 @@ register = "docs/technology-decisions.md"
 [roadmap]
 file = "docs/roadmap.md"
 
+[review]
+coverage = "broad"
+
 [release]
 major = 1
 
@@ -331,6 +334,18 @@ class WrongValues(unittest.TestCase):
         settings, sections = parse()
         settings.pop("release", None)
         self.assertEqual(pc.check(settings, sections), ([], []))
+
+    def test_review_coverage_is_one_of_three(self):
+        # gogogo#33: optional; absent means broad.
+        settings, sections = parse()
+        for skill in (None, *pc.SKILLS):
+            self.assertEqual(pc.check(settings, sections, skill), ([], []), skill)
+        settings["review"]["coverage"] = "deep"
+        errors, _ = pc.check(settings, sections)
+        self.assertIn("review.coverage: 'deep' is not one of broad, exhaustive, precise", errors)
+        settings.pop("review")
+        for skill in (None, *pc.SKILLS):
+            self.assertEqual(pc.check(settings, sections, skill), ([], []), skill)
 
     def test_value_outside_enum_is_named(self):
         settings, sections = parse()

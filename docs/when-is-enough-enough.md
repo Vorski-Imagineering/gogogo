@@ -12,15 +12,52 @@ read them; check them again before relying on this page.
 
 ## What the skills do today
 
-Since [#17](https://github.com/Vorski-Imagineering/gogogo/issues/17),
-`/gogogo:dev` §5 reviews a code change with `/code-review high`, then reviews
-each round's corrections, round after round, **until a round applies nothing**.
-There is no round limit. A finding the reviewer calls a correctness defect may
-not be declined: it is fixed, or the issue stops for a person. A prose-only
-change gets two rounds at most.
+Since [#33](https://github.com/Vorski-Imagineering/gogogo/issues/33),
+`/gogogo:dev` §5 judges each finding by evidence. Round 1 reviews the whole
+change against the issue's spec, at the profile's `review.coverage`. Every
+later round reviews only the corrections, at `precise`. A finding is applied
+when it shows one of these:
+- the change fails the spec or a `CLAUDE.md` rule;
+- it breaks something that worked;
+- a bug, with a concrete case;
+- a security, data-loss or unapproved-Hard-Stop risk.
+
+A small addition the spec does not have may be applied, with a test.
+Everything else is declined with a reason word. Each finding gets three
+attempts, a correction is never undone and redone, and prose files get two
+rounds each, even inside a code change.
+
+A review ends `clean` when a round applies nothing. It ends with a person on:
+- a third attempt that is still wrong;
+- a reversal the spec doesn't settle;
+- an unfixable finding;
+- a prose fix in the second round;
+- the breaker, at round 13.
+
+Every report ends with a record of the review (`v=2`). `review_stats.py`
+prints them as a table, with each issue's outcome and any later bug traced
+back to the review that let it through. To read the numbers:
+- **Rounds** and **ended** say whether reviews converge.
+- **Refix rate** is the share of applied findings that fixed an earlier fix: a
+  high one means the attempts rule is doing work.
+- **Declined by reason** shows what the reviewer raises that does not matter.
+- **Escaped bugs**, declined against missed, say whether the judgement is too
+  strict (declined) or the coverage too narrow (missed).
+
+The attempt limit, the breaker and the default coverage change only in an
+issue that cites `review_stats.py` output.
+
+### What the skills did before
+
+From [#17](https://github.com/Vorski-Imagineering/gogogo/issues/17) until #33,
+`/gogogo:dev` §5 reviewed a code change with `/code-review high`, then
+reviewed each round's corrections, round after round, **until a round applied
+nothing**. There was no round limit. A finding the reviewer called a
+correctness defect could not be declined: it was fixed, or the issue stopped
+for a person. A prose-only change got two rounds at most.
 
 The aim was right: nothing merges unreviewed, and corrections, where defects
-enter, are reviewed too. In practice the loop often does not converge.
+enter, are reviewed too. In practice the loop often did not converge.
 
 ## What we saw
 
@@ -96,9 +133,7 @@ Three things kept the loop going:
 ## What we decided
 
 Decided on 2026-10-02 and specified in
-[#33](https://github.com/Vorski-Imagineering/gogogo/issues/33). Until that
-issue ships, the skills still follow the rules under *What the skills do
-today*.
+[#33](https://github.com/Vorski-Imagineering/gogogo/issues/33).
 
 1. **Evidence decides what is applied.** A round applies a finding only when
    the change fails the spec or a rule in the repo's `CLAUDE.md`, breaks
