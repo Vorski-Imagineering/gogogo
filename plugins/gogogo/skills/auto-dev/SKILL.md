@@ -327,14 +327,15 @@ line>`, and the run goes on. Never put a token on a command line or in a report.
 
 ## 9. Close the run
 
-In a run that tried to send *run started*, first send *run closed* (§8). §9
-runs once the queue is done and any final PR (§6) is settled; a whole-run stop
-never reaches it. Then one report: every issue taken with its outcome and merge commit, every issue
+§9 begins when §1 lists nothing this run may still take (every row is done,
+skipped or abandoned in this run) and, under `run-branch-pr`, the final PR is
+merged or left for a person (§6). A run that stopped to ask and was told to go
+on reaches it the same way. First send *run closed* (§8). Then one report: every issue taken with its outcome and merge commit, every issue
 skipped with the reason, anything left half-done with its branch, every card
 moved to `tracker.columns.needs_human` with its Needs-you line, the stranded
 work from preflight, anything the profile's `stop.extra` checks raised, and
 every `notify failed: <its line>` (a `send` that exited non-zero) not already
-in a between-issues report.
+reported.
 
 ## Stop the whole run and ask when
 
@@ -349,8 +350,8 @@ in a between-issues report.
 - anything wants to touch production data or an environment whose `writes`
   forbids it.
 
-When you stop and ask, also give every `notify failed` line no report has
-carried yet.
+When you stop and ask, also give every `notify failed` line not already
+reported.
 
 A Hard Stop with no approval stops **that issue**, not the run.
 
