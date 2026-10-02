@@ -14,7 +14,10 @@ python3 "${CLAUDE_PLUGIN_ROOT}/scripts/profile_check.py" --for status --show
 ```
 
 Exit 0 prints the settings; use them wherever this skill says *the profile*.
-Any other exit: **stop and report the line it printed**.
+Its `profile ok for status: <path>` line names the profile file the report's
+`profile:` line shows. Any other exit: **stop and report the line it printed**.
+A setting this skill names that the profile does not set is left out of the
+report, never printed empty.
 
 ## It reads only
 
@@ -43,10 +46,11 @@ in its place in the report, and the others still run.
    git rev-parse --abbrev-ref HEAD
    git rev-parse --short HEAD
    git status --porcelain               # count the lines
+   git rev-parse --abbrev-ref @{u}      # <upstream>
    git rev-list --left-right --count @{u}...HEAD
    ```
-   The last prints `<behind> <ahead>`. With no upstream it fails: print
-   `no upstream` in place of the counts.
+   The last prints `<behind> <ahead>`. With no upstream both fail: the header
+   ends `· no upstream` in place of the counts.
 2. **Board**, only when `tracker.tool` is `shared`:
    ```bash
    python3 "${CLAUDE_PLUGIN_ROOT}/scripts/tracker.py" fields
@@ -63,6 +67,8 @@ in its place in the report, and the others still run.
    ```bash
    gh pr list --repo <tracker.code_repo> --state open --json number,title,headRefName,isDraft --limit 100
    ```
+   When it returns 100, the limit, there may be more: the `+N more` after the
+   list reads `+N or more`.
 4. **Branches and worktrees.** The base is `integration.base` when the profile
    sets it; otherwise the branch `git symbolic-ref --short refs/remotes/origin/HEAD`
    names, without `origin/`; otherwise `main`.
@@ -83,17 +89,20 @@ These rules apply, in order.
 - **Listed columns.** Cards are listed, not just counted, only in
   `tracker.queue`, `tracker.columns.in_progress`, and each `stages[].column`,
   in that order, each once. A stage column carries its `environment` in
-  brackets. Each list holds at most 10 cards, in `list --json` order, then
-  `+N more`. Every other column gets a count only.
+  brackets when the stage names one. Each list holds at most 10 cards, in
+  `list --json` order, then `+N more`. Every other column gets a count only.
 - **A card** reads `#<number> <title>`, the title cut to 70 characters. It is
   `<repo>#<number>` when its `repo` is not `tracker.issues_repo` (two repos on
-  one board can share a number), and `(draft)` for a draft. It ends with
-  ` (closed)` when its `state` is not `OPEN`.
+  one board can share a number). It ends with ` (closed)` when its `state`
+  is `CLOSED`. A card with no `number` is a draft or deleted content: it
+  reads `(draft) <title>`, with no repo and never `(closed)`.
 - **A pull request** reads `#<n> <headRefName>`, then ` → <issue>` when the
   branch name carries an issue number (next rule), then ` (draft)` if it is
   one. At most 10, then `+N more`, or `none`.
-- **An issue number in a branch name** is the first match of `/(\d+)(?:-|$)`
-  on the part after the last `/`, or of `^(\d+)-` on the whole name. It shows
+- **An issue number in a branch name** is a number straight after a `/` and
+  followed by a `-` or the end of the name: the first match of
+  `/(\d+)(?:-|$)` in the whole name (`fix/6-status` is 6,
+  `claude/q3xh50` has none), or else of `^(\d+)-` (`6-status` is 6). It shows
   as `#n [<column>]` when that issue's card is on the board (matched on
   `tracker.issues_repo`), or `#n (not on board)` when it is not. A name with no
   match shows nothing.
@@ -128,4 +137,5 @@ CODE
     <path> @ <short sha>
 ```
 
-Print the report and nothing after it.
+The report is your whole reply: print it once, in one fenced block, with
+nothing before or after it.

@@ -70,7 +70,11 @@ class Skill(unittest.TestCase):
         for setting in ("tracker.tool", "tracker.queue", "tracker.code_repo",
                         "tracker.issues_repo", "integration.base"):
             self.assertIn(setting, named)
+        # Three-part and stage settings the two-part regex cannot see.
         self.assertIn("`tracker.columns.in_progress`", skill_text())
+        self.assertIn("tracker.columns.in_progress", pc.FIELDS)
+        for key in re.findall(r"`stages\[\]\.([a-z_]+)`", skill_text()):
+            self.assertIn(key, pc.STAGE_KEYS, key)
         for setting in sorted(named):
             self.assertIn(setting, pc.FIELDS, setting)
 
