@@ -31,9 +31,10 @@ lookup this skill makes.
 ## The target
 
 What this skill posts goes to one *target*: a new issue in
-`tracker.issues_repo`, or a comment on an open issue there. Nowhere else. An
-answer or a change that names another repo is refused as a whole: say so,
-change nothing, and ask again.
+`tracker.issues_repo`, or a comment on an open issue there. Nowhere else, and
+only one. An answer or a change that chooses a target anywhere else, or more
+than one, is refused as a whole: say so, change nothing, and ask again. Merely
+mentioning another repo is not choosing it.
 
 ## 1. Look for an issue that already covers it
 
@@ -142,7 +143,7 @@ gh issue view <n> --repo <tracker.issues_repo> --json state,url -q '.state + " "
 Post only when it exits 0 and prints `OPEN` and a URL ending `/issues/<n>` in
 `tracker.issues_repo` (compared ignoring case). Anything else (closed, a pull
 request, not found, an error): post nothing, tell the person why, set the
-target to a new issue, write step 2's title, run step 3 on it, and go back to
+target to a new issue, write step 2's title, run step 3 again, and go back to
 step 4. Then:
 
 ```bash
