@@ -160,18 +160,18 @@ class Send(Case):
         self.write_creds(token="12:AB\tCD")
         code, out, err = self.run_main("send", "--profile", self.profile(), "--text", "x")
         self.assertEqual(code, 1)
-        self.assertIn("characters a bot token does not have", err)
+        self.assertIn("not shaped like a bot token", err)
         self.assertNotIn("AB", out + err)
         self.urlopen.assert_not_called()
 
     def test_6_a_token_with_other_characters_is_refused_everywhere(self):
-        for token in ("123:SECRÉT", "12:ab\\cd", "12:ab # mine"):
+        for token in ("123:SECRÉT", "12:ab\\cd", "12:ab # mine", "AAHsecretonly", "12:"):
             self.write_creds(token=token)
             for argv in (("send", "--profile", self.profile(), "--text", "x"),
                          ("status", "--profile", self.profile()), ("chat-id",)):
                 code, out, err = self.run_main(*argv)
                 self.assertEqual(code, 1, (token, argv))
-                self.assertNotIn(token.split(":")[1][:3], out + err, (token, argv))
+                self.assertNotIn(token[-4:], out + err, (token, argv))
         self.urlopen.assert_not_called()
 
     def test_6_an_answer_that_is_not_an_object_is_a_failed_send(self):
@@ -302,6 +302,8 @@ class ChatId(Case):
         self.write_creds(chat="")
         self.urlopen.return_value = ok([1, {"message": {"chat": {"first_name": "no id"}}},
                                         {"message": {"chat": {"id": None}}}, {"message": {"chat": {"id": [1]}}},
+                                        {"message": {"chat": {"id": "5\nTELEGRAM_BOT_TOKEN=x"}}},
+                                        {"message": {"chat": {"id": " "}}},
                                         {"message": {"chat": {"id": 3, "first_name": "Cy"}}}])
         code, out, _ = self.run_main("chat-id")
         self.assertEqual(code, 0)

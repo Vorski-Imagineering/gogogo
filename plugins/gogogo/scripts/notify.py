@@ -18,7 +18,7 @@ person fills in themselves. Every line this script prints has the token
 scrubbed out.
 
 Exit codes:
-  send     0 sent, off, or no credentials; 1 a send was attempted and failed;
+  send     0 sent, off, or no credentials; 1 the send failed, or the token cannot be sent;
            2 usage (empty text, no profile, an unknown `notify` value)
   status   0 off or ready; 1 failed; 3 no credentials; 2 usage
   init     0 created or already there
@@ -33,6 +33,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import re
 import sys
 import tempfile
 import urllib.error
@@ -104,14 +105,14 @@ def credentials():
 
 # --- transport -------------------------------------------------------------
 
-TOKEN_CHARS = frozenset("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789:_-")
+TOKEN_SHAPE = re.compile(r"\d+:[A-Za-z0-9_-]+")
 
 
 def _check_token(token):
-    """Only a token's own characters reach a URL; anything else would fail there and could leak."""
-    if not set(token) <= TOKEN_CHARS:
-        raise SendError(f"{TOKEN_KEY} holds characters a bot token does not have "
-                        "(a space, a comment, an accent?); paste the token alone")
+    """Only a bot token's shape reaches a URL; anything else would fail there and could leak."""
+    if not TOKEN_SHAPE.fullmatch(token):
+        raise SendError(f"{TOKEN_KEY} is not shaped like a bot token (<digits>:<letters, digits, _ or ->), "
+                        "or holds something else (a space, a comment, an accent); paste the token alone")
 
 
 def _call(token, method, params=None):
@@ -265,7 +266,7 @@ def _chats(updates):
             continue
         message = update.get("message") or update.get("edited_message") or update.get("channel_post") or {}
         chat = message.get("chat") if isinstance(message, dict) else None
-        if not isinstance(chat, dict) or type(chat.get("id")) not in (int, str) or chat["id"] == "":
+        if not isinstance(chat, dict) or type(chat.get("id")) is not int:  # Telegram's ids are integers
             continue
         name = chat.get("title") or chat.get("first_name") or chat.get("username") or ""
         seen.pop(chat["id"], None)
