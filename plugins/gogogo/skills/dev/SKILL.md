@@ -178,8 +178,9 @@ profile's settings block) is code, not prose.
    any change: the round that reviews it and the round that reviews its
    corrections. After its second round it changes only to fix a finding that
    meets tests 1 to 4, and such a fix sends the issue to a person, marked
-   unreviewed, once the code files' review has ended. Its other second-round
-   findings are follow-ups. Code files follow rules 3 to 6.
+   unreviewed, once the code files' review has ended. Its other findings
+   from the second round on are declined and listed as follow-ups. Code files
+   follow rules 3 to 6.
 8. **How a review ends.** `clean`: a round applies nothing. For a person
    (§8): `third-attempt` (rule 3), `reversal` (rule 4), `unfixable` (a
    finding that meets tests 1 to 4 and cannot be fixed), `prose` (rule 7).
