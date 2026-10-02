@@ -10,8 +10,8 @@ Approvals row and `A0` the Not approved line, `D<k>` each numbered Design item,
 `T<k>` each numbered test case, `N<k>` each bullet under Explicitly not in
 scope, and `F:<path>` each path under Create and Edit. Ids are by position. A
 Design or Test cases section with no numbered item is one item, `D0` or `T0`,
-and is printed as `unlisted:`; so is a Files section with no Create or Edit
-group naming a path. With `--base`, each `F:` item is `met` when the change
+and is printed as `unlisted:`; so is Files when it is missing or has no Create
+or Edit group naming a path. With `--base`, each `F:` item is `met` when the change
 touches that file and `missing` when it does not, and each changed file no
 `F:` item names is printed as `outside:` (not when Files is unlisted: there is
 no list to be outside of).
@@ -116,7 +116,7 @@ def list_items(body: str, changed: list[str] | None = None) -> dict | None:
         add(f"N{k}", text)
     outside = []
     paths = _paths(groups.get("create", []) + groups.get("edit", []))
-    if "Files" in by_title and not paths:
+    if not paths:
         unlisted.append("Files")
     for path in paths:
         add(f"F:{path}", path)

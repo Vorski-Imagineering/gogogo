@@ -145,6 +145,12 @@ class Items(unittest.TestCase):
         self.assertEqual(listed["outside"], [])
         self.assertFalse([i for i in listed["items"] if i["id"].startswith("F:")])
 
+    def test_no_files_section_is_unlisted_too(self):
+        body = "## Design\n\n1. Change it.\n"
+        listed = items(body, changed=["app/views.py"])
+        self.assertEqual(listed["unlisted"], ["Files"])
+        self.assertEqual(listed["outside"], [])
+
     def test_no_spec_in_this_body(self):
         out, code = call("items", body="## Request\n\nPlease fix it.\n")
         self.assertEqual(code, 1)
