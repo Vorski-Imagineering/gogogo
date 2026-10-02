@@ -297,8 +297,9 @@ reached, read from the profile's `stages`:
 
 For `run-branch-pr`: when the run's final PR has **merged** (check its state,
 not the merge command's exit), first check that every issue it landed is still
-open, with one `--open` for each, and treat exit 4 as in *Verify the merge
-landed*:
+open, with one `--open` for each, and treat its exits as in *Verify the
+merge landed* (exit 4: reopen; NOT-MERGED or "cannot tell": stop the whole run
+and leave the cards where they are):
 
 ```bash
 python3 "${CLAUDE_PLUGIN_ROOT}/scripts/verify_merged.py" <final pr> <integration.final_target> [--repo <code_repo>] --open <tracker.issues_repo>#<n> ...

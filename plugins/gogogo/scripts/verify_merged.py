@@ -83,16 +83,16 @@ def issue_state(link):
 
 
 def closed_links(links, sha, branch, pr_repo, this_repo, closing_refs):
-    """(lines, problem): a line per `--open` link that is closed, or a reason it cannot tell."""
+    """(lines, problems): a line per `--open` link that is closed, and a reason per one it cannot tell."""
     default = default_branch(pr_repo)
     if default is None:
-        return [], "gh repo view could not read the default branch"
+        return [], ["gh repo view could not read the default branch"]
     log = run("git", "log", "--format=%B", f"{sha}^1..{sha}")
     if log.returncode != 0:
-        return [], f"git could not read the messages of {sha[:12]}: {log.stderr.strip()}"
+        return [], [f"git could not read the messages of {sha[:12]}: {log.stderr.strip()}"]
     messages = log.stdout
     urls = {(ref.get("url") or "").lower() for ref in closing_refs or []}
-    lines = []
+    lines, problems = [], []
     for link in links:
         will_close = default == branch and (
             f"https://github.com/{link.repo}/issues/{link.number}".lower() in urls
@@ -103,14 +103,14 @@ def closed_links(links, sha, branch, pr_repo, this_repo, closing_refs):
             time.sleep(CLOSE_STEP)
             state = issue_state(link)
         if state is None:
-            return lines, f"gh issue view could not read the state of {link.ref()}"
-        if state == "OPEN" and will_close:
-            return lines, (f"{link.ref()} is named by a closing reference in this merge "
-                           f"and is still open after {CLOSE_WAIT}s")
-        if state != "OPEN":
+            problems.append(f"gh issue view could not read the state of {link.ref()}")
+        elif state == "OPEN" and will_close:
+            problems.append(f"{link.ref()} is named by a closing reference in this merge "
+                            f"and is still open after {CLOSE_WAIT}s")
+        elif state != "OPEN":
             how = "by this merge" if will_close else "(not by a closing reference in this merge)"
             lines.append(f"CLOSED {how}: {link.ref()}")
-    return lines, None
+    return lines, problems
 
 
 def missing_links(sha, expected, known):
@@ -174,17 +174,20 @@ def main(argv=None):
             if missing is None:
                 print(f"cannot tell: git could not read the trailers of {sha[:12]}", file=sys.stderr)
                 return 2
-        closed, problem = [], None
+        closed, problems = [], []
         if args.open:
-            closed, problem = closed_links(args.open, sha, args.branch, args.repo, args.repo or code_repo,
+            closed, problems = closed_links(args.open, sha, args.branch, args.repo, args.repo or code_repo,
                                            data.get("closingIssuesReferences"))
-        line = f"MERGED {sha[:12]} on origin/{args.branch}"
-        if missing:
-            line += f", but no Ships-issue: {', '.join(link.ref() for link in missing)}"
-        print("\n".join([line, *closed]))
-        if problem:
-            print(f"cannot tell: {problem}", file=sys.stderr)
+        no_link = [f"no Ships-issue: {', '.join(link.ref() for link in missing)}"] if missing else []
+        if problems:
+            # Merged, but an issue's state is unknown: no MERGED line, which a
+            # reader would take as the all-clear.
+            for problem in problems:
+                print(f"cannot tell: {sha[:12]} is on origin/{args.branch}, but {problem}", file=sys.stderr)
+            print("\n".join(no_link + closed))
             return 2
+        merged = f"MERGED {sha[:12]} on origin/{args.branch}"
+        print("\n".join([", but ".join([merged, *no_link]), *closed]))
         return 4 if closed else 3 if missing else 0
     if contains.returncode == 1:
         print(f"NOT-MERGED: {sha[:12]} is not on origin/{args.branch}")

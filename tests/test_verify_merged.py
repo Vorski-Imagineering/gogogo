@@ -248,6 +248,21 @@ class Open(Repo):
         self.assertIn("no Ships-issue: acme/issues#7", out)
         self.assertIn("CLOSED (not by a closing reference in this merge): acme/issues#7", out)
 
+    def test_every_open_link_is_checked_when_one_cannot_tell(self):
+        sha = self.merge("Fix it\n\nCloses acme/issues#7")
+        code, out = self.verify(sha, "--open", "acme/issues#7", "--open", "acme/issues#8",
+                                states=("OPEN",) * 13 + ("CLOSED",))
+        self.assertEqual(code, 2, out)
+        self.assertIn("acme/issues#7 is named by a closing reference", out)
+        self.assertIn("CLOSED (not by a closing reference in this merge): acme/issues#8", out)
+        self.assertFalse(any(line.startswith("MERGED") for line in out.splitlines()), out)
+
+    def test_cannot_tell_does_not_print_merged(self):
+        sha = self.merge("Fix it")
+        code, out = self.verify(sha, "--open", "acme/issues#7", fail=("issue",))
+        self.assertEqual(code, 2)
+        self.assertFalse(any(line.startswith("MERGED") for line in out.splitlines()), out)
+
     def test_an_unreadable_state_cannot_tell(self):
         sha = self.merge("Fix it")
         self.assertEqual(self.verify(sha, "--open", "acme/issues#7", fail=("issue",))[0], 2)
