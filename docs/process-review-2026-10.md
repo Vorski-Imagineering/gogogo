@@ -18,6 +18,15 @@ Everything here was read at `main` `6dd73fc`. Nothing in `plugins/gogogo/` was
 changed. The findings at the end are written down, not filed: the owner picks
 which become issues. Line references are to that commit.
 
+**Since this was read.** Later the same day #50 and #51 landed on `main`.
+#51 put #33's rule into the skills: a review finding is applied only on
+evidence, with three attempts per finding and a person after 13 rounds, and
+`scripts/review_stats.py` reads the review records back. That narrows A13
+(findings are now judged against the spec; the diff is still not checked
+against it, #44) and gives Q7 and Q8 in [process-measures.md](process-measures.md)
+a reader. No finding below is resolved by them. Line references stay at
+`6dd73fc`.
+
 **Settled before this review, not re-argued here:** the comparison of the git
 and PR process made the same day (branch per issue, squash merge, gates and CI,
 the `Ships-issue` link, annotated release tags); the owner's position that
@@ -68,7 +77,7 @@ written is cited); **deliberate departure, no reason written**; **gap**.
 | A10 | Least privilege for the agent | OWASP-06, CC-BP (allowlists, sandboxing, auto mode) | The loop requires `bypassPermissions` and refuses any other mode (`scripts/require_unattended.sh:1-10`, `skills/auto-dev/SKILL.md:57-66`) | deliberate departure, reason written | Reason: an unattended run must not stall on a prompt (`scripts/require_unattended.sh:4-6`). Auto mode now also runs without prompts, with a classifier that blocks risky actions, and is the default since Claude Code 2.1.283 (CC-BP); the reason does not consider it |
 | A11 | Give the agent a check it can run, and evidence instead of assertions | CC-BP | The seen-failing test and the run on real data (`skills/dev/SKILL.md:156-184`); the hand-back reports rungs, red tests and what the real run showed (`skills/dev/SKILL.md:186-213`) | matches | |
 | A12 | Explore, plan, then build from a self-contained spec with out-of-scope and an end-to-end check | CC-BP | `/gogogo:spec` writes Files with *explicitly not in scope*, Verification, and Verify by hand (`skills/spec/SKILL.md:50-62`) | matches | |
-| A13 | A fresh-context review that checks the diff against the plan and flags only what affects correctness or the requirements | CC-BP | `/code-review` reviews the diff for bugs, not against the spec (`skills/dev/SKILL.md:122-152`); findings are not filtered to the spec yet | gap | Filed: #44 (check against the spec), #33 (findings judged against it) |
+| A13 | A fresh-context review that checks the diff against the plan and flags only what affects correctness or the requirements | CC-BP | `/code-review` reviews the diff for bugs, not against the spec (`skills/dev/SKILL.md:122-152`); findings are not filtered to the spec yet | gap | Filed: #44 (check against the spec); #33 (findings judged against it) shipped in #51 after this was read |
 | A14 | Link the change to the issue without closing it before it is confirmed | GH-LINK | `Refs #<n>` and a `Ships-issue` trailer; closing references checked before merge, reopened after (`skills/dev/SKILL.md:265-298`, `references/stage-sync.md:36-37`) | deliberate departure, reason written | Reason: closing keywords close the issue at merge, before anyone saw the fix (`references/stage-sync.md:36-37`) |
 | A15 | Squash for one logical change; keep history where commits matter | GH-MERGE | `pr-squash` per issue; the `run-branch-pr` final PR by merge commit (`skills/auto-dev/SKILL.md:240-249`) | matches | |
 | A16 | Signed releases | SCORECARD (Signed-Releases) | Annotated `deploy-<build>` tags, unsigned (`references/versioning.md:25-27`) | gap | Low value for a private app; listed for completeness |

@@ -81,8 +81,8 @@ not the issues inside one; the branch is the per-issue key.
 
 | Measure | Question | Definition | Unit | Source | History | Public or local | Recording that would close the gap |
 |---|---|---|---|---|---|---|---|
-| **Q7 Review rounds and yield** | How long does review take to settle, and how much does it change? | per issue: `rounds`; sum of `applied`; `applied` in rounds after the first (fixes of fixes); `stopped`. Median and spread per period | rounds, findings | C (review record) | **partly**: since the record format (#17); earlier issues have none | public | #33 adds why each finding was applied or declined, and the models used |
-| **Q8 Review precision** | How many applied findings were real defects? | applied findings later judged real ÷ applied findings | ratio, with n | C | **no**: needs a person's judgement per finding, as was done once for #26 | public | #33's `review_stats.py` tracing a later bug to the review that passed it (with Q1) |
+| **Q7 Review rounds and yield** | How long does review take to settle, and how much does it change? | per issue: `rounds`; sum of `applied`; `applied` in rounds after the first (fixes of fixes); `stopped`. Median and spread per period | rounds, findings | C (review record) | **partly**: since the record format (#17); earlier issues have none | public | since #51, the record says why each finding was applied or declined, and `scripts/review_stats.py` reads it back |
+| **Q8 Review precision** | How many applied findings were real defects? | applied findings later judged real ÷ applied findings | ratio, with n | C | **no**: needs a person's judgement per finding, as was done once for #26 | public | `scripts/review_stats.py` (#51) tracing a later bug to the review that passed it, once Q1's `Caused by` link exists |
 
 ### Speed
 
