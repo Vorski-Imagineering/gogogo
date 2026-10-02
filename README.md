@@ -111,6 +111,50 @@ What we have not found in one place, and what gogogo is mostly about:
 If you know a product that already does all of this, please open an issue and
 tell us.
 
+## How it measures up
+
+In October 2026 we checked the whole process against DORA, GitHub, OpenSSF,
+OWASP and Anthropic's own guidance, and traced an issue through every merge
+shape. The full write-up, with sources and ranked findings, is
+[docs/process-review-2026-10.md](docs/process-review-2026-10.md).
+
+**What follows current practice:**
+
+- **The git and pull request mechanics.** One short-lived branch per issue,
+  cut from a fresh base, squash-merged and deleted. A new test must be seen
+  failing before it is trusted. CI is judged check by check, and "no checks
+  ran" counts as a failure. Every merge is read back from the base branch
+  before anyone is told it landed.
+- **Approval up front, not per change.** DORA's research found that external
+  change-approval boards slow delivery without lowering the failure rate.
+  gogogo has no board and no per-change gate: the owner's decisions are
+  recorded once, in the spec, before any code exists.
+- **Linking a change to its issue without closing it.** A `Ships-issue`
+  trailer instead of `Fixes #n`, because GitHub closes an issue the moment a
+  `Fixes` pull request merges, before anyone has seen the fix running.
+- **"Done" means run on real data.** A green test suite only counts as
+  "written".
+- **Stopping honestly.** Three attempts per issue, each on a different theory;
+  then the branch is pushed and parked with a note saying what was tried.
+
+**What is original:**
+
+- **The spec as an executable contract.** A linter keeps the ready label off
+  an issue until its spec has an Approvals table, a hand check, and a Hard
+  Stop verdict that agrees with its own answers.
+- **Hard Stops with a licence.** The owner names the dangerous categories
+  (schema, auth, money) once; each spec approves them one change at a time.
+  Some changes need two approvals: one for the design and one for applying it
+  to a shared environment.
+- **A release trail that keeps the board true.** A trailer in the commit, a
+  tag cut after the deploy, and CI moving each card when a tag ships its
+  commits, so the board shows where the code really is without anyone
+  updating it by hand.
+- **A stated position on code review.** Nobody reads the code except the core
+  data model. Instead of rubber-stamping agent pull requests, gogogo relies on
+  checks that scale with the volume of code: tests seen failing, verification
+  on real data, and a person confirming the behaviour.
+
 ## What it is
 
 `gogogo` is a Claude Code plugin with the development process shared by
