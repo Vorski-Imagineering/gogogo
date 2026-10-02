@@ -111,13 +111,13 @@ These rules apply, in order.
   branch name carries an issue number (next rule), then ` (draft)` if it is
   one. At most 10, then `+N more`, or `none`.
 - **An issue number in a branch name** is a number straight after a `/` and
-  followed by a `-` or the end of the name: the first match of
-  `/(\d+)(?:-|$)` in the whole name (`fix/6-status` is 6,
-  `claude/q3xh50` has none), or else of `^(\d+)-` (`6-status` is 6). It shows
-  as `#n [<column>]` when that issue's card is on the board (matched on
-  `tracker.issues_repo`), or `#n (not on board)` when it is not. When the
-  board was not read (BOARD is `unreadable` or `not shown`), it is `#n`
-  alone. A name with no match shows nothing.
+  followed by a `-` or the end of the name: the first match of `/(\d+)(?:-|$)`
+  in the whole name (`fix/6-status` is 6, `claude/q3xh50` has none), or else
+  of `^(\d+)-` (`6-status` is 6). It shows as `#n [<column>]` (`[no status]`
+  for a card with no column) when that issue's card is on the board (matched
+  on `tracker.issues_repo`), or `#n (not on board)` when it is not. When the
+  board was not read (BOARD is `unreadable` or `not shown`), it is `#n` alone.
+  A name with no match shows nothing.
 - **A branch** reads
   `<name>  <k> ahead  <pushed | <m> unpushed | upstream gone | local only>  <worktree path or ->  <issue, if any>`.
   `pushed` means the upstream is set, not `[gone]`, and the branch is not
@@ -130,9 +130,9 @@ These rules apply, in order.
 
 The report follows this layout line for line. It shows the full case, and
 every rule above wins over it where the two differ: for example the first
-line's ending (Gather step 1), BOARD as its one line (step 2), `+N more`,
-and `none` for a section with nothing to show. `Worktrees, detached:` is
-left out when there are none.
+line's ending (Gather step 1), BOARD as its one line (step 2) and `+N more`.
+A section or listed column with nothing to show prints `none`.
+`Worktrees, detached:` is left out when there are none.
 
 ```
 <repo> · <branch> @ <short sha> · <n> uncommitted · <a> ahead / <b> behind <upstream>, as last fetched
