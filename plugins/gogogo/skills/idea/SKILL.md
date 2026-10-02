@@ -36,7 +36,9 @@ gh issue list --repo <tracker.issues_repo> --state open --search "<two to four k
 
 When one is a likely match, show it and ask with `AskUserQuestion`: **add these
 findings as a comment on #<n>**, or **file a new issue**. The answer sets the
-*target* for steps 2 to 5: a comment on #<n>, or a new issue. No likely
+*target* for steps 2 to 5: a comment on #<n>, or a new issue. Every target is
+in `tracker.issues_repo`; an answer naming anything else is refused, and the
+question asked again. No likely
 match: the target is a new issue. A declined question: write the draft as for
 a new issue (steps 2 and 3), post nothing, say where it is and what step 3
 removed, and stop.
@@ -93,15 +95,16 @@ draft, and again after every change to it. Remove:
   wherever it points. The rule on names above applies inside a kept link too;
 - anything that looks like a token or key, and email addresses;
 - people's names (use their role);
-- *anything else* not known to be safe, such as customer or business data in
-  command output. The kinds above are the usual ones, not the only ones.
+- *anything else* not known to be safe that no rule above names, such as
+  customer or business data in command output. The kinds above are the usual ones, not the only ones.
 
 Keep a list of what you removed, in your own reply and never in the draft
 file: each item's kind, where it was, and the removed text. A token, key,
 email address, share, preview, signed or secret link, or an item removed
 under *anything else* is named by kind and place only (*a token, in the
-second finding*), and is never put back. An item that fits more than one
-kind is treated as the strictest. Step 4 shows the list with the draft, and
+second finding*), and is never put back: these are the strict kinds. An item
+that fits a strict kind is treated as strict, even if it fits another kind
+too, and even if it was kept before. Step 4 shows the list with the draft, and
 every later mention of what was removed (step 1, step 7) uses this same form.
 Any other item the person, having seen it, tells you to keep is theirs to
 publish: put it back and do not remove it again.
@@ -111,12 +114,13 @@ publish: put it back and do not remove it again.
 Show the target, the title (for a new issue), the whole body and step 3's
 list of removals. Then ask with `AskUserQuestion`: **post it** (naming the
 target: *file it as a new issue in <tracker.issues_repo>* or *post it as a
-comment on #<n>*), **change something**, or **don't post**.
+comment on <tracker.issues_repo>#<n>*), **change something**, or **don't post**.
 
 - Change something: edit the draft, or change the target (a new issue then
   needs step 2's title), run step 3 on it again, and ask again.
 - A target outside `tracker.issues_repo`, new issue or comment, is refused
-  with the whole change: say that nothing was changed, and ask again.
+  with the whole change. Check the target before editing anything; say that
+  nothing was changed, and ask again.
 - Don't post, or the question is declined: post nothing, say where the draft
   file is, and stop.
 
