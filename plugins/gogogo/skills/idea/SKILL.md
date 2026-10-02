@@ -35,23 +35,19 @@ gh issue list --repo <tracker.issues_repo> --state open --search "<two to four k
 ```
 
 When one is a likely match, show it and ask with `AskUserQuestion`: **add these
-findings as a comment on #<n>**, or **file a new issue**.
+findings as a comment on #<n>**, or **file a new issue**. The answer sets the
+*target* for steps 2 to 5: a comment on #<n>, or a new issue. A declined
+question, or no likely match, makes the target a new issue; step 4 still asks
+before anything is posted.
 
-- Comment: write the body (step 2's layout, step 3's removals) to a file,
-  show it, and ask with `AskUserQuestion`: **post it**, **change something**,
-  or **don't post**. Change something works as in step 4. On post it, run
-  `gh issue comment <n> --repo <tracker.issues_repo> --body-file <file>`, then
-  report the comment's link and what step 3 removed, and stop. On don't post
-  or a declined question, post nothing, say where the file is, and stop.
-  Never edit another issue's body; it may be a spec.
-- File new: go on.
-- A declined question: file nothing and stop.
+Never edit another issue's body; it may be a spec.
 
 ## 2. Draft
 
-Write the draft to a file in the scratchpad. The title is `<area>: <what>`,
-in the style of the titles step 1's search returned, if it returned any. The body has these headings and no
-others, in this order:
+Write the draft to a file in the scratchpad. The title, for a new issue, is
+`<area>: <what>`, in the style of the titles step 1's search returned, if it
+returned any; a comment has none. The body has these headings and no others,
+in this order:
 
 ```markdown
 ## Request
@@ -81,40 +77,50 @@ this body over as the issue's original report, unchanged.
 When `tracker.public` is true, remove from the title and the body, before the
 person sees the draft, and again after every change to it:
 
-- any path outside this repo: absolute (`/Users/`, `/home/`, `/tmp/`,
-  `/private/`, `C:\`), home-relative (`~/`), or into another repo's checkout.
-  A path into any checkout of this repo, a worktree included, is rewritten
-  relative to the repo root;
+- any path outside this checkout: absolute (`/Users/`, `/home/`, `/tmp/`,
+  `/private/`, `C:\`), home-relative (`~/`), or into another checkout. A path
+  inside this checkout is written relative to its root;
 - other repos and projects, by any name: an `owner/repo` other than
   `tracker.issues_repo` and `tracker.code_repo`, or a bare repo, project or
   folder name the session met outside this repo;
-- hostnames, IP addresses and links. A link stays only when it points into
-  `tracker.issues_repo` or `tracker.code_repo`, or is plainly a product's
-  public documentation; when unsure, remove it;
+- hostnames and IP addresses of machines and private services;
+- links, except into `tracker.issues_repo` or `tracker.code_repo`, or to a
+  product's plainly public documentation. The rule above on other repos and
+  projects wins over this one; when unsure, remove the link;
 - anything that looks like a token or key, and email addresses;
 - people's names (use their role).
 
-Keep a list of what you removed. It goes in your reply, never in the issue.
-Something the person, having seen that list, tells you to keep is theirs to
-publish: put it back and do not remove it again.
+Keep a list of what you removed. Step 4 shows it with the draft; it never goes
+in the issue. Something the person, having seen that list, tells you to keep
+is theirs to publish: put it back and do not remove it again.
 
 ## 4. Show and ask
 
-Show the title and the whole body, then ask with `AskUserQuestion`: **file
-it**, **change something**, or **don't file**.
+Show the target, the title (for a new issue), the whole body and step 3's
+list of removals. Then ask with `AskUserQuestion`: **post it** (naming the
+target: *file it as a new issue* or *post it as a comment on #<n>*), **change
+something**, or **don't post**.
 
 - Change something: edit the draft, run step 3 on it again, and ask again.
-- Don't file, or the question is declined: file nothing, say where the draft
+- Don't post, or the question is declined: post nothing, say where the draft
   file is, and stop.
 
-## 5. File
+## 5. Post
+
+A new issue:
 
 ```bash
 gh issue create --repo <tracker.issues_repo> --title "<title>" --body-file <file>
 ```
 
+A comment on #<n>:
+
+```bash
+gh issue comment <n> --repo <tracker.issues_repo> --body-file <file>
+```
+
 No label of any kind. Above all never `tracker.ready_marker`: it means
-"specced", and the loop would take the issue.
+"specced", and the loop would take the issue. After a comment, skip step 6.
 
 ## 6. The card
 
@@ -145,7 +151,7 @@ step was skipped, and why.
 
 ## 7. Report
 
-- the issue link;
+- the issue's or the comment's link;
 - the card's column as read back, or why there is none;
 - what step 3 removed;
 - next: `/gogogo:spec <n>` when someone is ready to design it.
