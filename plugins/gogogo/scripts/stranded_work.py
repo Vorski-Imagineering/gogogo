@@ -7,8 +7,10 @@ Work that is not in the tracker does not exist: nobody picks it up. A branch
 or worktree is reported when it has commits the base lacks, and either some of
 those commits are on no remote branch or the branch is checked out in a
 worktree (a local copy of a pushed branch is not stranded), and either its name
-carries no issue number, or that number is not an open issue in the profile's
-tracker (checked with `gh issue view` when the profile names a repo).
+carries no issue number (the same rule as /gogogo:status: a number right after
+a `/`, followed by `-` or the end, or a leading `<n>-`), or that number is not
+an open issue in the profile's tracker (checked with `gh issue view` when the
+profile names a repo).
 
 An open pull request in the profile's `tracker.code_repo` claims its branch,
 unless the branch has commits on no remote. Pull requests in the checkout's
@@ -40,6 +42,18 @@ def gh(*args):
         return subprocess.run(["gh", *args], capture_output=True, text=True)
     except OSError as exc:
         return subprocess.CompletedProcess(["gh", *args], 127, "", f"cannot run gh: {exc.strerror}")
+
+
+# The same rule as /gogogo:status (skills/status/SKILL.md): a number straight
+# after a `/` and followed by `-` or the end, else a leading `<n>-`.
+ISSUE_AFTER_SLASH = r"/(\d+)(?:-|$)"
+ISSUE_AT_START = r"^(\d+)-"
+
+
+def issue_in_branch(name):
+    """The issue number in a branch name, as a string, or None."""
+    match = re.search(ISSUE_AFTER_SLASH, name) or re.search(ISSUE_AT_START, name)
+    return match.group(1) if match else None
 
 
 def issue_open(repo, number):
@@ -163,8 +177,8 @@ def main(argv=None):
             if local.returncode == 0 and local.stdout.strip() == "0":
                 continue
         where = f" (worktree {worktrees[ref]})" if ref in worktrees else ""
-        number = re.search(r"(?:^|[/_-])(\d{1,6})(?:[/_-]|$)", branch)
-        if number and issue_open(repo, number.group(1)) is not False:
+        number = issue_in_branch(branch)
+        if number and issue_open(repo, number) is not False:
             continue
         # With no common commit, the count is the branch's whole history.
         shared = git("merge-base", args.base, ref)
@@ -193,7 +207,7 @@ def main(argv=None):
             if not number:
                 stranded.append(f"{branch}: {ahead_part}, no issue number in the name{pr_parts}{where}")
             else:
-                stranded.append(f"{branch}: {ahead_part}; issue #{number.group(1)} is not open{pr_parts}{where}")
+                stranded.append(f"{branch}: {ahead_part}; issue #{number} is not open{pr_parts}{where}")
 
     for line in stranded:
         print(line)
