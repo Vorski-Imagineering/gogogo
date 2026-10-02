@@ -100,6 +100,7 @@ class RequireUnattendedTest(unittest.TestCase):
         del env["CLAUDE_CODE_SESSION_ID"]
         r = self.run_script(env=env)
         self.assertEqual(r.returncode, 1)
+        self.assertIn("CLAUDE_CODE_SESSION_ID is not set", r.stderr)
 
 
 if __name__ == "__main__":
