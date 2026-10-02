@@ -18,9 +18,9 @@ Its `profile ok for status: <path>` line names the profile file the report's
 `profile:` line shows. Any other exit: **stop and report the line it printed**.
 A setting this skill names that the profile does not set is left out of the
 report, never printed empty: an unset `tracker.queue` or
-`tracker.columns.in_progress` has no line. Two have their own rule instead:
-`integration.base` falls back (Gather step 4), and an unset `tracker.tool`
-prints the BOARD `not shown` line.
+`tracker.columns.in_progress` has no line. Where a rule below says what an
+unset setting does (`integration.base`, `tracker.tool`,
+`stages[].environment`), that rule applies instead.
 
 ## It reads only
 
@@ -46,14 +46,17 @@ in its place in the report, and the others still run.
 1. **Header.**
    ```bash
    git rev-parse --show-toplevel        # its basename is <repo>
-   git status --porcelain=v2 --branch
+   git --no-optional-locks status --porcelain=v2 --branch
    ```
    Its `# branch.head` line is `<branch>` (`(detached)` on a detached HEAD),
    `# branch.oid` the commit (its first 7 characters), `# branch.upstream`
    `<upstream>`, and `# branch.ab +<a> -<b>` the counts. Every line not
-   starting `#` is one uncommitted change. The header ends with the counts
-   when `branch.ab` is there; otherwise `· <upstream> gone` when
+   starting `#` is one uncommitted change. On a detached HEAD the branch reads
+   `detached` and the header ends after the uncommitted count. Otherwise it
+   ends with the counts when `branch.ab` is there, `· <upstream> gone` when
    `branch.upstream` is there without it, and `· no upstream` when neither is.
+   `--no-optional-locks` keeps `git status` from taking the index lock, which
+   would be a write and could block a run working in the same checkout.
 2. **Board**, only when `tracker.tool` is `shared`:
    ```bash
    python3 "${CLAUDE_PLUGIN_ROOT}/scripts/tracker.py" fields
