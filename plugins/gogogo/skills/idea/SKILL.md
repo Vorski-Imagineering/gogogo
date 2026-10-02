@@ -100,7 +100,9 @@ Keep a list of what you removed, in your own reply and never in the draft
 file: each item's kind, where it was, and the removed text. A token, key,
 email address, share, preview, signed or secret link, or an item removed
 under *anything else* is named by kind and place only (*a token, in the
-second finding*), and is never put back. Step 4 shows the list with the draft.
+second finding*), and is never put back. An item that fits more than one
+kind is treated as the strictest. Step 4 shows the list with the draft, and
+every later mention of what was removed (step 1, step 7) uses this same form.
 Any other item the person, having seen it, tells you to keep is theirs to
 publish: put it back and do not remove it again.
 
@@ -113,9 +115,8 @@ comment on #<n>*), **change something**, or **don't post**.
 
 - Change something: edit the draft, or change the target (a new issue then
   needs step 2's title), run step 3 on it again, and ask again.
-- A target outside `tracker.issues_repo`, new issue or comment, is refused:
-  say so, keep the current target, apply the rest of the change, and ask
-  again.
+- A target outside `tracker.issues_repo`, new issue or comment, is refused
+  with the whole change: say that nothing was changed, and ask again.
 - Don't post, or the question is declined: post nothing, say where the draft
   file is, and stop.
 
