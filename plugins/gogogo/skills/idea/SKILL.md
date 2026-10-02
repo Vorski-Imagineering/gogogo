@@ -37,8 +37,9 @@ gh issue list --repo <tracker.issues_repo> --state open --search "<two to four k
 When one is a likely match, show it and ask with `AskUserQuestion`: **add these
 findings as a comment on #<n>**, or **file a new issue**. The answer sets the
 *target* for steps 2 to 5: a comment on #<n>, or a new issue. No likely
-match: the target is a new issue. A declined question: write the draft
-(steps 2 and 3), post nothing, say where it is, and stop.
+match: the target is a new issue. A declined question: write the draft as for
+a new issue (steps 2 and 3), post nothing, say where it is and what step 3
+removed, and stop.
 
 Never edit another issue's body; it may be a spec.
 
@@ -80,17 +81,19 @@ person sees the draft, and again after every change to it:
 - any path outside this checkout: absolute (`/Users/`, `/home/`, `/tmp/`,
   `/private/`, `C:\`), home-relative (`~/`), or into another checkout. A path
   inside this checkout is written relative to its root;
-- other repos and projects: an `owner/repo` other than `tracker.issues_repo`
-  and `tracker.code_repo`, or the name of another repo, project or folder the
-  session met on this machine;
+- other repos: any `owner/repo` other than `tracker.issues_repo` and
+  `tracker.code_repo`, and the name of any other private repo or project,
+  however it is written and however the session learned it;
 - hostnames and IP addresses, except inside a link the next rule keeps;
 - links, except into `tracker.issues_repo` or `tracker.code_repo`, or to a
-  product's plainly public documentation; when unsure, remove the link;
+  public product's documentation; when unsure, remove the link. Nothing here
+  keeps a private repo's or project's name;
 - anything that looks like a token or key, and email addresses;
 - people's names (use their role).
 
-Keep a list of what you removed, each by its kind and where it was (*a token,
-in the second finding*), never repeating a token, key or email address. Step 4
+Keep a list of what you removed: each item's kind, where it was, and the
+removed text, except that a token, key or email address is named by kind and
+place only (*a token, in the second finding*). Step 4
 shows it with the draft; it never goes in the issue. Something the person, having seen that list, tells you to keep
 is theirs to publish: put it back and do not remove it again.
 
@@ -102,7 +105,10 @@ target: *file it as a new issue* or *post it as a comment on #<n>*), **change
 something**, or **don't post**.
 
 - Change something: edit the draft, or change the target (a new issue then
-  needs step 2's title), run step 3 on it again, and ask again.
+  needs step 2's title; a comment needs an open issue in
+  `tracker.issues_repo`, checked with
+  `gh issue view <n> --repo <tracker.issues_repo> --json state`), run step 3
+  on it again, and ask again.
 - Don't post, or the question is declined: post nothing, say where the draft
   file is, and stop.
 
