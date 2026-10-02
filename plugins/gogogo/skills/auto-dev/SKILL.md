@@ -253,10 +253,14 @@ and the merge is `gh pr merge ... --body-file` with the body built as
 Never hand-roll a merge around a failed integration step, and never use a
 script the profile marks forbidden.
 
+Every PR body, commit message and squash body in the run names its issue as
+`/gogogo:dev` §8 says (`Refs #<n>`, never a closing keyword), the run's final
+PR included, and checks the PR's closing references before `gh pr merge`.
+
 ### Verify the merge landed: never trust an exit code alone
 
 ```bash
-python3 "${CLAUDE_PLUGIN_ROOT}/scripts/verify_merged.py" <pr> <base branch> [--repo <code_repo>]
+python3 "${CLAUDE_PLUGIN_ROOT}/scripts/verify_merged.py" <pr> <base branch> [--repo <code_repo>] --open <tracker.issues_repo>#<n>
 ```
 
 Confirm **MERGED** before commenting on the issue or moving any card. A run
@@ -267,13 +271,17 @@ again. NOT-MERGED, or "cannot tell", stops the whole run.
 When the link was written, add it to the check:
 
 ```bash
-python3 "${CLAUDE_PLUGIN_ROOT}/scripts/verify_merged.py" <pr> <base branch> [--repo <code_repo>] --profile <profile> --ships <tracker.issues_repo>#<n>
+python3 "${CLAUDE_PLUGIN_ROOT}/scripts/verify_merged.py" <pr> <base branch> [--repo <code_repo>] --profile <profile> --ships <tracker.issues_repo>#<n> --open <tracker.issues_repo>#<n>
 ```
 
 Exit 3
 (merged, link missing) does **not** stop the run: hand back as merged, and list
 the issue in the between-issues log and the close-run report as one whose card
 must be moved by hand when its tag ships.
+
+Exit 4 (merged, the issue closed) does **not** stop the run either: reopen it
+as `/gogogo:dev` §8 says, hand back as merged, and list the issue in the
+between-issues log (§8) and the close-run report as one the merge closed.
 
 ## 7. Report and hand back
 
@@ -288,8 +296,16 @@ reached, read from the profile's `stages`:
   run.
 
 For `run-branch-pr`: when the run's final PR has **merged** (check its state,
-not the merge command's exit), move every card the run landed to the next
-stage's column and read the board back. An opened-but-unmerged PR leaves the
+not the merge command's exit), first check that every issue it landed is still
+open, with one `--open` for each, and treat exit 4 as in *Verify the merge
+landed*:
+
+```bash
+python3 "${CLAUDE_PLUGIN_ROOT}/scripts/verify_merged.py" <final pr> <integration.final_target> [--repo <code_repo>] --open <tracker.issues_repo>#<n> ...
+```
+
+Then move every card the run landed to the next stage's column and read the
+board back. An opened-but-unmerged PR leaves the
 cards where they are.
 
 ## 8. Between issues
