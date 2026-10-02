@@ -320,18 +320,19 @@ each, `<repo>` being the name part of `tracker.code_repo`:
 - `<repo> #<n> started: <title>`;
 - after the merge is verified: `<repo> #<n> merged (<short sha>) -> <column>`;
 - `<repo> #<n> needs you -> <tracker.columns.needs_human>: <the Needs-you line>`;
-- when §9 closes the run: `<repo> auto-dev: run closed: <a> merged, <b> need you, <c> skipped`.
+- *run closed*, sent as §9 says: `<repo> auto-dev: run closed: <a> merged, <b> need you, <c> skipped`.
 
 A `send` that exits non-zero goes into this report as `notify failed: <its
 line>`, and the run goes on. Never put a token on a command line or in a report.
 
 ## 9. Close the run
 
-One report: every issue taken with its outcome and merge commit, every issue
+When this run tried to send *run started*, first send *run closed* (§8). Then
+one report: every issue taken with its outcome and merge commit, every issue
 skipped with the reason, anything left half-done with its branch, every card
 moved to `tracker.columns.needs_human` with its Needs-you line, the stranded
-work from preflight, and anything the profile's `stop.extra` checks raised.
-Then, when this run tried to send *run started*, send *run closed* (§8).
+work from preflight, anything the profile's `stop.extra` checks raised, and a
+`notify failed` line if *run closed* did not send.
 
 ## Stop the whole run and ask when
 
