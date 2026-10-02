@@ -137,6 +137,14 @@ class Items(unittest.TestCase):
         n_texts = [i["text"] for i in items(BODY)["items"] if i["id"].startswith("N")]
         self.assertEqual(n_texts, ["The form's fields.", "Any other repo."])
 
+    def test_files_with_no_groups_is_unlisted_and_nothing_is_outside(self):
+        body = BODY.replace("**Create:** `tests/test_list.py`.", "Create `tests/test_list.py`.").replace(
+            "**Edit:** `app/views.py`", "Edit `app/views.py`")
+        listed = items(body, changed=["app/views.py", "README.md"])
+        self.assertIn("Files", listed["unlisted"])
+        self.assertEqual(listed["outside"], [])
+        self.assertFalse([i for i in listed["items"] if i["id"].startswith("F:")])
+
     def test_no_spec_in_this_body(self):
         out, code = call("items", body="## Request\n\nPlease fix it.\n")
         self.assertEqual(code, 1)
@@ -245,6 +253,14 @@ class Verify(unittest.TestCase):
             self.assertEqual(code, 2, evidence + "\n" + out)
         out, code = self.verify(self.answers(D1="D1 | met | app/views.py::listed, app/views.py | "))
         self.assertEqual(code, 0, out)
+
+    def test_evidence_outside_the_working_tree_is_refused(self):
+        outside = self.dir.parent / "elsewhere.txt"
+        outside.write_text("x\n")
+        self.addCleanup(outside.unlink)
+        for evidence in (str(outside), "../elsewhere.txt", str(self.dir / "app" / "views.py")):
+            out, code = self.verify(self.answers(D1=f"D1 | met | {evidence} | "))
+            self.assertEqual(code, 2, evidence + "\n" + out)
 
     def test_differs_needs_a_note(self):
         out, code = self.verify(self.answers(D2="D2 | differs | app/views.py:1 | "))

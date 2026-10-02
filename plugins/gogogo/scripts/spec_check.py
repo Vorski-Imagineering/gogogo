@@ -10,14 +10,16 @@ Approvals row and `A0` the Not approved line, `D<k>` each numbered Design item,
 `T<k>` each numbered test case, `N<k>` each bullet under Explicitly not in
 scope, and `F:<path>` each path under Create and Edit. Ids are by position. A
 Design or Test cases section with no numbered item is one item, `D0` or `T0`,
-and is printed as `unlisted:`. With `--base`, each `F:` item is `met` when the
-change touches that file and `missing` when it does not, and each changed file
-no `F:` item names is printed as `outside:`.
+and is printed as `unlisted:`; so is a Files section with no Create or Edit
+group naming a path. With `--base`, each `F:` item is `met` when the change
+touches that file and `missing` when it does not, and each changed file no
+`F:` item names is printed as `outside:` (not when Files is unlisted: there is
+no list to be outside of).
 
 `verify` reads a reader's answers, one line per `V`, `A`, `D`, `T` and `N`
 item: `<id> | <met|missing|differs|na> | <evidence> | <note>`. Evidence is
 `path`, `path:line` or `path::name`, several separated by `, `, or `-`; every
-one must resolve in the working tree. It refuses an answer list that skips an
+one must resolve to a file in the working tree, by a path relative to it. It refuses an answer list that skips an
 item, answers one twice, names an unknown id, gives `met` or `differs` on a
 `D`, `T` or `A` item with no evidence, or leaves a note empty where one is
 needed. Otherwise it prints what is not `met`, then
@@ -114,6 +116,8 @@ def list_items(body: str, changed: list[str] | None = None) -> dict | None:
         add(f"N{k}", text)
     outside = []
     paths = _paths(groups.get("create", []) + groups.get("edit", []))
+    if "Files" in by_title and not paths:
+        unlisted.append("Files")
     for path in paths:
         add(f"F:{path}", path)
     if changed is not None:
@@ -122,7 +126,8 @@ def list_items(body: str, changed: list[str] | None = None) -> dict | None:
         for item in items:
             if item["id"].startswith("F:"):
                 item["status"] = "met" if touches(item["text"]) else "missing"
-        outside = [f for f in changed if not any(f == p or f.endswith("/" + p) for p in paths)]
+        if paths:
+            outside = [f for f in changed if not any(f == p or f.endswith("/" + p) for p in paths)]
     return {"items": items, "unlisted": unlisted, "outside": outside}
 
 
@@ -142,7 +147,9 @@ def _resolves(evidence: str) -> str | None:
         elif re.search(r":\d+$", part):
             path, line = part.rsplit(":", 1)
         file = Path(path)
-        if not path or not file.is_file():
+        if not path or file.is_absolute() or not file.resolve().is_relative_to(Path.cwd().resolve()):
+            return f"{part}: not a path inside the working tree"
+        if not file.is_file():
             return f"{part}: no such file"
         text = file.read_text(encoding="utf-8", errors="replace")
         if line is not None and not 1 <= int(line) <= len(text.splitlines()):

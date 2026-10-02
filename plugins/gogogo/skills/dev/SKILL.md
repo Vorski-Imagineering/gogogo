@@ -134,11 +134,14 @@ change for bugs. In order:
 
 - **List the items.** Save the issue body to a file and run
   ```bash
-  python3 "${CLAUDE_PLUGIN_ROOT}/scripts/spec_check.py" items <body file> --base <base>
+  python3 "${CLAUDE_PLUGIN_ROOT}/scripts/spec_check.py" items <body file> --base origin/<base>
   ```
-  where `<base>` is the branch the change merges into (`integration.base`, or
-  the repo's default branch when the profile has none). Exit 1 means the body
-  has no spec: skip the rest of this step, and say so in §7.
+  from the change's working tree, where `<base>` is the branch the change
+  merges into (`integration.base`, or the repo's default branch when the
+  profile has none); `git fetch origin` first, so files other changes already
+  merged are not counted as this change's. Exit 1 means the body has no spec:
+  skip the rest of this step, and say so in §7. An `unlisted:` line names a
+  section the check could not list item by item; say so in §7.
 - **A reader answers them.** Give a reader that has not seen how the change
   was made three things and nothing else: where the spec is (the issue
   number), the item list, and the change (the working tree and its difference
@@ -164,7 +167,7 @@ change for bugs. In order:
   When no such reader can be started, answer the list yourself and record
   `reader=self`.
 - **Check the answers.** Run `spec_check.py verify <body file> <answers file>
-  --base <base>`. On exit 2, give the reader the `error:` lines and have it
+  --base origin/<base>`. On exit 2, give the reader the `error:` lines and have it
   answer again.
 - **Handle what is not `met`**, each by the first case that fits:
   - two parts of the spec disagree, so that meeting one item breaks another →
@@ -184,7 +187,8 @@ change for bugs. In order:
 - **A misreading.** An answer you believe is a misreading: give the reader the
   file and line for that item and ask once more. Its second answer stands.
 - **Again, at most three times.** After changing anything, have the reader
-  answer the items that were not `met` again, and run `verify` again. At most
+  answer the items that were not `met` again, replacing their lines in the
+  answers file and keeping the rest, and run `verify` again. At most
   three reader runs. An item still `missing`, or `differs` and not declared,
   after the third → the issue stops for a person (§8).
 - **Then round 1 starts.** What this step changed is part of the change the
