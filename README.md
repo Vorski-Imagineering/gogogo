@@ -164,8 +164,8 @@ way: most of the value comes in the first two or three rounds, later rounds can
 make a change worse, and a loop converges when findings are judged against the
 spec and a loop that will not settle goes to a person.
 [docs/when-is-enough-enough.md](docs/when-is-enough-enough.md) has the numbers,
-the sources with the dates we read them, and the proposal in
-[#33](https://github.com/Vorski-Imagineering/gogogo/issues/33).
+the sources with the dates we read them, and the rule we settled on
+([#33](https://github.com/Vorski-Imagineering/gogogo/issues/33)).
 
 ## Skills
 

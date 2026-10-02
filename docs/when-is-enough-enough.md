@@ -4,7 +4,7 @@ Every change an agent makes here is reviewed by another model before it
 merges, and every fix the review asks for is reviewed again. That loop is what
 lets the queue run unattended. It also has a failure that decides how well the
 whole system works: it does not always stop. This page records what we saw, what
-the research said in October 2026, and what we propose to do about it
+the research said in October 2026, and what we decided to do about it
 ([#33](https://github.com/Vorski-Imagineering/gogogo/issues/33)).
 
 The state of the art here is moving fast. The sources below carry the date we
@@ -93,35 +93,59 @@ Three things kept the loop going:
    is perfect; optional polish is marked "Nit" and never blocks
    ([Google: the standard of code review](#sources)).
 
-## What we propose
+## What we decided
 
-For [#33](https://github.com/Vorski-Imagineering/gogogo/issues/33). These are
-proposals until the issue's Approvals table records the owner's decisions; the
-skills still follow the rules above.
+Decided on 2026-10-02 and specified in
+[#33](https://github.com/Vorski-Imagineering/gogogo/issues/33). Until that
+issue ships, the skills still follow the rules under *What the skills do
+today*.
 
-1. **The spec is the yardstick.** A round applies a finding only when the
-   change does not do what the spec says, breaks something that already works,
-   or has a bug a real repo or a real run would hit. Everything else is
-   declined with a one-line reason: hypothetical setups, style, settled
-   decisions, reversals of an earlier fix.
-2. **Beyond the spec is a follow-up, never a fix.** A correction may not add
-   behaviour the spec does not have. A finding that asks for new behaviour goes
-   into the issue's report for a person to decide.
-3. **Verify before changing.** Before applying a finding, confirm it with a
-   concrete case: reproduce it, or trace it to a line and a real input. This is
-   the instruction the feedback-control paper found decisive.
-4. **Carry decisions forward.** Each round reviews only the previous round's
-   corrections, and is given the findings already declined and the decisions
-   the spec settled, so they are not raised again.
-5. **Watch the trend, and escalate instead of grinding.** Rounds one to three
-   follow the rules above. From round four, only a real correctness defect is
-   applied; everything else becomes a follow-up. If round six still finds a real
-   correctness defect, the issue stops for a person: a loop that will not
-   settle usually means a gap in the spec or the design, which is a person's
-   decision.
+1. **Evidence decides what is applied.** A round applies a finding only when
+   the change fails the spec or a rule in the repo's `CLAUDE.md`, breaks
+   something that worked, or has a bug shown by a concrete case: for code, a
+   test that fails; for prose, a named, real situation. Everything else is
+   declined with a recorded reason, even when the reviewer calls it a
+   correctness defect. The exception is harm that costs most: where the
+   consequence would be a security hole, lost data or an unapproved Hard Stop
+   change, a plausible finding is fixed or goes to a person.
+2. **A small addition beyond the spec may be applied.** Small means: it touches
+   no Hard Stop, adds no new user-visible behaviour, setting or message, stays
+   inside the files the spec lists, and has a test. It is named in the report.
+   If a later round finds a defect in the addition, it is removed and becomes a
+   follow-up; it is not patched again. Anything larger is a follow-up for a
+   person.
+3. **Prose is judged per file.** Markdown and text files get the prose rule
+   (two rounds at most) even inside a change that also has code. Most of the
+   churn above was skill text reviewed under the code rule.
+4. **Three attempts per finding, and no flip-flops.** After the first round a
+   review looks only at the corrections, so a real defect there means a fix was
+   wrong. The second attempt must say what the first got wrong and take a
+   different approach. A real defect in the third attempt sends the issue to a
+   person, with the three attempts. A finding that would undo an earlier
+   correction is never applied a second time: the spec's reading stands, and
+   where the spec is silent a person decides. This replaces #17's "no round
+   limit" with a rule about what a round means; in practice a review ends in
+   about four rounds.
+5. **A circuit breaker at 13 rounds.** Not a rule to steer by: if a review ever
+   gets that far, the loop itself has misbehaved, and the issue stops for a
+   person. We hope it is only bad luck that hits it.
+6. **Coverage is set per repo.** A repo's profile may set `review.coverage` to
+   `precise` (only findings the reviewer is confident in), `broad` (a wider
+   net, some less certain; the default) or `exhaustive`. The first round runs
+   at that coverage; every correction round runs at `precise`. What a repo
+   treats as serious is written as rules in its `CLAUDE.md`, which the
+   reviewer reads.
+7. **The loop keeps its own numbers.** Each issue's review record carries why
+   findings were applied or declined, how many fixes were fixes of fixes, how
+   the review ended, and which models wrote and reviewed the change. A
+   read-only script, `review_stats.py`, prints the table above from those
+   records, with each issue's outcome and any later bug traced back to it. The
+   attempt limit, the breaker and the default coverage change only on those
+   numbers.
 
-Point 5 replaces #17's "there is no round limit". It keeps #17's goal, that
-nothing merges unreviewed, by stopping for a person rather than merging.
+Not taken: a fixed round limit as the rule, depth presets, a setting for the
+reviewer's model (the record notes the models instead), and a second agent to
+judge findings.
 
 ## Sources
 
@@ -150,6 +174,12 @@ write-up; "summary" means only a search result's summary was seen.
 - Anthropic, Claude Code `code-review` plugin README.
   <https://github.com/anthropics/claude-code/blob/main/plugins/code-review/README.md>.
   Read.
+- Anthropic, Claude Code documentation: *Code Review* (`/code-review` effort
+  levels; `REVIEW.md` guidance on re-review convergence and a verification
+  bar), *Skills* and *Subagents* (how a subagent's model is chosen).
+  <https://code.claude.com/docs/en/code-review>,
+  <https://code.claude.com/docs/en/skills>,
+  <https://code.claude.com/docs/en/sub-agents>. Read.
 - Madaan et al., *Self-Refine: Iterative Refinement with Self-Feedback*, 2023.
   <https://arxiv.org/pdf/2303.17651>. Summary.
 - Emergent Mind, *Iterative Self-Refinement* (topic overview).
