@@ -5,7 +5,9 @@ A local branch whose commits are all on some remote branch is a copy, not
 stranded work, unless it is checked out in a worktree. Each test builds real
 repos in a temp dir (a bare `origin` and a clone) and runs the script as a
 subprocess from the clone, so no profile is found and no `gh` call is made.
-Branch names carry no digits, so the issue lookup never runs.
+`StrandedWorkTest`'s branch names carry no digits, so the issue lookup never
+runs there; `BranchNumbers` uses numbered names, and with no profile a name
+read as numbered is never listed.
 
 `PullRequests` adds a profile in the clone and a fake `gh` on PATH that answers
 from a JSON fixture and logs every call (gogogo#22).
