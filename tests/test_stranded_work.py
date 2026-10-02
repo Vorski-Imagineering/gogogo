@@ -13,6 +13,7 @@ from a JSON fixture and logs every call (gogogo#22).
     python3 -m unittest tests.test_stranded_work
 """
 
+import importlib.util
 import json
 import os
 import shutil
@@ -329,6 +330,57 @@ class PullRequests(Repos):
         self.branch_with("fix/12-x", 1)
         self.assertEqual(self.run_with({"issue": {"12": {"state": "OPEN"}}}), (0, []))
         self.assertNotIn("pr list", self.log.read_text())
+
+
+def load_script():
+    sys.path.insert(0, str(SCRIPT.parent))
+    spec = importlib.util.spec_from_file_location("stranded_work", SCRIPT)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+STATUS = SCRIPT.parents[1] / "skills" / "status" / "SKILL.md"
+
+
+class IssueNumberRule(unittest.TestCase):
+    """The issue number in a branch name: the same rule as /gogogo:status (gogogo#40)."""
+
+    def test_the_rule_name_by_name(self):
+        rule = load_script().issue_in_branch
+        for name, number in [("fix/6-status", "6"), ("fix/22", "22"), ("6-status", "6"),
+                             ("claude/q3xh50", None), ("tech-eval-register-rules-23", None),
+                             ("main-2026-10-01", None), ("auto-dev-run-branch-and-notify", None),
+                             ("fix/2026-10-01", "2026")]:
+            self.assertEqual(rule(name), number, name)
+
+    def test_the_patterns_are_status_patterns(self):
+        module = load_script()
+        text = STATUS.read_text(encoding="utf-8")
+        for pattern in (module.ISSUE_AFTER_SLASH, module.ISSUE_AT_START):
+            self.assertIn(f"`{pattern}`", text)
+
+
+class BranchNumbers(Repos):
+    def test_a_dated_branch_is_listed_with_no_number(self):
+        self.branch_with("main-2026-10-01", 1)
+        code, lines = self.stranded()
+        self.assertEqual(code, 1)
+        self.assertEqual(len(lines), 1, lines)
+        self.assertTrue(lines[0].startswith(
+            "main-2026-10-01: 1 commit(s) ahead of main, no issue number in the name"), lines[0])
+
+    def test_a_trailing_number_is_not_a_claim(self):
+        self.branch_with("tech-eval-register-rules-23", 1)
+        code, lines = self.stranded()
+        self.assertEqual(code, 1)
+        self.assertEqual(len(lines), 1, lines)
+        self.assertTrue(lines[0].startswith(
+            "tech-eval-register-rules-23: 1 commit(s) ahead of main, no issue number in the name"), lines[0])
+
+    def test_fix_n_slug_still_reads_as_numbered(self):
+        self.branch_with("fix/23-thing", 1)
+        self.assertEqual(self.stranded(), (0, []))
 
 
 if __name__ == "__main__":
