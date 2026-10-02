@@ -98,7 +98,9 @@ means finished work sits unverified while you go and ask.
 A non-zero exit is a **stop**, never an empty column: the tool refuses to print
 a list it could not reconcile. The first time this list is read in a run
 (not in triage-only mode), send the *run started* message (§8), counting the
-rows that are issues. Work only rows that are issues. Take them in the
+rows that are issues. When nothing listed may still be taken in this run,
+finish §6's `run-branch-pr` final PR if the run made one, then go to §9.
+Work only rows that are issues. Take them in the
 order the user gave; absent one, live user-facing bugs first, refactors after,
 anything large last so it cannot absorb the run.
 
@@ -327,15 +329,13 @@ line>`, and the run goes on. Never put a token on a command line or in a report.
 
 ## 9. Close the run
 
-§9 begins when §1 lists nothing this run may still take (every row is done,
-skipped or abandoned in this run) and, under `run-branch-pr`, the final PR is
-merged or left for a person (§6). A run that stopped to ask and was told to go
-on reaches it the same way. First send *run closed* (§8). Then one report: every issue taken with its outcome and merge commit, every issue
+In a run that tried to send *run started*, first send *run closed* (§8). Then
+one report: every issue taken with its outcome and merge commit, every issue
 skipped with the reason, anything left half-done with its branch, every card
 moved to `tracker.columns.needs_human` with its Needs-you line, the stranded
 work from preflight, anything the profile's `stop.extra` checks raised, and
 every `notify failed: <its line>` (a `send` that exited non-zero) not already
-reported.
+given in a between-issues report or when stopping to ask.
 
 ## Stop the whole run and ask when
 
@@ -351,7 +351,7 @@ reported.
   forbids it.
 
 When you stop and ask, also give every `notify failed` line not already
-reported.
+given in a between-issues report or an earlier stop.
 
 A Hard Stop with no approval stops **that issue**, not the run.
 
