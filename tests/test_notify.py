@@ -225,7 +225,7 @@ class Status(Case):
         code, out, _ = self.run_main("status", "--profile", self.profile())
         self.assertEqual(code, 1)
         self.assertIn("chat not found", out)
-        self.urlopen.side_effect = [Answer({"ok": True}), ok({"first_name": "Vic"})]
+        self.urlopen.side_effect = [ok({}), ok({"first_name": "Vic"})]
         self.assertEqual(self.run_main("status", "--profile", self.profile())[0], 1)
         self.assertNotIn("sendMessage", self.methods())
 
