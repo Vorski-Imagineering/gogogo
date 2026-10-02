@@ -10,3 +10,6 @@ __pycache__/
 
 # per-machine Claude Code settings (may hold tokens or local paths)
 .claude/settings.local.json
+
+# private trial-run write-ups kept only in a local clone
+/evals/
