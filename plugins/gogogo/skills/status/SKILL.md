@@ -48,13 +48,16 @@ in its place in the report, and the others still run.
    git rev-parse --show-toplevel        # its basename is <repo>
    git --no-optional-locks status --porcelain=v2 --branch
    ```
-   Its `# branch.head` line is `<branch>`,
-   `# branch.oid` the commit (its first 7 characters), `# branch.upstream`
-   `<upstream>`, and `# branch.ab +<a> -<b>` the counts. Every line not
-   starting `#` is one uncommitted change. On a detached HEAD the branch reads
-   `detached` and the header ends after the uncommitted count. Otherwise it
-   ends with the counts when `branch.ab` is there, `· <upstream> gone` when
-   `branch.upstream` is there without it, and `· no upstream` when neither is.
+   Its `# branch.head` line is `<branch>` (`(detached)` on a detached HEAD,
+   printed as is), `# branch.oid` the commit (its first 7 characters),
+   `# branch.upstream` `<upstream>`, and `# branch.ab +<a> -<b>` the counts.
+   Every line not starting `#` is one uncommitted change. After
+   `<n> uncommitted`, the first line ends, by the first case that fits:
+   - `(detached)`: nothing more;
+   - `branch.ab` present: ` · <a> ahead / <b> behind <upstream>, as last fetched`;
+   - `branch.upstream` present without it: ` · <upstream> gone`;
+   - neither: ` · no upstream`.
+
    `--no-optional-locks` keeps `git status` from taking the index lock, which
    would be a write and could block a run working in the same checkout.
 2. **Board**, only when `tracker.tool` is `shared`:
@@ -124,9 +127,11 @@ These rules apply, in order.
 
 ## Template
 
-The report follows this layout line for line. The first line's ending after
-the uncommitted count is the one Gather step 1 picks; the template shows the
-case with counts. A section with nothing to show prints `none`. `Worktrees, detached:` is left out when there are none.
+The report follows this layout line for line. It shows the full case: where
+a rule above makes a line one line (`unreadable`, `not shown`), changes its
+ending (Gather step 1) or leaves it out (an unset setting), that rule wins.
+A section with nothing to show prints `none`. `Worktrees, detached:` is left
+out when there are none.
 
 ```
 <repo> · <branch> @ <short sha> · <n> uncommitted · <a> ahead / <b> behind <upstream>, as last fetched
