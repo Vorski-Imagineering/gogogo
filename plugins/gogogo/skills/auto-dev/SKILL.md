@@ -96,11 +96,11 @@ means finished work sits unverified while you go and ask.
 ```
 
 A non-zero exit is a **stop**, never an empty column: the tool refuses to print
-a list it could not reconcile. The first time this list is read in a run
-(not in triage-only mode), send the *run started* message (§8), counting the
-rows that are issues. When nothing listed may still be taken in this run,
-finish §6's `run-branch-pr` final PR if the run made one, then go to §9.
-Work only rows that are issues. Take them in the
+a list it could not reconcile. Outside triage-only mode: the first time this
+list is read successfully in a run, send the *run started* message (§8),
+counting the rows that are issues; and when nothing listed may still be taken
+in this run, go to §9, by way of §6's final PR and §7's card moves when the
+run made a `run-branch-pr` run branch. Work only rows that are issues. Take them in the
 order the user gave; absent one, live user-facing bugs first, refactors after,
 anything large last so it cannot absorb the run.
 
@@ -324,18 +324,17 @@ each, `<repo>` being the name part of `tracker.code_repo`:
 - `<repo> #<n> needs you -> <tracker.columns.needs_human>: <the Needs-you line>`;
 - *run closed*, from §9 only: `<repo> auto-dev: run closed: <a> merged, <b> need you, <c> skipped`.
 
-A `send` that exits non-zero goes into this report as `notify failed: <its
-line>`, and the run goes on. Never put a token on a command line or in a report.
+A `send` that exits non-zero is a `notify failed: <its line>`, and the run
+goes on. Each is given once, in the first report after it: this one, §9's, or
+a stop's question. Never put a token on a command line or in a report.
 
 ## 9. Close the run
 
-In a run that tried to send *run started*, first send *run closed* (§8). Then
-one report: every issue taken with its outcome and merge commit, every issue
+First send *run closed* (§8). Then one report: every issue taken with its outcome and merge commit, every issue
 skipped with the reason, anything left half-done with its branch, every card
 moved to `tracker.columns.needs_human` with its Needs-you line, the stranded
 work from preflight, anything the profile's `stop.extra` checks raised, and
-every `notify failed: <its line>` (a `send` that exited non-zero) not already
-given in a between-issues report or when stopping to ask.
+the `notify failed` lines §8 says are due.
 
 ## Stop the whole run and ask when
 
@@ -350,8 +349,7 @@ given in a between-issues report or when stopping to ask.
 - anything wants to touch production data or an environment whose `writes`
   forbids it.
 
-When you stop and ask, also give every `notify failed` line not already
-given in a between-issues report or an earlier stop.
+When you stop and ask, also give the `notify failed` lines §8 says are due.
 
 A Hard Stop with no approval stops **that issue**, not the run.
 
