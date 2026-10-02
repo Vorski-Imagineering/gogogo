@@ -320,12 +320,10 @@ each, `<repo>` being the name part of `tracker.code_repo`:
 - `<repo> #<n> started: <title>`;
 - after the merge is verified: `<repo> #<n> merged (<short sha>) -> <column>`;
 - `<repo> #<n> needs you -> <tracker.columns.needs_human>: <the Needs-you line>`;
-- `<repo> auto-dev: run closed: <a> merged, <b> need you, <c> skipped`,
-  whenever a run that tried to send *run started* ends: at §9, or when it
-  stops (§ *Stop the whole run*, or §1's list failing on a re-read), with
-  `, stopped: <reason>` added. If the person then has it go on, its later
-  messages follow, and §9 closes it again. A run that never got as far as
-  *run started* sends nothing.
+- from §9 only: `<repo> auto-dev: run closed: <a> merged, <b> need you, <c> skipped`,
+  with `, stopped: <reason>` added when the run stopped (§ *Stop the whole
+  run*, or §1's list failing on a re-read). A run the person has go on after
+  a stop is a new run: it sends *run started* again.
 
 A `send` that exits non-zero goes into this report as `notify failed: <its
 line>`, and the run goes on. Never put a token on a command line or in a report.
@@ -336,8 +334,8 @@ One report: every issue taken with its outcome and merge commit, every issue
 skipped with the reason, anything left half-done with its branch, every card
 moved to `tracker.columns.needs_human` with its Needs-you line, the stranded
 work from preflight, and anything the profile's `stop.extra` checks raised.
-Then send *run closed* (§8), unless the last message this run tried to send
-was already a *run closed* for a stop.
+Then, when this run tried to send *run started*, send *run closed* (§8). §9
+is the only place it is sent.
 
 ## Stop the whole run and ask when
 
@@ -351,6 +349,9 @@ was already a *run closed* for a stop.
 - anything the profile's `stop.extra` names;
 - anything wants to touch production data or an environment whose `writes`
   forbids it.
+
+Stopping the whole run closes it: write the §9 report, which sends its
+*run closed* with the reason, then ask.
 
 A Hard Stop with no approval stops **that issue**, not the run.
 
