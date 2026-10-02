@@ -34,11 +34,18 @@ def git(*args):
     return subprocess.run(["git", *args], capture_output=True, text=True)
 
 
+def gh(*args):
+    """`gh`, where a missing or unrunnable `gh` is a failed call, never a crash."""
+    try:
+        return subprocess.run(["gh", *args], capture_output=True, text=True)
+    except OSError as exc:
+        return subprocess.CompletedProcess(["gh", *args], 127, "", f"cannot run gh: {exc.strerror}")
+
+
 def issue_open(repo, number):
     if not repo:
         return None
-    out = subprocess.run(["gh", "issue", "view", number, "--repo", repo, "--json", "state"],
-                         capture_output=True, text=True)
+    out = gh("issue", "view", number, "--repo", repo, "--json", "state")
     if out.returncode != 0:
         return False
     return json.loads(out.stdout).get("state") == "OPEN"
@@ -65,9 +72,8 @@ def github_repos(code_repo):
 
 def pull_requests(repo, branch):
     """(this repo's PRs from `branch`, None), or (None, why the lookup failed)."""
-    out = subprocess.run(["gh", "pr", "list", "--repo", repo, "--head", branch, "--state", "all",
-                          "--json", "number,state,headRefOid,headRepository", "--limit", "20"],
-                         capture_output=True, text=True)
+    out = gh("pr", "list", "--repo", repo, "--head", branch, "--state", "all",
+             "--json", "number,state,headRefOid,headRepository", "--limit", "20")
     if out.returncode != 0:
         return None, (out.stderr.strip().splitlines() or [f"gh exited {out.returncode}"])[0]
     try:
@@ -91,7 +97,7 @@ _archived = {}
 
 def archived(repo):
     if repo not in _archived:
-        out = subprocess.run(["gh", "repo", "view", repo, "--json", "isArchived"], capture_output=True, text=True)
+        out = gh("repo", "view", repo, "--json", "isArchived")
         try:
             _archived[repo] = json.loads(out.stdout).get("isArchived") if out.returncode == 0 else None
         except json.JSONDecodeError:
