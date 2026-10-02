@@ -251,11 +251,19 @@ class Open(Repo):
     def test_every_open_link_is_checked_when_one_cannot_tell(self):
         sha = self.merge("Fix it\n\nCloses acme/issues#7")
         code, out = self.verify(sha, "--open", "acme/issues#7", "--open", "acme/issues#8",
-                                states=("OPEN",) * 13 + ("CLOSED",))
+                                states=("OPEN",) * (vm.CLOSE_WAIT // vm.CLOSE_STEP + 1) + ("CLOSED",))
         self.assertEqual(code, 2, out)
         self.assertIn("acme/issues#7 is named by a closing reference", out)
         self.assertIn("CLOSED (not by a closing reference in this merge): acme/issues#8", out)
         self.assertFalse(any(line.startswith("MERGED") for line in out.splitlines()), out)
+
+    def test_one_wait_covers_every_open_link(self):
+        """Every close comes from the same merge, so the wait is shared, not one per issue."""
+        sha = self.merge("Fix it\n\nCloses acme/issues#7\nCloses acme/issues#8")
+        code, out = self.verify(sha, "--open", "acme/issues#7", "--open", "acme/issues#8")
+        self.assertEqual(code, 2, out)
+        self.assertIn("acme/issues#8 is named by a closing reference", out)
+        self.assertLessEqual(self.slept, vm.CLOSE_WAIT // vm.CLOSE_STEP)
 
     def test_cannot_tell_does_not_print_merged(self):
         sha = self.merge("Fix it")

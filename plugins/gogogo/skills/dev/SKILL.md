@@ -276,13 +276,15 @@ commenting or moving anything:
 python3 "${CLAUDE_PLUGIN_ROOT}/scripts/verify_merged.py" <pr> <base branch> [--repo <code_repo>] --open <tracker.issues_repo>#<n>
 ```
 
-Exit 4 means the merge closed the issue (or something else did). Reopen each
-issue the output names (`gh issue reopen <n> --repo <tracker.issues_repo>`),
-confirm `gh issue view <n> --repo <tracker.issues_repo> --json state -q .state`
-reads `OPEN`, then hand back as merged; when the output also names a missing
-`Ships-issue`, also do what exit 3 says (below). Say in the §7 report that the
-merge closed the issue and it was reopened. If the reopen fails, still hand
-back as merged, with `**Needs you:** reopen #<n>` as the report's first line.
+Every issue a `CLOSED` line names, whatever the exit, is reopened
+(`gh issue reopen <n> --repo <tracker.issues_repo>`) and confirmed with
+`gh issue view <n> --repo <tracker.issues_repo> --json state -q .state`, which
+must read `OPEN`. Exit 4 means the merge landed and closed the issue (or
+something else did): after the reopen, hand back as merged; when the output
+also names a missing `Ships-issue`, also do what exit 3 says (below). Say in
+the §7 report that the merge closed the issue and it was reopened. If the
+reopen fails, still hand back as merged, with `**Needs you:** reopen #<n>` as
+the report's first line.
 
 ### When you merge with `gh`: the squash body carries the link
 

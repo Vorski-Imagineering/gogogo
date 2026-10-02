@@ -27,7 +27,8 @@ unreadable profile only loses the short form; full-form links still check.
 (`Fixes #n`) in the PR's body or in a commit the merge brings onto the default
 branch closes the issue a few seconds after the merge, so a single read can
 pass before the close lands. When the PR or those commits name the issue with
-a closing keyword, the script waits up to CLOSE_WAIT seconds for the close;
+a closing keyword, the script waits up to CLOSE_WAIT seconds for the close (one wait shared by
+every `--open` issue);
 when nothing does, it reads the state once. A short-form `#n` names the PR's
 own repo: `--repo`, else the profile's `tracker.code_repo`. It only reads;
 reopening is the skill's job.
@@ -93,11 +94,11 @@ def closed_links(links, sha, branch, pr_repo, this_repo, closing_refs):
     messages = log.stdout
     urls = {(ref.get("url") or "").lower() for ref in closing_refs or []}
     lines, problems = [], []
+    deadline = time.monotonic() + CLOSE_WAIT  # one merge, so one wait for all its closes
     for link in links:
         will_close = default == branch and (
             f"https://github.com/{link.repo}/issues/{link.number}".lower() in urls
             or closes(messages, link, this_repo))
-        deadline = time.monotonic() + CLOSE_WAIT
         state = issue_state(link)
         while will_close and state == "OPEN" and time.monotonic() < deadline:
             time.sleep(CLOSE_STEP)
@@ -184,7 +185,8 @@ def main(argv=None):
             # reader would take as the all-clear.
             for problem in problems:
                 print(f"cannot tell: {sha[:12]} is on origin/{args.branch}, but {problem}", file=sys.stderr)
-            print("\n".join(no_link + closed))
+            if no_link or closed:
+                print("\n".join(no_link + closed))
             return 2
         merged = f"MERGED {sha[:12]} on origin/{args.branch}"
         print("\n".join([", but ".join([merged, *no_link]), *closed]))
