@@ -138,12 +138,12 @@ Push the branch as soon as it has its first commit (`git push -u origin
 - **Every rung in `verify.rungs` is mandatory** for every issue.
 - The regression test must be seen failing, then the whole suite green. Record
   how many new tests went red.
-- `/code-review` as `/gogogo:dev` §5 says. **Code**: review each round's
-  corrections until a round applies nothing; there is no round limit, so the
-  number of rounds never stops the issue. **Prose only**: `medium`, two rounds
-  at most.
-- **When the review stops an issue** (a correctness finding you cannot fix,
-  or, for prose, a correctness defect in the second round, fixed): commit
+- Review as `/gogogo:dev` §5 says. The run commits, so each correction
+  round's target is the correction commits' range. The number of rounds
+  never stops an issue except through §5's own endings.
+- **When the review stops an issue** (one of `/gogogo:dev` §5 rule 8's
+  endings for a person: `third-attempt`, `reversal`, `unfixable`, `prose` or
+  `breaker`): commit
   everything the change produced, and nothing else, to its branch and push it,
   leave the branch unmerged, hand the card back to
   `tracker.columns.needs_human` as `/gogogo:dev` §8 says (the Needs-you line,
@@ -390,4 +390,5 @@ integration and merging follow this skill and the profile. See the profile's
   claude -n "$(basename "$(git rev-parse --show-toplevel)")-autodev" --permission-mode bypassPermissions "/gogogo:auto-dev"
   ```
   The name is what `/resume` and the terminal title show.
-- `/code-review high` and the `claude-in-chrome` tools, as in `/gogogo:dev`.
+- The review command and its level for each coverage, and the
+  `claude-in-chrome` tools, as in `/gogogo:dev`'s `## Claude-specific`.

@@ -121,35 +121,76 @@ The profile's `## Recon traps` lists what this codebase specifically hides.
 
 ## 5. Review
 
-```
-/code-review high
-```
+Review the change before reporting anything, with the review command named in
+`## Claude-specific`. Apply findings deliberately, one at a time, never with
+the review command's own fix option, and render them as markdown, never raw
+JSON. Nothing merges unreviewed. Configuration inside a Markdown file (a
+profile's settings block) is code, not prose.
 
-Run it on the working tree before reporting anything. Apply findings
-deliberately rather than with `--fix`, then **review the corrections**: rounds
-of corrections are where defects enter. Render findings as markdown, never raw
-JSON. How many rounds depends on what the change is:
+1. **A round.** Round 1 reviews the whole change against the issue's spec, at
+   the profile's `review.coverage` (`broad` when unset); a change whose files
+   are all prose is reviewed at `precise`. Every later round reviews only what
+   the previous round's corrections changed, at `precise`: in a run that
+   commits, the correction commits' range; otherwise name the changed files
+   and what each correction changed. Every round, tell the review where the
+   spec is (the issue number) and to report only where the change fails the
+   spec or a rule in `CLAUDE.md`, breaks something that worked, or has a bug
+   with a concrete triggering case. From round 2, also give it the findings
+   already declined, one line each, and tell it not to raise them again.
+2. **Which findings are applied.** Take the first test a finding meets. A
+   reviewer's own label ("correctness", a severity) does not change which
+   test that is.
 
-- **Code** is any change that is not prose only, including configuration
-  inside a Markdown file (a profile's settings block). Review at `high`. Review
-  each round's corrections, round after round, until a round applies nothing:
-  it found nothing, or every finding was declined with a reason. Nothing merges
-  unreviewed. There is no round limit.
-- **Prose only** means every changed file is Markdown or plain text and no
-  configuration in it changed. Review at `medium`, because prose always has
-  another ambiguity to find. **Two rounds at most**: the change, then its
-  corrections. After the second round, apply nothing except a correctness fix;
-  its other findings are listed in the report as follow-ups. If it found a
-  correctness defect, fix it and **stop before merging**: the change goes to a
-  person with the fix marked unreviewed, handed back as *stopped for a person*
-  (§8). Do not start a third round.
-- A change that mixes the two is code.
-- Findings you disagree with may be declined, with the reason. Correctness
-  findings may not: fix them, or stop and hand back as *stopped for a person*
-  (§8).
-- When the spec moves content unchanged, findings about that content are not
-  part of the move: list them in the report as follow-ups. A correctness
-  finding there still means fix or stop.
+   | # | The finding shows | What happens | Recorded as |
+   |---|---|---|---|
+   | 1 | the change fails the spec or a rule in `CLAUDE.md` | applied | `spec` |
+   | 2 | the change breaks something that worked before it | applied, with the case | `regression` |
+   | 3 | a bug, with a concrete case | applied. Code: write the test that fails first, see it fail, then fix. What no test reaches (prose, configuration, a script's output): the exact situation or input and the wrong result, reproduced or traced to a `file:line` | `bug` |
+   | 4 | a consequence that would be a security hole, lost or corrupted data, or a change the repo's Hard Stop rules require approval for that no Approvals row covers | no concrete case needed: fixed, or the issue stops for a person; an unapproved Hard Stop always stops (§4) | `risk` |
+   | 5 | behaviour the spec does not have | applied only when small: touches no Hard Stop item, adds no new user-visible behaviour, setting or message, stays inside the files the spec lists, and has a test. Named in the report under *Added beyond the spec*. Otherwise declined and listed as a follow-up | `added`, or declined as `beyond` |
+   | 6 | anything else | declined, with one line saying why | `hypothetical` (a setup or input no real repo or run has), `style` (wording, naming, tidiness, speed with no wrong result), `settled` (the spec, an Approvals row or an earlier round decided it), `reversal`, `late` |
+
+   Test 4 is read by consequence, not by file: a finding on a file a Hard
+   Stop covers is not test 4 unless its consequence is. A finding that meets
+   tests 1 to 4 and cannot be fixed stops the issue for a person (§8).
+3. **Three attempts per finding.** From round 2, a finding that meets tests 1
+   to 4 means a correction was wrong; it belongs to the finding that
+   correction was for. The second attempt says what the first got wrong and
+   takes a different approach, not a patch on the patch. A third attempt does
+   the same. When a round finds such a defect in the third attempt, the issue
+   stops for a person, with the three attempts and what each got wrong in the
+   report.
+4. **No flip-flops.** A finding that would undo a correction made in an
+   earlier round: when it meets no test from 1 to 4, it is declined as
+   `reversal`. When it does, and the spec or `CLAUDE.md` says which way is
+   right, that way is applied once and stands, and later findings against it
+   are `settled`. When it does and the spec is silent, nothing is changed and
+   the issue stops for a person, who decides.
+5. **Late findings.** From round 2, a finding about something no correction
+   touched is declined as `late` and listed as a follow-up, unless it meets
+   test 2, 3 or 4, in which case it is a new finding with its own three
+   attempts.
+6. **A small addition that goes wrong is removed.** When a later round finds a
+   defect in something applied as `added`, the addition is taken out and
+   listed as a follow-up.
+7. **Prose, per file.** A file is prose when it is Markdown or plain text and
+   no configuration in it changed. A prose file gets two rounds at most, in
+   any change: the round that reviews it and the round that reviews its
+   corrections. After its second round it changes only to fix a finding that
+   meets tests 1 to 4, and such a fix sends the issue to a person, marked
+   unreviewed, once the code files' review has ended. Its other findings
+   from the second round on are declined and listed as follow-ups. Code files
+   follow rules 3 to 6.
+8. **How a review ends.** `clean`: a round applies nothing. For a person
+   (§8): `third-attempt` (rule 3), `reversal` (rule 4), `unfixable` (a
+   finding that meets tests 1 to 4 and cannot be fixed), `prose` (rule 7).
+   And `breaker`: when round 13 ends and the review has not, the issue stops
+   for a person and the report says the loop itself misbehaved. There is no
+   other limit on rounds.
+
+When the spec moves content unchanged, findings about that content are not
+part of the move: list them in the report as follow-ups. A finding there that
+meets tests 1 to 4 still means fix or stop.
 
 ## 6. Verify: an executed path, not a green suite
 
@@ -191,16 +232,33 @@ Comment in the reporter's language, not the codebase's:
 - **What changed**: user-visible effects, as bullets.
 - **How it was verified**: which rungs ran, how many new tests went red, what
   the real run showed.
-- **How it was reviewed**: code or prose only (§5), the review level, and the
-  number of rounds. Then one line per round: how many findings were applied
-  and how many declined, and the most important applied finding in a few words
-  (say "correctness" when it was one). End the comment with the record on one
+- **How it was reviewed**: the kind (code, prose, or mixed: code with prose
+  files, §5 rule 7) and the coverage. One line per round: how many findings
+  were applied and how many declined, and the most important applied finding
+  in a few words. **Added beyond the spec**, when anything was (§5 test 5).
+  **Declined**: one line per declined finding with its reason word from §5's
+  table, inside a `<details>` block when there are more than five. The
+  follow-ups. How the review ended (§5 rule 8). When §3 found that the bug
+  this issue fixes was introduced by the change made for an earlier issue in
+  this tracker, say so in one sentence. End the comment with the record on one
   line, with no spaces inside a value:
-  `<!-- gogogo:review pr=<n|none> kind=<code|prose> level=<high|medium> rounds=<n> applied=<a1,a2,…> declined=<d1,d2,…> correctness=<c1,c2,…> stopped=<yes|no> -->`
-  `pr` is the pull request the change went through, or `none` when there is
-  none yet. `applied`, `declined` and `correctness` have one number per round,
-  in order; `correctness` counts the applied findings that were correctness
-  defects. `stopped=yes` only when the review stopped the change before merging (§5).
+  `<!-- gogogo:review v=2 pr=<n|none> kind=<code|prose|mixed> coverage=<precise|broad|exhaustive> rounds=<n> applied=<a1,a2,…> declined=<d1,d2,…> refix=<f1,f2,…> applied_as=spec:<n>,regression:<n>,bug:<n>,risk:<n>,added:<n> declined_as=hypothetical:<n>,style:<n>,settled:<n>,reversal:<n>,beyond:<n>,late:<n> followups=<n> end=<clean|third-attempt|reversal|unfixable|prose|breaker> escaped_from=<n|none> escaped_as=<declined|missed|none> impl=<model> reviewer=<model> -->`
+  - `pr` is the pull request the change went through, or `none` when there
+    is none yet. `coverage` is round 1's.
+  - `applied`, `declined` and `refix` have one number per round, in order.
+    `refix` counts the applied findings that fixed an earlier correction (§5
+    rule 3); its first number is always 0.
+  - `applied_as` and `declined_as` are totals over the whole review by the
+    *Recorded as* words; each adds up to the sum of its per-round list.
+  - `followups` is the number of follow-ups the report lists.
+  - `escaped_from` is set when §3 found that the bug this issue fixes was
+    introduced by the change made for an earlier issue in this tracker: that
+    issue's number, found from the commit that introduced the defect.
+    `escaped_as` is `declined` when that earlier issue's report lists the
+    defect among its declined findings or follow-ups, and `missed` when it
+    does not. Otherwise both are `none`.
+  - `impl` and `reviewer` are the model that made the change and the model
+    that reviewed it, as the agent's tool names them, or `unknown`.
 - **Anything they still own**: data, configuration, a decision left open.
 - **Where it is now, and only what is true when you post**: in the working
   tree, on a branch, or merged. Name the stage in the repo's words (the
@@ -217,8 +275,10 @@ Write the body to a file and pass `--body-file`; inline `--body` mangles markdow
 The card moves to the column of the **stage the code has actually reached**,
 and no further. Take the first case that fits:
 
-- **stopped for a person**: a review fix no round has reviewed, a correctness
-  finding you could not fix, a decision or Hard Stop found mid-change (§4), a
+- **stopped for a person**: a review that ended for a person (§5 rule 8: a
+  defect in a finding's third attempt, a reversal the spec does not settle, a
+  finding you could not fix, a prose file's second-round fix, or the breaker
+  at round 13), a decision or Hard Stop found mid-change (§4), a
   gate you could not make pass, or verification that gave up →
   `tracker.columns.needs_human`, whether or not
   the work sits on a branch or PR. The §7 report's first line is
@@ -345,6 +405,12 @@ and integration follow this skill and the repo's merge path. See the profile's
 
 ## Claude-specific
 
-- `/code-review high` is Claude Code's review command.
+- The review command is `/code-review <level> <target and brief>`. The level
+  follows the coverage: `precise` is `medium`, `broad` is `high`,
+  `exhaustive` is `max`. The target is the change in round 1 (the working
+  tree, or the branch against its base) and the corrections in later rounds
+  (their commit range, or the files named); the brief is §5 rule 1's.
+- In the record, `impl` is the session's model id; `reviewer` is
+  `$CLAUDE_CODE_SUBAGENT_MODEL` when it is set, else the same as `impl`.
 - Browser checks use the `claude-in-chrome` tools; load the ones you need in one
   `ToolSearch` call.

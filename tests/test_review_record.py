@@ -1,58 +1,89 @@
 #!/usr/bin/env python3
 """Tests for the review record that /gogogo:dev §7 asks for on each issue.
 
-The rounds rule in §5 is wording and gets no test here (CLAUDE.md § Tests): it
-is checked by a live run. The record is a template a later counter will parse,
-so these pin its keys and its format.
+The review rule in §5 is wording and gets no test here (CLAUDE.md § Tests): it
+is checked by scenario runs. The record is a template `review_stats.py`
+parses, so these pin its keys, its worked example, the old format the records
+already on issues use, and where the skill names its settings.
 
     python3 -m unittest tests.test_review_record
 """
 
 import re
+import sys
 import unittest
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-DEV = ROOT / "plugins" / "gogogo" / "skills" / "dev" / "SKILL.md"
-KEYS = ["pr", "kind", "level", "rounds", "applied", "declined", "correctness", "stopped"]
+PLUGIN = ROOT / "plugins" / "gogogo"
+DEV = PLUGIN / "skills" / "dev" / "SKILL.md"
+sys.path.insert(0, str(PLUGIN / "scripts"))
+
+import profile_check  # noqa: E402
+import review_stats  # noqa: E402
+
+KEYS = ["v", "pr", "kind", "coverage", "rounds", "applied", "declined", "refix", "applied_as",
+        "declined_as", "followups", "end", "escaped_from", "escaped_as", "impl", "reviewer"]
 MARKER = re.compile(r"<!-- gogogo:review (.*?) -->")
-# Design 3's example, verbatim.
-EXAMPLE = ("<!-- gogogo:review pr=482 kind=code level=high rounds=4 applied=5,2,1,0 "
-           "declined=1,0,0,0 correctness=0,1,1,0 stopped=no -->")
-LISTS = ("applied", "declined", "correctness")
+# Design 2's worked example, verbatim.
+EXAMPLE = ("<!-- gogogo:review v=2 pr=482 kind=mixed coverage=broad rounds=3 applied=5,2,0 declined=3,1,2 "
+           "refix=0,1,0 applied_as=spec:2,regression:1,bug:3,risk:0,added:1 "
+           "declined_as=hypothetical:3,style:1,settled:1,reversal:0,beyond:1,late:0 followups=1 end=clean "
+           "escaped_from=none escaped_as=none impl=claude-opus-5-5 reviewer=claude-opus-5-5 -->")
+# The format before gogogo#33, as records already on issues carry it.
+OLD_EXAMPLE = ("<!-- gogogo:review pr=482 kind=code level=high rounds=4 applied=5,2,1,0 "
+               "declined=1,0,0,0 correctness=0,1,1,0 stopped=no -->")
 
 
-def parse(line):
-    """The record as a dict: list keys split on ',', everything else a string."""
-    body = MARKER.search(line).group(1)
-    record = dict(part.split("=", 1) for part in body.split(" "))
-    for key in LISTS:
-        record[key] = record[key].split(",")
-    return record
-
-
-def section_7():
-    text = DEV.read_text(encoding="utf-8")
-    return text.split("\n## 7.")[1].split("\n## 8.")[0]
+def section(text, start, end):
+    return text.split(f"\n## {start}")[1].split(f"\n## {end}")[0]
 
 
 class Template(unittest.TestCase):
     def test_the_template_is_complete(self):
-        lines = [line for line in section_7().splitlines() if MARKER.search(line)]
+        lines = [line for line in section(DEV.read_text(encoding="utf-8"), "7.", "8.").splitlines()
+                 if MARKER.search(line)]
         self.assertEqual(len(lines), 1, lines)
         keys = [part.split("=", 1)[0] for part in MARKER.search(lines[0]).group(1).split(" ")]
         self.assertEqual(keys, KEYS)
 
 
 class Example(unittest.TestCase):
-    def test_the_example_parses(self):
-        record = parse(EXAMPLE)
-        self.assertEqual(list(record), KEYS)
-        self.assertEqual((record["rounds"], record["pr"]), ("4", "482"))
-        for key in LISTS:
-            self.assertEqual(len(record[key]), int(record["rounds"]), key)
-        for applied, correctness in zip(record["applied"], record["correctness"]):
-            self.assertLessEqual(int(correctness), int(applied))
+    def test_the_example_parses_and_adds_up(self):
+        record = review_stats.parse_review(EXAMPLE)
+        self.assertIsNotNone(record)
+        self.assertEqual((record["v"], record["rounds"], record["pr"]), (2, 3, "482"))
+        for key in ("applied", "declined", "refix"):
+            self.assertEqual(len(record[key]), record["rounds"], key)
+        self.assertEqual(record["refix"][0], 0)
+        for refix, applied in zip(record["refix"], record["applied"]):
+            self.assertLessEqual(refix, applied)
+        self.assertEqual(sum(record["applied_as"].values()), sum(record["applied"]))
+        self.assertEqual(sum(record["declined_as"].values()), sum(record["declined"]))
+        self.assertTrue(record["consistent"])
+
+    def test_the_old_format_still_parses(self):
+        record = review_stats.parse_review(OLD_EXAMPLE)
+        self.assertIsNotNone(record)
+        self.assertEqual((record["v"], record["coverage"], record["end"]), (1, "broad", "clean"))
+        self.assertIsNone(record["refix"])
+
+
+class Settings(unittest.TestCase):
+    def test_dev_names_the_coverage_setting_and_maps_it_in_claude_specific(self):
+        text = DEV.read_text(encoding="utf-8")
+        self.assertIn("`review.coverage`", text)
+        self.assertIn("review.coverage", profile_check.FIELDS)
+        claude = text.split("\n## Claude-specific")[1]
+        for value in ("precise", "broad", "exhaustive"):
+            self.assertIn(value, claude)
+        review = section(text, "5.", "6.")
+        self.assertIsNone(re.search(r"/code-review (medium|high|max)\b", review))
+        self.assertIsNone(re.search(r"`(medium|high|max)`", review))
+
+    def test_readme_lists_review_stats(self):
+        readme = (ROOT / "README.md").read_text(encoding="utf-8")
+        self.assertTrue(any(line.startswith("- `review_stats.py`") for line in readme.splitlines()))
 
 
 if __name__ == "__main__":

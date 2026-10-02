@@ -96,6 +96,7 @@ no skill requires it; a skill that finds it uses it.
 | `preflight.extra` | list | optional | Extra checks before a run. |
 | `stop.extra` | list | optional | Extra conditions that stop a whole run. |
 | `notify` | str | optional | none / telegram. Optional; absent means none. telegram: sent by scripts/notify.py; bot token and chat id from TELEGRAM_BOT_TOKEN and TELEGRAM_CHAT_ID in the environment or ~/.claude/gogogo/notify.env, never in the profile. |
+| `review.coverage` | str | optional | precise / broad / exhaustive. Optional; absent means broad. How wide a net the first review round casts; correction rounds are always precise. |
 | `auto_test.pass_column` | str | `auto-test` | Column a card moves to on PASS. |
 | `auto_test.fail_column` | str | `auto-test` | Column a card moves to on FAIL. |
 | `auto_test.fail_label` | str | `auto-test` | Label added on FAIL. |
@@ -296,6 +297,23 @@ profile. Unset, the repo has no roadmap document and the skill stops.
 ```toml
 [roadmap]
 file = "docs/roadmap.md"
+```
+
+### Review
+
+`review.coverage` sets how wide a net the first review round of
+`/gogogo:dev` §5 casts. `precise` reports only what it is sure of; `broad`
+(the default) also reports what it judges likely; `exhaustive` reports
+everything it can find, uncertain findings included. Only the first round,
+which reviews the whole change, uses it: every correction round reviews only
+what the previous round changed, at `precise`. Which findings are then
+applied does not depend on the setting; §5 decides that. What a repo treats as
+serious (its own rules a review must hold the change to) belongs in its
+`CLAUDE.md`, not here.
+
+```toml
+[review]
+coverage = "broad"
 ```
 
 ## Sections

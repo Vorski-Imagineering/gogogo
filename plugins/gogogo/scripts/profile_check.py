@@ -89,6 +89,8 @@ FIELDS = {
     "notify": (str, (), "none / telegram. Optional; absent means none. telegram: sent by scripts/notify.py; "
                "bot token and chat id from TELEGRAM_BOT_TOKEN and TELEGRAM_CHAT_ID in the environment or "
                "~/.claude/gogogo/notify.env, never in the profile."),
+    "review.coverage": (str, (), "precise / broad / exhaustive. Optional; absent means broad. How wide a net "
+                        "the first review round casts; correction rounds are always precise."),
     "auto_test.pass_column": (str, (TEST,), "Column a card moves to on PASS."),
     "auto_test.fail_column": (str, (TEST,), "Column a card moves to on FAIL."),
     "auto_test.fail_label": (str, (TEST,), "Label added on FAIL."),
@@ -127,6 +129,7 @@ ENUMS = {
     "integration.strategy": {"merge-script", "run-branch-pr", "pr-squash"},
     "handback.reporter": {"trailer", "assign", "none"},
     "notify": {"none", "telegram"},
+    "review.coverage": {"precise", "broad", "exhaustive"},
 }
 
 

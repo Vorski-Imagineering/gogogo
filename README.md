@@ -134,9 +134,10 @@ commands, the environments, the Hard Stop rules) lives in one file per repo,
    decision the owner made, the design, test cases, files and a **Hard-stop
    check**. A linter blocks the ready label until the spec holds together.
 2. **Build.** The agent reads the issue, finds the real cause (often data or
-   configuration rather than code), makes the change, runs `/code-review`
-   until a round has nothing to apply (two rounds at most for a prose-only
-   change), and watches the new test fail before trusting that it passes.
+   configuration rather than code), makes the change, runs `/code-review`,
+   applies a finding only when there is evidence for it and gives each one
+   three attempts, and watches the new test fail before trusting that it
+   passes.
 3. **Verify.** "Done" means the path was run on real data in the pre-merge
    environment. A green test suite alone only counts as "written".
 4. **Hand back.** A comment in the reporter's words, and the card moves only as
@@ -163,9 +164,13 @@ most of its time, and it does not always stop: our last four code reviews took
 way: most of the value comes in the first two or three rounds, later rounds can
 make a change worse, and a loop converges when findings are judged against the
 spec and a loop that will not settle goes to a person.
+That is how the skills now work
+([#33](https://github.com/Vorski-Imagineering/gogogo/issues/33)): a finding is
+applied only with evidence, each finding gets three attempts, a fix is never
+undone and redone, and a review past 13 rounds goes to a person.
 [docs/when-is-enough-enough.md](docs/when-is-enough-enough.md) has the numbers,
-the sources with the dates we read them, and the rule we settled on
-([#33](https://github.com/Vorski-Imagineering/gogogo/issues/33)).
+the sources with the dates we read them, and the rule; `review_stats.py` reads
+the review records back.
 
 **Branches and pull requests.** Every issue gets its own branch,
 `fix/<issue-number>-<slug>`, cut from a freshly pulled base: a stale base would silently undo the
@@ -208,6 +213,7 @@ Scripts the skills call, all in `plugins/gogogo/scripts/`:
 - `stage_sync.py`: writes the `Ships-issue` link at merge, and moves cards to a stage when a tag ships their commits (run by a repo's CI).
 - `stranded_work.py`: finds branches holding work no open issue or open pull request points to, and says what became of each branch's pull request.
 - `notify.py`: sends a run's messages by the profile's `notify` (Telegram today); off, or no credentials on the machine, sends nothing.
+- `review_stats.py`: reads back the review record on each issue and sums them up: rounds, why findings were applied or declined, how each review ended and what became of the issue.
 - `require_unattended.sh`: refuses to start the loop unless the session can run without prompts.
 - `setup_check.py`: the read-only check behind `/gogogo:setup`.
 - `roadmap_status.py`: compares a roadmap document's marks with the tracker, and rewrites the ones that disagree with `--write`.

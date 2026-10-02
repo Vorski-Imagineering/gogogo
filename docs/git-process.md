@@ -70,7 +70,7 @@ keeps its branch, pushed and unmerged, and its card moves to the
 `needs_human` column with a link to it. The last commit message says why:
 
 - *unreviewed*: a fix no review round has looked at;
-- *known defect*: a correctness finding the agent could not fix, named;
+- *known defect*: a finding that meets `/gogogo:dev` §5's tests 1 to 4 and that the agent could not fix, named;
 - *stopped*: a Hard Stop or a missing decision found mid-change, with the
   question;
 - *abandoned*: verification failed three times, each attempt on a different
@@ -95,8 +95,9 @@ Every issue goes through the same checks, in this order, before its merge:
 
 1. **Tests.** The new regression test is seen failing first (stash the change,
    run the one test, see red, pop), then every lane in the profile passes.
-2. **Review.** `/code-review` round after round until a round has nothing to
-   apply (two rounds at most for a prose-only change). See
+2. **Review.** `/code-review`, applying a finding only on evidence, with three
+   attempts per finding and two rounds per prose file, until a round applies
+   nothing (a person after 13 rounds). See
    [when-is-enough-enough.md](when-is-enough-enough.md).
 3. **Verify.** The path the issue describes is run on real data in the
    pre-merge environment. A green suite alone counts as "written", not "done".
