@@ -87,10 +87,14 @@ draft, and again after every change to it. Remove:
   `tracker.issues_repo`, `tracker.code_repo`, and tools and products anyone
   would know as public;
 - hostnames and IP addresses, except inside a link the next rule keeps;
-- links, except into `tracker.issues_repo` or `tracker.code_repo`, or to a page
-  anyone can open without logging in;
+- links, except into `tracker.issues_repo` or `tracker.code_repo`, or to a
+  public product's documentation; never a share, preview or secret link
+  (a shared document, a gist, a preview deploy). The rule on names above
+  applies inside a kept link too;
 - anything that looks like a token or key, and email addresses;
-- people's names (use their role).
+- people's names (use their role);
+- anything else not known to be safe, such as customer or business data in
+  command output. The kinds above are the usual ones, not the only ones.
 
 Keep a list of what you removed, in your own reply and never in the draft
 file: each item's kind, where it was, and the removed text, except that a
@@ -107,7 +111,8 @@ target: *file it as a new issue* or *post it as a comment on #<n>*), **change
 something**, or **don't post**.
 
 - Change something: edit the draft, or change the target (a new issue then
-  needs step 2's title), run step 3 on it again, and ask again.
+  needs step 2's title; a comment goes only on an issue in
+  `tracker.issues_repo`), run step 3 on it again, and ask again.
 - Don't post, or the question is declined: post nothing, say where the draft
   file is, and stop.
 
@@ -119,12 +124,18 @@ A new issue:
 gh issue create --repo <tracker.issues_repo> --title "<title>" --body-file <file>
 ```
 
-A comment on #<n>, however the target was chosen: first confirm it is an open
-issue in `tracker.issues_repo`. A target in another repo, a pull request, or an
-issue not `OPEN`: post nothing, say so, and go back to step 4.
+A comment on #<n>, however the target was chosen. First:
 
 ```bash
 gh issue view <n> --repo <tracker.issues_repo> --json state,url -q '.state + " " + .url'
+```
+
+Post only when it exits 0 and prints `OPEN` and a URL ending `/issues/<n>` in
+`tracker.issues_repo`. Anything else (closed, a pull request, not found, an
+error): post nothing, tell the person why, set the target to a new issue, and
+go back to step 4. Then:
+
+```bash
 gh issue comment <n> --repo <tracker.issues_repo> --body-file <file>
 ```
 
