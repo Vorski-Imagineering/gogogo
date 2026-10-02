@@ -182,7 +182,9 @@ commands, the environments, the Hard Stop rules) lives in one file per repo,
    decision the owner made, the design, test cases, files and a **Hard-stop
    check**. A linter blocks the ready label until the spec holds together.
 2. **Build.** The agent reads the issue, finds the real cause (often data or
-   configuration rather than code), makes the change, runs `/code-review`,
+   configuration rather than code), and makes the change. Before the review, a
+   reader that has not seen how it was built checks the change item by item
+   against the spec, and every gap is built, matched or declared. Then it runs `/code-review`,
    applies a finding only when there is evidence for it and gives each one
    three attempts, and watches the new test fail before trusting that it
    passes.
@@ -256,6 +258,7 @@ Scripts the skills call, all in `plugins/gogogo/scripts/`:
 
 - `profile_check.py`: reads and validates the repo's profile.
 - `spec_lint.py`: checks a spec's layout, approvals and hard-stop verdict.
+- `spec_check.py`: lists a spec's items and checks that a reader answered every one against the change.
 - `tracker.py`: lists and moves cards on a GitHub Project board, by column name, with read-back.
 - `verify_merged.py`: confirms a PR's merge is really on the base branch.
 - `stage_sync.py`: writes the `Ships-issue` link at merge, and moves cards to a stage when a tag ships their commits (run by a repo's CI).
