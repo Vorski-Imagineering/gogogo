@@ -320,15 +320,16 @@ each, `<repo>` being the name part of `tracker.code_repo`:
 - `<repo> #<n> started: <title>`;
 - after the merge is verified: `<repo> #<n> merged (<short sha>) -> <column>`;
 - `<repo> #<n> needs you -> <tracker.columns.needs_human>: <the Needs-you line>`;
-- when §1 finds nothing left to take, in a run that tried to send *run started*
-  (a whole-run stop is not a close and sends nothing): `<repo> auto-dev: run closed: <a> merged, <b> need you, <c> skipped`.
+- *run closed*, from §9 only: `<repo> auto-dev: run closed: <a> merged, <b> need you, <c> skipped`.
 
 A `send` that exits non-zero goes into this report as `notify failed: <its
 line>`, and the run goes on. Never put a token on a command line or in a report.
 
 ## 9. Close the run
 
-Send *run closed* if §8 says it applies. Then one report: every issue taken with its outcome and merge commit, every issue
+In a run that tried to send *run started*, first send *run closed* (§8). §9
+runs once the queue is done and any final PR (§6) is settled; a whole-run stop
+never reaches it. Then one report: every issue taken with its outcome and merge commit, every issue
 skipped with the reason, anything left half-done with its branch, every card
 moved to `tracker.columns.needs_human` with its Needs-you line, the stranded
 work from preflight, anything the profile's `stop.extra` checks raised, and
@@ -347,6 +348,9 @@ in a between-issues report.
 - anything the profile's `stop.extra` names;
 - anything wants to touch production data or an environment whose `writes`
   forbids it.
+
+When you stop and ask, also give every `notify failed` line no report has
+carried yet.
 
 A Hard Stop with no approval stops **that issue**, not the run.
 
