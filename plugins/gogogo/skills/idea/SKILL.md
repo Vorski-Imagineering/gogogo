@@ -28,6 +28,13 @@ for content. Each gap becomes an item under *Things the spec will need to
 settle*. Reading the tracker for an existing issue (next step) is the one
 lookup this skill makes.
 
+## The target
+
+What this skill posts goes to one *target*: a new issue in
+`tracker.issues_repo`, or a comment on an open issue there. Nowhere else. An
+answer or a change that names another repo is refused as a whole: say so,
+change nothing, and ask again.
+
 ## 1. Look for an issue that already covers it
 
 ```bash
@@ -36,9 +43,9 @@ gh issue list --repo <tracker.issues_repo> --state open --search "<two to four k
 
 When one is a likely match, show it and ask with `AskUserQuestion`: **add these
 findings as a comment on <tracker.issues_repo>#<n>**, or **file a new issue in
-<tracker.issues_repo>**. The answer sets the *target* for steps 2 to 5. Every
-target is in `tracker.issues_repo`: an answer naming an issue anywhere else is
-refused, and the question asked again. Any other answer counts as declined. No likely
+<tracker.issues_repo>**. The answer, or another issue in `tracker.issues_repo`
+the person names instead, sets the target for steps 2 to 5 (§ *The target*).
+An answer that names no target counts as declined. No likely
 match: the target is a new issue. A declined question: write the draft as for
 a new issue (steps 2 and 3), post nothing, say where it is and what step 3
 removed, and stop.
@@ -79,7 +86,7 @@ this body over as the issue's original report, unchanged.
 
 When `tracker.public` is true, the title and body keep only what is known to be
 safe to publish. When unsure, remove it. Do this before the person sees the
-draft, and again on everything you write after a change. Remove:
+draft, and again on the whole draft after every change. Remove:
 
 - any path outside this checkout: absolute (`/Users/`, `/home/`, `/tmp/`,
   `/private/`, `C:\`), home-relative (`~/`), or into another checkout. A path
@@ -103,8 +110,7 @@ Keep a list of what you removed, in your own reply and never in the draft
 file: each item by its kind and where it was (*a hostname, in the second
 finding*), never the removed text. Step 4 shows it with the draft, and every
 later mention of what was removed (step 1, step 7) uses the same form. Nothing
-removed is put back by you. Text the person writes into the draft themselves,
-in a change at step 4, is theirs to publish and is kept as they wrote it.
+removed is put back. A person who wants it published posts it themselves.
 
 ## 4. Show and ask
 
@@ -113,10 +119,9 @@ list of removals. Then ask with `AskUserQuestion`: **post it** (naming the
 target: *file it as a new issue in <tracker.issues_repo>* or *post it as a
 comment on <tracker.issues_repo>#<n>*), **change something**, or **don't post**.
 
-- Change something: first, when the change names a target outside
-  `tracker.issues_repo`, refuse the whole change, say nothing was changed, and
-  ask again. Otherwise edit the draft, or change the target (a new issue then
-  needs step 2's title), run step 3 on what you wrote, and ask again.
+- Change something: edit the draft, or change the target within § *The
+  target* (a new issue then needs step 2's title), run step 3 again, and ask
+  again.
 - Don't post, or the question is declined: post nothing, say where the draft
   file is, and stop.
 
