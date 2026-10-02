@@ -307,13 +307,15 @@ class PullRequests(Repos):
     def test_no_gh_installed_still_reports(self):
         """A missing `gh` is a failed lookup: the branch is still reported, with the reason."""
         self.branch_with("done", 1)
+        self.branch_with("fix/12-x", 1)
         bare = self.tmp / "nogh"
         bare.mkdir()
         (bare / "git").symlink_to(shutil.which("git"))
         code, lines = self.stranded({**self.env, "PATH": str(bare)})
         self.assertEqual(code, 1, self.stderr)
-        self.assertEqual(len(lines), 1, self.stderr)
-        self.assertIn("; pull requests in o/code not checked: ", lines[0])
+        self.assertEqual([line.split(":")[0] for line in lines], ["done", "fix/12-x"], self.stderr)
+        for line in lines:
+            self.assertIn("; pull requests in o/code not checked: cannot run gh", line)
 
     def test_no_profile_makes_no_gh_call(self):
         (self.clone / ".agents" / "dev-process.md").unlink()
