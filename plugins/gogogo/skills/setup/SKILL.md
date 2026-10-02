@@ -198,8 +198,8 @@ What each fix involves:
        file: the transcript is stored on disk.
     2. Ask them to send the bot any message, then run
        `python3 "${CLAUDE_PLUGIN_ROOT}/scripts/notify.py" chat-id`. Show the
-       chat name it prints; once they confirm it is theirs, run
-       `python3 "${CLAUDE_PLUGIN_ROOT}/scripts/notify.py" chat-id --save`.
+       chats it prints; once they say which one is theirs, run
+       `python3 "${CLAUDE_PLUGIN_ROOT}/scripts/notify.py" chat-id --save <its id>`.
     3. Only when the profile does not already say `notify = "telegram"`: ask,
        then set it in `.agents/dev-process.md` and commit it like setup's
        other profile changes.
@@ -207,7 +207,8 @@ What each fix involves:
        and re-run the check: the row must be `PASS notify: telegram: bot @… -> …`.
   - `WARN notify: telegram: <reason>`: show the reason. The usual causes are a
     wrong token (paste it again) and a chat the bot cannot reach (send the bot
-    a message, then `chat-id --save`).
+    a message, then `chat-id`, and `chat-id --save <id>` for the chat the
+    person confirms).
 
 ## Reviewing a repo that is already set up
 

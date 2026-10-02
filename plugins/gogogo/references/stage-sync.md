@@ -189,7 +189,9 @@ jobs:
           python3 <vendored folder>/stage_sync.py --profile .agents/dev-process.md \
             shipped --tag "$TAG" --titles > message.txt \
             || printf 'Tag %s pushed (issue list unavailable)\n' "$TAG" > message.txt
-          python3 <vendored folder>/notify.py send --profile .agents/dev-process.md < message.txt
+          # A failed send must never turn the release's run red.
+          python3 <vendored folder>/notify.py send --profile .agents/dev-process.md < message.txt \
+            || echo "::warning::notify failed: the cards moved; the message did not go"
 ```
 
 Replace `<vendored folder>` with the folder from *Vendoring*.

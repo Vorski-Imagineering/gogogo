@@ -15,6 +15,7 @@ import stat
 import sys
 import tempfile
 import unittest
+import http.client
 import urllib.error
 import urllib.parse
 from contextlib import redirect_stderr, redirect_stdout
@@ -146,6 +147,7 @@ class Send(Case):
         errors = [
             urllib.error.HTTPError(url, 502, f"Bad Gateway at {url}", {}, io.BytesIO(b"<html>")),
             urllib.error.URLError(f"cannot reach {url}"),
+            http.client.InvalidURL(f"URL can't contain control characters. '/bot{TOKEN}/sendMessage'"),
         ]
         for error in errors:
             self.urlopen.side_effect = error
@@ -160,6 +162,14 @@ class Send(Case):
         self.run_main("send", "--profile", self.profile(), "--text", "a" * 5000)
         _, params = self.posted(self.urlopen.call_args)
         self.assertEqual(len(params["text"]), 4096)
+        self.assertTrue(params["text"].endswith("…"))
+
+    def test_7_the_limit_is_in_utf16_units(self):
+        self.write_creds()
+        self.urlopen.return_value = ok({})
+        self.run_main("send", "--profile", self.profile(), "--text", "😀" * 3000)
+        _, params = self.posted(self.urlopen.call_args)
+        self.assertLessEqual(len(params["text"].encode("utf-16-le")) // 2, 4096)
         self.assertTrue(params["text"].endswith("…"))
 
     def test_8_usage_errors_make_no_call(self):
@@ -238,6 +248,16 @@ class ChatId(Case):
         self.assertIn(f"{notify.TOKEN_KEY}={TOKEN}", text)
         self.assertIn("# my comment", text)
         self.assertEqual(stat.S_IMODE(self.creds.stat().st_mode), 0o600)
+
+    def test_11_save_a_chosen_chat_and_refuse_an_unlisted_one(self):
+        self.write_creds(chat="")
+        a, b = {"id": 1, "first_name": "Ann"}, {"id": 2, "title": "Team"}
+        self.urlopen.return_value = self.updates(a, b)
+        self.assertEqual(self.run_main("chat-id", "--save", "1")[0], 0)
+        self.assertIn(f"{notify.CHAT_KEY}=1\n", self.creds.read_text())
+        self.urlopen.return_value = self.updates(a, b)
+        self.assertEqual(self.run_main("chat-id", "--save", "9")[0], 1)
+        self.assertIn(f"{notify.CHAT_KEY}=1\n", self.creds.read_text())
 
     def test_11_no_messages_and_no_token(self):
         self.write_creds(chat="")

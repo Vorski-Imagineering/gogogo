@@ -73,8 +73,11 @@ means finished work sits unverified while you go and ask.
    python3 "${CLAUDE_PLUGIN_ROOT}/scripts/notify.py" status
    ```
    Exit 0 with `notify: off`: say nothing. Exit 0 otherwise: messages will
-   send. Exit 1 or 3: put its line once at the top of the run report and go
-   on. Messages are a convenience, never a reason to stop.
+   send. Any other exit: put its line once at the top of the run report and
+   go on. Messages are a convenience, never a reason to stop.
+
+When every check above has passed, send the *run started* message (§8)
+before selecting the queue.
 8. **A logged-in browser on the pre-merge environment** (`verify.session_url`,
    or the first `verify.agent` environment's `session_url`). A redirect to a
    login page → stop the whole run and ask. Do not decide that other coverage
@@ -297,11 +300,15 @@ new tests went red, what review found, what the real run showed, the merge
 commit, the card's new column. The user is not watching every step; this log is
 how they stay able to stop you. Then return to §1: the board may have moved.
 
-Send one short message per change of state, only **after** the thing is true,
-each with:
+Send one short message per change of state, only **after** the thing is true.
+Pass the text on stdin through a quoted heredoc, never inside a quoted
+argument: titles are user-written, and `$(…)` or a stray `"` in one must stay
+text.
 
 ```bash
-python3 "${CLAUDE_PLUGIN_ROOT}/scripts/notify.py" send --text "<message>"
+python3 "${CLAUDE_PLUGIN_ROOT}/scripts/notify.py" send <<'MSG'
+<message>
+MSG
 ```
 
 The script does nothing when the profile's `notify` is off or this machine has
@@ -309,11 +316,13 @@ no credentials, so call it the same way in every repo. One plain-text line
 each, `<repo>` being the name part of `tracker.code_repo`:
 
 - after preflight passes: `<repo> auto-dev: run started on <hostname>, <k> issues in "<tracker.queue>"`;
-- `<repo> #<n> skipped: <reason>`;
+- the first time an issue is skipped in this run, not on later passes: `<repo> #<n> skipped: <reason>`;
 - `<repo> #<n> started: <title>`;
 - after the merge is verified: `<repo> #<n> merged (<short sha>) -> <column>`;
 - `<repo> #<n> needs you -> <tracker.columns.needs_human>: <the Needs-you line>`;
-- `<repo> auto-dev: run closed: <a> merged, <b> need you, <c> skipped`.
+- `<repo> auto-dev: run closed: <a> merged, <b> need you, <c> skipped`, also
+  when the whole run stops to ask (§ *Stop the whole run*), with
+  `, stopped: <reason>` added.
 
 A `send` that exits 1 goes into this report as `notify failed: <its line>`,
 and the run goes on. Never put a token on a command line or in a report.

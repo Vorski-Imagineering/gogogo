@@ -4,7 +4,7 @@
     notify.py [--profile FILE] send [--text TEXT]      (text from stdin when --text is absent)
     notify.py [--profile FILE] status
     notify.py init
-    notify.py chat-id [--save]
+    notify.py chat-id [--save [ID]]
 
 The profile's `notify` setting picks the transport: absent or "none" is off,
 "telegram" sends through a Telegram bot. Messages are a convenience, never a
@@ -32,8 +32,8 @@ from __future__ import annotations
 import argparse
 import json
 import os
-import socket
 import sys
+import tempfile
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -46,7 +46,7 @@ import profile_check  # noqa: E402
 CREDENTIALS = Path.home() / ".claude" / "gogogo" / "notify.env"
 TOKEN_KEY, CHAT_KEY = "TELEGRAM_BOT_TOKEN", "TELEGRAM_CHAT_ID"
 API = "https://api.telegram.org/bot{token}/{method}"
-LIMIT = 4096
+LIMIT = 4096  # Telegram counts UTF-16 code units
 TIMEOUT = 10
 
 OFF, READY, NO_CREDENTIALS, FAILED = "off", "ready", "no-credentials", "failed"
@@ -115,7 +115,7 @@ def _call(token, method, params=None):
             body = json.loads(exc.read().decode("utf-8"))
         except Exception:  # noqa: BLE001 - any unreadable body: report the HTTP error itself
             raise SendError(_scrub(exc, token)) from None
-    except (urllib.error.URLError, socket.timeout, OSError, ValueError) as exc:
+    except Exception as exc:  # noqa: BLE001 - any failure is a failed call, its text scrubbed
         raise SendError(_scrub(exc, token)) from None
     if not body.get("ok"):
         raise SendError(_scrub(body.get("description") or "Telegram refused the call", token))
@@ -177,13 +177,29 @@ def status(profile_path=None):
 
 # --- commands --------------------------------------------------------------
 
+def _units(text):
+    return len(text.encode("utf-16-le")) // 2
+
+
+def _fit(text):
+    """`text`, cut so it is at most LIMIT UTF-16 units, ending in … when cut."""
+    if _units(text) <= LIMIT:
+        return text
+    out, used = [], 1  # room for the …
+    for char in text:
+        used += _units(char)
+        if used > LIMIT:
+            break
+        out.append(char)
+    return "".join(out) + "…"
+
+
 def cmd_send(args):
     text = args.text if args.text is not None else sys.stdin.read()
     text = text.strip()
     if not text:
         raise UsageError("nothing to send: empty text")
-    if len(text) > LIMIT:
-        text = text[:LIMIT - 1] + "…"
+    text = _fit(text)
     value = _setting(args.profile)
     if value == "none":
         print("notify: off")
@@ -237,7 +253,7 @@ def _chats(updates):
 
 
 def _save_chat(chat_id):
-    lines = CREDENTIALS.read_text(encoding="utf-8").splitlines() if CREDENTIALS.exists() else []
+    lines = CREDENTIALS.read_text(encoding="utf-8").splitlines() if CREDENTIALS.is_file() else []
     out, done = [], False
     for line in lines:
         if line.strip().startswith(f"{CHAT_KEY}="):
@@ -247,11 +263,18 @@ def _save_chat(chat_id):
             out.append(line)
     if not done:
         out.append(f"{CHAT_KEY}={chat_id}")
+    # Write a new file beside it and swap it in, so a failed write never loses
+    # the token the person pasted.
     CREDENTIALS.parent.mkdir(parents=True, exist_ok=True)
-    fd = os.open(CREDENTIALS, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
-    with os.fdopen(fd, "w", encoding="utf-8") as handle:
-        handle.write("\n".join(out) + "\n")
-    os.chmod(CREDENTIALS, 0o600)
+    fd, tmp = tempfile.mkstemp(dir=CREDENTIALS.parent, prefix=".notify.env.")
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as handle:
+            handle.write("\n".join(out) + "\n")
+        os.chmod(tmp, 0o600)
+        os.replace(tmp, CREDENTIALS)
+    except BaseException:
+        Path(tmp).unlink(missing_ok=True)
+        raise
 
 
 def cmd_chat_id(args):
@@ -271,8 +294,12 @@ def cmd_chat_id(args):
     for chat_id, name in chats:
         _say(f"{chat_id}  {name}", token)
     if args.save:
-        _save_chat(chats[-1][0])
-        print(f"saved {CHAT_KEY}={chats[-1][0]} in {CREDENTIALS}")
+        chosen = args.save if args.save is not True else str(chats[-1][0])
+        if chosen not in {str(chat_id) for chat_id, _ in chats}:
+            print(f"{chosen} is not one of the chats above; nothing saved")
+            return EXIT_FAILED
+        _save_chat(chosen)
+        print(f"saved {CHAT_KEY}={chosen} in {CREDENTIALS}")
     return EXIT_OK
 
 
@@ -287,7 +314,8 @@ def main(argv=None):
     st.add_argument("--profile", dest="profile_sub", help=argparse.SUPPRESS)
     sub.add_parser("init", help=f"create {CREDENTIALS} (mode 600), never overwriting it")
     chat = sub.add_parser("chat-id", help="list the chats that messaged the bot")
-    chat.add_argument("--save", action="store_true", help=f"write the newest chat's id to {CHAT_KEY}")
+    chat.add_argument("--save", nargs="?", const=True, metavar="ID",
+                      help=f"write a listed chat's id to {CHAT_KEY} (default: the newest)")
     args = parser.parse_args(argv)
     args.profile = getattr(args, "profile_sub", None) or args.profile
     handlers = {"send": cmd_send, "status": cmd_status, "init": cmd_init, "chat-id": cmd_chat_id}
