@@ -157,6 +157,16 @@ commands, the environments, the Hard Stop rules) lives in one file per repo,
   different theory. Then the issue goes back to the queue with a note, and the
   loop moves on.
 
+**When is a review enough?** The review loop is where an unattended run spends
+most of its time, and it does not always stop: our last four code reviews took
+8, 11, 17 and 20 rounds. Research and other teams' experience point the same
+way: most of the value comes in the first two or three rounds, later rounds can
+make a change worse, and a loop converges when findings are judged against the
+spec and a loop that will not settle goes to a person.
+[docs/when-is-enough-enough.md](docs/when-is-enough-enough.md) has the numbers,
+the sources with the dates we read them, and the proposal in
+[#33](https://github.com/Vorski-Imagineering/gogogo/issues/33).
+
 ## Skills
 
 | Command | What it does |
