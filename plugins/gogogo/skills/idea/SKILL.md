@@ -88,9 +88,9 @@ draft, and again after every change to it. Remove:
   would know as public;
 - hostnames and IP addresses, except inside a link the next rule keeps;
 - links, except into `tracker.issues_repo` or `tracker.code_repo`, or to a
-  public product's documentation; never a share, preview or secret link
-  (a shared document, a gist, a preview deploy). The rule on names above
-  applies inside a kept link too;
+  public product's documentation. A share, preview, signed or secret link (a
+  shared document, a gist, a preview deploy, a URL with a token) is removed
+  wherever it points. The rule on names above applies inside a kept link too;
 - anything that looks like a token or key, and email addresses;
 - people's names (use their role);
 - anything else not known to be safe, such as customer or business data in
@@ -98,8 +98,8 @@ draft, and again after every change to it. Remove:
 
 Keep a list of what you removed, in your own reply and never in the draft
 file: each item's kind, where it was, and the removed text, except that a
-token, key or email address is named by kind and place only (*a token, in the
-second finding*). Step 4 shows it with the draft. Something the person, having
+token, key, email address or anything the last rule removed is named by kind
+and place only (*a token, in the second finding*). Step 4 shows it with the draft. Something the person, having
 seen that list, tells you to keep is theirs to publish: put it back and do not
 remove it again.
 
@@ -112,7 +112,9 @@ something**, or **don't post**.
 
 - Change something: edit the draft, or change the target (a new issue then
   needs step 2's title; a comment goes only on an issue in
-  `tracker.issues_repo`), run step 3 on it again, and ask again.
+  `tracker.issues_repo`, so a target the person names in another repo is
+  refused and the question asked again), run step 3 on it again, and ask
+  again.
 - Don't post, or the question is declined: post nothing, say where the draft
   file is, and stop.
 
@@ -131,9 +133,10 @@ gh issue view <n> --repo <tracker.issues_repo> --json state,url -q '.state + " "
 ```
 
 Post only when it exits 0 and prints `OPEN` and a URL ending `/issues/<n>` in
-`tracker.issues_repo`. Anything else (closed, a pull request, not found, an
-error): post nothing, tell the person why, set the target to a new issue, and
-go back to step 4. Then:
+`tracker.issues_repo` (compared ignoring case). Anything else (closed, a pull
+request, not found, an error): post nothing, tell the person why, set the
+target to a new issue, write step 2's title, run step 3 on it, and go back to
+step 4. Then:
 
 ```bash
 gh issue comment <n> --repo <tracker.issues_repo> --body-file <file>
