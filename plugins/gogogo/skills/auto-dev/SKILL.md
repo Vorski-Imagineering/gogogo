@@ -96,11 +96,9 @@ means finished work sits unverified while you go and ask.
 ```
 
 A non-zero exit is a **stop**, never an empty column: the tool refuses to print
-a list it could not reconcile. Outside triage-only mode: the first time this
+a list it could not reconcile. Outside triage-only mode, the first time this
 list is read successfully in a run, send the *run started* message (§8),
-counting the rows that are issues; and when nothing listed may still be taken
-in this run, go to §9, by way of §6's final PR and §7's card moves when the
-run made a `run-branch-pr` run branch. Work only rows that are issues. Take them in the
+counting the rows that are issues. Work only rows that are issues. Take them in the
 order the user gave; absent one, live user-facing bugs first, refactors after,
 anything large last so it cannot absorb the run.
 
@@ -320,17 +318,19 @@ each, `<repo>` being the name part of `tracker.code_repo`:
 - once preflight has passed and §1 has read the queue: `<repo> auto-dev: run started on <hostname>, <k> issues in "<tracker.queue>"`;
 - the first time an issue is skipped in this run, not on later passes: `<repo> #<n> skipped: <reason>`;
 - `<repo> #<n> started: <title>`;
-- after the merge is verified: `<repo> #<n> merged (<short sha>) -> <column>`;
+- once per issue, after its own merge is verified: `<repo> #<n> merged (<short sha>) -> <column>`;
 - `<repo> #<n> needs you -> <tracker.columns.needs_human>: <the Needs-you line>`;
 - *run closed*, from §9 only: `<repo> auto-dev: run closed: <a> merged, <b> need you, <c> skipped`.
 
 A `send` that exits non-zero is a `notify failed: <its line>`, and the run
-goes on. Each is given once, in the first report after it: this one, §9's, or
-a stop's question. Never put a token on a command line or in a report.
+goes on. Each is given once, in the next report to the person in this session
+(a between-issues report, §9's report, or a stop's question), never in a
+tracker comment. Never put a token on a command line or in a report.
 
 ## 9. Close the run
 
-First send *run closed* (§8). Then one report: every issue taken with its outcome and merge commit, every issue
+In a run that tried to send *run started*, first send *run closed* (§8). Then
+one report: every issue taken with its outcome and merge commit, every issue
 skipped with the reason, anything left half-done with its branch, every card
 moved to `tracker.columns.needs_human` with its Needs-you line, the stranded
 work from preflight, anything the profile's `stop.extra` checks raised, and
