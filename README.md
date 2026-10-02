@@ -169,6 +169,8 @@ commands, the environments, the Hard Stop rules) lives in one file per repo,
 
 ## The process
 
+![The gogogo workflow: separate human thinking from agent execution, with clean handoffs between them](docs/images/gogogo-workflow.png)
+
 ```
  report ──► /gogogo:spec ──► "dev ready" ──► /gogogo:auto-dev ──► PR / merge ──► stages ──► a human confirms
             (asks, decides,     (label)      (or /gogogo:dev        (by the repo's   (dev, staging,
