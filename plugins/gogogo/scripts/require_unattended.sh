@@ -4,8 +4,11 @@
 # An unattended run that merges must not reach the merge and then stall on a
 # permission prompt, with finished work stranded on a branch. Nothing in the
 # environment exposes the mode, so this reads the last `permissionMode` from
-# the session's own transcript. That is an undocumented format, so it FAILS
-# CLOSED: a missing transcript, a missing field, or any other value is a stop.
+# the session's own transcript, found by the session id under any folder of
+# ~/.claude/projects (the session may have started in another folder than the
+# one this runs from, such as a worktree). That is an undocumented format, so
+# it FAILS CLOSED: a missing transcript, a second transcript with the same id,
+# a missing field, or any other value is a stop.
 #
 # Exit 0 prints "bypassPermissions: on". Anything else prints ERROR and exits 1.
 set -u
@@ -42,12 +45,19 @@ fail() {
 }
 
 [ -n "${CLAUDE_CODE_SESSION_ID:-}" ] || fail "CLAUDE_CODE_SESSION_ID is not set; cannot find the session transcript."
-project_dir="$HOME/.claude/projects/$(pwd | sed 's#[/.]#-#g')"
-transcript="$project_dir/${CLAUDE_CODE_SESSION_ID}.jsonl"
-if [ ! -r "$transcript" ] && started_in_bypass; then
+projects="$HOME/.claude/projects"
+transcript=""
+count=0
+for f in "$projects"/*/"$CLAUDE_CODE_SESSION_ID".jsonl; do
+  [ -r "$f" ] || continue
+  transcript=$f
+  count=$((count + 1))
+done
+if [ "$count" -eq 0 ] && started_in_bypass; then
   echo "bypassPermissions: on (headless run started with a bypass flag)"; exit 0
 fi
-[ -r "$transcript" ] || fail "session transcript not found at $transcript."
+[ "$count" -gt 0 ] || fail "no session transcript named $CLAUDE_CODE_SESSION_ID.jsonl under $projects."
+[ "$count" -eq 1 ] || fail "$count session transcripts named $CLAUDE_CODE_SESSION_ID.jsonl under $projects; cannot tell which is this session's."
 mode=$(grep -o '"permissionMode":"[^"]*"' "$transcript" | tail -1 | cut -d'"' -f4)
 if [ -z "$mode" ]; then
   started_in_bypass && { echo "bypassPermissions: on (headless run started with a bypass flag)"; exit 0; }
