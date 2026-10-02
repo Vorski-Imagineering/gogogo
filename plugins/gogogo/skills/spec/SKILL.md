@@ -58,10 +58,10 @@ Every tracker command targets `tracker.issues_repo`. When it differs from
 | `## Design` | Artefacts numbered 1., 2., 3. at the start of a line. Exact signatures, exact rules in order, exact selectors. Where each piece lands, following `design.placement_rule` when the profile has one. |
 | `## Test cases` | Real cases in every applicable lane, numbered 1., 2., 3. at the start of a line straight through the section, across lanes; checks in a lane a test cannot reach stay as bullets. Never "add tests". |
 | `## Files` | A `**Create:**` and an `**Edit:**` group with each path in backticks, then `**Explicitly not in scope:**` as a bullet list. |
-
-`/gogogo:dev` checks the change against these items one by one (Design, Test cases, the file groups, and the *Verify by hand* steps and Approvals rows), so `spec_lint.py` refuses a spec whose Design or Test cases are not numbered or whose Files are not grouped this way.
 | `## Verification` | Gate commands and the prove-it-fails step. This is the implementing agent's gate. |
 | `## Hard-stop check` | Each item in the profile's `hard_stops.items` answered, then the verdict. |
+
+`/gogogo:dev` checks the change against these items one by one (Design, Test cases, the file groups, and the *Verify by hand* steps and Approvals rows), so `spec_lint.py` refuses a spec whose Design or Test cases are not numbered or whose Files are not grouped this way.
 
 ## `## Verify by hand`
 

@@ -317,9 +317,6 @@ Comment in the reporter's language, not the codebase's:
     `declared` when at least one difference or file was declared, `stopped`
     when the check stopped the issue, and `nospec` when the body has no spec
     (then every count is 0 and `reader=none`).
-  - For example:
-    `gogogo:spec-check v=1 items=62 met=57 missing=1 differs=3 na=1 outside=1 runs=2 fixed=2 declared=3 reader=fresh end=declared`,
-    inside the same `<!-- … -->`.
 - **How it was verified**: which rungs ran, how many new tests went red, what
   the real run showed.
 - **How it was reviewed**: the kind (code, prose, or mixed: code with prose

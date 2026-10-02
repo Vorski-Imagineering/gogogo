@@ -218,10 +218,7 @@ def main(argv=None) -> int:
             print(json.dumps(listed, indent=2))
             return 0
         for item in listed["items"]:
-            if item["id"].startswith("F:"):
-                print(item["id"] + (f"\t{item['status']}" if "status" in item else ""))
-            else:
-                print(f"{item['id']}\t{item['text']}")
+            print(f"{item['id']}\t{item['text']}" + (f"\t{item['status']}" if "status" in item else ""))
         for title in listed["unlisted"]:
             print(f"unlisted: {title}")
         for name in listed["outside"]:

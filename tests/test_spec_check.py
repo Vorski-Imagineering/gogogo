@@ -169,9 +169,9 @@ class ChangedFiles(unittest.TestCase):
                                  cwd=repo, capture_output=True, text=True)
         self.assertEqual(out.returncode, 0, out.stderr)
         lines = out.stdout.splitlines()
-        self.assertIn("F:dev/SKILL.md\tmet", lines)
-        self.assertIn("F:tests/test_list.py\tmet", lines)
-        self.assertIn("F:app/views.py\tmissing", lines)
+        self.assertIn("F:dev/SKILL.md\tdev/SKILL.md\tmet", lines)
+        self.assertIn("F:tests/test_list.py\ttests/test_list.py\tmet", lines)
+        self.assertIn("F:app/views.py\tapp/views.py\tmissing", lines)
         self.assertIn("outside: README.md", lines)
         self.assertFalse([ln for ln in lines if ln.startswith("outside: plugins/")], lines)
 
