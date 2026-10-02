@@ -22,7 +22,8 @@ Exit codes:
            2 usage (empty text, no profile, an unknown `notify` value)
   status   0 off or ready; 1 failed; 3 no credentials; 2 usage
   init     0 created or already there
-  chat-id  0 at least one chat; 1 none, or the call failed; 2 no token
+  chat-id  0 at least one chat; 1 none, the call failed, or --save named an unlisted chat;
+           2 no token, or an empty --save
 
 Standard library only; imports `profile_check` from this folder, so a vendored
 copy works when the files sit side by side.
@@ -71,10 +72,7 @@ class SendError(Exception):
 
 def _scrub(text, token):
     text = str(text)
-    if token:
-        for form in (token, repr(token)[1:-1]):  # raw, and as an error's repr() shows it
-            text = text.replace(form, "<token>")
-    return text
+    return text.replace(token, "<token>") if token else text
 
 
 def _say(text, token, stream=None):
@@ -106,8 +104,15 @@ def credentials():
 
 # --- transport -------------------------------------------------------------
 
+def _check_token(token):
+    """A token with spaces or control characters cannot be sent, and would leak in an error."""
+    if any(c.isspace() or not c.isprintable() for c in token):
+        raise SendError(f"{TOKEN_KEY} holds spaces or control characters; paste the token alone")
+
+
 def _call(token, method, params=None):
     """POST to the Bot API; the decoded answer when `ok`, else SendError (token scrubbed)."""
+    _check_token(token)
     data = urllib.parse.urlencode(params or {}).encode()
     request = urllib.request.Request(API.format(token=token, method=method), data=data)
     try:
@@ -124,14 +129,7 @@ def _call(token, method, params=None):
         raise SendError("Telegram's answer was not a JSON object")
     if not body.get("ok"):
         raise SendError(_scrub(body.get("description") or "Telegram refused the call", token))
-    result = body.get("result")
-    return result if result is not None else {}
-
-
-def _check_token(token):
-    """A token with spaces or control characters cannot be sent, and would leak in an error."""
-    if any(c.isspace() or not c.isprintable() for c in token):
-        raise SendError(f"{TOKEN_KEY} holds spaces or control characters; paste the token alone")
+    return body.get("result")
 
 
 class Telegram:
@@ -145,15 +143,13 @@ class Telegram:
 
 
     def send(self, text):
-        _check_token(self.token)
         _call(self.token, "sendMessage", {"chat_id": self.chat, "text": text,
                                           "disable_web_page_preview": "true"})
 
     def describe(self):
-        _check_token(self.token)
         me = _call(self.token, "getMe")
         chat = _call(self.token, "getChat", {"chat_id": self.chat})
-        if not isinstance(me, dict) or not isinstance(chat, dict):
+        if not isinstance(me, dict) or not me.get("username") or not isinstance(chat, dict):
             raise SendError("Telegram's answer had no bot or chat")
         who = chat.get("title") or chat.get("first_name") or chat.get("username") or self.chat
         return f"bot @{me.get('username')} -> {who}"
@@ -259,9 +255,11 @@ def _chats(updates):
     """Each distinct chat once, (id, name), in the order its latest message came."""
     seen = {}
     for update in updates:
+        if not isinstance(update, dict):
+            continue
         message = update.get("message") or update.get("edited_message") or update.get("channel_post") or {}
-        chat = message.get("chat")
-        if not chat:
+        chat = message.get("chat") if isinstance(message, dict) else None
+        if not isinstance(chat, dict) or "id" not in chat:
             continue
         name = chat.get("title") or chat.get("first_name") or chat.get("username") or ""
         seen.pop(chat["id"], None)
@@ -304,11 +302,10 @@ def cmd_chat_id(args):
         print(f"no bot token: put it after {TOKEN_KEY}= in {CREDENTIALS} (`notify.py init` creates the file)")
         return EXIT_USAGE
     try:
-        _check_token(token)
         updates = _call(token, "getUpdates")
         chats = _chats(updates if isinstance(updates, list) else [])
     except SendError as exc:
-        _say(f"getUpdates failed: {exc}", token, sys.stderr)
+        _say(f"chat-id failed: {exc}", token, sys.stderr)
         return EXIT_FAILED
     if not chats:
         print("no messages yet: send your bot a message "

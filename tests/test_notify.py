@@ -225,6 +225,8 @@ class Status(Case):
         code, out, _ = self.run_main("status", "--profile", self.profile())
         self.assertEqual(code, 1)
         self.assertIn("chat not found", out)
+        self.urlopen.side_effect = [Answer({"ok": True}), ok({"first_name": "Vic"})]
+        self.assertEqual(self.run_main("status", "--profile", self.profile())[0], 1)
         self.assertNotIn("sendMessage", self.methods())
 
 
@@ -285,6 +287,14 @@ class ChatId(Case):
         self.assertTrue(self.creds.is_symlink())
         self.assertIn(f"{notify.CHAT_KEY}=5", real.read_text())
         self.assertEqual(self.run_main("chat-id", "--save", "")[0], 2)
+
+    def test_11_malformed_updates_are_skipped(self):
+        self.write_creds(chat="")
+        self.urlopen.return_value = ok([1, {"message": {"chat": {"first_name": "no id"}}},
+                                        {"message": {"chat": {"id": 3, "first_name": "Cy"}}}])
+        code, out, _ = self.run_main("chat-id")
+        self.assertEqual(code, 0)
+        self.assertEqual(out.split()[0], "3")
 
     def test_11_no_messages_and_no_token(self):
         self.write_creds(chat="")

@@ -96,8 +96,9 @@ means finished work sits unverified while you go and ask.
 ```
 
 A non-zero exit is a **stop**, never an empty column: the tool refuses to print
-a list it could not reconcile. The first time this list is read in a run, send
-the *run started* message (§8) with its count. Work only rows that are issues. Take them in the
+a list it could not reconcile. The first time this list is read in a run
+(not in triage-only mode), send the *run started* message (§8), counting the
+rows that are issues. Work only rows that are issues. Take them in the
 order the user gave; absent one, live user-facing bugs first, refactors after,
 anything large last so it cannot absorb the run.
 
@@ -333,6 +334,7 @@ One report: every issue taken with its outcome and merge commit, every issue
 skipped with the reason, anything left half-done with its branch, every card
 moved to `tracker.columns.needs_human` with its Needs-you line, the stranded
 work from preflight, and anything the profile's `stop.extra` checks raised.
+Then send the *run closed* message (§8).
 
 ## Stop the whole run and ask when
 
