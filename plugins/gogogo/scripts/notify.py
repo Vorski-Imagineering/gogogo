@@ -104,10 +104,14 @@ def credentials():
 
 # --- transport -------------------------------------------------------------
 
+TOKEN_CHARS = frozenset("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789:_-")
+
+
 def _check_token(token):
-    """A token with spaces or control characters cannot be sent, and would leak in an error."""
-    if any(c.isspace() or not c.isprintable() for c in token):
-        raise SendError(f"{TOKEN_KEY} holds spaces or control characters; paste the token alone")
+    """Only a token's own characters reach a URL; anything else would fail there and could leak."""
+    if not set(token) <= TOKEN_CHARS:
+        raise SendError(f"{TOKEN_KEY} holds characters a bot token does not have "
+                        "(a space, a comment, an accent?); paste the token alone")
 
 
 def _call(token, method, params=None):
@@ -148,9 +152,11 @@ class Telegram:
 
     def describe(self):
         me = _call(self.token, "getMe")
+        if not isinstance(me, dict) or not me.get("username"):
+            raise SendError("Telegram's getMe answer named no bot")
         chat = _call(self.token, "getChat", {"chat_id": self.chat})
-        if not isinstance(me, dict) or not me.get("username") or not isinstance(chat, dict):
-            raise SendError("Telegram's answer had no bot or chat")
+        if not isinstance(chat, dict):
+            raise SendError("Telegram's getChat answer named no chat")
         who = chat.get("title") or chat.get("first_name") or chat.get("username") or self.chat
         return f"bot @{me.get('username')} -> {who}"
 
@@ -259,7 +265,7 @@ def _chats(updates):
             continue
         message = update.get("message") or update.get("edited_message") or update.get("channel_post") or {}
         chat = message.get("chat") if isinstance(message, dict) else None
-        if not isinstance(chat, dict) or "id" not in chat:
+        if not isinstance(chat, dict) or type(chat.get("id")) not in (int, str) or chat["id"] == "":
             continue
         name = chat.get("title") or chat.get("first_name") or chat.get("username") or ""
         seen.pop(chat["id"], None)
