@@ -127,9 +127,9 @@ These rules apply, in order.
 
 ## Template
 
-The report follows this layout line for line. It shows the full case: where
-a rule above makes a line one line (`unreadable`, `not shown`), changes its
-ending (Gather step 1) or leaves it out (an unset setting), that rule wins.
+The report follows this layout line for line. It shows the full case, and
+any rule above wins over it: a block collapsed to one line (`unreadable`,
+`not shown`) prints nothing else, and a part a rule leaves out is left out.
 A section with nothing to show prints `none`. `Worktrees, detached:` is left
 out when there are none.
 
