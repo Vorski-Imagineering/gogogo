@@ -97,24 +97,24 @@ draft, and again after every change to it. Remove:
   command output. The kinds above are the usual ones, not the only ones.
 
 Keep a list of what you removed, in your own reply and never in the draft
-file: each item's kind, where it was, and the removed text, except that a
-token, key, email address or anything the last rule removed is named by kind
-and place only (*a token, in the second finding*). Step 4 shows it with the draft. Something the person, having
+file: each item's kind, where it was, and the removed text. A token, key,
+email address, secret link, or anything removed only because it was not known
+to be safe is named by kind and place only (*a token, in the second
+finding*). Step 4 shows it with the draft. Something the person, having
 seen that list, tells you to keep is theirs to publish: put it back and do not
-remove it again.
+remove it again. Tokens, keys and secret links are never put back.
 
 ## 4. Show and ask
 
 Show the target, the title (for a new issue), the whole body and step 3's
 list of removals. Then ask with `AskUserQuestion`: **post it** (naming the
-target: *file it as a new issue* or *post it as a comment on #<n>*), **change
-something**, or **don't post**.
+target: *file it as a new issue in <tracker.issues_repo>* or *post it as a
+comment on #<n>*), **change something**, or **don't post**.
 
 - Change something: edit the draft, or change the target (a new issue then
-  needs step 2's title; a comment goes only on an issue in
-  `tracker.issues_repo`, so a target the person names in another repo is
-  refused and the question asked again), run step 3 on it again, and ask
-  again.
+  needs step 2's title), run step 3 on it again, and ask again.
+- A target outside `tracker.issues_repo`, new issue or comment, is refused:
+  say so and ask again, changing nothing.
 - Don't post, or the question is declined: post nothing, say where the draft
   file is, and stop.
 
