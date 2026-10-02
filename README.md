@@ -159,6 +159,7 @@ commands, the environments, the Hard Stop rules) lives in one file per repo,
 | Command | What it does |
 |---|---|
 | `/gogogo:spec` | Turns an issue into a spec another agent can build from without asking. Asks the owner in rounds, records the decisions, lints the result. |
+| `/gogogo:idea` | Files what the session has found as an un-specced issue (request, findings, open questions), after showing you the draft. No further research; `/gogogo:spec` designs it later. |
 | `/gogogo:dev` | One issue end to end: read, triage, find the cause, change, review, verify on real data, report, move the card. |
 | `/gogogo:auto-dev` | Works the ready queue unattended, one issue after another, each on its own branch. `--triage-only` reads the queue and changes nothing. |
 | `/gogogo:setup` | Opens with the repo's setup and configuration, then onboards it, or checks it is still set up right: plugin settings, profile, Hard Stops, board and columns, ready label, competing local skills. |

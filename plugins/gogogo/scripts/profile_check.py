@@ -35,7 +35,8 @@ TEST = "auto-test"
 TECH = "tech-eval"
 ROADMAP = "roadmap"
 STATUS = "status"
-SKILLS = (SPEC, ONE, LOOP, TEST, TECH, ROADMAP, STATUS)
+IDEA = "idea"
+SKILLS = (SPEC, ONE, LOOP, TEST, TECH, ROADMAP, STATUS, IDEA)
 
 # Dotted path -> (type, skills that require it, one-line meaning).
 # `references/profile-schema.md` documents the same paths; a test keeps the two
