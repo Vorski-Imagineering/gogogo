@@ -30,8 +30,9 @@ lookup this skill makes.
 
 ## The target
 
-What this skill posts goes to one *target*: a new issue in
-`tracker.issues_repo`, or a comment on an open issue there. Nowhere else, and
+The text this skill posts goes to one *target*: a new issue in
+`tracker.issues_repo`, or a comment on an issue there (step 5 checks it is
+open). Nowhere else, and
 only one. An answer or a change that chooses a target anywhere else, or more
 than one, is refused as a whole: say so, change nothing, and ask again. Merely
 mentioning another repo is not choosing it.
@@ -45,8 +46,8 @@ gh issue list --repo <tracker.issues_repo> --state open --search "<two to four k
 When one is a likely match, show it and ask with `AskUserQuestion`: **add these
 findings as a comment on <tracker.issues_repo>#<n>**, or **file a new issue in
 <tracker.issues_repo>**. The answer, or another issue in `tracker.issues_repo`
-the person names instead, sets the target for steps 2 to 5 (§ *The target*).
-An answer that names no target counts as declined. No likely
+the person chooses instead, sets the target for steps 2 to 5 (§ *The target*).
+An answer that chooses no target counts as declined. No likely
 match: the target is a new issue. A declined question: write the draft as for
 a new issue (steps 2 and 3), post nothing, say where it is and what step 3
 removed, and stop.
