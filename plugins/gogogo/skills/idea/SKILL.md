@@ -36,9 +36,9 @@ gh issue list --repo <tracker.issues_repo> --state open --search "<two to four k
 
 When one is a likely match, show it and ask with `AskUserQuestion`: **add these
 findings as a comment on #<n>**, or **file a new issue**. The answer sets the
-*target* for steps 2 to 5: a comment on #<n>, or a new issue. A declined
-question, or no likely match, makes the target a new issue; step 4 still asks
-before anything is posted.
+*target* for steps 2 to 5: a comment on #<n>, or a new issue. No likely
+match: the target is a new issue. A declined question: write the draft
+(steps 2 and 3), post nothing, say where it is, and stop.
 
 Never edit another issue's body; it may be a spec.
 
@@ -80,18 +80,18 @@ person sees the draft, and again after every change to it:
 - any path outside this checkout: absolute (`/Users/`, `/home/`, `/tmp/`,
   `/private/`, `C:\`), home-relative (`~/`), or into another checkout. A path
   inside this checkout is written relative to its root;
-- other repos and projects, by any name: an `owner/repo` other than
-  `tracker.issues_repo` and `tracker.code_repo`, or a bare repo, project or
-  folder name the session met outside this repo;
-- hostnames and IP addresses of machines and private services;
+- other repos and projects: an `owner/repo` other than `tracker.issues_repo`
+  and `tracker.code_repo`, or the name of another repo, project or folder the
+  session met on this machine;
+- hostnames and IP addresses, except inside a link the next rule keeps;
 - links, except into `tracker.issues_repo` or `tracker.code_repo`, or to a
-  product's plainly public documentation. The rule above on other repos and
-  projects wins over this one; when unsure, remove the link;
+  product's plainly public documentation; when unsure, remove the link;
 - anything that looks like a token or key, and email addresses;
 - people's names (use their role).
 
-Keep a list of what you removed. Step 4 shows it with the draft; it never goes
-in the issue. Something the person, having seen that list, tells you to keep
+Keep a list of what you removed, each by its kind and where it was (*a token,
+in the second finding*), never repeating a token, key or email address. Step 4
+shows it with the draft; it never goes in the issue. Something the person, having seen that list, tells you to keep
 is theirs to publish: put it back and do not remove it again.
 
 ## 4. Show and ask
@@ -101,7 +101,8 @@ list of removals. Then ask with `AskUserQuestion`: **post it** (naming the
 target: *file it as a new issue* or *post it as a comment on #<n>*), **change
 something**, or **don't post**.
 
-- Change something: edit the draft, run step 3 on it again, and ask again.
+- Change something: edit the draft, or change the target (a new issue then
+  needs step 2's title), run step 3 on it again, and ask again.
 - Don't post, or the question is declined: post nothing, say where the draft
   file is, and stop.
 
@@ -154,7 +155,8 @@ step was skipped, and why.
 - the issue's or the comment's link;
 - the card's column as read back, or why there is none;
 - what step 3 removed;
-- next: `/gogogo:spec <n>` when someone is ready to design it.
+- for a new issue, next: `/gogogo:spec <n>` when someone is ready to design
+  it.
 
 ## Claude-specific
 
