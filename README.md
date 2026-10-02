@@ -206,7 +206,7 @@ Scripts the skills call, all in `plugins/gogogo/scripts/`:
 - `tracker.py`: lists and moves cards on a GitHub Project board, by column name, with read-back.
 - `verify_merged.py`: confirms a PR's merge is really on the base branch.
 - `stage_sync.py`: writes the `Ships-issue` link at merge, and moves cards to a stage when a tag ships their commits (run by a repo's CI).
-- `stranded_work.py`: finds branches holding work no open issue points to.
+- `stranded_work.py`: finds branches holding work no open issue or open pull request points to, and says what became of each branch's pull request.
 - `notify.py`: sends a run's messages by the profile's `notify` (Telegram today); off, or no credentials on the machine, sends nothing.
 - `require_unattended.sh`: refuses to start the loop unless the session can run without prompts.
 - `setup_check.py`: the read-only check behind `/gogogo:setup`.
