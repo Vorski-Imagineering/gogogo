@@ -17,7 +17,7 @@ Exit 0 prints the settings; use them wherever this skill says *the profile*.
 Its `profile ok for status: <path>` line names the profile file the report's
 `profile:` line shows. Any other exit: **stop and report the line it printed**.
 A setting this skill names that the profile does not set is left out of the
-report, never printed empty.
+report, never printed empty, unless this skill gives a fallback for it.
 
 ## It reads only
 
@@ -43,14 +43,17 @@ in its place in the report, and the others still run.
 1. **Header.**
    ```bash
    git rev-parse --show-toplevel        # its basename is <repo>
-   git rev-parse --abbrev-ref HEAD
+   git branch --show-current            # empty on a detached HEAD
    git rev-parse --short HEAD
    git status --porcelain               # count the lines
-   git rev-parse --abbrev-ref @{u}      # <upstream>
+   git for-each-ref --format='%(upstream:short)|%(upstream:track)' refs/heads/<branch>
    git rev-list --left-right --count @{u}...HEAD
    ```
-   The last prints `<behind> <ahead>`. With no upstream both fail: the header
-   ends `· no upstream` in place of the counts.
+   The `for-each-ref` line gives `<upstream>`. The last command prints
+   `<behind> <ahead>`; run it only when the upstream is set and not `[gone]`.
+   Otherwise the header ends `· no upstream` (none set), `· <upstream> gone`
+   (`[gone]`), or, on a detached HEAD, shows `detached` for the branch and
+   ends after the uncommitted count.
 2. **Board**, only when `tracker.tool` is `shared`:
    ```bash
    python3 "${CLAUDE_PLUGIN_ROOT}/scripts/tracker.py" fields
@@ -89,13 +92,14 @@ These rules apply, in order.
 - **Listed columns.** Cards are listed, not just counted, only in
   `tracker.queue`, `tracker.columns.in_progress`, and each `stages[].column`,
   in that order, each once. A stage column carries its `environment` in
-  brackets when the stage names one. Each list holds at most 10 cards, in
+  parentheses when the stage names one. Each list holds at most 10 cards, in
   `list --json` order, then `+N more`. Every other column gets a count only.
 - **A card** reads `#<number> <title>`, the title cut to 70 characters. It is
   `<repo>#<number>` when its `repo` is not `tracker.issues_repo` (two repos on
   one board can share a number). It ends with ` (closed)` when its `state`
-  is `CLOSED`. A card with no `number` is a draft or deleted content: it
-  reads `(draft) <title>`, with no repo and never `(closed)`.
+  is set and not `OPEN` (a merged pull request too). A card with no
+  `number` is a draft or deleted content: it reads `(draft) <title>`, with
+  no repo and never `(closed)`.
 - **A pull request** reads `#<n> <headRefName>`, then ` → <issue>` when the
   branch name carries an issue number (next rule), then ` (draft)` if it is
   one. At most 10, then `+N more`, or `none`.
@@ -137,5 +141,5 @@ CODE
     <path> @ <short sha>
 ```
 
-The report is your whole reply: print it once, in one fenced block, with
-nothing before or after it.
+Print the report once, in one fenced block, with nothing before it. After
+it comes only the pointer of *Positions only*, when the user asked what to do.

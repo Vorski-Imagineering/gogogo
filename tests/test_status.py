@@ -73,7 +73,9 @@ class Skill(unittest.TestCase):
         # Three-part and stage settings the two-part regex cannot see.
         self.assertIn("`tracker.columns.in_progress`", skill_text())
         self.assertIn("tracker.columns.in_progress", pc.FIELDS)
-        for key in re.findall(r"`stages\[\]\.([a-z_]+)`", skill_text()):
+        stage_keys = re.findall(r"`stages\[\]\.([a-z_]+)`", skill_text())
+        self.assertIn("column", stage_keys)
+        for key in stage_keys:
             self.assertIn(key, pc.STAGE_KEYS, key)
         for setting in sorted(named):
             self.assertIn(setting, pc.FIELDS, setting)
