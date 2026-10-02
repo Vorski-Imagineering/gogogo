@@ -73,9 +73,8 @@ means finished work sits unverified while you go and ask.
    python3 "${CLAUDE_PLUGIN_ROOT}/scripts/notify.py" status
    ```
    Exit 0 with `notify: off`: say nothing. Exit 0 otherwise: messages will
-   send. Any other exit: give its line once, in the next report to the person
-   (as §8 says for a failed send), and go on. Messages are a convenience,
-   never a reason to stop.
+   send. Any other exit: put its line once at the top of the run report and
+   go on. Messages are a convenience, never a reason to stop.
 8. **A logged-in browser on the pre-merge environment** (`verify.session_url`,
    or the first `verify.agent` environment's `session_url`). A redirect to a
    login page → stop the whole run and ask. Do not decide that other coverage
@@ -319,7 +318,7 @@ each, `<repo>` being the name part of `tracker.code_repo`:
 - once preflight has passed and §1 has read the queue: `<repo> auto-dev: run started on <hostname>, <k> issues in "<tracker.queue>"`;
 - the first time an issue is skipped in this run, not on later passes: `<repo> #<n> skipped: <reason>`;
 - `<repo> #<n> started: <title>`;
-- after the merge is verified: `<repo> #<n> merged (<short sha>) -> <column>`;
+- after the issue's merge is verified: `<repo> #<n> merged (<short sha>) -> <column>`;
 - `<repo> #<n> needs you -> <tracker.columns.needs_human>: <the Needs-you line>`;
 - *run closed*, from §9 only: `<repo> auto-dev: run closed: <a> merged, <b> need you, <c> skipped`.
 
