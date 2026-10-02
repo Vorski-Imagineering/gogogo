@@ -1,2 +1,12 @@
 __pycache__/
 .DS_Store
+
+# secrets: tokens for local test bots and the like
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+
+# per-machine Claude Code settings (may hold tokens or local paths)
+.claude/settings.local.json
