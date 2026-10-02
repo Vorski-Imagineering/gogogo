@@ -1,3 +1,5 @@
+![gogogo: when Human Ideas Move Faster Than Coding Agents](docs/images/gogogo-banner.png)
+
 # gogogo
 
 **Let Claude work on its own for hours, not minutes: through a queue of
