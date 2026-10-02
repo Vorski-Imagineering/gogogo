@@ -266,8 +266,8 @@ python3 "${CLAUDE_PLUGIN_ROOT}/scripts/verify_merged.py" <pr> <base branch> [--r
 Confirm **MERGED** before commenting on the issue or moving any card. A run
 that reports six merges and delivered five is worse than one that stops at the
 first failure: the board says done, the branch says otherwise, and nobody looks
-again. NOT-MERGED, or "cannot tell", stops the whole run, once every issue a
-`CLOSED` line names has been reopened as `/gogogo:dev` §8 says.
+again. Every exit first reopens what the output says the merge closed, as
+`/gogogo:dev` §8 says; then NOT-MERGED, or "cannot tell", stops the whole run.
 
 When the link was written, add it to the check:
 
@@ -280,8 +280,8 @@ Exit 3
 the issue in the between-issues log and the close-run report as one whose card
 must be moved by hand when its tag ships.
 
-Exit 4 (merged, the issue closed) does **not** stop the run either: reopen it
-as `/gogogo:dev` §8 says, hand back as merged, and list the issue in the
+Exit 4 (merged, the issue closed) does **not** stop the run either: hand back
+as merged, as `/gogogo:dev` §8 says, and list the issue in the
 between-issues log (§8) and the close-run report as one the merge closed.
 
 ## 7. Report and hand back
@@ -299,9 +299,7 @@ reached, read from the profile's `stages`:
 For `run-branch-pr`: when the run's final PR has **merged** (check its state,
 not the merge command's exit), first check that every issue it landed is still
 open, with one `--open` for each, and treat its exits as in *Verify the
-merge landed*: reopen every issue a `CLOSED` line names, as `/gogogo:dev` §8
-says, whatever the exit; then, on NOT-MERGED or "cannot tell", stop the whole
-run and leave the cards where they are:
+merge landed*:
 
 ```bash
 python3 "${CLAUDE_PLUGIN_ROOT}/scripts/verify_merged.py" <final pr> <integration.final_target> [--repo <code_repo>] --open <tracker.issues_repo>#<n> ...
@@ -361,7 +359,8 @@ the `notify failed` lines §8 says are due.
 - the unattended-mode check fails, at the start or before any merge;
 - the base is red before you start, or the run branch goes red mid-run, or
   a `run-branch-pr` final PR that is a release fails §6's checks step;
-- a merge conflicts, or the merge check says NOT-MERGED or cannot tell;
+- a merge conflicts, or the merge check says NOT-MERGED or cannot tell (after
+  the reopen *Verify the merge landed* asks for);
 - a two-licence apply fails or half-applies;
 - the same change fails verification after the bound on two issues in a row
   (the environment, not the issues, is the likely cause);
