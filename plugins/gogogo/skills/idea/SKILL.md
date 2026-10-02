@@ -75,27 +75,29 @@ this body over as the issue's original report, unchanged.
 
 ## 3. Public trackers
 
-When `tracker.public` is true, remove from the title and the body, before the
-person sees the draft, and again after every change to it:
+When `tracker.public` is true, the title and body keep only what is known to be
+safe to publish. When unsure, remove it. Do this before the person sees the
+draft, and again after every change to it. Remove:
 
 - any path outside this checkout: absolute (`/Users/`, `/home/`, `/tmp/`,
   `/private/`, `C:\`), home-relative (`~/`), or into another checkout. A path
-  inside this checkout is written relative to its root;
-- other repos: any `owner/repo` other than `tracker.issues_repo` and
-  `tracker.code_repo`, and the name of any other private repo or project,
-  however it is written and however the session learned it;
+  inside this checkout is written relative to its root, and is kept;
+- every repo, project, client, product or folder name from outside this
+  checkout, in any form (`owner/repo`, a bare name, a folder), except
+  `tracker.issues_repo`, `tracker.code_repo`, and tools and products anyone
+  would know as public;
 - hostnames and IP addresses, except inside a link the next rule keeps;
-- links, except into `tracker.issues_repo` or `tracker.code_repo`, or to a
-  public product's documentation; when unsure, remove the link. Nothing here
-  keeps a private repo's or project's name;
+- links, except into `tracker.issues_repo` or `tracker.code_repo`, or to a page
+  anyone can open without logging in;
 - anything that looks like a token or key, and email addresses;
 - people's names (use their role).
 
-Keep a list of what you removed: each item's kind, where it was, and the
-removed text, except that a token, key or email address is named by kind and
-place only (*a token, in the second finding*). Step 4
-shows it with the draft; it never goes in the issue. Something the person, having seen that list, tells you to keep
-is theirs to publish: put it back and do not remove it again.
+Keep a list of what you removed, in your own reply and never in the draft
+file: each item's kind, where it was, and the removed text, except that a
+token, key or email address is named by kind and place only (*a token, in the
+second finding*). Step 4 shows it with the draft. Something the person, having
+seen that list, tells you to keep is theirs to publish: put it back and do not
+remove it again.
 
 ## 4. Show and ask
 
@@ -105,10 +107,7 @@ target: *file it as a new issue* or *post it as a comment on #<n>*), **change
 something**, or **don't post**.
 
 - Change something: edit the draft, or change the target (a new issue then
-  needs step 2's title; a comment needs an open issue in
-  `tracker.issues_repo`, checked with
-  `gh issue view <n> --repo <tracker.issues_repo> --json state`), run step 3
-  on it again, and ask again.
+  needs step 2's title), run step 3 on it again, and ask again.
 - Don't post, or the question is declined: post nothing, say where the draft
   file is, and stop.
 
@@ -120,9 +119,12 @@ A new issue:
 gh issue create --repo <tracker.issues_repo> --title "<title>" --body-file <file>
 ```
 
-A comment on #<n>:
+A comment on #<n>, however the target was chosen: first confirm it is an open
+issue in `tracker.issues_repo`. A target in another repo, a pull request, or an
+issue not `OPEN`: post nothing, say so, and go back to step 4.
 
 ```bash
+gh issue view <n> --repo <tracker.issues_repo> --json state,url -q '.state + " " + .url'
 gh issue comment <n> --repo <tracker.issues_repo> --body-file <file>
 ```
 
