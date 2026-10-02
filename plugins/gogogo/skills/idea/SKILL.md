@@ -37,13 +37,15 @@ gh issue list --repo <tracker.issues_repo> --state open --search "<two to four k
 When one is a likely match, show it and ask with `AskUserQuestion`: **add these
 findings as a comment on #<n>**, or **file a new issue**.
 
-- Comment: write the body (step 2's layout, step 3's removals) to a file and
-  show and ask as step 4 does. On **post it**, run
+- Comment: write the body (step 2's layout, step 3's removals) to a file,
+  show it, and ask with `AskUserQuestion`: **post it**, **change something**,
+  or **don't post**. Change something works as in step 4. On post it, run
   `gh issue comment <n> --repo <tracker.issues_repo> --body-file <file>`, then
-  report the comment's link and what step 3 removed, and stop. On **don't
-  post** or a declined question, post nothing, say where the file is, and
-  stop. Never edit another issue's body; it may be a spec.
-- File new, or the question declined: go on.
+  report the comment's link and what step 3 removed, and stop. On don't post
+  or a declined question, post nothing, say where the file is, and stop.
+  Never edit another issue's body; it may be a spec.
+- File new: go on.
+- A declined question: file nothing and stop.
 
 ## 2. Draft
 
@@ -80,17 +82,21 @@ When `tracker.public` is true, remove from the title and the body, before the
 person sees the draft, and again after every change to it:
 
 - any path outside this repo: absolute (`/Users/`, `/home/`, `/tmp/`,
-  `/private/`, `C:\`), home-relative (`~/`), or into another checkout. Paths
-  inside this repo are written relative to its root;
+  `/private/`, `C:\`), home-relative (`~/`), or into another repo's checkout.
+  A path into any checkout of this repo, a worktree included, is rewritten
+  relative to the repo root;
 - other repos and projects, by any name: an `owner/repo` other than
   `tracker.issues_repo` and `tracker.code_repo`, or a bare repo, project or
   folder name the session met outside this repo;
-- hostnames and IP addresses of machines and services. Links to public
-  documentation stay;
+- hostnames, IP addresses and links. A link stays only when it points into
+  `tracker.issues_repo` or `tracker.code_repo`, or is plainly a product's
+  public documentation; when unsure, remove it;
 - anything that looks like a token or key, and email addresses;
 - people's names (use their role).
 
 Keep a list of what you removed. It goes in your reply, never in the issue.
+Something the person, having seen that list, tells you to keep is theirs to
+publish: put it back and do not remove it again.
 
 ## 4. Show and ask
 
@@ -125,7 +131,9 @@ that is not `on board, no status`. Then, by what the last run printed:
 
 - a column: report it;
 - still `on board, no status`: report that the board has not placed it yet;
-- still `not on project …`: add it, then read it back the same way;
+- still `not on project …`: add it once, then read it back the same way, and
+  report what that read-back prints (or the add's error), without adding
+  again;
 - a non-zero exit with any other message: report that line and add nothing.
 
 ```bash
