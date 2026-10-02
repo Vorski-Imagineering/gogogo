@@ -73,8 +73,8 @@ means finished work sits unverified while you go and ask.
    python3 "${CLAUDE_PLUGIN_ROOT}/scripts/notify.py" status
    ```
    Exit 0 with `notify: off`: say nothing. Exit 0 otherwise: messages will
-   send. Any other exit: put its line once at the top of the run report (in
-   triage-only mode, of the triage report) and go on. Messages are a convenience, never a reason to stop.
+   send. Any other exit: put its line once at the top of the run report and
+   go on. Messages are a convenience, never a reason to stop.
 8. **A logged-in browser on the pre-merge environment** (`verify.session_url`,
    or the first `verify.agent` environment's `session_url`). A redirect to a
    login page → stop the whole run and ask. Do not decide that other coverage
@@ -318,7 +318,7 @@ each, `<repo>` being the name part of `tracker.code_repo`:
 - once preflight has passed and §1 has read the queue: `<repo> auto-dev: run started on <hostname>, <k> issues in "<tracker.queue>"`;
 - the first time an issue is skipped in this run, not on later passes: `<repo> #<n> skipped: <reason>`;
 - `<repo> #<n> started: <title>`;
-- after the issue's merge is verified and its card is in that column: `<repo> #<n> merged (<short sha>) -> <column>`;
+- after the issue's merge is verified: `<repo> #<n> merged (<short sha>) -> <column>`;
 - `<repo> #<n> needs you -> <tracker.columns.needs_human>: <the Needs-you line>`;
 - *run closed*, from §9 only: `<repo> auto-dev: run closed: <a> merged, <b> need you, <c> skipped`.
 
@@ -330,12 +330,12 @@ tracker comment. Never put a token on a command line or in a report.
 ## 9. Close the run
 
 In a run that tried to send *run started*, first send *run closed* (§8). Then
-one report: every issue taken with its outcome and merge commit, every issue
+one report, opening with the notify line preflight item 7 put there, if any:
+every issue taken with its outcome and merge commit, every issue
 skipped with the reason, anything left half-done with its branch, every card
 moved to `tracker.columns.needs_human` with its Needs-you line, the stranded
-work from preflight, the notify status line from preflight (item 7), anything
-the profile's `stop.extra` checks raised, and the `notify failed` lines §8 says
-are due.
+work from preflight, anything the profile's `stop.extra` checks raised, and
+the `notify failed` lines §8 says are due.
 
 ## Stop the whole run and ask when
 
