@@ -218,8 +218,8 @@ Push the branch as soon as it has its first commit (`git push -u origin
 `/gogogo:dev` §3–6, with these differences because nobody is watching:
 
 - **Every rung in `verify.rungs` is mandatory** for every issue.
-- The regression test must be seen failing, then the whole suite green. Record
-  how many new tests went red.
+- The regression test must be seen failing, then the whole suite green (by
+  exit status, `/gogogo:dev` §6). Record how many new tests went red.
 - **Mutation testing** as `/gogogo:dev` §6 says, for every lane with a `mutate`
   command, to its end, in the foreground or polled. When it stops the issue (a
   run that failed twice, or survivors left after the third run): commit
@@ -280,8 +280,9 @@ Push the branch as soon as it has its first commit (`git push -u origin
 ## 5. Gates
 
 Run the profile's `gates.always`, and each `gates.when` entry whose pattern the
-change touches, before merging. A gate failure is a finding: fix it rather than
-raise a budget, or stop the issue and hand its card back to
+change touches, before merging. A gate passes on its exit status, read as
+`/gogogo:dev` §6 says, never on filtered output. A gate failure is a finding:
+fix it rather than raise a budget, or stop the issue and hand its card back to
 `tracker.columns.needs_human` as `/gogogo:dev` §8 says.
 
 ## 6. Merge, by the profile's integration strategy
@@ -498,9 +499,10 @@ integration and merging follow this skill and the profile. See the profile's
   when it is unset.
 - **Polling background work** (§4): `rm -f <scratch>/job.pid`, then start the
   job so it records a pid that lives as long as it does,
-  `sh -c 'echo $$ > <scratch>/job.pid.tmp && mv <scratch>/job.pid.tmp <scratch>/job.pid; <command>' > <output file> 2>&1`
+  `sh -c 'echo $$ > <scratch>/job.pid.tmp && mv <scratch>/job.pid.tmp <scratch>/job.pid; <command>; echo "exit=$?"' > <output file> 2>&1`
   (the background tool's task id is not a pid), and once `<scratch>/job.pid`
-  exists use its number as `<pid>`. Then one foreground command at a time, each
+  exists use its number as `<pid>`. The output file's last line, `exit=<n>`, is
+  the job's own exit status; no `exit=` last line means the job failed. Then one foreground command at a time, each
   under the shell tool's 10-minute limit, for example
   ```bash
   timeout 540 sh -c 'while kill -0 <pid> 2>/dev/null; do sleep 15; done'; kill -0 <pid> 2>/dev/null && echo running || echo finished

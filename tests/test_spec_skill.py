@@ -118,6 +118,65 @@ class Skill(unittest.TestCase):
 RUN = "## Several issues in one run"
 
 
+class ChangedMeanwhile(unittest.TestCase):
+    """Posting compares the issue with a snapshot taken when it started (gogogo#91)."""
+
+    def test_before_you_write_takes_the_start_snapshot(self):
+        before = "\n".join(section(skill_text(), "## Before you write"))
+        self.assertIn("issue-<N>-start.json", before)
+        self.assertIn("--json body,labels", before)
+
+    def test_posting_step_one_compares_and_asks(self):
+        posting = section(skill_text(), "## Posting")
+        steps = {int(m.group(1)): i for i, line in enumerate(posting) if (m := re.match(r"(\d+)\. ", line))}
+        one = "\n".join(posting[steps[1]:steps[2]])
+        for text in ("issue-<N>-start.json", "issue-<N>-now.json", "keep", "replace"):
+            self.assertIn(text, one)
+
+    def test_the_final_report_names_a_changed_issue(self):
+        rules = "\n".join(section(skill_text(), "## Several issues in one run"))
+        self.assertIn("changed by someone else meanwhile", rules)
+
+    def test_red_flags_name_the_start_snapshot(self):
+        flags = [l for l in section(skill_text(), "## Red flags") if l.startswith("|")]
+        self.assertTrue(any("start snapshot" in l for l in flags))
+
+
+class Dependents(unittest.TestCase):
+    """Posting step 4 checks the open specs that read this issue's body (gogogo#93)."""
+
+    def posting(self):
+        return section(skill_text(), "## Posting")
+
+    def step(self, number):
+        posting = self.posting()
+        steps = {int(m.group(1)): i for i, line in enumerate(posting) if (m := re.match(r"(\d+)\. ", line))}
+        return "\n".join(posting[steps[number]:steps[number + 1]])
+
+    def test_step_four_lists_the_open_specs(self):
+        four = self.step(4)
+        for text in ("gh issue list", "--state open", "tracker.issues_repo"):
+            self.assertIn(text, four)
+
+    def test_the_check_comes_before_the_post(self):
+        posting = self.posting()
+        listing = next(i for i, line in enumerate(posting) if "gh issue list" in line)
+        post = next(i for i, line in enumerate(posting) if "gh issue edit <N> --body-file" in line)
+        self.assertLess(listing, post)
+
+    def test_test_rules_has_five_rules(self):
+        rules = (SKILL.parent / "references" / "test-rules.md").read_text(encoding="utf-8")
+        self.assertEqual(len(re.findall(r"(?m)^## ", rules)), 5)
+
+    def test_the_pattern_matches_commands_not_mentions(self):
+        found = re.search(r'test\("([^"]+)"\)', self.step(4))
+        self.assertIsNotNone(found)
+        pattern = found.group(1).replace("\\\\", "\\").replace("<N>", "57")
+        self.assertRegex("gh issue view 57 --json body", pattern)
+        self.assertNotRegex("such as #57", pattern)
+        self.assertNotRegex("gh issue view 157", pattern)
+
+
 class SeveralIssues(unittest.TestCase):
     """A list or a column is specced one issue at a time (gogogo#70)."""
 
@@ -159,6 +218,44 @@ class SeveralIssues(unittest.TestCase):
 
     def test_readme_shows_list_example(self):
         self.assertRegex((ROOT / "README.md").read_text(encoding="utf-8"), r"`/gogogo:spec #\d+ #\d+")
+
+
+BUILDING = "## Is someone building it already?"
+BEFORE = "## Before you write"
+
+
+class BeforeYouWrite(unittest.TestCase):
+    """In-flight check, the today check and prior work (gogogo#97)."""
+
+    def before_steps(self):
+        before = "\n".join(section(skill_text(), BEFORE))
+        return re.findall(r"^(\d+)\. (.*?)(?=^\d+\. |^\*\*REQUIRED|\Z)", before, re.M | re.S)
+
+    def test_building_section_directly_before_before_you_write(self):
+        lines = skill_text().splitlines()
+        heads = [i for i, line in enumerate(lines) if line.startswith(BUILDING)]
+        self.assertEqual(len(heads), 1)
+        nxt = next(line for line in lines[heads[0] + 1:] if line.startswith("## "))
+        self.assertTrue(nxt.startswith(BEFORE), nxt)
+        sub = "\n".join(section(skill_text(), BUILDING))
+        for name in ("tracker.columns.in_progress", "tracker.columns.needs_human", "gh pr list"):
+            self.assertIn(name, sub)
+
+    def test_before_you_write_steps_zero_to_seven(self):
+        steps = self.before_steps()
+        self.assertEqual([int(n) for n, _ in steps], list(range(0, 8)))
+        self.assertIn("today", steps[6][1])
+        self.assertIn("Prior work", steps[7][1])
+
+    def test_close_command_has_reopen_comment(self):
+        six = self.before_steps()[6][1]
+        close = re.search(r"gh issue close[^`]*`", six)
+        self.assertIsNotNone(close, "no close command in step 6")
+        self.assertIn('--reason "not planned"', close.group(0))
+        self.assertIn("--comment", close.group(0))
+
+    def test_claude_specific_names_web_search(self):
+        self.assertIn("WebSearch", "\n".join(section(skill_text(), "## Claude-specific")))
 
 
 if __name__ == "__main__":
