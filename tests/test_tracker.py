@@ -191,6 +191,7 @@ class NeedsHumanGuardTests(unittest.TestCase):
 
     def test_a_quoted_template_or_no_comment_is_not_a_reason(self):
         self.assertFalse(board.has_reason("<!-- gogogo:stop v=1 reason=<hard-stop|decision> -->"))
+        self.assertFalse(board.has_reason("<!-- gogogo:skip v=1 reason=<why> -->"))
         self.assertFalse(board.has_reason(""))
 
     def test_skip_and_auto_test_markers_are_reasons(self):
