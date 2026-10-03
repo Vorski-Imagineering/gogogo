@@ -20,8 +20,10 @@ rename detection, and prints one item per test hunk: `H<k>  deleted  <path>`
 for a test file deleted since the base, or `H<k>  changed  <path>:<old line>
 <enclosing>` for any other hunk in a test file that existed at the base,
 followed by its `-` and `+` lines. `<enclosing>` is the innermost enclosing
-line of the file at the base (the test's own `def`, in most languages), or
-git's function context when there is none. A pure rename and a file new since
+line of the file at the base (the test's own `def`, in most languages; for a
+line added just above a definition, that definition), or git's function
+context when there is none. Lines at column 0 are skipped while a more
+indented enclosing line exists. A pure rename and a file new since
 the base list nothing. The last line is `test-guard: hunks=<n>`.
 
 `verify` reads ANSWERS_FILE, one line per item, `H<k><TAB><same|stronger|
@@ -116,11 +118,31 @@ def _indent(text: str) -> int:
 
 
 def enclosing(old_lines: list[str], line: int, content_indent: int) -> list[str]:
-    """The lines enclosing a hunk in the file at the base, innermost first: walking up
-    from `line`, each non-blank line less indented than the hunk's content and than
-    every line already taken, up to one at indentation 0."""
-    found, limit = [], content_indent
-    for text in reversed(old_lines[:max(line, 0)]):
+    """The lines enclosing a hunk in the file at the base, innermost first. Walking up
+    from `line`, take each non-blank line indented more than 0 and less than the hunk's
+    content and every line already taken, then the first line at indentation 0 whose
+    next non-blank line is indented more than 0 and no deeper than the last one taken,
+    so text written at the margin is passed over. When nothing above 0 is taken: each
+    line less indented than the hunk and the lines taken, up to one at indentation 0."""
+    above = old_lines[:max(line, 0)]
+    found, limit, last = [], content_indent, None
+    for i in range(len(above) - 1, -1, -1):
+        text = above[i]
+        if text.strip() and 0 < _indent(text) < limit:
+            found.append(text.strip())
+            limit, last = _indent(text), i
+    if found:
+        for i in range(last - 1, -1, -1):
+            text = above[i]
+            if not text.strip() or _indent(text) != 0:
+                continue
+            below = next((t for t in old_lines[i + 1:] if t.strip()), None)
+            if below is not None and 0 < _indent(below) <= limit:
+                found.append(text.strip())
+                break
+        return found
+    limit = content_indent
+    for text in reversed(above):
         if not text.strip():
             continue
         if _indent(text) < limit:
@@ -129,6 +151,28 @@ def enclosing(old_lines: list[str], line: int, content_indent: int) -> list[str]
             if limit == 0:
                 break
     return found
+
+
+def _definition_below(old_lines: list[str], hunk: dict, content_indent: int) -> str | None:
+    """The definition directly below a hunk whose lines all sit at its content
+    indentation, such as a decorator added above a method: the old line after the
+    hunk, when it is at that indentation and the next non-blank line is deeper."""
+    lines = hunk["minus"] + hunk["plus"]
+    if any(t.strip() and _indent(t) != content_indent for t in lines):
+        return None
+    last = (hunk["plus"] or hunk["minus"])[-1:]
+    if not last or not last[0].strip():
+        return None
+    after = hunk["line"] + len(hunk["minus"]) if hunk["minus"] else hunk["line"] + 1
+    if not 1 <= after <= len(old_lines):
+        return None
+    candidate = old_lines[after - 1]
+    if not candidate.strip() or _indent(candidate) != content_indent:
+        return None
+    below = next((t for t in old_lines[after:] if t.strip()), None)
+    if below is None or _indent(below) <= content_indent:
+        return None
+    return candidate.strip()
 
 
 def _content_indent(hunk: dict) -> int:
@@ -178,7 +222,11 @@ def items(base: str, globs: list[str]) -> list[dict]:
         hunks = _hunks(fork, [old, new] if renamed_from else [new])
         old_lines = _base_lines(fork, old) if hunks else []
         for hunk in hunks:
-            hunk["enclosing"] = enclosing(old_lines, hunk["line"], _content_indent(hunk))
+            indent = _content_indent(hunk)
+            hunk["enclosing"] = enclosing(old_lines, hunk["line"], indent)
+            below = _definition_below(old_lines, hunk, indent)
+            if below is not None:
+                hunk["enclosing"].insert(0, below)
             found.append({"kind": "changed", "path": new, "renamed_from": renamed_from, **hunk})
     for k, item in enumerate(found, 1):
         item["id"] = f"H{k}"

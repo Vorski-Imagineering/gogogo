@@ -77,6 +77,10 @@ def git(repo, *args):
     return subprocess.run(["git", *args], cwd=repo, check=True, capture_output=True, text=True).stdout
 
 
+TEST_TEXT = ('import unittest\n\n\nclass T(unittest.TestCase):\n    def test_s(self):\n        x = """\n'
+             'a = 1\n"""\n        self.assertEqual(x, "\\na = 1\\n")\n        self.assertTrue(x)\n')
+
+
 class Repo:
     def __init__(self, tests='tests = ["tests/*"]'):
         self._tmp = tempfile.TemporaryDirectory()
@@ -290,6 +294,22 @@ class Enclosing(unittest.TestCase):
         self.assertEqual(out.returncode, 1, out.stdout + out.stderr)
         self.assertIn("H1  NOT LICENSED", out.stdout)
 
+    def test_a_line_added_above_a_def_is_inside_that_def(self):
+        self.change(TEST_CLASS.replace("    def test_b(self):\n", "    @unittest.skip(\"x\")\n    def test_b(self):\n"))
+        items = self.items()
+        self.assertEqual(len(items), 1, items)
+        self.assertTrue(items[0].endswith("def test_b(self):"), items)
+        out = self.r.run("verify", body=body(cases="1. `tests/test_c.py::test_b` rewritten"),
+                         answers="H1\tweaker\ta skip\n")
+        self.assertEqual(out.returncode, 0, out.stdout + out.stderr)
+        self.assertIn("H1  licensed", out.stdout)
+
+    def test_a_line_added_with_a_blank_line_before_a_def_is_not_inside_it(self):
+        self.change(TEST_CLASS.replace("    def test_b(self):\n", "    X = 1\n\n    def test_b(self):\n"))
+        items = self.items()
+        self.assertEqual(len(items), 1, items)
+        self.assertTrue(items[0].endswith("class T(unittest.TestCase):"), items)
+
     def test_a_hunk_of_blank_lines_has_no_enclosing_line(self):
         self.change(TEST_CLASS.replace("        self.assertEqual(two(), 2)\n\n", "        self.assertEqual(two(), 2)\n"))
         out = self.r.run("list", "--json")
@@ -358,6 +378,24 @@ class EnclosingFunction(unittest.TestCase):
                 os.close(fd)
         self.assertIn("tests/gone", str(raised.exception))
         self.assertIn("fatal", str(raised.exception))
+
+    def test_a_text_block_at_the_margin_is_skipped(self):
+        lines = ["class T:", "    def test_a(self):", "        x = '''", "a = 1", "'''", "        assert y"]
+        self.assertEqual(self.enclosing(lines, 6, 8), ["def test_a(self):", "class T:"])
+
+    def test_a_def_inside_text_is_not_the_enclosing_line(self):
+        lines = ["class T:", "    def test_y(self):", "        s = '''", "def test_parse():", "'''", "        assert y"]
+        self.assertEqual(self.enclosing(lines, 6, 8), ["def test_y(self):", "class T:"])
+
+    def test_the_outermost_line_is_followed_by_a_line_no_deeper_than_the_def(self):
+        lines = ["class T:", "    def test_a(self):", "        x = '''", "a = 1", "'''", "        assert x", "",
+                 "    def test_b(self):", "        assert y"]
+        self.assertEqual(self.enclosing(lines, 9, 8), ["def test_b(self):", "class T:"])
+
+    def test_closing_lines_at_the_margin_leave_the_walk_as_it_was(self):
+        lines = ["describe('a', () => {", "  it('x', () => {", "    one()", "  });", "});", "",
+                 "describe('b', () => {", "  it('y', () => {", "    two()"]
+        self.assertEqual(self.enclosing(lines, 9, 4), ["it('y', () => {", "describe('b', () => {"])
 
     def test_the_walk_goes_on_to_indentation_0(self):
         self.assertEqual(self.enclosing(["a:", " b:", "  c"], 3, 2), ["b:", "a:"])
@@ -444,6 +482,28 @@ class Verify(unittest.TestCase):
                 self.assertIn("H1  licensed", out.stdout)
                 self.assertIn("H2  NOT LICENSED", out.stdout)
                 self.assertIn("unlicensed=1", out.stdout)
+
+    def test_a_method_with_a_text_block_is_licensed_by_its_name(self):
+        self.r.at_base("tests/test_s.py", TEST_TEXT)
+        self.r.write("tests/test_s.py", TEST_TEXT.replace("        self.assertTrue(x)\n", ""))
+        self.r.commit("drop an assertion")
+        out = self.r.run("list")
+        items = [ln for ln in out.stdout.splitlines() if re.match(r"H\d+  ", ln)]
+        self.assertEqual(len(items), 1, out.stdout)
+        self.assertTrue(items[0].endswith("def test_s(self):"), items)
+        out = self.verify("H1\tweaker\tdropped\n", cases="1. `tests/test_s.py::test_s` rewritten")
+        self.assertEqual(out.returncode, 0, out.stdout + out.stderr)
+        self.assertIn("H1  licensed", out.stdout)
+
+    def test_a_deleted_method_is_not_licensed_by_the_next_one(self):
+        text = ("class T:\n    def test_a(self):\n        one()\n    def test_b(self):\n        two()\n"
+                "    def test_c(self):\n        three()\n")
+        self.r.at_base("tests/test_abc.py", text)
+        self.r.write("tests/test_abc.py", text.replace("    def test_b(self):\n        two()\n", ""))
+        self.r.commit("drop test_b")
+        out = self.verify("H1\tweaker\ttest_b is gone\n", cases="1. `tests/test_abc.py::test_c` removed")
+        self.assertEqual(out.returncode, 1, out.stdout + out.stderr)
+        self.assertIn("H1  NOT LICENSED", out.stdout)
 
     def test_a_name_matches_as_a_whole_word(self):
         text = ("def test_parse():\n    assert a() == 1\n    assert b() == 2\n\n\n"
