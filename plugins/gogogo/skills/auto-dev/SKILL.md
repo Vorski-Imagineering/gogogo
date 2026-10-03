@@ -168,7 +168,7 @@ apply row is missing, which is built and then stopped (§4), not skipped:
 
    | reason | when |
    |---|---|
-   | `lint` | no ready label, and `spec_lint.py` failed or withheld it (§1) |
+   | `lint` | no ready label, and `spec_lint.py` failed or withheld it (§1); or a body §2 folded comments into failed it |
    | `nospec` | a feature with no analysis pass (`/gogogo:dev` §2) |
    | `decision` | an open product decision not answered in the body |
    | `hard-stop` | a Hard Stop no Approvals row names |

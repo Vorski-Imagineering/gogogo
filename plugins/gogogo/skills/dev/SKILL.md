@@ -91,8 +91,8 @@ implementation, including of a Hard Stop when a row names that specific change.
 Do this first, before the stops and the ready-case rules above are applied:
 bring into the description every comment that decides something about this
 issue and is not in it yet. A body with no spec (no `## Approvals`) is not
-folded into: its comments are read as part of the report, and the §7 report
-lists them.
+folded into: its comments are read as part of the issue's report, and the
+§7 report lists them as *read: no spec to fold into*.
 
 1. **Comments to fold**: from `<scratch>/issue-<n>-comments.json`, those
    - created after the description's `lastEditedAt` (the issue's `createdAt`
@@ -441,7 +441,8 @@ Comment in the reporter's language, not the codebase's:
 - **Comments read** (§2, *Fold in comments the description does not hold
   yet*): one line per comment created after the description's last edit, with
   its link: *folded in* (with the Approvals row it became), *nothing to fold*,
-  *stopped on it*, or *read, not followed: no write access*. Leave the line out
+  *stopped on it*, *read: no spec to fold into*, or *read, not followed: no
+  write access*. Leave the line out
   when there was none.
 - **How it matches the spec** (§5's spec check). With no spec in the body,
   the one sentence "This issue has no spec in its body, so the change was not
