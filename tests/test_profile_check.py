@@ -389,7 +389,8 @@ class WrongValues(unittest.TestCase):
             errors = [e for e in pc.check(settings, sections)[0] if "mutate" in e]
             self.assertEqual(len(errors), 1, bad)
             self.assertTrue(errors[0].startswith("lanes[0] ("), errors)
-            self.assertIn("mutate must be a command containing <base>", errors[0])
+            self.assertTrue(errors[0].endswith("): mutate must be a command containing <base>, the branch the "
+                                               "change merges into"), errors[0])
 
     def test_lane_tests_must_be_a_list_of_patterns(self):
         for good in (["tests/*"], None):
