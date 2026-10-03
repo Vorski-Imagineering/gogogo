@@ -100,7 +100,10 @@ Every tracker command targets `tracker.issues_repo`. When it differs from
 7. **The final report** has one line per issue in the list: *specced and
    labelled*; *posted without the label* (naming Posting step 7's withholding
    case); *left open* (with the question); *skipped* (closed, a pull request,
-   or already ready); or *not reached* (with why the run stopped). Each
+   or already ready); *skipped: being built* (with the column or pull
+   request); *closed: nothing hits it today*; *not filed: nothing hits it
+   today*; *stopped: nothing hits it today, no answer*; or *not reached* (with
+   why the run stopped). Each
    *specced and labelled* line ends with its card's result from Posting step
    8: moved, already there, left in `<column>`, closed, no card, could not
    be read, the move failed, or step 8 skipped (and which of its conditions
@@ -317,6 +320,33 @@ Four rules hold in all of them:
 means in practice, and the profile's `## Lane constraints` for what each lane
 must specify in this codebase.
 
+## Is someone building it already?
+
+When an issue starts (one issue, or each issue of a run as rule 4 starts it),
+check this before *Before you write* § 0. Never for an idea not yet filed: it
+has no card and no pull request.
+
+1. Run `<tracker.tool> show <N>` (for `shared`,
+   `python3 "${CLAUDE_PLUGIN_ROOT}/scripts/tracker.py" show <N>`) when the
+   profile has `tracker.tool`, and
+   `gh pr list --repo <tracker.code_repo> --state open --json number,title,body,headRefName,url`.
+2. It is being built when the card's column is `tracker.columns.in_progress`,
+   or an open pull request has `#<N>` as a whole token in its title or body, or
+   `<N>` between non-digits in its branch name. A plain search for the number
+   also finds `1<N>` and line numbers; match the token. A non-zero exit from
+   either command counts as being built, with the reason "could not check". A
+   card in `tracker.columns.needs_human` does not count: it was handed back for
+   a person, usually for exactly this re-spec.
+3. Not being built: go on to *Before you write*.
+4. Being built: say so in one sentence, naming the column or the pull request
+   link, and that the build was made against the current spec. Ask: **change
+   the spec anyway** or **leave it**. On *change it anyway*, go on; after
+   Posting step 6, comment on each pull request found: "The spec in #<N>
+   changed after this was built: <one line per changed Design or Test case
+   item>". On *leave it*, a decline, or no person to ask: post nothing, add no
+   label, and end this issue. The four-choice menu for a declined question is
+   not used here.
+
 ## Before you write
 
 0. **Check where any existing spec lives.** If the issue already carries a spec
@@ -331,6 +361,26 @@ must specify in this codebase.
    visible transient and a flaky test.
 5. **Correct the ticket where it is wrong**, in the spec and in your reply to
    the user.
+6. **Does anything hit it today?** After steps 1 to 3, name the case that hits
+   it today, with a link or `file:line`: a person asked for it, or a record (an
+   issue report, a run report, an error) or a real path in a repo shows it. A
+   person's request always hits today; this check is for follow-ups an agent
+   filed (a review finding, a "what if"). When recon finds none:
+   1. For an issue: ask **close it as not planned** or **spec it anyway**. On
+      close: `gh issue close <N> --repo <tracker.issues_repo> --reason "not planned" --comment "Not specced: nothing hits this today. Reopen when <the case that would make it real>."`,
+      and end this issue.
+   2. For an idea not yet filed: ask **don't file it** or **file and spec
+      it**. On don't: file nothing, and end.
+   3. A decline, or no person to ask: post nothing, file nothing, close
+      nothing, and end this issue, saying what recon found.
+7. **A new mechanism: look for prior work first.** When the design would add
+   something the repo does not have (a setting, a script, a kind of check, a
+   state, a process step), search the web before the first question: how
+   others solve it, and what went wrong for them. Put a `**Prior work.**`
+   paragraph in `## Context` with each source as a link and one line on what
+   it adds, or the searches run and "none found". Prior work is evidence, not
+   authority: the Design still answers to this repo's code and the person's
+   choices. It is not a question to the person.
 
 **REQUIRED REFERENCE:** read `references/recon.md` for how to do 2-5, and the
 profile's `## Recon traps` for what this codebase specifically hides.
@@ -361,6 +411,9 @@ profile's `## Recon traps` for what this codebase specifically hides.
 | `## Context` with no traps | Nobody looked. |
 | "Done" anywhere in the spec | The spec proposes work; only the implementing agent's report can claim "done". |
 | Spec posted, no ready label, no reason given | Either label it or say which condition withheld it. Silence reads as "forgot". |
+| A changed spec on an issue whose card is In progress or that has an open PR, not raised | The build was reviewed against the old spec and is now short of the new one. Ask first (§ Is someone building it already?). |
+| A follow-up specced with no case that hits it today | A question round spent on something nobody meets. Offer closing first (Before you write § 6). |
+| A new mechanism with no Prior work in Context | Options invented without looking at how others solved it (Before you write § 7). |
 
 ## Posting
 
@@ -500,6 +553,8 @@ Then as the tracker:
 9. Is the spec in the issue **body**?
 10. Does the issue carry the ready label, and did Posting step 8 move the
     card or say why it did not? Or did I say which withholding case applies?
+11. Was the issue checked for work in flight before anything was written, and
+    does `## Context` name the case that hits it today?
 
 Any "no" is a rewrite.
 
@@ -521,6 +576,8 @@ Listed in one place so an adapter for another agent knows what to replace.
   forbids `AskUserQuestion`, any `gh issue edit`, `comment` or `create`, any
   label and any card move. Start a new one only when the issue it researched
   has started.
+- **Prior work** (*Before you write* § 7) uses `WebSearch`, and `WebFetch` to
+  read a page it finds. Without them, say so in the `Prior work` paragraph.
 
 ## Working alongside superpowers
 

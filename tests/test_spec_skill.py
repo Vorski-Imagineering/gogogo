@@ -161,5 +161,43 @@ class SeveralIssues(unittest.TestCase):
         self.assertRegex((ROOT / "README.md").read_text(encoding="utf-8"), r"`/gogogo:spec #\d+ #\d+")
 
 
+BUILDING = "## Is someone building it already?"
+BEFORE = "## Before you write"
+
+
+class BeforeYouWrite(unittest.TestCase):
+    """In-flight check, the today check and prior work (gogogo#97)."""
+
+    def before_steps(self):
+        before = "\n".join(section(skill_text(), BEFORE))
+        return re.findall(r"^(\d+)\. (.*?)(?=^\d+\. |^\*\*REQUIRED|\Z)", before, re.M | re.S)
+
+    def test_building_section_directly_before_before_you_write(self):
+        lines = skill_text().splitlines()
+        heads = [i for i, line in enumerate(lines) if line.startswith(BUILDING)]
+        self.assertEqual(len(heads), 1)
+        nxt = next(line for line in lines[heads[0] + 1:] if line.startswith("## "))
+        self.assertTrue(nxt.startswith(BEFORE), nxt)
+        sub = "\n".join(section(skill_text(), BUILDING))
+        for name in ("tracker.columns.in_progress", "tracker.columns.needs_human", "gh pr list"):
+            self.assertIn(name, sub)
+
+    def test_before_you_write_steps_zero_to_seven(self):
+        steps = self.before_steps()
+        self.assertEqual([int(n) for n, _ in steps], list(range(0, 8)))
+        self.assertIn("today", steps[6][1])
+        self.assertIn("Prior work", steps[7][1])
+
+    def test_close_command_has_reopen_comment(self):
+        six = self.before_steps()[6][1]
+        close = re.search(r"gh issue close[^`]*`", six)
+        self.assertIsNotNone(close, "no close command in step 6")
+        self.assertIn('--reason "not planned"', close.group(0))
+        self.assertIn("--comment", close.group(0))
+
+    def test_claude_specific_names_web_search(self):
+        self.assertIn("WebSearch", "\n".join(section(skill_text(), "## Claude-specific")))
+
+
 if __name__ == "__main__":
     unittest.main()
