@@ -274,6 +274,19 @@ class ChangedFiles(unittest.TestCase):
         self.assertIn("F:README.md", f_ids)
         self.assertIn("F:x.py", f_ids)
 
+    def test_an_untracked_file_counts_and_an_ignored_one_does_not(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            repo = self.slashless_repo(tmp, "**Edit:** `notes.md`, `secret.md`.")
+            (repo / "notes.md").write_text("local\n")
+            (repo / "secret.md").write_text("local\n")
+            (repo / ".gitignore").write_text("body.md\n.gitignore\nsecret.md\n")
+            out = subprocess.run([sys.executable, str(SCRIPT), "items", "body.md"],
+                                 cwd=repo, capture_output=True, text=True)
+        self.assertEqual(out.returncode, 0, out.stderr)
+        f_ids = [ln.split("\t")[0] for ln in out.stdout.splitlines() if ln.startswith("F:")]
+        self.assertIn("F:notes.md", f_ids)
+        self.assertNotIn("F:secret.md", f_ids)
+
     def test_slashless_edit_names_against_a_real_tree(self):
         body = BODY.replace(BODY[BODY.index("**Edit:**"):BODY.index("\n", BODY.index("**Edit:**"))],
                             "**Edit:** `README.md`, `views.py`, `preflight.extra`.")
