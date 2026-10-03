@@ -179,8 +179,9 @@ The profile's `## Recon traps` lists what this codebase specifically hides.
      in the report. After a verified merge, §8 removes it from the main
      worktree.
 
-  When `git branch --show-current` prints the default branch's name, first look for earlier
-  work on the issue:
+  When `git branch --show-current` prints the default branch's name, or
+  always for `worktree`, whatever branch this session is on, first look for
+  earlier work on the issue:
   ```bash
   git fetch origin
   python3 "${CLAUDE_PLUGIN_ROOT}/scripts/issue_work.py" <issue-number>
@@ -205,7 +206,10 @@ The profile's `## Recon traps` lists what this codebase specifically hides.
   lowercase words from the issue's title, joined by `-`, letters and digits
   only). In the checkout, uncommitted changes come along; never stash, reset
   or pull to do it.
-  On any other branch, or a detached HEAD, stay where you are and say so.
+  In the checkout, on any other branch or a detached HEAD, stay where you
+  are and say so. For `worktree` that never applies: a session already in
+  another issue's worktree still makes this issue's `<path>` from the main
+  worktree.
   When that name already exists, stop and ask which branch to use; never
   reuse or reset it. For `worktree`, when `<path>` already exists (an earlier
   stopped run, say), stop and ask the same way, and never reuse or delete it;
