@@ -33,8 +33,13 @@ def v2(pr=1, rounds=1, applied="1", declined="0", refix="0", applied_as="spec:1,
             f"{' ' + extra if extra else ''} -->")
 
 
-def stop(reason):
-    return f"**Needs you:** do the thing.\n<!-- gogogo:stop v=1 reason={reason} -->"
+def stop(reason, session=None):
+    tail = f" session={session}" if session is not None else ""
+    return f"**Needs you:** do the thing.\n<!-- gogogo:stop v=1 reason={reason}{tail} -->"
+
+
+def skip(reason, session="unknown"):
+    return f"**Needs you:** re-spec it.\n<!-- gogogo:skip v=1 reason={reason} session={session} -->"
 
 
 SESSION = "0d6f3c2a-8b1e-4f5d-9a7c-2e4b6d8f0a1c"
@@ -514,6 +519,113 @@ class Stops(StatsBase):
 
     def test_stops_alone_are_still_no_records(self):
         code, out, _ = self.run_stats([(40, stop("gate"))])
+        self.assertEqual(code, 1)
+
+
+
+OTHER = "7e1a2b3c-4d5e-4f60-8a9b-0c1d2e3f4a5b"
+OLD_RECORD = ("<!-- gogogo:review pr=482 kind=code level=high rounds=4 applied=5,2,1,0 "
+              "declined=1,0,0,0 correctness=0,1,1,0 stopped=no -->")
+
+
+class SkipsAndSessions(StatsBase):
+    """Triage skips on their issues, and runs rebuilt from a shared session id (gogogo#63)."""
+
+    def at(self, hhmm, day="03"):
+        return f"2026-10-{day}T{hhmm}:00Z"
+
+    def two_runs(self):
+        return [(40, v2(extra=f"session={SESSION}"), self.at("09:00")),
+                (41, stop("spec", SESSION), self.at("10:00")),
+                (42, skip("lint", SESSION), self.at("11:30")),
+                (43, v2(extra=f"session={OTHER}"), self.at("12:00"))]
+
+    def test_skips_by_reason_and_unreadable(self):
+        comments = [(1, v2()), (2, skip("lint")), (3, skip("lint")), (4, skip("decision")),
+                    (5, skip("lunch")), (6, "<!-- gogogo:skip v=1 reason=<lint|nospec> session=<id|unknown> -->")]
+        s = self.json_of(comments)["summary"]
+        self.assertEqual(s["skips"], {"lint": 2, "nospec": 0, "decision": 1, "hard-stop": 0})
+        self.assertEqual(s["unreadable_skips"], 2)
+
+    def test_a_skip_quoted_in_a_sentence_is_not_read(self):
+        quoted = "the run posts `<!-- gogogo:skip v=1 reason=<lint|nospec> session=<id|unknown> -->` on it"
+        s = self.json_of([(1, v2()), (2, quoted)])["summary"]
+        self.assertEqual((sum(s["skips"].values()), s["unreadable_skips"]), (0, 0))
+
+    def test_a_run_counts_its_records_stops_and_skips(self):
+        sessions = self.json_of(self.two_runs())["summary"]["sessions"]
+        self.assertEqual([x["session"] for x in sessions], [SESSION, OTHER])
+        a, b = sessions
+        self.assertEqual((a["taken"], a["needs_you"], a["skipped"]), (2, 1, 1))
+        self.assertEqual((a["first"], a["last"]), (self.at("09:00"), self.at("11:30")))
+        self.assertEqual((b["taken"], b["needs_you"], b["skipped"]), (1, 0, 0))
+
+    def test_runs_are_ordered_by_their_first_marker_not_by_issue(self):
+        comments = [(1, v2(extra=f"session={OTHER}"), self.at("12:00")),
+                    (2, v2(extra=f"session={SESSION}"), self.at("09:00"))]
+        sessions = self.json_of(comments)["summary"]["sessions"]
+        self.assertEqual([x["session"] for x in sessions], [SESSION, OTHER])
+
+    def test_a_run_counts_distinct_issues(self):
+        comments = [(40, v2(extra=f"session={SESSION}") + "\n" + stop("review", SESSION), self.at("09:00")),
+                    (40, stop("review", SESSION), self.at("10:00"))]
+        (a,) = self.json_of(comments)["summary"]["sessions"]
+        self.assertEqual((a["taken"], a["needs_you"]), (1, 1))
+
+    def test_markers_without_a_session_are_counted_apart(self):
+        comments = [(1, OLD_RECORD), (2, stop("spec")), (3, skip("lint", "unknown"))]
+        s = self.json_of(comments)["summary"]
+        self.assertEqual(s["sessions"], [])
+        self.assertEqual(s["without_session"], 3)
+
+    def test_an_empty_session_makes_a_stop_unreadable(self):
+        s = self.json_of([(1, v2()), (2, "<!-- gogogo:stop v=1 reason=spec session= -->")])["summary"]
+        self.assertEqual(s["unreadable_stops"], 1)
+
+    def test_no_session_says_none_recorded(self):
+        code, out, _ = self.run_stats([(1, v2()), (2, stop("spec"))])
+        self.assertEqual(code, 0)
+        self.assertIn("sessions: none recorded (2 records without one)", out)
+
+    def test_the_session_line_exactly(self):
+        code, out, _ = self.run_stats(self.two_runs())
+        self.assertEqual(code, 0)
+        self.assertIn("skips: lint 1", out)
+        self.assertIn("sessions: 2 with a session id (0 records without one)", out)
+        self.assertIn(f"  {SESSION[:8]} 2026-10-03 09:00–11:30  2 taken, 1 needs you, 1 skipped", out)
+        self.assertIn(f"  {OTHER[:8]} 2026-10-03 12:00–12:00  1 taken, 0 needs you, 0 skipped", out)
+
+    def test_the_skip_and_session_lines_are_whole_lines(self):
+        comments = [(1, v2(extra=f"session={OTHER}"), self.at("12:00")),
+                    (2, skip("lint", SESSION), self.at("23:00")), (3, skip("lint", SESSION), self.at("23:10")),
+                    (4, skip("decision", SESSION), self.at("23:20")),
+                    (5, stop("spec", SESSION), self.at("01:00", day="04")),
+                    (6, skip("lunch")), (7, skip("lunch"))]
+        code, out, _ = self.run_stats(comments)
+        self.assertEqual(code, 0)
+        lines = out.splitlines()
+        self.assertIn("skips: lint 2, decision 1 (2 unreadable)", lines)
+        self.assertIn("sessions: 2 with a session id (0 records without one)", lines)
+        self.assertIn(f"  {OTHER[:8]} 2026-10-03 12:00–12:00  1 taken, 0 needs you, 0 skipped", lines)
+        self.assertIn(f"  {SESSION[:8]} 2026-10-03 23:00–2026-10-04 01:00  1 taken, 1 needs you, 3 skipped", lines)
+        self.assertEqual(lines.index(f"  {OTHER[:8]} 2026-10-03 12:00–12:00  1 taken, 0 needs you, 0 skipped") + 1,
+                         lines.index(f"  {SESSION[:8]} 2026-10-03 23:00–2026-10-04 01:00  1 taken, 1 needs you, 3 skipped"))
+
+    def test_a_run_with_no_times_is_listed_last_with_a_dash(self):
+        comments = [(1, v2(extra=f"session={SESSION}")), (2, v2(extra=f"session={OTHER}"), self.at("08:00"))]
+        code, out, _ = self.run_stats(comments)
+        lines = out.splitlines()
+        first = lines.index(f"  {OTHER[:8]} 2026-10-03 08:00–08:00  1 taken, 0 needs you, 0 skipped")
+        self.assertEqual(lines[first + 1], f"  {SESSION[:8]} -  1 taken, 0 needs you, 0 skipped")
+
+    def test_the_lines_with_nothing_recorded_are_whole_lines(self):
+        code, out, _ = self.run_stats([(1, v2())])
+        lines = out.splitlines()
+        self.assertIn("skips: none recorded", lines)
+        self.assertIn("sessions: none recorded (1 records without one)", lines)
+
+    def test_skips_and_stops_alone_are_still_no_records(self):
+        code, out, _ = self.run_stats([(1, skip("lint", SESSION)), (2, stop("spec", SESSION))])
         self.assertEqual(code, 1)
 
 
