@@ -68,8 +68,8 @@ class Report:
     def fail(self, check, detail, fix):
         self.add("FAIL", check, detail, fix)
 
-    def warn(self, check, detail):
-        self.add("WARN", check, detail)
+    def warn(self, check, detail, fix=""):
+        self.add("WARN", check, detail, fix)
 
     def info(self, check, detail):
         self.add("INFO", check, detail)
@@ -247,7 +247,7 @@ def _ruleset_fix(repo, branch, existing):
 def check_branch_rules(repo, branch, rules, classic, checks, wants_check, needs_ci, rep, *, target=True,
                        existing=None):
     """rules: list from rules/branches/<branch>, each rule carrying its ruleset's
-    `bypass_actors` (None when that ruleset could not be read), or an error string.
+    `bypass_actors`, or an error string (also when a ruleset could not be read).
     classic: dict from branches/<branch>/protection, {} when GitHub says
     'Branch not protected', or an error string.
     checks: names that passed on the latest PR merged into <branch>, [] when
@@ -272,15 +272,11 @@ def check_branch_rules(repo, branch, rules, classic, checks, wants_check, needs_
     basic = [name for name in ("no force push", "no deletion") if not present[name]]
     if basic and isinstance(classic, str):
         rep.warn(check, f"{repo} {branch} has no ruleset for {', '.join(basic)}; it may be set in classic branch "
-                        f"protection, which needs admin to read ({classic})")
+                        f"protection, which needs admin to read ({classic})", fix)
         return
     if basic:
         missing = basic + (["a required check"] if wants_check and not present["a required check"] else [])
         rep.fail(check, f"{repo} {branch} is missing: {', '.join(missing)}", fix)
-        return
-    unread = sorted({r.get("ruleset_id") for r in rules if r.get("bypass_actors") is None})
-    if unread:
-        rep.warn(check, f"could not read the bypass list of ruleset {', '.join(map(str, unread))} on {repo}")
         return
     actors = [a for r in rules for a in r.get("bypass_actors") or []]
     if actors:
@@ -310,7 +306,7 @@ def check_branch_rules(repo, branch, rules, classic, checks, wants_check, needs_
     if needs_ci:
         rep.fail(check, detail, level_fix)
     else:
-        rep.warn(check, f"{detail} -> {level_fix}")
+        rep.warn(check, detail, level_fix)
 
 
 def _gh_json(*args, json_on_failure=False):
@@ -373,7 +369,9 @@ def _rules_with_bypass(repo, branch):
     bypass = {}
     for ruleset in {r.get("ruleset_id") for r in rules}:
         body, error = _gh_json("api", f"repos/{repo}/rulesets/{ruleset}")
-        bypass[ruleset] = body.get("bypass_actors", []) if isinstance(body, dict) and not error else None
+        if error or not isinstance(body, dict):
+            return f"ruleset {ruleset}: {error or 'gh printed something that is not a JSON object'}"
+        bypass[ruleset] = body.get("bypass_actors", [])
     return [dict(r, bypass_actors=bypass[r.get("ruleset_id")]) for r in rules]
 
 
