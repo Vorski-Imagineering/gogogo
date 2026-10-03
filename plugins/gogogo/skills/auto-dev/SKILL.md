@@ -100,7 +100,9 @@ means finished work sits unverified while you go and ask.
 A non-zero exit is a **stop**, never an empty column: the tool refuses to print
 a list it could not reconcile. Outside triage-only mode, the first time this
 list is read successfully in a run, send the *run started* message (§8),
-counting every row, labelled or not. Work only rows that are issues.
+counting every row, labelled or not. Work only rows that are issues. Take them in the
+order the user gave; absent one, live user-facing bugs first, refactors after,
+anything large last so it cannot absorb the run.
 
 Each row's `labels` decides its path. A row carrying `tracker.ready_marker`
 (compared without regard to case) goes on to §2. A row without it was put in
@@ -117,9 +119,7 @@ python3 "${CLAUDE_PLUGIN_ROOT}/scripts/spec_lint.py" <scratch>/issue-<n>-body.md
   reason `no ready label; spec lint: <its first error: line, or the withhold
   reason>`.
 - Exit 2: **stop the whole run** with the line it printed. Preflight already
-  read the profile, so this is the environment, not the issue. Take them in the
-order the user gave; absent one, live user-facing bugs first, refactors after,
-anything large last so it cannot absorb the run.
+  read the profile, so this is the environment, not the issue.
 
 ## 2. Triage each issue before touching it
 
