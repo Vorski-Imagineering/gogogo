@@ -456,6 +456,21 @@ class Audit(unittest.TestCase):
         self.assertIn("#109, ...", detail)
         self.assertNotIn("#110", detail)
 
+    def test_pr_row_separates_numbers_and_names_a_card_with_no_column(self):
+        cards = [self._card(41, self.OWN[0], None, kind="PullRequest"),
+                 self._card(42, self.OWN[0], "Done", kind="PullRequest")]
+        detail = self._pr_rows(self._origin(cards))[0]["detail"]
+        self.assertIn("no status", detail)
+        self.assertIn("#41, #42. ", detail)
+
+    def test_ten_pr_cards_are_all_listed_without_more_and_eleven_add_it(self):
+        ten = [self._card(100 + i, self.OWN[0], "Done", kind="PullRequest") for i in range(10)]
+        detail = self._pr_rows(self._origin(ten))[0]["detail"]
+        self.assertIn("#109. ", detail)
+        self.assertNotIn("...", detail)
+        eleven = ten + [self._card(110, self.OWN[0], "Done", kind="PullRequest")]
+        self.assertIn("#109, .... ", self._pr_rows(self._origin(eleven))[0]["detail"])
+
     def test_auto_add_row_names_the_repo_and_says_the_api_is_blind(self):
         rep = sc.Report()
         sc.check_board_workflows([{"name": n, "enabled": True} for n in sc.BOARD_WORKFLOWS], rep, ("a/b",))
