@@ -344,7 +344,8 @@ has no card and no pull request.
    Posting step 6, comment on each pull request found: "The spec in #<N>
    changed after this was built: <one line per changed Design or Test case
    item>". On *leave it*, a decline, or no person to ask: post nothing, add no
-   label, and end this issue. The four-choice menu for a declined question is
+   label, and end this issue (in a run of several, no person to ask stops the
+   run, as rule 6 says). The four-choice menu for a declined question is
    not used here.
 
 ## Before you write
@@ -372,7 +373,9 @@ has no card and no pull request.
    2. For an idea not yet filed: ask **don't file it** or **file and spec
       it**. On don't: file nothing, and end.
    3. A decline, or no person to ask: post nothing, file nothing, close
-      nothing, and end this issue, saying what recon found.
+      nothing, and end this issue, saying what recon found (in a run of
+      several, no person to ask stops the run, as rule 6 says). The
+      four-choice menu for a declined question is not used here.
 7. **A new mechanism: look for prior work first.** When the design would add
    something the repo does not have (a setting, a script, a kind of check, a
    state, a process step), search the web before the first question: how
@@ -553,7 +556,8 @@ Then as the tracker:
 9. Is the spec in the issue **body**?
 10. Does the issue carry the ready label, and did Posting step 8 move the
     card or say why it did not? Or did I say which withholding case applies?
-11. Was the issue checked for work in flight before anything was written, and
+11. Was the issue checked for work in flight before anything was written (or
+    is it an idea not yet filed), and
     does `## Context` name the case that hits it today?
 
 Any "no" is a rewrite.
