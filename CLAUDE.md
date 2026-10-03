@@ -23,7 +23,9 @@ No approval = do not proceed.
   merge or card move). Wording that changes no behaviour is not a Hard Stop.
 - **Profile format**: adding, renaming or removing a setting or a required
   section, or changing what a setting means. Every adopting profile has to
-  follow it.
+  follow it. A new setting ships with a default and a `DEFAULTS` entry; a
+  change with no safe default bumps `profile`, and the checker accepts the
+  previous version with warnings until the next bump.
 - **Executable scripts**: any change to `plugins/gogogo/scripts/` that changes
   what a script does to a repo, a board or the tracker (reading is fine;
   writing, merging and moving are not).
