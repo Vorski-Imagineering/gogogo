@@ -11,6 +11,7 @@ marketplace (`.claude-plugin/marketplace.json`). How it came about is in `docs/h
 - **Skills hold only what is the same in every repo.** Anything that names a
   project, host, repo or command belongs in that repo's
   `.agents/dev-process.md`. `grep -rniE 'manage\.py|npm |firebase|django|htmx|sentry' plugins/gogogo/skills plugins/gogogo/scripts` must print nothing. CI runs the same check on every PR.
+- **A `SKILL.md` has 500 lines or fewer.** A step's full rules go in that skill's `references/`, named from its `SKILL.md` and from no other reference. `tests/test_skill_budget.py` checks it.
 - **Don't edit `plugins/gogogo/` while a run is using it** (an unattended
   `/gogogo:auto-dev` in an adopting repo may be reading this tree).
 

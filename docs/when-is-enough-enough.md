@@ -25,13 +25,13 @@ when it shows one of these:
 A small addition the spec does not have may be applied, with a test.
 Everything else is declined with a reason word. Each finding gets three
 attempts, a correction is never undone and redone, and prose files get two
-rounds each, even inside a code change.
+rounds each, and one more for a fix made in the second, even inside a code change.
 
 A review ends `clean` when a round applies nothing. It ends with a person on:
 - a third attempt that is still wrong;
 - a reversal the spec doesn't settle;
 - an unfixable finding;
-- a prose fix in the second round;
+- a defect in the round that reviews a prose file's second-round fix;
 - the breaker, at round 13.
 
 Every report ends with a record of the review (`v=2`). `review_stats.py`
@@ -151,7 +151,7 @@ Decided on 2026-10-02 and specified in
    person.
 3. **Prose is judged per file.** Markdown and text files get the prose rule
    (two rounds at most) even inside a change that also has code. Most of the
-   churn above was skill text reviewed under the code rule.
+   churn above was skill text reviewed under the code rule. Since 2026-10-03 a fix made in the second round gets one more round of its own: six issues stopped there in one day, and each one with a pull request merged after a model read the fix.
 4. **Three attempts per finding, and no flip-flops.** After the first round a
    review looks only at the corrections, so a real defect there means a fix was
    wrong. The second attempt must say what the first got wrong and take a
