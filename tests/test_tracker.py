@@ -212,8 +212,8 @@ class NeedsHumanGuardTests(unittest.TestCase):
             code, wrote, _, _, _ = self._move(to, "just a comment")
             self.assertEqual(code, 4, to)
             wrote.assert_not_called()
-        # A trailing space fails the column lookup before the guard (Design 4's placement),
-        # so it is refused as an unknown column, not with 4. Spec case 6 expects 4: see the issue.
+        # A trailing space fails the column lookup before the guard (Design 4), so it is refused
+        # as an unknown column with nothing written (Approvals row 5).
         with self.assertRaises(board.BoardError):
             self._move("human!help! ", "just a comment")
 
