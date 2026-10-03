@@ -194,7 +194,8 @@ commands, the environments, the Hard Stop rules) lives in one file per repo,
    against the spec, and every gap is built, matched or declared. Then it runs `/code-review`,
    applies a finding only when there is evidence for it and gives each one
    three attempts, and watches the new test fail before trusting that it
-   passes.
+   passes. Where the repo's profile has a mutation command, it mutates the
+   changed lines and kills or accounts for every mutant the tests miss.
 3. **Verify.** "Done" means the path was run on real data in the pre-merge
    environment. A green test suite alone only counts as "written".
 4. **Hand back.** A comment in the reporter's words, and the card moves only as

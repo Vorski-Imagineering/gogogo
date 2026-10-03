@@ -265,7 +265,8 @@ meets tests 1 to 4 still means fix or stop.
 
 Work through the profile's `verify.rungs` in order, in the environments
 `verify.agent` names. Each rung sees something the one below it cannot. Two are
-always required:
+always required, and a third when a lane in the profile has a `mutate`
+command:
 
 **The new test, seen failing.** The regression test must be watched going red.
 Stash the change, run the test, confirm red, restore:
@@ -319,6 +320,47 @@ rather than trusting a cached bundle. Read back real content (text, an
 attribute, an element's presence), never a screenshot. Close anything you
 opened that holds a resource (a room, a camera, a browser left running).
 
+**The changed lines, mutated.** For each lane whose profile entry has a
+`mutate` command. In order:
+
+1. It runs last in §6, once every applicable lane's `run` command is green and
+   the real run has been made. When no lane has a `mutate` command, nothing
+   runs and §7 says so.
+2. Run the lane's `mutate` command, after `git fetch origin`, with `<base>`
+   replaced by `origin/<branch>`, where `<branch>` is the branch the change
+   merges into (`integration.base`, or the repo's default branch when the
+   profile has none), and let it finish: there is no time limit.
+3. A run whose output has no `mutants:` line is a failed run, never a pass.
+   Run it once more. A second failed run stops the issue for a person (§8).
+4. `mutants: 0` means nothing on the changed lines can be mutated in this
+   lane. It is reported and is not a failure.
+5. Each survivor is handled by the first of these that applies, and nothing
+   else is a reason (not "unlikely", "hard to test" or "the review covered
+   it"):
+   - **Kill it.** Add a test, or tighten an assertion, so the lane's tests
+     fail with the mutant in place. Such a change only adds or tightens: it
+     never deletes, skips or loosens a test.
+   - **Decline it** as `equivalent`: no input makes the mutated code behave
+     differently from the original.
+   - **Decline it** as `text`: the mutant changes only wording a person reads
+     (a message, help text, a label, how much of an id is shown) and the spec
+     does not fix that wording.
+   - **Decline it** as `outside`: the difference shows only outside what this
+     lane's tests can observe (what is handed to an external program or
+     service the tests replace with a stand-in, a wait or retry interval),
+     **and** the real run in this section executed that line. When the real
+     run did not execute it, kill it: assert what is handed over.
+6. When the test written to kill a survivor also fails on the unmutated code,
+   the survivor found a bug. Fix the code. That fix is a correction: it goes
+   back through §5 as a new round on the fix, then through §6 again.
+7. After killing, run the command again. A survivor counts as killed only
+   when a run reports it killed. At most three runs that give counts per
+   lane. A survivor that is neither killed nor declined after the third
+   stops the issue for a person (§8), named in the report.
+8. Tests added or tightened here are not reviewed again: their evidence is the
+   run that reports the mutant killed. After the last such change, run every
+   applicable lane's `run` command once more and see it green.
+
 "Done" means an executed path. A green suite alone is "written", not "done".
 
 ## 7. Report on the issue
@@ -336,8 +378,8 @@ Comment in the reporter's language, not the codebase's:
   why, and any *Verify by hand* step that now reads differently, written out
   as it now reads (or "Differs from the spec: nothing."); each `outside` file
   kept, with the item it serves; each `na` item with its reason. A stop names
-  the items left. Put this record on its own line just before the review
-  record, with no spaces inside a value:
+  the items left. Put this record on its own line before the review record
+  and before any mutation record, with no spaces inside a value:
   `<!-- gogogo:spec-check v=1 items=<n> met=<n> missing=<n> differs=<n> na=<n> outside=<n> runs=<n> fixed=<n> declared=<n> reader=<fresh|self|none> end=<clean|declared|stopped|nospec> -->`
   - `items`, `met`, `missing`, `differs`, `na` and `outside` are the first
     valid `spec-check:` line `verify` printed. `items` is the sum of the four
@@ -351,6 +393,27 @@ Comment in the reporter's language, not the codebase's:
     (then every count is 0 and `reader=none`).
 - **How it was verified**: which rungs ran, how many new tests went red, what
   the real run showed.
+- **How the tests were tested** (§6's mutation step). When no lane has a
+  `mutate` command, the one sentence "No lane in this repo's profile has a
+  mutation command." and no record. Otherwise, per lane that has one: how many
+  mutants ran, how many the tests caught, how many timed out and how many
+  survived on the first run; how many survivors were then killed by added or
+  tightened tests; and **Declined survivors**, one line each with the file and
+  line, the change in a few words and its reason word, inside a `<details>`
+  block when there are more than five. A stop names what is left. Then the
+  record, one line per lane that has a `mutate` command, on its own line
+  after any spec-check record and directly before the review record, with no
+  spaces inside a value (a space in the lane's name is written as `-`):
+  `<!-- gogogo:mutation v=1 lane=<name> mutants=<n> killed=<n> survived=<n> timeout=<n> runs=<n> added=<n> declined_as=equivalent:<n>,text:<n>,outside:<n> end=<clean|survivors|failed> -->`
+  - `mutants`, `killed`, `survived` and `timeout` are the first run's counts:
+    what the tests caught as the change was written. `mutants` is the sum of
+    the other three.
+  - `runs` is the number of runs that gave counts.
+  - `added` is the number of survivors killed by tests added or tightened
+    afterwards. `declined_as` is the number declined, by reason.
+  - `end` is `clean` when every survivor was killed or declined (then `added`
+    plus the `declined_as` total equals `survived`), `survivors` when rule 7
+    stopped the issue, and `failed` when rule 3 did (all counts 0).
 - **How it was reviewed**: the kind (code, prose, or mixed: code with prose
   files, §5 rule 7) and the coverage. One line per round: how many findings
   were applied and how many declined, and the most important applied finding
@@ -410,7 +473,8 @@ and no further. Take the first case that fits:
   at round 13), a spec check that stopped (§5: two parts of the spec
   disagree, a difference that is not small, a piece that could not be built,
   or items left after the third reading), a weakened test the change could
-  not pass without (§6), a decision or Hard Stop found
+  not pass without (§6), mutation testing that stopped (§6: a run that failed
+  twice, or survivors left after the third run), a decision or Hard Stop found
   mid-change (§4), a gate you could not make pass, or verification that gave up →
   `tracker.columns.needs_human`, whether or not
   the work sits on a branch or PR. The §7 report's first line is
@@ -545,6 +609,9 @@ and integration follow this skill and the repo's merge path. See the profile's
 - The spec check's reader (§5) is a subagent started with the `Agent` tool,
   which does not see this conversation. Its prompt is §5's brief for the
   reader and the item list, and it writes the answers file.
+- A mutation run (§6) can outlast the shell tool's foreground limit: start it
+  with `run_in_background` and wait for its notification. In a headless run,
+  poll until it has finished.
 - In the record, `impl` is the session's model id; `reviewer` is
   `$CLAUDE_CODE_SUBAGENT_MODEL` when it is set, else the same as `impl`.
 - Browser checks use the `claude-in-chrome` tools; load the ones you need in one

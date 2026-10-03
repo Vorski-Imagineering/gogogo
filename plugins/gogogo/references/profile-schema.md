@@ -76,7 +76,7 @@ no skill requires it; a skill that finds it uses it.
 | `technology.register` | str | optional | Path of the technology decisions register, from the repo root. |
 | `roadmap.file` | str | optional | Path of the roadmap document, from the folder holding `.agents/`; it may sit in another git repo checked out inside this one. |
 | `release.major` | int | optional | Hand-set major version. A production release is tagged `deploy-<build>` and versioned `<major>.0.<build>`; see `references/versioning.md`. |
-| `lanes` | list | `spec`, `dev`, `auto-dev` | Test lanes: name, plus run/focused/tests/env/ci. |
+| `lanes` | list | `spec`, `dev`, `auto-dev` | Test lanes: name, plus run/focused/mutate/tests/env/ci. |
 | `verify.agent` | list | `dev`, `auto-dev` | Environments where the implementing agent checks its work. |
 | `verify.human` | str | `spec`, `auto-test` | Environment where a person confirms a fix. |
 | `verify.rungs` | list | `dev`, `auto-dev` | Ordered verification steps. |
@@ -107,8 +107,28 @@ no skill requires it; a skill that finds it uses it.
 
 `lanes` is a list of tables. Each needs a `name`, and either `run` (a command)
 or `env` (where the lane is checked). Optional: `focused` (the command for one
-test or module, used for the seen-failing step), `tests` (a list of file
-patterns naming the lane's test files) and `ci` (true if CI runs it).
+test or module, used for the seen-failing step), `mutate` (the command that
+mutation-tests the changed lines, below), `tests` (a list of file patterns
+naming the lane's test files) and `ci` (true if CI runs it).
+
+`mutate` is a command `/gogogo:dev` §6 runs last, to find changed lines the
+lane's tests do not check. Its contract:
+
+1. `<base>` is replaced with the branch the change merges into
+   (`integration.base`, or the repo's default branch when the profile has
+   none), as its remote-tracking ref after a fetch, `origin/<branch>`.
+2. It mutates only the lines changed between the point where the change left
+   that branch (`git merge-base <base> HEAD`) and the working tree,
+   uncommitted work included, and runs this lane's tests against each mutant.
+3. It prints each surviving mutant with its file, its line and what was
+   changed, and its last line is exactly
+   `mutants: <n> killed: <n> survived: <n> timeout: <n>`, where mutants is the
+   sum of the other three.
+4. It exits 0 with no survivors, 1 with survivors, and with any other status
+   when it could not finish; a run that could not finish prints no `mutants:`
+   line.
+5. It leaves the working tree exactly as it found it.
+6. It has no time limit of its own.
 
 `tests` patterns are matched against repo-relative paths, with `*` matching `/`
 as well. `/gogogo:dev` §6 compares the test files they match before and after a
@@ -120,6 +140,7 @@ passed; when no lane has it, the report says "tests not checked".
 name = "automated"
 run = "make test"
 focused = "make test TEST=<module>"
+mutate = "make mutate BASE=<base>"
 tests = ["tests/*"]
 ci = false
 

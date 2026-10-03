@@ -379,6 +379,19 @@ class WrongValues(unittest.TestCase):
         self.assertIn("lanes[0]: each lane needs a name", errors)
         self.assertTrue(any(e.startswith("lanes[1] (browser): needs run") for e in errors))
 
+    def test_lane_mutate_must_name_base(self):
+        settings, sections = parse()
+        settings["lanes"][0]["mutate"] = "x <base>"
+        self.assertFalse([e for e in pc.check(settings, sections)[0] if "mutate" in e])
+        for bad in ("x", "", 5):
+            settings, sections = parse()
+            settings["lanes"][0]["mutate"] = bad
+            errors = [e for e in pc.check(settings, sections)[0] if "mutate" in e]
+            self.assertEqual(len(errors), 1, bad)
+            self.assertTrue(errors[0].startswith("lanes[0] ("), errors)
+            self.assertTrue(errors[0].endswith("): mutate must be a command containing <base>, the branch the "
+                                               "change merges into"), errors[0])
+
     def test_lane_tests_must_be_a_list_of_patterns(self):
         for good in (["tests/*"], None):
             settings, sections = parse()

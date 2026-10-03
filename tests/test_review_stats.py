@@ -241,5 +241,78 @@ class TestsRecord(StatsBase):
         self.assertIn("tests: no records", out)
 
 
+MUTATION = ("<!-- gogogo:mutation v=1 lane=unit mutants=128 killed=92 survived=35 timeout=1 runs=2 added=5 "
+            "declined_as=equivalent:1,text:18,outside:11 end=clean -->")
+
+
+class Mutation(StatsBase):
+    def test_a_mutation_record_fills_its_columns_and_the_summary(self):
+        comments = [(45, MUTATION + "\n" + v2())]
+        row = self.json_of(comments)["rows"][0]
+        self.assertEqual((row["mutants"], row["survived"], row["added"]), (128, 35, 5))
+        code, out, _ = self.run_stats(comments)
+        self.assertEqual(code, 0)
+        self.assertIn("mutation: 1 records, 128 mutants, 35 survived (27%), 5 killed by added tests", out)
+        self.assertIn("mutation declined by reason: equivalent 1, text 18, outside 11", out)
+        self.assertIn("mutation ended: clean 1, survivors 0, failed 0", out)
+
+    def test_the_mutation_lines_keep_the_rest_of_the_summary(self):
+        code, out, _ = self.run_stats([(45, MUTATION + "\n" + v2())])
+        self.assertTrue(out.splitlines()[0].startswith("o/r: 1 review records"))
+        self.assertIn("median rounds: 1", out.splitlines())
+
+    def test_a_record_with_no_mutants_shows_no_share(self):
+        failed = ("<!-- gogogo:mutation v=1 lane=unit mutants=0 killed=0 survived=0 timeout=0 runs=0 added=0 "
+                  "declined_as=equivalent:0,text:0,outside:0 end=failed -->")
+        code, out, _ = self.run_stats([(45, failed + "\n" + v2())])
+        self.assertIn("mutation: 1 records, 0 mutants, 0 survived (-), 0 killed by added tests", out.splitlines())
+
+    def test_survivors_left_need_not_add_up_but_a_clean_end_must(self):
+        left = MUTATION.replace("added=5", "added=2").replace("end=clean", "end=survivors")
+        self.assertIsNotNone(rs.parse_mutation(left))
+        self.assertIsNone(rs.parse_mutation(MUTATION.replace("added=5", "added=2")))
+
+    def test_each_unreadable_mutation_marker_counts(self):
+        bad = MUTATION.replace("mutants=128", "mutants=127")
+        code, out, _ = self.run_stats([(45, bad + "\n" + bad + "\n" + v2())])
+        self.assertIn("2 unreadable skipped", out.splitlines()[0])
+
+    def test_no_mutation_record_shows_dashes(self):
+        code, out, _ = self.run_stats([(40, v2())])
+        header = next(line for line in out.splitlines() if line.startswith("issue")).split()
+        line = next(line for line in out.splitlines() if line.startswith("#40")).split()
+        self.assertEqual([line[header.index(c)] for c in ("mutants", "survived", "added")], ["-", "-", "-"])
+        self.assertIn("mutation: 0 records", out.splitlines())
+        self.assertNotIn("mutation declined", out)
+
+    def test_two_lanes_are_summed_on_the_row(self):
+        second = MUTATION.replace("lane=unit", "lane=browser")
+        row = self.json_of([(45, MUTATION + "\n" + second + "\n" + v2())])["rows"][0]
+        self.assertEqual((row["mutants"], row["survived"], row["added"]), (256, 70, 10))
+
+    def test_a_record_that_does_not_add_up_is_unreadable(self):
+        bad = MUTATION.replace("mutants=128", "mutants=127")
+        code, out, _ = self.run_stats([(45, bad + "\n" + v2())])
+        self.assertIn("1 unreadable skipped", out.splitlines()[0])
+        self.assertIn("mutation: 0 records", out)
+
+    def test_a_template_and_a_record_without_a_review_are_unreadable(self):
+        template = ("<!-- gogogo:mutation v=1 lane=<name> mutants=<n> killed=<n> survived=<n> timeout=<n> runs=<n> "
+                    "added=<n> declined_as=equivalent:<n>,text:<n>,outside:<n> end=<clean|survivors|failed> -->")
+        code, out, _ = self.run_stats([(45, template + "\n" + v2()), (46, MUTATION), (47, v2(pr=3))])
+        self.assertIn("2 unreadable skipped", out.splitlines()[0])
+        self.assertIn("mutation: 0 records", out)
+
+    def test_json_keys(self):
+        data = self.json_of([(45, MUTATION + "\n" + v2()), (40, v2(pr=2))])
+        for row in data["rows"]:
+            self.assertTrue({"mutants", "survived", "added"} <= set(row))
+        m = data["summary"]["mutation"]
+        self.assertEqual(m["declined_as"], {"equivalent": 1, "text": 18, "outside": 11})
+        self.assertEqual(m["ends"], {"clean": 1, "survivors": 0, "failed": 0})
+        self.assertEqual((m["records"], m["mutants"], m["killed"], m["survived"], m["timeout"], m["added"]),
+                         (1, 128, 92, 35, 1, 5))
+
+
 if __name__ == "__main__":
     unittest.main()

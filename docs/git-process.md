@@ -17,6 +17,7 @@ the repo's profile, `.agents/dev-process.md`
 | `integration.ci_before_merge` | Whether CI must pass on each issue's PR before it merges. |
 | `integration.mode_check` | A command that proves the session can run without prompts, in place of the plugin's check. |
 | `gates.always`, `gates.when` | Checks run before every merge, and extra ones by path. |
+| a lane's `mutate` | The command that mutation-tests the lines a change made; every mutant its tests miss is killed or accounted for before the merge. |
 | `stages` | Where a merged change goes next, and which board column says so. |
 
 ## The shape
@@ -95,6 +96,8 @@ Every issue goes through the same checks, in this order, before its merge:
 
 1. **Tests.** The new regression test is seen failing first (stash the change,
    run the one test, see red, pop), then every lane in the profile passes.
+   Where a lane has a `mutate` command, its mutants on the changed lines are
+   then killed by a test or declined with a fixed reason.
 2. **Spec check.** Before the review, a reader that has not seen how the
    change was made answers every numbered item of the spec against it
    (`spec_check.py`). A missing piece is built, a difference is matched or,
