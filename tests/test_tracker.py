@@ -244,6 +244,23 @@ class NeedsHumanGuardTests(unittest.TestCase):
         self.assertEqual(code, 0)
         asked.assert_not_called()
 
+    def test_a_defaulted_needs_human_guards_only_the_role_key(self):
+        # No needs_human in the profile: it shares the in_progress column (#87). Starting work
+        # on an issue must not need a stop marker; handing it back still does.
+        saved = board.COLUMNS.get("in_progress")
+        board.COLUMNS["needs_human"] = board.Column("In progress", "tracker.columns.in_progress")
+        board.COLUMNS["in_progress"] = board.Column("In progress", "tracker.columns.in_progress")
+        try:
+            for to in ("in_progress", "In progress"):
+                code, _, _, asked, _ = self._move(to, AssertionError("read"), status_after="In progress")
+                self.assertEqual(code, 0, to)
+                asked.assert_not_called()
+            code, wrote, _, _, _ = self._move("needs_human", "just a comment", status_after="In progress")
+            self.assertEqual(code, 4)
+            wrote.assert_not_called()
+        finally:
+            board.COLUMNS["in_progress"] = saved
+
     def test_no_needs_human_in_the_profile_means_no_guard(self):
         board.COLUMNS.pop("needs_human")
         code, _, _, asked, _ = self._move("Human!Help!", AssertionError("read"))
