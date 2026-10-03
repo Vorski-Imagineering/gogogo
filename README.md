@@ -82,6 +82,43 @@ repo first ([Adopting it in a repo](#adopting-it-in-a-repo), step 1).
    skipped and named in the run's report. Preview the run first with
    `/gogogo:auto-dev --triage-only`, which changes nothing.
 
+### auto-dev under `/goal`
+
+[`/goal`](https://code.claude.com/docs/en/goal) keeps a session taking turns
+until a small model, reading only the transcript, judges a condition met or
+impossible. auto-dev already works the whole queue in one run, so a goal adds
+little to a run that ends with its close-run report. What it adds is
+persistence: a goal retries a turn that failed on a dropped connection, and
+after a usage limit it pauses, then carries on if the session waits for the
+reset.
+
+The risk is a goal that names an outcome instead of the process. When auto-dev
+refuses to start or stops for you, the evaluator only sees "not met yet" and
+tells the next turn to keep going, so the agent works around the skill: it
+builds issues with its own subagents, skips review, verification and merge,
+and parks cards in `Human!Help!` with no note
+([#84](https://github.com/Vorski-Imagineering/gogogo/issues/84)).
+
+Use a goal when all of these hold:
+
+- the session runs in `bypassPermissions`, as above. The `/goal` docs suggest
+  auto mode, but auto mode refuses the merge;
+- `/gogogo:auto-dev --triage-only` takes the issues you expect;
+- the condition names the skill, and makes a refusal or a stop the end:
+  ```text
+  /goal /gogogo:auto-dev has finished and printed its close-run report. Work issues only through /gogogo:auto-dev. If it refuses to start, that ends the goal: report why and change nothing to get round it.
+  ```
+
+Don't use one when:
+
+- auto-dev or dev refuses to start. Fix that first, with
+  `/gogogo:setup` and you there;
+- the condition is open-ended ("get done what we can") or a board state ("Dev
+  Ready is empty"): moving cards meets it without doing the work;
+- the queue still needs decisions. `/gogogo:spec` needs you, and a goal
+  pushes past questions;
+- you are working the same issues in another session.
+
 ## Who it is for
 
 It has been run by one developer across several products on different stacks,
