@@ -834,9 +834,11 @@ class ConfigHeader(unittest.TestCase):
     def test_release_row_says_where_work_happens(self):
         s = self.settings()
         s["integration"]["workspace"] = "worktree"
-        self.assertTrue(self.header(s)[0]["config: release"].endswith(", work in worktree"))
+        self.assertTrue(self.header(s)[0]["config: release"].endswith(
+            "; integration merge-script into main, work in worktree"))
         del s["integration"]["workspace"]
-        self.assertTrue(self.header(s)[0]["config: release"].endswith(", work in missing"))
+        self.assertTrue(self.header(s)[0]["config: release"].endswith(
+            "; integration merge-script into main, work in missing"))
 
     def test_no_profile_prints_missing(self):
         rows, order, calls = self.header({}, profile=None)
@@ -1096,6 +1098,30 @@ class Workspace(unittest.TestCase):
         self.assertEqual(sc.live_checkout(self.root, self.home),
                          ["your Claude Code settings run scripts/h.py on SessionStart",
                           "your Claude Code settings run bin/stop.sh on Stop"])
+
+    def test_the_exact_rows_design_3_fixes(self):
+        self.assertEqual(self.rows()[0]["detail"], "not decided: dev and auto-dev work in the checkout")
+        self.assertEqual(self.rows(lanes="Put each issue in its own git Worktree")[0]["detail"],
+                         "not decided: dev and auto-dev work in the checkout; ## Lane constraints mention a "
+                         "worktree, so dev and auto-dev stop until it is set")
+        (self.root / ".claude-plugin").mkdir()
+        self.hooks(("SessionStart", "python3 ~/dev/repo/scripts/h.py"))
+        self.assertEqual(self.rows("worktree")[0]["detail"],
+                         "worktree; live checkout: this repo is a Claude Code plugin; sessions may load it "
+                         "from here with --plugin-dir; your Claude Code settings run scripts/h.py on SessionStart")
+
+    def test_a_hook_without_a_command_does_not_hide_the_next(self):
+        path = self.home / ".claude" / "settings.json"
+        path.parent.mkdir()
+        path.write_text(json.dumps({"hooks": {"SessionStart": [{"hooks": [
+            {"type": "command", "command": 5},
+            {"type": "command", "command": "python3 ~/dev/repo/scripts/h.py"}]}]}}))
+        self.assertEqual(sc.live_checkout(self.root, self.home),
+                         ["your Claude Code settings run scripts/h.py on SessionStart"])
+
+    def test_a_hook_naming_the_checkout_itself_is_named_as_dot(self):
+        self.hooks(("Stop", "cd ~/dev/repo && make"))
+        self.assertEqual(sc.live_checkout(self.root, self.home), ["your Claude Code settings run . on Stop"])
 
     def test_a_hook_outside_the_checkout_is_no_reason(self):
         self.hooks(("SessionStart", "python3 ~/other/h.py"))

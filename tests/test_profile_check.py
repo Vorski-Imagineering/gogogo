@@ -708,6 +708,13 @@ class SchemaDoc(unittest.TestCase):
         self.assertIn("absent means telegram", pc.FIELDS["notify"][2])
         self.assertIn(".claude/gogogo/notify.env", pc.FIELDS["notify"][2])
 
+    def test_workspace_meaning_is_the_one_the_spec_fixes(self):
+        # gogogo#94 Design 1.
+        self.assertEqual(pc.FIELDS["integration.workspace"][2],
+                         "checkout | worktree. Optional; absent means checkout. Where dev and auto-dev do an "
+                         "issue's work: in the checkout, or in a git worktree ../<repo>-wt-<n> beside it. "
+                         "Worktree support is in development.")
+
     def test_doc_example_is_valid_toml(self):
         doc = (PLUGIN / "references" / "profile-schema.md").read_text()
         for block in doc.split("```toml\n")[1:]:
