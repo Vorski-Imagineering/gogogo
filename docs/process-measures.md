@@ -123,7 +123,7 @@ Compute in this order. Each line says what it needs from the adopting repo.
 7. **Q7 Review rounds and yield**: review records.
 8. **Q6 Spec edits after ready**: edit history, through GraphQL.
 9. **K1-K4**: transcripts on the owner's machine, for the days they cover; say which days.
-10. **P1 Time per phase** (start and end only) and **P2 Run size**: transcripts.
+10. **P1 Time per phase** (start and end only) and **P2 Run size**: transcripts, and for P2 since #63 the `sessions:` section of `review_stats.py` (C).
 
 Report as *no data*, with the reason, never as zero: Q1, Q5 (before #63), Q8, the inside of
 P1, and P3 (a) unless board history turns out to be readable.

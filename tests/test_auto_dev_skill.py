@@ -45,7 +45,7 @@ class QueueSelection(unittest.TestCase):
 
     def test_a_skip_is_handed_back(self):
         triage = section(self.text, "2. Triage each issue before touching it")
-        for name in ("tracker.columns.needs_human", "tracker.ready_marker", "gh issue comment"):
+        for name in ("tracker.columns.needs_human", "tracker.ready_marker", "gh issue comment", "--remove-label"):
             self.assertIn(name, triage)
 
     def test_the_skip_names_its_session_source(self):

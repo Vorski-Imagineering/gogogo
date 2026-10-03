@@ -131,9 +131,11 @@ names, or a two-licence change whose apply row is missing (that one is
 buildable: build and test it, then stop that issue before applying).
 
 **Hand back a skip.** Every skip from §1's lint and from this section, outside
-triage-only mode, and never the *could not add the ready label* skip below
-(the tracker failing, not the spec: reported, nothing written, the card left
-for the next run):
+triage-only mode, once per issue per run: a later pass that reads the issue
+again reports the skip and writes nothing more. Never the *could not add the
+ready label* skip below (the tracker failing, not the spec: reported, nothing
+written, the card left for the next run), and never a two-licence change whose
+apply row is missing, which is built and then stopped (§4), not skipped:
 
 1. Post one comment on the issue:
    `gh issue comment <n> --repo <tracker.issues_repo> --body-file <scratch>/skip-<n>.md`.
@@ -415,8 +417,8 @@ each, `<repo>` being the name part of `tracker.code_repo`:
 - the first time an issue is skipped in this run, not on later passes: `<repo> #<n> skipped -> <tracker.columns.needs_human>: <reason>` when *Hand back a skip* moved the card, else `<repo> #<n> skipped: <reason>` (the label failure, or a failed move);
 - `<repo> #<n> started: <title>`;
 - after the issue's merge is verified: `<repo> #<n> merged (<short sha>) -> <column>`;
-- `<repo> #<n> needs you -> <tracker.columns.needs_human>: <the Needs-you line>`;
-- *run closed*, from §9 only: `<repo> auto-dev: run closed: <a> merged, <b> need you, <c> skipped`.
+- `<repo> #<n> needs you -> <tracker.columns.needs_human>: <the Needs-you line>`, for an issue taken and then stopped, never for a triage skip (its skip line says it);
+- *run closed*, from §9 only: `<repo> auto-dev: run closed: <a> merged, <b> need you, <c> skipped`, where `<b>` counts issues taken and stopped, and `<c>` the triage skips, each issue once.
 
 A `send` that exits non-zero is a `notify failed: <its line>`, and the run
 goes on. Each is given once, in the next report to the person in this session
@@ -428,8 +430,8 @@ tracker comment. Never put a token on a command line or in a report.
 In a run that tried to send *run started*, first send *run closed* (§8). Then
 one report, opening with the notify line preflight item 7 put there, if any:
 every issue taken with its outcome and merge commit (and *label added by
-the run* for each one §2 labelled), every issue skipped with the reason and its column, anything left half-done with its branch, every card
-moved to `tracker.columns.needs_human` with its Needs-you line, the stranded
+the run* for each one §2 labelled), every issue skipped with the reason and its column, anything left half-done with its branch, every other card
+moved to `tracker.columns.needs_human` (taken, then stopped) with its Needs-you line, the stranded
 work from preflight, anything the profile's `stop.extra` checks raised, and
 the `notify failed` lines §8 says are due.
 
