@@ -31,6 +31,15 @@ stopped or nospec. A spec-check marker that does not parse, or whose `items`
 is not the sum of its four statuses, or that sits in a comment with no
 readable review record, is counted as unreadable.
 
+A report may also carry `<!-- gogogo:mutation v=1 … -->` records, one per
+lane whose `mutate` command /gogogo:dev §6 ran (gogogo#45). They are attached
+to the review records of the same comment: each row gains `mutants`,
+`survived` and `added` (summed over its lanes; `-` when none), and the
+summary adds a `mutation:` line (records, mutants, survived and its share,
+survivors killed by added tests), a `mutation declined by reason:` line and a
+`mutation ended:` line. A mutation marker that does not parse or add up, or
+that sits in a comment with no readable review record, counts as unreadable.
+
 The outcome of a row is the verdict of the latest `<!-- auto-test v1 … -->`
 marker on the issue (pass, fail, needs-human); else `confirmed` when the issue
 is closed as completed, `dropped` when it is closed otherwise, else `waiting`.
@@ -64,6 +73,10 @@ SPEC_CHECK = re.compile(r"<!-- gogogo:spec-check (.*?) -->")
 SPEC_CHECK_ENDS = ("clean", "declared", "stopped", "nospec")
 SPEC_CHECK_READERS = ("fresh", "self", "none")
 TESTS = re.compile(r"<!-- gogogo:tests (.*?) -->")
+MUTATION = re.compile(r"<!-- gogogo:mutation (.*?) -->")
+MUTATION_DECLINED_AS = ("equivalent", "text", "outside")
+MUTATION_ENDS = ("clean", "survivors", "failed")
+MUTATION_COUNTS = ("mutants", "killed", "survived", "timeout", "runs", "added")
 TESTS_KEYS = ("v", "checked", "hunks", "weaker", "licensed", "restored", "attempts", "end")
 TESTS_ENDS = ("clean", "restored", "stopped", "unchecked")
 SPEC_CHECK_COUNTS = ("items", "met", "missing", "differs", "na", "outside", "runs", "fixed", "declared")
@@ -74,7 +87,7 @@ ENDS = ("clean", "third-attempt", "reversal", "unfixable", "prose", "breaker")
 OLD_COVERAGE = {"high": "broad", "medium": "precise", "max": "exhaustive"}
 VERDICTS = {"PASS": "pass", "FAIL": "fail", "NEEDS_HUMAN": "needs-human"}
 COLUMNS = ("issue", "pr", "kind", "coverage", "rounds", "applied", "declined", "refix", "end", "outcome",
-           "escaped", "spec_items", "spec_unmet", "spec_declared", "weaker")
+           "escaped", "mutants", "survived", "added", "spec_items", "spec_unmet", "spec_declared", "weaker")
 
 
 class GhError(Exception):
@@ -163,6 +176,27 @@ def parse_spec_check(text: str) -> dict | None:
     return record
 
 
+def parse_mutation(text: str) -> dict | None:
+    """The first mutation record in `text` (one lane's run, /gogogo:dev §6), or None when it does not parse or add up."""
+    match = MUTATION.search(text)
+    fields = _fields(match.group(1)) if match else None
+    if fields is None or fields.get("v") != "1":
+        return None
+    try:
+        record = {k: int(fields[k]) for k in MUTATION_COUNTS}
+        record.update(lane=fields["lane"], end=fields["end"],
+                      declined_as=_reasons(fields["declined_as"], MUTATION_DECLINED_AS))
+    except (KeyError, ValueError):
+        return None
+    if record["end"] not in MUTATION_ENDS:
+        return None
+    if record["mutants"] != record["killed"] + record["survived"] + record["timeout"]:
+        return None
+    if record["end"] == "clean" and record["added"] + sum(record["declined_as"].values()) != record["survived"]:
+        return None
+    return record
+
+
 def parse_tests(text: str) -> dict | None:
     """The first tests record in `text` (from test_guard.py, /gogogo:dev §6), or None."""
     match = TESTS.search(text)
@@ -218,18 +252,28 @@ def collect(repo: str, since: str | None) -> tuple[list[dict], int, dict[int, st
         tests = parse_tests(tests_marker.group(0)) if tests_marker else None
         if tests_marker and tests is None:
             unreadable += 1
+        mutations = []
+        for match in MUTATION.finditer(body):
+            mutation = parse_mutation(match.group(0))
+            if mutation is None:
+                unreadable += 1
+            else:
+                mutations.append(mutation)
         read = 0
         for match in REVIEW.finditer(body):
             record = parse_review(match.group(0))
             if record is None:
                 unreadable += 1
             else:
-                records.append({**record, "issue": issue, "spec_check": spec_check, "tests": tests})
+                records.append({**record, "issue": issue, "spec_check": spec_check, "tests": tests,
+                                "mutation": mutations})
                 read += 1
         if spec_check is not None and not read:
             unreadable += 1
         if tests is not None and not read:
             unreadable += 1
+        if not read:
+            unreadable += len(mutations)
         for match in AUTO_TEST.finditer(body):
             fields = _fields(match.group(1)) or {}
             if fields.get("verdict") in VERDICTS:
@@ -262,6 +306,8 @@ def build(records, unreadable, verdicts, issues) -> dict:
                         spec_unmet=spec["missing"] + spec["differs"] if spec else None,
                         spec_declared=spec["declared"] if spec else None,
                         weaker=r["tests"]["weaker"] if r.get("tests") else None)
+        lanes = r.get("mutation") or []
+        rows[-1].update({k: sum(m[k] for m in lanes) if lanes else None for k in ("mutants", "survived", "added")})
     escaped = Counter()
     for r in records:
         if r["escaped_from"] is not None and r["escaped_as"] in ("declined", "missed"):
@@ -274,6 +320,7 @@ def build(records, unreadable, verdicts, issues) -> dict:
     applied_total = sum(sum(r["applied"]) for r in new)
     checks = [r["spec_check"] for r in records if r.get("spec_check")]
     guarded = [r["tests"] for r in records if r.get("tests")]
+    mutated = [m for r in records for m in r.get("mutation") or []]
     summary = {
         "repo_records": len(records), "old_format": sum(r["v"] == 1 for r in records), "unreadable": unreadable,
         "median_rounds": statistics.median(r["rounds"] for r in records),
@@ -287,6 +334,10 @@ def build(records, unreadable, verdicts, issues) -> dict:
                        **{k: sum(c[k] for c in checks) for k in ("items", "missing", "differs", "fixed", "declared")},
                        "ends": {e: sum(c["end"] == e for c in checks) for e in SPEC_CHECK_ENDS},
                        "readers": {w: sum(c["reader"] == w for c in checks) for w in SPEC_CHECK_READERS}},
+        "mutation": {"records": len(mutated),
+                     **{k: sum(m[k] for m in mutated) for k in ("mutants", "killed", "survived", "timeout", "added")},
+                     "declined_as": {k: sum(m["declined_as"][k] for m in mutated) for k in MUTATION_DECLINED_AS},
+                     "ends": {e: sum(m["end"] == e for m in mutated) for e in MUTATION_ENDS}},
         "tests": {"records": len(guarded), "checked": sum(t["checked"] == "yes" for t in guarded),
                   "not_checked": sum(t["checked"] == "no" for t in guarded),
                   **{k: sum(t[k] for t in guarded) for k in ("weaker", "licensed", "restored")},
@@ -320,6 +371,15 @@ def render(repo: str, data: dict) -> str:
               "declined by reason: " + ", ".join(f"{k} {v}" for k, v in s["declined_as"].items()),
               "outcomes: " + ", ".join(f"{k} {v}" for k, v in sorted(s["outcomes"].items())),
               f"escaped bugs: {s['escaped']['declined']} declined, {s['escaped']['missed']} missed"]
+    m = s["mutation"]
+    if m["records"]:
+        pct = f"{m['survived'] / m['mutants']:.0%}" if m["mutants"] else "-"
+        lines += [f"mutation: {m['records']} records, {m['mutants']} mutants, {m['survived']} survived ({pct}), "
+                  f"{m['added']} killed by added tests",
+                  "mutation declined by reason: " + ", ".join(f"{k} {v}" for k, v in m["declined_as"].items()),
+                  "mutation ended: " + ", ".join(f"{k} {v}" for k, v in m["ends"].items())]
+    else:
+        lines.append("mutation: 0 records")
     spec = s["spec_check"]
     if spec["records"]:
         lines += [f"spec check: {spec['records']} records, {spec['items']} items, {spec['missing']} missing, "

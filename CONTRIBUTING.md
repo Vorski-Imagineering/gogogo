@@ -5,7 +5,8 @@ Pull requests are welcome.
 Before you open one:
 
 - Run `python3 -m unittest discover -s tests`. A new test must have been seen
-  failing: break the thing it names, run it, confirm red, restore.
+  failing: break the thing it names, run it, confirm red, restore. On a change
+  to a script, also run `python3 tools/mutate.py origin/main`.
 - Skills hold only what is the same in every repo. Anything that names a
   project, host, repo or command belongs in that repo's profile
   (`.agents/dev-process.md`), not in a skill. CI runs the stack-word check from
