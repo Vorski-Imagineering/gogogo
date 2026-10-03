@@ -107,6 +107,7 @@ base = "main"
 command = "make merge"
 mode_check = "./require_bypass.sh"
 ci_before_merge = false
+workspace = "checkout"
 
 [handback]
 reporter = "trailer"
@@ -345,6 +346,19 @@ class WrongValues(unittest.TestCase):
         settings.pop("review")
         for skill in (None, *pc.SKILLS):
             self.assertEqual(pc.check(settings, sections, skill), ([], []), skill)
+
+    def test_workspace_is_checkout_or_worktree_and_optional(self):
+        # gogogo#94: optional; absent means checkout. A typo must not silently mean checkout.
+        settings, sections = parse()
+        for value in ("worktree", "checkout"):
+            settings["integration"]["workspace"] = value
+            self.assertEqual(pc.check(settings, sections, pc.LOOP), ([], []), value)
+        settings["integration"].pop("workspace")
+        for skill in (None, *pc.SKILLS):
+            self.assertEqual(pc.check(settings, sections, skill), ([], []), skill)
+        settings["integration"]["workspace"] = "wt"
+        errors, _ = pc.check(settings, sections, pc.LOOP)
+        self.assertIn("integration.workspace: 'wt' is not one of checkout, worktree", errors)
 
     def test_value_outside_enum_is_named(self):
         settings, sections = parse()
