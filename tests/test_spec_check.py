@@ -264,6 +264,17 @@ class ChangedFiles(unittest.TestCase):
         self.assertIn("F:old.py\told.py\tmet", lines)
         self.assertNotIn("outside: old.py", lines)
 
+    def test_a_top_level_edit_file_the_change_renames_is_still_listed(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            repo = self.slashless_repo(tmp, "**Edit:** `old.py`, `README.md`.")
+            git(repo, "switch", "-q", "-c", "change")
+            git(repo, "mv", "old.py", "new.py")
+            git(repo, "commit", "-q", "-m", "rename old.py")
+            out = subprocess.run([sys.executable, str(SCRIPT), "items", "body.md", "--base", "main"],
+                                 cwd=repo, capture_output=True, text=True)
+        self.assertEqual(out.returncode, 0, out.stderr)
+        self.assertIn("F:old.py", [ln.split("\t")[0] for ln in out.stdout.splitlines()])
+
     def test_slashless_edit_names_are_read_from_the_repo_top_in_a_subfolder(self):
         with tempfile.TemporaryDirectory() as tmp:
             repo = self.slashless_repo(tmp, "**Edit:** `README.md`, `x.py`.")

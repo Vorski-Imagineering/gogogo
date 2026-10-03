@@ -152,8 +152,17 @@ def list_items(body: str, changed: list[str] | None = None, tree=None) -> dict |
     return {"items": items, "unlisted": unlisted, "outside": outside}
 
 
+def _fork(base: str) -> str:
+    return _git(["merge-base", base, "HEAD"]).strip()
+
+
+def _tree_at(rev: str) -> list[str]:
+    """Every file in commit rev, named from the repo top."""
+    return [p for p in _git(["ls-tree", "-r", "-z", "--name-only", "--full-tree", rev]).split("\0") if p]
+
+
 def changed_files(base: str) -> list[str]:
-    fork = _git(["merge-base", base, "HEAD"]).strip()
+    fork = _fork(base)
     names = _git(["diff", "--name-only", fork]).splitlines()
     names += _git(["ls-files", "--others", "--exclude-standard"]).splitlines()
     return list(dict.fromkeys(n for n in names if n))
@@ -233,8 +242,9 @@ def main(argv=None) -> int:
         body = sys.stdin.read() if args.body == "-" else Path(args.body).read_text(encoding="utf-8")
         answers = Path(args.answers).read_text(encoding="utf-8") if args.command == "verify" else ""
         changed = changed_files(args.base) if args.base else None
-        # A file the change deletes is no longer in the tree but was there before it.
-        listed = list_items(body, changed, lambda: _tree() + (changed or []))
+        # An Edit file exists before the change: with a base, the tree at the fork
+        # counts too, so a file the change deletes or renames is still found.
+        listed = list_items(body, changed, (lambda: _tree() + _tree_at(_fork(args.base))) if args.base else _tree)
     except (OSError, UnicodeDecodeError, GitError) as exc:
         print(exc, file=sys.stderr)
         return 2
