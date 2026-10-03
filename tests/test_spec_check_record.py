@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
 """Tests for the spec-check record that /gogogo:dev §7 asks for on each issue.
 
-The spec check in §5 is wording and gets no test here (CLAUDE.md § Tests): it
-is checked by scenario runs. The record is a template `review_stats.py`
+The spec check in §5 is wording and is checked by scenario runs (CLAUDE.md §
+Tests); the only tests of it here pin the reader's brief to what
+`spec_check.py verify` accepts (gogogo#81). The record is a template `review_stats.py`
 parses, so these pin its keys, its worked example, its allowed values, and
 where the skills and README name the check (gogogo#44).
 
@@ -63,9 +64,8 @@ class Example(unittest.TestCase):
         self.assertEqual(record["items"], record["met"] + record["missing"] + record["differs"] + record["na"])
 
 
-class Named(unittest.TestCase):
-    def test_dev_names_the_script(self):
-        self.assertIn("scripts/spec_check.py", DEV.read_text(encoding="utf-8"))
+class Skill(unittest.TestCase):
+    """§5's reader brief names only what `spec_check.py verify` accepts (gogogo#81)."""
 
     def brief(self):
         text = DEV.read_text(encoding="utf-8")
@@ -86,6 +86,11 @@ class Named(unittest.TestCase):
         self.assertEqual(len(bullets), 1, bullets)
         for letter in spec_check.NEEDS_EVIDENCE:
             self.assertIn(f"`{letter}`", bullets[0])
+
+
+class Named(unittest.TestCase):
+    def test_dev_names_the_script(self):
+        self.assertIn("scripts/spec_check.py", DEV.read_text(encoding="utf-8"))
 
     def test_auto_dev_hands_a_stopped_check_to_needs_human(self):
         four = section(AUTO_DEV.read_text(encoding="utf-8"), "4.", "5.")
