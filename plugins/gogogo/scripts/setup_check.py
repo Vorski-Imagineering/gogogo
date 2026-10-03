@@ -822,7 +822,7 @@ def main(argv=None):
     check_settings(root, rep)
 
     path = profile_check.find_profile()
-    settings = {}
+    settings, sections = {}, None
     if not path.is_file():
         rep.fail("profile", "no .agents/dev-process.md",
                  "create one from plugins/gogogo/references/profile-schema.md (/gogogo:setup drafts it)")
@@ -837,6 +837,9 @@ def main(argv=None):
             check_workspace(root, settings, sections, rep, Path.home())
         # From here on, the values the skills use: the format's defaults filled in.
         settings = profile_check.effective(settings)
+    if sections is None and live_checkout(root, Path.home()):
+        # No profile to read yet: setup asks the question while drafting one, so name what runs here.
+        check_workspace(root, {}, {}, rep, Path.home())
     if settings:
         check_release_shape(settings, rep)
         check_release(settings, rep)

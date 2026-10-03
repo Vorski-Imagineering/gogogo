@@ -1123,6 +1123,31 @@ class Workspace(unittest.TestCase):
         self.hooks(("Stop", "cd ~/dev/repo && make"))
         self.assertEqual(sc.live_checkout(self.root, self.home), ["your Claude Code settings run . on Stop"])
 
+    def run_main(self, cwd):
+        """setup_check.py's rows, run in `cwd` with HOME at this test's home and gh offline."""
+        bin_dir = self.home / "bin"
+        bin_dir.mkdir(exist_ok=True)
+        (bin_dir / "gh").write_text("#!/bin/sh\necho offline >&2\nexit 1\n")
+        (bin_dir / "gh").chmod(0o755)
+        env = {**os.environ, "HOME": str(self.home), "PATH": f"{bin_dir}:{os.environ['PATH']}"}
+        script = ROOT / "plugins" / "gogogo" / "scripts" / "setup_check.py"
+        out = subprocess.run([sys.executable, str(script), "--json"], cwd=cwd, env=env,
+                             capture_output=True, text=True)
+        return [r for r in json.loads(out.stdout) if r["check"] == "workspace"]
+
+    def test_no_profile_still_names_a_live_checkout(self):
+        # Setup asks the question while drafting a profile, so the live reasons must be there then too.
+        subprocess.run(["git", "init", "-q", str(self.root)], check=True)
+        self.assertEqual(self.run_main(self.root), [])
+        (self.root / ".claude-plugin").mkdir()
+        rows = self.run_main(self.root)
+        self.assertEqual([(r["level"], r["detail"]) for r in rows],
+                         [("WARN", "not decided: dev and auto-dev work in the checkout; live checkout: this repo "
+                                   "is a Claude Code plugin; sessions may load it from here with --plugin-dir")])
+        (self.root / ".agents").mkdir()
+        (self.root / ".agents" / "dev-process.md").write_text("no front matter\n")
+        self.assertEqual([r["level"] for r in self.run_main(self.root)], ["WARN"])
+
     def test_a_hook_outside_the_checkout_is_no_reason(self):
         self.hooks(("SessionStart", "python3 ~/other/h.py"))
         self.assertEqual(sc.live_checkout(self.root, self.home), [])
