@@ -26,10 +26,18 @@ PROFILE = '+++\nprofile = 1\n\n[tracker]\nissues_repo = "o/r"\ncode_repo = "o/r"
 
 def v2(pr=1, rounds=1, applied="1", declined="0", refix="0", applied_as="spec:1,regression:0,bug:0,risk:0,added:0",
        declined_as="hypothetical:0,style:0,settled:0,reversal:0,beyond:0,late:0", end="clean",
-       escaped_from="none", escaped_as="none"):
+       escaped_from="none", escaped_as="none", extra=""):
     return (f"<!-- gogogo:review v=2 pr={pr} kind=code coverage=broad rounds={rounds} applied={applied} "
             f"declined={declined} refix={refix} applied_as={applied_as} declined_as={declined_as} followups=0 "
-            f"end={end} escaped_from={escaped_from} escaped_as={escaped_as} impl=m1 reviewer=m2 -->")
+            f"end={end} escaped_from={escaped_from} escaped_as={escaped_as} impl=m1 reviewer=m2"
+            f"{' ' + extra if extra else ''} -->")
+
+
+def stop(reason):
+    return f"**Needs you:** do the thing.\n<!-- gogogo:stop v=1 reason={reason} -->"
+
+
+SESSION = "0d6f3c2a-8b1e-4f5d-9a7c-2e4b6d8f0a1c"
 
 
 def autotest(n, verdict):
@@ -45,7 +53,7 @@ class StatsBase(unittest.TestCase):
         self.calls = []
 
     def run_stats(self, comments, issues=None, *argv, fail=False):
-        """comments: [(issue number, body)]; issues: {n: (state, state_reason)}."""
+        """comments: [(issue number, body[, created_at])]; issues: {n: (state, state_reason)}."""
         issues = issues or {}
 
         def fake_gh(args):
@@ -53,8 +61,9 @@ class StatsBase(unittest.TestCase):
             if fail:
                 raise rs.GhError("gh: HTTP 502")
             if "issues/comments" in args[-1]:
-                return json.dumps([[{"issue_url": f"https://api.github.com/repos/o/r/issues/{n}", "body": b}
-                                    for n, b in comments]])
+                return json.dumps([[{"issue_url": f"https://api.github.com/repos/o/r/issues/{c[0]}", "body": c[1],
+                                     **({"created_at": c[2]} if len(c) > 2 else {})}
+                                    for c in comments]])
             n = int(args[-1].rsplit("/", 1)[1])
             state, reason = issues.get(n, ("open", None))
             return json.dumps({"number": n, "title": f"issue {n}", "state": state, "state_reason": reason})
@@ -312,6 +321,164 @@ class Mutation(StatsBase):
         self.assertEqual(m["ends"], {"clean": 1, "survivors": 0, "failed": 0})
         self.assertEqual((m["records"], m["mutants"], m["killed"], m["survived"], m["timeout"], m["added"]),
                          (1, 128, 92, 35, 1, 5))
+
+
+
+class PhaseTimes(StatsBase):
+    def test_a_bad_session_is_not_an_id(self):
+        data = self.json_of([(40, v2(extra="session=abc"))])
+        self.assertIsNone(data["rows"][0]["session"])
+        self.assertEqual(data["summary"]["malformed"], 1)
+
+    def test_a_time_that_is_no_real_minute_is_malformed(self):
+        data = self.json_of([(40, v2(extra="t_branch=2026-10-03T25:00Z t_verified=2026-10-03T10:30Z"))])
+        self.assertIsNone(data["rows"][0]["t_branch"])
+        self.assertEqual(data["summary"]["malformed"], 1)
+
+    def test_an_empty_new_value_is_malformed_not_unreadable(self):
+        code, out, _ = self.run_stats([(40, v2(extra="session= t_branch=unknown t_verified=unknown"))])
+        self.assertEqual(code, 0)
+        self.assertIn("1 review records", out.splitlines()[0])
+        self.assertIn("0 unreadable skipped, 1 with malformed fields", out.splitlines()[0])
+
+    def test_unknown_is_not_malformed(self):
+        data = self.json_of([(40, v2(extra="session=unknown t_branch=unknown"))])
+        self.assertEqual((data["rows"][0]["session"], data["rows"][0]["t_branch"]), (None, None))
+        self.assertEqual(data["summary"]["malformed"], 0)
+
+    def test_the_medians_come_from_the_right_fields(self):
+        comments = [(40, v2(extra=f"session={SESSION} t_branch=2026-10-03T09:00Z t_verified=2026-10-03T10:30Z"),
+                     "2026-10-03T11:00:00Z"),
+                    (41, v2(pr=2, extra="t_branch=2026-10-03T09:00Z t_verified=2026-10-03T09:40Z"),
+                     "2026-10-03T10:00:00Z")]
+        s = self.json_of(comments)["summary"]
+        self.assertEqual(s["timed"], 2)
+        self.assertEqual(s["with_session"], 1)
+        self.assertEqual(s["median_branch_to_verified"], 65)
+        self.assertEqual(s["median_verified_to_report"], 25)
+        row = self.json_of(comments)["rows"][0]
+        self.assertEqual((row["session"], row["t_branch"], row["t_verified"], row["posted"]),
+                         (SESSION, "2026-10-03T09:00Z", "2026-10-03T10:30Z", "2026-10-03T11:00:00Z"))
+
+    def test_times_in_the_wrong_order_are_malformed_and_not_timed(self):
+        s = self.json_of([(40, v2(extra="t_branch=2026-10-03T10:30Z t_verified=2026-10-03T09:00Z"))])["summary"]
+        self.assertEqual(s["timed"], 0)
+        self.assertEqual(s["malformed"], 1)
+        code, out, _ = self.run_stats([(40, v2(extra="t_branch=2026-10-03T10:30Z t_verified=2026-10-03T09:00Z"))])
+        self.assertIn("1 with malformed fields", out.splitlines()[0])
+
+    def test_no_evidence_is_not_zero_minutes(self):
+        s = self.json_of([(40, v2())])["summary"]
+        self.assertEqual(s["timed"], 0)
+        self.assertIsNone(s["median_branch_to_verified"])
+        self.assertIsNone(s["median_verified_to_report"])
+        code, out, _ = self.run_stats([(40, v2())])
+        self.assertIn("phase times: 0 of 1 new records (median branch→verified - min, verified→report - min)", out)
+        self.assertIn("session ids: 0 of 1 new records", out)
+
+    def test_an_old_record_has_no_times_and_breaks_nothing(self):
+        old = ("<!-- gogogo:review pr=482 kind=code level=high rounds=4 applied=5,2,1,0 "
+               "declined=1,0,0,0 correctness=0,1,1,0 stopped=no -->")
+        data = self.json_of([(26, old), (40, v2(extra="t_branch=2026-10-03T09:00Z t_verified=2026-10-03T09:30Z"))])
+        old_row = next(r for r in data["rows"] if r["issue"] == 26)
+        self.assertEqual((old_row["session"], old_row["t_branch"], old_row["t_verified"]), (None, None, None))
+        self.assertEqual(data["summary"]["timed"], 1)
+        self.assertEqual(data["summary"]["median_branch_to_verified"], 30)
+
+
+class PhaseTimesExact(StatsBase):
+    """Each line and boundary pinned exactly, so a changed word or bound is seen (mutation, gogogo#62)."""
+
+    def test_the_header_and_its_blank_line(self):
+        code, out, _ = self.run_stats([(40, v2())])
+        self.assertEqual(out.splitlines()[:2], ["o/r: 1 review records (0 old format, 0 unreadable skipped)", ""])
+
+    def test_the_phase_and_session_lines(self):
+        old = ("<!-- gogogo:review pr=482 kind=code level=high rounds=4 applied=5,2,1,0 "
+               "declined=1,0,0,0 correctness=0,1,1,0 stopped=no -->")
+        comments = [(26, old),
+                    (40, v2(extra=f"session={SESSION} t_branch=2026-10-03T09:00Z t_verified=2026-10-03T10:30Z"),
+                     "2026-10-03T11:00:00Z"),
+                    (41, v2(pr=2, extra="t_branch=2026-10-03T09:00Z t_verified=2026-10-03T09:40Z"),
+                     "2026-10-03T10:00:00Z")]
+        code, out, _ = self.run_stats(comments)
+        lines = out.splitlines()
+        self.assertIn("phase times: 2 of 2 new records (median branch→verified 65 min, verified→report 25 min)",
+                      lines)
+        self.assertIn("session ids: 1 of 2 new records", lines)
+
+    def test_zero_minutes_is_a_time_not_an_error(self):
+        s = self.json_of([(40, v2(extra="t_branch=2026-10-03T09:00Z t_verified=2026-10-03T09:00Z"),
+                           "2026-10-03T09:00:00Z")])["summary"]
+        self.assertEqual((s["timed"], s["malformed"]), (1, 0))
+        self.assertEqual((s["median_branch_to_verified"], s["median_verified_to_report"]), (0, 0))
+
+    def test_a_report_half_a_minute_after_verifying_counts(self):
+        s = self.json_of([(40, v2(extra="t_branch=2026-10-03T09:00Z t_verified=2026-10-03T10:30Z"),
+                           "2026-10-03T10:30:30Z")])["summary"]
+        self.assertEqual(s["median_verified_to_report"], 0.5)
+
+    def test_each_empty_new_value_names_its_key(self):
+        for key in ("session", "t_branch", "t_verified"):
+            record = rs.parse_review(v2(extra=f"{key}="))
+            self.assertIsNotNone(record, key)
+            self.assertEqual(record["malformed"], [key])
+
+    def test_rows_keep_the_models(self):
+        row = self.json_of([(40, v2())])["rows"][0]
+        self.assertEqual((row["impl"], row["reviewer"]), ("m1", "m2"))
+
+    def test_an_old_record_has_every_key_empty(self):
+        old = rs.parse_review("<!-- gogogo:review pr=482 kind=code level=high rounds=4 applied=5,2,1,0 "
+                              "declined=1,0,0,0 correctness=0,1,1,0 stopped=no -->")
+        for key in ("escaped_from", "escaped_as", "impl", "reviewer", "session", "t_branch", "t_verified"):
+            self.assertIsNone(old[key], key)
+
+
+class Stops(StatsBase):
+    def test_every_reason_is_counted(self):
+        reasons = ("hard-stop", "decision", "spec", "review", "tests", "mutation", "verify", "gate", "ci")
+        s = self.json_of([(40 + i, stop(reason) + "\n" + v2(pr=i)) for i, reason in enumerate(reasons)])["summary"]
+        self.assertEqual(s["stops"], dict.fromkeys(reasons, 1))
+        self.assertEqual(s["unreadable_stops"], 0)
+
+    def test_the_stops_line_exactly(self):
+        comments = [(40, stop("review") + "\n" + v2()), (41, stop("ci") + "\n" + v2(pr=2)),
+                    (42, "<!-- gogogo:stop v=1 reason=lunch -->\n" + v2(pr=3))]
+        code, out, _ = self.run_stats(comments)
+        self.assertIn("stops: review 1, ci 1 (1 unreadable)", out.splitlines())
+        code, out, _ = self.run_stats([(40, v2())])
+        self.assertIn("stops: none recorded", out.splitlines())
+
+    def test_stops_by_reason_and_unreadable(self):
+        template = "<!-- gogogo:stop v=1 reason=<hard-stop|decision|review> -->"
+        comments = [(40, stop("review") + "\n" + v2()), (41, stop("ci") + "\n" + v2(pr=2)),
+                    (42, stop("lunch") + "\n" + v2(pr=3)), (43, template + "\n" + v2(pr=4))]
+        s = self.json_of(comments)["summary"]
+        self.assertEqual(set(s["stops"]), set(rs.STOPS))
+        self.assertEqual({k: v for k, v in s["stops"].items() if v}, {"review": 1, "ci": 1})
+        self.assertEqual(s["unreadable_stops"], 2)
+        code, out, _ = self.run_stats(comments)
+        self.assertIn("stops: ", out)
+        self.assertIn("review 1", out.split("stops: ")[1].splitlines()[0])
+        self.assertIn("(2 unreadable)", out)
+
+    def test_a_stop_without_a_review_record_still_counts(self):
+        s = self.json_of([(40, stop("hard-stop")), (41, v2())])["summary"]
+        self.assertEqual(s["stops"]["hard-stop"], 1)
+        self.assertEqual(s["unreadable_stops"], 0)
+
+    def test_no_stop_says_none_recorded(self):
+        code, out, _ = self.run_stats([(40, v2())])
+        self.assertIn("stops: none recorded", out)
+
+    def test_only_unreadable_stops_say_none_recorded_and_count_them(self):
+        code, out, _ = self.run_stats([(40, "quoted: <!-- gogogo:stop … -->\n" + v2())])
+        self.assertIn("stops: none recorded (1 unreadable)", out.splitlines())
+
+    def test_stops_alone_are_still_no_records(self):
+        code, out, _ = self.run_stats([(40, stop("gate"))])
+        self.assertEqual(code, 1)
 
 
 if __name__ == "__main__":

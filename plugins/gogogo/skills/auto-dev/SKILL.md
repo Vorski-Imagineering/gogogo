@@ -259,7 +259,7 @@ one command.
 
 A failure stops that issue at its PR, handed back to
 `tracker.columns.needs_human` as `/gogogo:dev` §8 says for a gate you could not
-make pass. For the run's final PR, see `run-branch-pr` below.
+make pass, with stop reason `ci`. For the run's final PR, see `run-branch-pr` below.
 
 **The link, when a merge is yours.** When you merge with `gh` and the profile
 uses the `Ships-issue` link (`/gogogo:dev`'s *When you merge with `gh`*

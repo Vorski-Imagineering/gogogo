@@ -309,8 +309,8 @@ that the change did not get there by weakening a test. In order:
    back the base version of that hunk, or the deleted file) and make the change
    pass with it. Then run the lanes and steps 1 to 4 again. Up to three
    attempts, each naming a hypothesis different from the last. After the
-   third, the issue stops for a person (§8), with "stop reason: tests" in the
-   Needs-you line and each unlicensed item named in §7.
+   third, the issue stops for a person (§8), with the stop marker's reason
+   `tests` and each unlicensed item named in §7.
 6. Run steps 1 to 4 again after any later step of this section that changed a
    test file.
 
@@ -424,7 +424,7 @@ Comment in the reporter's language, not the codebase's:
   this issue fixes was introduced by the change made for an earlier issue in
   this tracker, say so in one sentence. End the comment with the record on one
   line, with no spaces inside a value:
-  `<!-- gogogo:review v=2 pr=<n|none> kind=<code|prose|mixed> coverage=<precise|broad|exhaustive> rounds=<n> applied=<a1,a2,…> declined=<d1,d2,…> refix=<f1,f2,…> applied_as=spec:<n>,regression:<n>,bug:<n>,risk:<n>,added:<n> declined_as=hypothetical:<n>,style:<n>,settled:<n>,reversal:<n>,beyond:<n>,late:<n> followups=<n> end=<clean|third-attempt|reversal|unfixable|prose|breaker> escaped_from=<n|none> escaped_as=<declined|missed|none> impl=<model> reviewer=<model> -->`
+  `<!-- gogogo:review v=2 pr=<n|none> kind=<code|prose|mixed> coverage=<precise|broad|exhaustive> rounds=<n> applied=<a1,a2,…> declined=<d1,d2,…> refix=<f1,f2,…> applied_as=spec:<n>,regression:<n>,bug:<n>,risk:<n>,added:<n> declined_as=hypothetical:<n>,style:<n>,settled:<n>,reversal:<n>,beyond:<n>,late:<n> followups=<n> end=<clean|third-attempt|reversal|unfixable|prose|breaker> escaped_from=<n|none> escaped_as=<declined|missed|none> impl=<model> reviewer=<model> session=<id|unknown> t_branch=<YYYY-MM-DDTHH:MMZ|unknown> t_verified=<YYYY-MM-DDTHH:MMZ|unknown> -->`
   - `pr` is the pull request the change went through, or `none` when there
     is none yet. `coverage` is round 1's.
   - `applied`, `declined` and `refix` have one number per round, in order.
@@ -441,6 +441,20 @@ Comment in the reporter's language, not the codebase's:
     does not. Otherwise both are `none`.
   - `impl` and `reviewer` are the model that made the change and the model
     that reviewed it, as the agent's tool names them, or `unknown`.
+  - `session` is the id of the agent session that made the change, as
+    `## Claude-specific` says, or `unknown` when it cannot be read. It is
+    never made up.
+  - `t_branch` is when the issue's branch was created, UTC to the minute,
+    from git's reflog:
+    `TZ=UTC git reflog show --date=format-local:%Y-%m-%dT%H:%MZ --format='%gd %gs' <branch> | tail -1`.
+    It is the date inside `@{…}` when that line's text starts
+    `branch: Created from`, and `unknown` otherwise.
+  - `t_verified` is when the last rung of §6 passed: the output of
+    `date -u +%Y-%m-%dT%H:%MZ`, run at that moment and kept for the record. It
+    is `unknown` when verification did not finish (a stop before or during §6).
+  - The time the review ended is when the report was posted, and the merge
+    time is the PR's; neither is written in the record, and the record is
+    never edited after it is posted.
 - **How the tests were compared** (§6): how many test hunks were checked, and
   how many were `weaker`, `licensed` and restored, or "tests not checked" and
   why. End the comment with this record on its own line, after the review
@@ -480,7 +494,8 @@ and no further. Take the first case that fits:
   the work sits on a branch or PR. The §7 report's first line is
   `**Needs you:**` and one sentence saying what the person must do, followed
   by the branch or PR link: for example, read commit `<sha>` and merge; decide
-  `<question>`; read the attempts and re-spec or requeue. When nothing is
+  `<question>`; read the attempts and re-spec or requeue. Directly under that
+  line goes the stop marker (below). When nothing is
   committed (this skill commits only when asked, §4), ask the person whether
   to commit and push the work first, so the card links to something; if they
   decline, say "in the working tree of <path>";
@@ -489,6 +504,24 @@ and no further. Take the first case that fits:
   missing → `tracker.columns.in_progress`;
 - merged → the first of the profile's `stages`, and only after the merge is
   verified (`verify_merged.py`, below).
+
+**The stop marker.** Every hand-back to `tracker.columns.needs_human` carries
+one, on its own line directly under the `**Needs you:**` line, and no other
+report does (the reopen line below is not a stop):
+
+`<!-- gogogo:stop v=1 reason=<hard-stop|decision|spec|review|tests|mutation|verify|gate|ci> -->`
+
+| reason | when |
+|---|---|
+| `hard-stop` | a Hard Stop found mid-change with no Approvals row (§4) |
+| `decision` | a decision that belongs to a person and is not in the body (§4) |
+| `spec` | the spec check stopped (§5: two parts of the spec disagree, a difference that is not small, a piece that could not be built, or items left after the third reading) |
+| `review` | the review ended for a person (§5 rule 8; the record's `end` says which ending) |
+| `tests` | a weakened test the change could not pass without (§6, after the third restore attempt) |
+| `mutation` | mutation testing stopped (§6: a run that failed twice, or survivors left after the third run) |
+| `verify` | verification gave up (`/gogogo:auto-dev` §4's bound) |
+| `gate` | a gate that could not be made to pass (`/gogogo:auto-dev` §5) |
+| `ci` | the PR's checks failed or could not be read (`/gogogo:auto-dev` §6, *Judge*) |
 
 Nothing sweeps cards out of `tracker.columns.needs_human`, and no run takes an
 issue from there: a person moves it on once they have done what it asked, or
@@ -614,5 +647,7 @@ and integration follow this skill and the repo's merge path. See the profile's
   poll until it has finished.
 - In the record, `impl` is the session's model id; `reviewer` is
   `$CLAUDE_CODE_SUBAGENT_MODEL` when it is set, else the same as `impl`.
+- In the record, `session` is `$CLAUDE_CODE_SESSION_ID`, the variable
+  `require_unattended.sh` also reads, and `unknown` when it is unset.
 - Browser checks use the `claude-in-chrome` tools; load the ones you need in one
   `ToolSearch` call.
