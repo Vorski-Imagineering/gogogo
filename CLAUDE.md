@@ -44,5 +44,6 @@ that looks for a sentence breaks on every rewording and guards nothing.
 
 ## Commits
 
-Small commits, pushed to `main` for docs and evidence. Anything under a Hard
-Stop goes through a PR.
+Small commits. Docs and evidence go through a PR like everything else: `main`
+requires the `tests` check and nobody can bypass it. Anything under a Hard Stop
+needs approval first.
