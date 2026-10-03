@@ -393,7 +393,7 @@ order, checking each step before starting the next:
    check nobody changed the issue since it started:
    `gh issue view <N> --repo <tracker.issues_repo> --json body,labels > <scratch>/issue-<N>-now.json`,
    then write its body, from that same read, to `<scratch>/issue-<N>-original.md`
-   (`jq -r .body <scratch>/issue-<N>-now.json > <scratch>/issue-<N>-original.md`).
+   (`python3 -c 'import json,sys; print(json.load(sys.stdin)["body"])' < <scratch>/issue-<N>-now.json > <scratch>/issue-<N>-original.md`).
    Confirm the file is non-empty (unless the issue body is empty). Then
    compare `body` and the set of label names with `issue-<N>-start.json`
    (*Before you write* § 0). Comments and `updatedAt` are not compared.
@@ -409,7 +409,10 @@ order, checking each step before starting the next:
        below the `---` is this run's. Go on to step 2. When step 7 then
        withholds the label and the other version left it on, remove it
        (`gh issue edit <N> --repo <tracker.issues_repo> --remove-label "<ready_marker>"`):
-       the label describes the spec now in the body. The final-report line
+       the label describes the spec now in the body. When the card is in
+       `tracker.queue` (where the other version's step 8 put it), leave it
+       and say so in the reply: a person moves it, since a run would take
+       it from there. The final-report line
        says *replaced a version posted meanwhile*, then the line steps 7 and 8
        would give it.
      - A decline, or no person to ask: as keep, and the line says *skipped:
