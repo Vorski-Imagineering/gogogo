@@ -3,8 +3,8 @@
 
 The skill is prose, so these pin what a reader of it depends on: the
 declined-question subsection and its four choices, the Posting step that
-offers to move the card, that every setting it names is one the checker
-knows, that the offer adds no profile requirement, and that no project's
+moves the card, that every setting it names is one the checker
+knows, that the move adds no profile requirement, and that no project's
 facts leak into it. Whether it behaves is a trigger run, not a phrase match.
 
     python3 -m unittest tests.test_spec_skill
@@ -74,7 +74,7 @@ class Skill(unittest.TestCase):
         self.assertRegex(text.split("---")[1], r"(?m)^name: spec$")
         self.assertIn('profile_check.py" --for spec --show', text)
 
-    def test_offer_step_in_posting(self):
+    def test_move_step_in_posting(self):
         posting = section(skill_text(), "## Posting")
         steps = {int(m.group(1)): i for i, line in enumerate(posting) if (m := re.match(r"(\d+)\. ", line))}
         self.assertIn(7, steps)
@@ -84,11 +84,28 @@ class Skill(unittest.TestCase):
         self.assertIn("ready_marker", seven)
         self.assertIn("move", eight)
         self.assertIn("`tracker.queue`", eight)
+        for name in ("`tracker.columns.in_progress`", "`tracker.columns.needs_human`", "`stages`", "--add-missing"):
+            self.assertIn(name, eight)
         for setting in ("tracker.tool", "tracker.queue", "tracker.ready_marker"):
             self.assertIn(setting, pc.FIELDS, setting)
-        named = set(re.findall(r"`(tracker\.[a-z_]+)`", skill_text()))
+        named = set(re.findall(r"`(tracker\.[a-z_]+(?:\.[a-z_]+)*)`", skill_text()))
         for setting in named:
             self.assertIn(setting, pc.FIELDS, setting)
+
+    def several_rules(self):
+        several = "\n".join(section(skill_text(), "## Several issues in one run"))
+        return re.findall(r"^(\d+)\. (.*?)(?=^\d+\. |\Z)", several, re.M | re.S)
+
+    def test_no_end_of_run_move_rule(self):
+        rules = self.several_rules()
+        self.assertEqual([int(n) for n, _ in rules], list(range(1, 8)))
+        self.assertFalse([n for n, text in rules if "tracker.queue" in text])
+
+    def test_rule_references_resolve(self):
+        count = len(self.several_rules())
+        refs = [int(n) for n in re.findall(r"\brule (\d+)\b", skill_text())]
+        self.assertTrue(refs)
+        self.assertFalse([n for n in refs if not 1 <= n <= count], refs)
 
     def test_profile_still_does_not_require_queue(self):
         settings, sections = pc.split_profile(COMPLETE)
@@ -115,7 +132,7 @@ class SeveralIssues(unittest.TestCase):
 
     def test_several_issues_rules(self):
         sub = "\n".join(section(skill_text(), RUN))
-        self.assertEqual([int(m) for m in re.findall(r"^(\d+)\. ", sub, re.M)], list(range(1, 9)))
+        self.assertEqual([int(m) for m in re.findall(r"^(\d+)\. ", sub, re.M)], list(range(1, 8)))
         for name in ("list --status", "--issues-only", "--open-only", "spec_lint.py", "tracker.ready_marker"):
             self.assertIn(name, sub)
         for setting in re.findall(r"`(tracker\.[a-z_.]+)`", sub):

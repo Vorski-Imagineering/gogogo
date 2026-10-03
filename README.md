@@ -52,8 +52,8 @@ repo first ([Adopting it in a repo](#adopting-it-in-a-repo), step 1).
    label). It asks before writing anything.
 2. **`/gogogo:spec`**: describe your idea, or give it an existing issue. It
    asks you questions until every decision is made, writes the spec into the
-   issue (filing one if there isn't one yet), marks it ready and offers to put
-   it in the `Dev Ready` column. Several issues, or a whole column, go in one
+   issue (filing one if there isn't one yet), marks it ready and moves its card
+   to the `Dev Ready` column (not when someone is already working on it). Several issues, or a whole column, go in one
    run, one issue at a time: `/gogogo:spec #12 #14` or
    `/gogogo:spec everything in New`.
 3. **`/gogogo:dev <issue>`**: builds that one issue end to end. It finds the

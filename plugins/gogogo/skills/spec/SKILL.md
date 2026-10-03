@@ -64,7 +64,7 @@ Every tracker command targets `tracker.issues_repo`. When it differs from
    say the tracker has no columns to read, and ask for issue numbers. Say the
    list and its order in one line before starting. An issue filed during the
    run, such as a split-off, is never added; it goes in the final report
-   (rule 8).
+   (rule 7).
 3. **Skip before starting an issue**, and record why: it is closed (its
    `state` is anything but `OPEN`); it is a pull request (`gh issue view <n>
    --json state,url` answers for one too, and its `url` contains `/pull/`);
@@ -78,7 +78,7 @@ Every tracker command targets `tracker.issues_repo`. When it differs from
    exits 0 with a last line `label: apply`. Any other result means it is
    specced like any other issue.
 4. **One issue at a time.** Each issue goes through this whole skill: *Before
-   you write*, the question rounds, and Posting steps 0 to 7. Only then does
+   you write*, the question rounds, and Posting steps 0 to 8. Only then does
    the next issue start. Ask about one issue only in each question call, and
    name it in every question (`#<n>: …`).
 5. **Research one issue ahead.** When an issue starts, run rule 3 on the
@@ -97,17 +97,15 @@ Every tracker command targets `tracker.issues_repo`. When it differs from
    issue. Record the question left open, and go on to the next issue. When the
    question tool errors (no person to ask), stop the whole run and report
    every issue not reached.
-7. **Card moves come once, at the end.** Posting step 8 is not run per issue.
-   After the last issue, apply step 8's conditions to every issue labelled in
-   this run. Read each card's column, then ask **one** question listing every
-   card not already in `tracker.queue` with its current column: move them all,
-   or none. On yes, move each one and report each result as step 8.3 says. On
-   no or a decline, say which column each stays in.
-8. **The final report** has one line per issue in the list: *specced and
+7. **The final report** has one line per issue in the list: *specced and
    labelled*; *posted without the label* (naming Posting step 7's withholding
    case); *left open* (with the question); *skipped* (closed, a pull request,
-   or already ready); or *not reached* (with why the run stopped). Then each
-   issue filed during the run, with `/gogogo:spec <n>`.
+   or already ready); or *not reached* (with why the run stopped). Each
+   *specced and labelled* line ends with its card's result from Posting step
+   8: moved, already there, left in `<column>`, closed, no card, could not
+   be read, the move failed, or step 8 skipped (and which of its conditions
+   was not met).
+   Then each issue filed during the run, with `/gogogo:spec <n>`.
 
 ## The issue body IS these sections, in this order
 
@@ -425,25 +423,34 @@ order, checking each step before starting the next:
 
    A spec that stops at a gate is still worth posting; it just is not ready
    until the gate is cleared.
-8. **Offer to move the card to the queue.** In a run of several issues, this
-   step runs once, after the last issue (§ *Several issues in one run*,
-   rule 7). Only when step 7 applied the label,
-   the profile has both `tracker.tool` and `tracker.queue`, and
-   `tracker.queue` is one of the board's columns (`<tracker.tool> fields
-   --check` lists them); otherwise skip this
-   step without a word.
-   1. Read the card's column: `<tracker.tool> show <N>` (for `shared`,
+8. **Move the card to the queue.** Only when step 7 applied the label, the
+   profile has both `tracker.tool` and `tracker.queue`, and `tracker.queue` is
+   one of the board's columns (`<tracker.tool> fields --check` lists them);
+   otherwise skip this step without a word. In a run of several issues
+   (§ *Several issues in one run*) it runs per issue, right after that
+   issue's step 7. In order:
+   1. Read the card: `<tracker.tool> show <N>` (for `shared`,
       `python3 "${CLAUDE_PLUGIN_ROOT}/scripts/tracker.py" show <N>`, and the
-      same command for `move` below). When it is already in `tracker.queue`,
-      skip. When the issue has no card on the board, say so and skip.
-   2. Otherwise ask the user whether to move the card from its current column
-      to `tracker.queue`, naming both columns.
-   3. On yes: `<tracker.tool> move <N> --to "<tracker.queue>"`, and report the
-      result. Only its zero exit counts as moved; on any other exit, say it
-      failed and leave the card where it is.
-   4. On no, a decline, or when no one can answer: do not move it, and say
-      which column the card stays in. The four-choice menu for a declined
-      question is not used here.
+      same for `move` below). Run it as this step's first command,
+      immediately before the move, never reusing an earlier read. When it
+      exits non-zero, do not move the card: say the card could not be read,
+      give its message, and stop this step.
+   2. When the issue is closed: do not move it; say so.
+   3. When the card is already in `tracker.queue`: nothing to do; say so.
+   4. When the card is in `tracker.columns.in_progress`,
+      `tracker.columns.needs_human`, or any `stages` entry's `column`: do not
+      move it. Say which column it is in and that it was left there, because
+      someone may be working on it or it has shipped. A setting the profile
+      lacks names no column.
+   5. When the issue has no card: for `tracker.tool` `shared`, run
+      `move <N> --to "<tracker.queue>" --add-missing`. For any other tool, say
+      the issue has no card on the board and leave it.
+   6. Otherwise: `move <N> --to "<tracker.queue>"`.
+   7. Report the result. Only a zero exit counts as moved. On any other exit,
+      say the move failed, give its message, and leave the card. The label
+      stays: it describes the spec, not the card.
+
+   Nothing in this step asks the user anything.
 
 Which report to keep:
 
@@ -491,9 +498,8 @@ Then read `## Verify by hand` as the reporter, who has no technical context:
 Then as the tracker:
 
 9. Is the spec in the issue **body**?
-10. Does the issue carry the ready label, and was the move to the queue
-    offered, skipped for a reason Posting step 8 names, or deferred to the end
-    of a run of several issues? Or did I say which withholding case applies?
+10. Does the issue carry the ready label, and did Posting step 8 move the
+    card or say why it did not? Or did I say which withholding case applies?
 
 Any "no" is a rewrite.
 
