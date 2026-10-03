@@ -704,18 +704,29 @@ def previous_tag(tag: str, glob: str) -> str | None:
     return proc.stdout.strip() or None
 
 
-def shipped(tag: str, prev: str, known: dict[str, str]) -> Shipped:
+def shipped(tag: str, prev: str, known: dict[str, str], issues_repo: str = "") -> Shipped:
     """The issues whose commits are in `prev..tag`, first-merged first.
 
+    A commit links to an issue by its `Ships-issue` trailer or, given
+    `issues_repo`, by `Refs #<n>` / `Refs <owner>/<repo>#<n>` in its subject,
+    read as `reverts` reads them; an issue named both ways counts once.
     Commits with no link are counted, not dropped: a short list that silently
     omits unlinked work reads as the whole release.
     """
+    rev_range = f"{prev}..{tag}"
+    refs: dict[str, list[IssueLink]] = {}
+    if issues_repo:
+        for sha, subject, _ in log_records(rev_range):
+            for match in _REFS.finditer(subject):
+                repo = f"{match['owner']}/{match['name']}" if match["owner"] else issues_repo
+                refs.setdefault(sha, []).append(IssueLink(repo, int(match["number"])))
     seen: dict[tuple[str, int], IssueLink] = {}
     unlinked = 0
-    for commit in commits_with_trailers(f"{prev}..{tag}", known):
-        if not commit.links:
+    for commit in commits_with_trailers(rev_range, known):
+        links = commit.links + refs.get(commit.sha, [])
+        if not links:
             unlinked += 1
-        for link in commit.links:
+        for link in links:
             seen.setdefault(link.key, link)
     return Shipped(list(seen.values()), unlinked)
 
@@ -779,7 +790,7 @@ def cmd_shipped(args: argparse.Namespace, profile: Profile) -> int:
         print(f"Deployed {args.tag} to {environment}\n\n"
               f"first tag matching {stage['tag']}; nothing to compare with")
         return 0
-    result = shipped(args.tag, prev, profile.known)
+    result = shipped(args.tag, prev, profile.known, profile.issues_repo)
     titles = fetch_titles(result.links) if args.titles else None
     sys.stdout.write(render_shipped(args.tag, environment, result, titles))
     return 0

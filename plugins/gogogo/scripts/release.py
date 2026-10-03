@@ -106,7 +106,7 @@ def body(name: str, sha: str, profile: stage_sync.Profile, titles: bool) -> str:
     prev = previous(name, sha)
     if prev is None:
         return FIRST + "\n"
-    result = stage_sync.shipped(sha, prev, profile.known)
+    result = stage_sync.shipped(sha, prev, profile.known, profile.issues_repo)
     names = stage_sync.fetch_titles(result.links) if titles else None
     return stage_sync.render_shipped(name, production(profile), result, names)
 

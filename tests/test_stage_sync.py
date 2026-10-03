@@ -863,6 +863,18 @@ class ShippedInGit(RepoTestCase):
         self.assertEqual([link.key for link in result.links], [("acme/issues", 1)])
         self.assertEqual(result.unlinked_commits, 1)
 
+    def test_refs_in_a_subject_link_a_commit_once(self):
+        self.repo.commit("base")
+        self.repo.tag("deploy-A")
+        self.repo.commit("fix: x (Refs #12)")
+        self.repo.commit("fix: y (Refs #12)\n\n" + ss.format_trailer(ss.IssueLink("acme/issues", 12)))
+        self.repo.commit("feat: z (Refs acme/other#3)")
+        self.repo.commit("a commit with no link")
+        self.repo.tag("deploy-B")
+        result = ss.shipped("deploy-B", "deploy-A", KNOWN, issues_repo="acme/issues")
+        self.assertEqual([link.key for link in result.links], [("acme/issues", 12), ("acme/other", 3)])
+        self.assertEqual(result.unlinked_commits, 1)
+
     def test_previous_tag_skips_other_tags(self):
         self.repo.commit("one")
         self.repo.tag("deploy-1")
