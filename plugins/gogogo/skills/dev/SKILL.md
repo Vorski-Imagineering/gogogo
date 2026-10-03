@@ -378,8 +378,8 @@ Comment in the reporter's language, not the codebase's:
   why, and any *Verify by hand* step that now reads differently, written out
   as it now reads (or "Differs from the spec: nothing."); each `outside` file
   kept, with the item it serves; each `na` item with its reason. A stop names
-  the items left. Put this record on its own line just before the review
-  record, with no spaces inside a value:
+  the items left. Put this record on its own line before the review record
+  and before any mutation record, with no spaces inside a value:
   `<!-- gogogo:spec-check v=1 items=<n> met=<n> missing=<n> differs=<n> na=<n> outside=<n> runs=<n> fixed=<n> declared=<n> reader=<fresh|self|none> end=<clean|declared|stopped|nospec> -->`
   - `items`, `met`, `missing`, `differs`, `na` and `outside` are the first
     valid `spec-check:` line `verify` printed. `items` is the sum of the four
