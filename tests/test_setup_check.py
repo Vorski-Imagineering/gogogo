@@ -658,6 +658,19 @@ class Audit(unittest.TestCase):
         with mock.patch.object(sc, "run", self._gh(calls, checks=(("tests", "pass"), ("lint", "fail")))):
             self.assertEqual(sc.check_names("o/code", "main"), ["tests"])
 
+    def test_a_refused_rules_read_warns_with_githubs_reason(self):
+        def fake_run(*cmd, cwd=None):
+            if "/rules/branches/" in " ".join(cmd):
+                return subprocess.CompletedProcess(cmd, 1, '{"message":"Upgrade to GitHub Pro","status":"403"}',
+                                                   "gh: Upgrade to GitHub Pro (HTTP 403)")
+            return self._gh([])(*cmd, cwd=cwd)
+        rep = sc.Report()
+        settings = {"integration": {"strategy": "pr-squash", "base": "main"}}
+        with mock.patch.object(sc, "run", fake_run):
+            sc.check_branches("o/code", settings, "main", rep)
+        self.assertEqual([r["level"] for r in rep.rows], ["WARN"])
+        self.assertIn("Upgrade to GitHub Pro", rep.rows[0]["detail"])
+
     def test_ruleset_for_a_branch_the_profile_does_not_give_exits_2(self):
         calls = []
         settings = {"tracker": {"code_repo": "o/code"}, "integration": {"strategy": "pr-squash", "base": "main"}}

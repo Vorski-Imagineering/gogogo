@@ -313,13 +313,17 @@ def check_branch_rules(repo, branch, rules, classic, checks, wants_check, needs_
         rep.warn(check, f"{detail} -> {level_fix}")
 
 
-def _gh_json(*args):
+def _gh_json(*args, json_on_failure=False):
+    """(parsed stdout, None) or (None, gh's error line). A failed call is an
+    error even when GitHub printed its error as JSON, except where the caller
+    says a non-zero exit can carry real output (`gh pr checks` exits non-zero
+    when a check failed)."""
     out = run("gh", *args)
     try:
         value = json.loads(out.stdout) if out.stdout.strip() else None
     except json.JSONDecodeError:
         value = None
-    if out.returncode != 0 and value is None:
+    if out.returncode != 0 and (value is None or not json_on_failure):
         return None, (out.stderr.strip().splitlines() or [f"gh exited {out.returncode}"])[0]
     if value is None:
         return None, "gh printed nothing readable"
@@ -334,7 +338,8 @@ def check_names(repo, branch):
         return error
     if not prs:
         return []
-    checks, error = _gh_json("pr", "checks", str(prs[0]["number"]), "--repo", repo, "--json", "name,bucket")
+    checks, error = _gh_json("pr", "checks", str(prs[0]["number"]), "--repo", repo, "--json", "name,bucket",
+                             json_on_failure=True)
     if error:
         return error
     return [c["name"] for c in checks if c.get("bucket") == "pass"]
