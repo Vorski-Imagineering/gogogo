@@ -88,7 +88,15 @@ means finished work sits unverified while you go and ask.
    ```
    List what it prints at the top of the run report. Never delete, merge or
    rebase any of it.
-10. **The profile's `preflight.extra`**, each as it says. A check that says
+10. **Shipped fixes since reverted**, when the profile has `stages` and
+   `tracker.tool` is `shared`:
+   ```bash
+   python3 "${CLAUDE_PLUGIN_ROOT}/scripts/stage_sync.py" --profile <profile> reverts --apply
+   ```
+   Each card it names gets a comment with a `reverted` stop marker and goes to
+   `tracker.columns.needs_human`. Put its lines at the top of the run report.
+   Exit 2: put its last line there and go on; it never stops the run.
+11. **The profile's `preflight.extra`**, each as it says. A check that says
    "report only" is reported and never acted on.
 
 ## 1. Select the queue
@@ -396,8 +404,8 @@ In a run that tried to send *run started*, first send *run closed* (§8). Then
 one report, opening with the notify line preflight item 7 put there, if any:
 every issue taken with its outcome and merge commit (and *label added by
 the run* for each one §2 labelled), every issue skipped with the reason, anything left half-done with its branch, every card
-moved to `tracker.columns.needs_human` with its Needs-you line, the stranded
-work from preflight, anything the profile's `stop.extra` checks raised, and
+moved to `tracker.columns.needs_human` with its Needs-you line, the reverted
+fixes and the stranded work from preflight, anything the profile's `stop.extra` checks raised, and
 the `notify failed` lines §8 says are due.
 
 ## Stop the whole run and ask when

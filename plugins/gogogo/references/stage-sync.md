@@ -60,6 +60,7 @@ Co-Authored-By: Someone <someone@example.org>
 stage_sync.py [--profile FILE] trailer (--issue ISSUE ... | --branch NAME) [--verify] [--co-authors-from RANGE]
 stage_sync.py [--profile FILE] sync --tag TAG [--main-ref REF] [--dry-run]
 stage_sync.py [--profile FILE] shipped --tag TAG [--titles]
+stage_sync.py [--profile FILE] reverts [--main-ref REF] [--apply]
 ```
 
 `--profile` defaults to the nearest `.agents/dev-process.md`. Pass it
@@ -83,11 +84,24 @@ explicitly in CI.
 - **`shipped --tag T`** lists the issues linked from the commits between the
   previous tag matching the same glob and `T`, for a release notification.
   `--titles` looks the titles up with `gh`.
+- **`reverts`** reads each open issue card in any stage's column and names
+  each one a commit on `--main-ref` (default `origin/<integration.base>`)
+  reverts: a commit whose message says `This reverts commit <sha>` (at least
+  7 characters), as `git revert` and GitHub's Revert button write it, for a
+  commit linked to that issue by its `Ships-issue` trailer or by
+  `Refs #<n>` / `Refs <owner/repo>#<n>` in its subject. One line per hit:
+  `#<n>: shipped by <sha7>, reverted by <sha7> (<subject>)`. `--apply` then,
+  per issue, comments naming the revert with a `**Needs you:**` line and a
+  `<!-- gogogo:stop v=1 reason=reverted -->` marker, and moves the card to
+  `tracker.columns.needs_human`; a failed comment leaves that card unmoved,
+  and an issue whose newest comment already names that revert is left alone.
+  A hand-made revert without that line, and a rollback by redeploying an older
+  tag, are not detected.
 
 | Exit | Meaning |
 |---|---|
 | 0 | ok |
-| 1 | `sync`: every possible move was made, and something needs a look (a card with no linked commit, or a reporter that could not be assigned) |
+| 1 | `sync`: every possible move was made, and something needs a look (a card with no linked commit, or a reporter that could not be assigned); `reverts`: a shipped fix was reverted |
 | 2 | nothing trustworthy to act on (no such tag, no stage matches it, an unreadable board or profile), or a comment or move failed |
 | 3 | `trailer --verify`: every issue exists, but a reporter cannot be assigned. Retry without the login |
 
@@ -177,6 +191,15 @@ jobs:
           ARGS=(--profile .agents/dev-process.md sync --tag "$TAG" --main-ref origin/main)
           if [ "$DRY_RUN" = "true" ]; then ARGS+=(--dry-run); fi
           python3 <vendored folder>/stage_sync.py "${ARGS[@]}"
+      - name: Hand back the cards whose fix was reverted
+        env:
+          DRY_RUN: ${{ github.event.inputs.dry_run || 'false' }}
+          GH_TOKEN: ${{ secrets.STAGE_SYNC_TOKEN }}
+        run: |
+          ARGS=(--profile .agents/dev-process.md reverts --main-ref origin/main)
+          if [ "$DRY_RUN" != "true" ]; then ARGS+=(--apply); fi
+          # Exit 1 is "some were reverted", already handed back: not a failure.
+          python3 <vendored folder>/stage_sync.py "${ARGS[@]}" || [ $? -eq 1 ]
       - name: Tell a person what shipped
         if: ${{ github.event.inputs.dry_run != 'true' }}
         env:

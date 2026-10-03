@@ -68,7 +68,8 @@ in its place in the report, and the others still run.
    python3 "${CLAUDE_PLUGIN_ROOT}/scripts/tracker.py" list --json
    ```
    `fields` gives the column order; `list --json` gives the cards, each with
-   `number`, `title`, `state`, `repo`, `status` and `kind`. Only when a card
+   `number`, `title`, `state`, `repo`, `status`, `status_since` (when it
+   entered its column) and `kind`. Only when a card
    is an own-repo pull request (*Shape*), also read the board's URL:
    ```bash
    gh project view <tracker.project_number> --owner <tracker.project_owner> --format json -q .url
@@ -80,6 +81,14 @@ in its place in the report, and the others still run.
    An unreadable board is not an empty one. When `tracker.tool` is missing or
    names another tool, the BOARD block is one line:
    `BOARD  not shown: status reads the board only through the shared tracker (tracker.tool = "shared")`.
+   Then, only when `fields` and `list` both exited 0 and the profile has
+   `stages`, the shipped fixes since reverted (it reads; without `--apply` it
+   writes nothing):
+   ```bash
+   python3 "${CLAUDE_PLUGIN_ROOT}/scripts/stage_sync.py" reverts
+   ```
+   Exit 1: its lines are the REVERTED block. Exit 0: no block. Exit 2:
+   `REVERTED  unreadable: stage_sync.py exited 2: <its last stderr line>`.
 3. **Pull requests.**
    ```bash
    gh pr list --repo <tracker.code_repo> --state open --json number,title,headRefName,isDraft --limit 100
@@ -108,7 +117,10 @@ These rules apply, in order.
 - **Listed columns.** Cards are listed, not just counted, only in
   `tracker.queue`, `tracker.columns.in_progress`, and each `stages[].column`,
   in that order, each once. A stage column carries its `stages[].environment`
-  in parentheses when the stage names one. Each list holds at most 10 cards,
+  in parentheses when the stage names one, and then, when any of its open
+  cards has a `status_since`, `, oldest <age>`: how long its oldest open card
+  has been in the column, as `<d> days`, `<h> hours` or `under an hour`
+  (`1 day`, `1 hour`). Each list holds at most 10 cards,
   in `list --json` order, then `+N more`. Every other column gets a count
   only.
 - **A card** reads `#<number> <title>`, the title cut to 70 characters. It is
@@ -126,6 +138,9 @@ These rules apply, in order.
   `…/projects/<n>/workflows`. When that read fails, the line names
   `the board's ⋯ → Workflows` instead.
   No line when there are none.
+- **REVERTED** follows the BOARD block, one line per line `reverts` printed,
+  as it printed it, against the base as last fetched. It is left out when
+  `reverts` found none, and when the board was not read.
 - **A pull request** reads `#<n> <headRefName>`, then ` → <issue>` when the
   branch name carries an issue number (next rule), then ` (draft)` if it is
   one. At most 10, then `+N more`, or `none`.
@@ -161,8 +176,11 @@ BOARD  <n> cards
   <column> <count> · <column> <count> · … · no status <count>
   <queue column>:  <card> · <card> · …
   <in-progress column>:  <card> · …
-  <stage column> (<environment>):  <card> · …
+  <stage column> (<environment>), oldest <age>:  <card> · …
   <N> pull-request card(s) on the board: set Auto-add to project's filter to is:issue is:open at <workflows URL>; /gogogo:setup archives them.
+
+REVERTED
+  #<n>: shipped by <sha7>, reverted by <sha7> (<subject>)
 
 CODE
   Pull requests:  <pr> · <pr> · …
