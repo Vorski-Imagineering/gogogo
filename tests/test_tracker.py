@@ -223,8 +223,14 @@ class NeedsHumanGuardTests(unittest.TestCase):
         self.assertEqual(wrote.call_args.kwargs["option"], "hhh")
 
     def test_a_failed_comment_read_writes_nothing(self):
-        with self.assertRaises(board.BoardError):
-            self._move("needs_human", board.BoardError("partial data"))
+        with mock.patch.object(board, "board_meta", return_value=self.META), \
+             mock.patch.object(board, "issue_card") as read, \
+             mock.patch.object(board, "graphql") as wrote, \
+             mock.patch.object(board, "newest_comment", side_effect=board.BoardError("partial data")):
+            with self.assertRaises(board.BoardError):
+                board.move_card(7, board.DEFAULT_REPO, "needs_human")
+        wrote.assert_not_called()
+        read.assert_not_called()
 
     def test_other_columns_never_read_the_comment(self):
         code, _, _, asked, _ = self._move("in_progress", AssertionError("read"), status_after="In progress")
