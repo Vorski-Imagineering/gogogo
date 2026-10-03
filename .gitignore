@@ -7,6 +7,7 @@ __pycache__/
 !.env.example
 *.pem
 *.key
+.claude/gogogo/
 
 # per-machine Claude Code settings (may hold tokens or local paths)
 .claude/settings.local.json

@@ -18,17 +18,20 @@ repo-relative paths with `fnmatch`, so `*` also matches `/`. When no lane has
 `list` diffs the merge base of REF and HEAD against the working tree, with
 rename detection, and prints one item per test hunk: `H<k>  deleted  <path>`
 for a test file deleted since the base, or `H<k>  changed  <path>:<old line>
-<function context>` for any other hunk in a test file that existed at the base,
-followed by its `-` and `+` lines. A pure rename and a file new since the base
-list nothing. The last line is `test-guard: hunks=<n>`.
+<enclosing>` for any other hunk in a test file that existed at the base,
+followed by its `-` and `+` lines. `<enclosing>` is the innermost enclosing
+line of the file at the base (the test's own `def`, in most languages), or
+git's function context when there is none. A pure rename and a file new since
+the base list nothing. The last line is `test-guard: hunks=<n>`.
 
 `verify` reads ANSWERS_FILE, one line per item, `H<k><TAB><same|stronger|
 weaker><TAB><reason>`, and the issue body in BODY_FILE. A `weaker` item is
 licensed when a line of the body's `## Test cases` or `## Design` holds a
 backticked token and says "remove" or "rewrit": a token `path` licenses every
-item in that test file, and `path::name` the hunks whose function context or
-removed lines contain `name`. It prints each `weaker` item as `licensed` or
-`NOT LICENSED`, then `test-guard: hunks=<n> same=<n> stronger=<n> weaker=<n>
+item in that test file, and `path::name` the hunks whose enclosing lines,
+function context or removed lines contain `name` as a whole word; `name` may
+hold further `::`-separated parts, each of which must occur. It prints each
+`weaker` item as `licensed` or `NOT LICENSED`, then `test-guard: hunks=<n> same=<n> stronger=<n> weaker=<n>
 licensed=<n> unlicensed=<n>`.
 
 `/gogogo:dev` §6 runs this once every lane is green. It only reads git and
@@ -108,6 +111,41 @@ def _hunks(fork: str, paths: list[str]) -> list[dict]:
     return hunks
 
 
+def _indent(text: str) -> int:
+    return len(text) - len(text.lstrip())
+
+
+def enclosing(old_lines: list[str], line: int, content_indent: int) -> list[str]:
+    """The lines enclosing a hunk in the file at the base, innermost first: walking up
+    from `line`, each non-blank line less indented than the hunk's content and than
+    every line already taken, up to one at indentation 0."""
+    found, limit = [], content_indent
+    for text in reversed(old_lines[:max(line, 0)]):
+        if not text.strip():
+            continue
+        if _indent(text) < limit:
+            found.append(text.strip())
+            limit = _indent(text)
+            if limit == 0:
+                break
+    return found
+
+
+def _content_indent(hunk: dict) -> int:
+    """The least indentation among the hunk's non-blank lines, so a hunk that runs
+    into the next definition is not taken as inside the one it starts in."""
+    return min((_indent(t) for t in hunk["minus"] + hunk["plus"] if t.strip()), default=0)
+
+
+def _base_lines(fork: str, path: str) -> list[str]:
+    """The file at the base, split on newlines only, as git numbers its lines."""
+    out = subprocess.run(["git", "show", f"{fork}:{path}"], capture_output=True)
+    if out.returncode != 0:
+        err = out.stderr.decode("utf-8", "replace").strip().splitlines()
+        raise GitError((err or [f"git exited {out.returncode}"])[0])
+    return out.stdout.decode("utf-8").split("\n")
+
+
 def items(base: str, globs: list[str]) -> list[dict]:
     fork = _git(["merge-base", base, "HEAD"]).strip()
     tracked = set(_git(["ls-files", "-z"]).split("\0"))
@@ -131,12 +169,16 @@ def items(base: str, globs: list[str]) -> list[dict]:
         if status[0] == "A" or status[0] == "C":
             continue  # new since the base: it cannot weaken anything
         if status[0] == "D":
-            found.append({"kind": "deleted", "path": old, "line": None, "context": "", "minus": [], "plus": []})
+            found.append({"kind": "deleted", "path": old, "line": None, "context": "", "enclosing": [],
+                          "minus": [], "plus": []})
             continue
         if status == "R100":
             continue
         renamed_from = old if status[0] == "R" else None
-        for hunk in _hunks(fork, [old, new] if renamed_from else [new]):
+        hunks = _hunks(fork, [old, new] if renamed_from else [new])
+        old_lines = _base_lines(fork, old) if hunks else []
+        for hunk in hunks:
+            hunk["enclosing"] = enclosing(old_lines, hunk["line"], _content_indent(hunk))
             found.append({"kind": "changed", "path": new, "renamed_from": renamed_from, **hunk})
     for k, item in enumerate(found, 1):
         item["id"] = f"H{k}"
@@ -146,7 +188,8 @@ def items(base: str, globs: list[str]) -> list[dict]:
 def describe(item: dict) -> str:
     if item["kind"] == "deleted":
         return f"{item['id']}  deleted  {item['path']}"
-    text = f"{item['id']}  changed  {item['path']}:{item['line']}  {item['context'] or '-'}"
+    shown = item["enclosing"][0] if item["enclosing"] else item["context"] or "-"
+    text = f"{item['id']}  changed  {item['path']}:{item['line']}  {shown}"
     if item.get("renamed_from"):
         text += f"  (renamed from {item['renamed_from']})"
     return text
@@ -168,12 +211,18 @@ def _same_file(path: str, named: str) -> bool:
     return path == named or path.endswith("/" + named)
 
 
+def _has_word(text: str, word: str) -> bool:
+    return re.search(rf"(?<![A-Za-z0-9_]){re.escape(word)}(?![A-Za-z0-9_])", text) is not None
+
+
 def licensed(item: dict, tokens: list[str]) -> bool:
     for token in tokens:
         if "::" in token:
-            named, name = token.split("::", 1)
-            if item["kind"] == "changed" and _same_file(item["path"], named) and name and (
-                    name in item["context"] or any(name in m for m in item["minus"])):
+            named, rest = token.split("::", 1)
+            segments = [part for part in rest.split("::") if part]
+            texts = [item["context"], *item["enclosing"], *item["minus"]]
+            if item["kind"] == "changed" and _same_file(item["path"], named) and segments and all(
+                    any(_has_word(t, part) for t in texts) for part in segments):
                 return True
         elif _same_file(item["path"], token):
             return True

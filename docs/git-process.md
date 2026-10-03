@@ -46,11 +46,22 @@ A branch cut from a stale base silently reverts the previous issue's work when
 it is squashed back. `--ff-only` refuses a base that has diverged rather than
 merging into it.
 
+**Unless the issue already has work.** Before cutting a branch,
+`issue_work.py <n>` looks for an open pull request that references the issue,
+a local or `origin` branch named for it that is ahead of the base, and the
+branch its stop-marker comment names. With exactly one, the skills continue on
+it instead, updated with `git merge origin/<base>` (never a rebase or a force
+push), and reuse its pull request. `/gogogo:dev` asks first; `/gogogo:auto-dev`
+continues without asking, and skips an issue with two or more candidates or a
+pull request from a fork.
+
 **The name carries the issue number**: `fix/<n>-<slug>`, for a bug or a
 feature alike. The number is what ties the branch back to the tracker:
 
-- `stranded_work.py` reports a branch or worktree that is ahead of the base,
-  holds work on no remote or sits in a worktree, and names no open issue;
+- `stranded_work.py` reports a branch or worktree, local or on `origin`, that
+  is ahead of `origin`'s base and names no open issue, or names an open issue
+  but has no open pull request and no stop marker naming it (a local branch
+  only when it holds work on no remote or sits in a worktree);
 - `/gogogo:status` links each branch to its issue by that number;
 - `stage_sync.py trailer --branch fix/<n>-<slug>` reads the issue from it.
 
@@ -277,3 +288,7 @@ gogogo runs its own process, with `pr-squash` onto `main`
   ```bash
   git fetch origin && git worktree add -b fix/<n>-<slug> <path> origin/main
   ```
+  or, for an issue that already has a branch, a worktree of that branch
+  (`git worktree add <path> <branch>`, or
+  `git worktree add --track -b <branch> <path> origin/<branch>` when it is
+  only on `origin`).

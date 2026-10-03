@@ -23,6 +23,11 @@ checks that read (not the ones that need a browser or bypass mode), run §1 and
 reason, citing the Approvals row or the missing decision. A card without the
 ready label whose spec passed the lint (§1) is `take (no ready label; spec lint
 passed; the label would be added)`; one that failed is `skip` with §1's reason.
+For each issue taken, also run §3's `issue_work.py` (after `git fetch origin`)
+and report the outcome §3 would take: `continue on <branch>` (with its PR, if
+any), or §3's skip reason.
+Per issue, name each comment `/gogogo:dev` §2 would fold in or stop on, with
+its link; triage-only folds nothing.
 Create no branch, move no card, add no label, post nothing, send no message.
 
 ## Before anything: preflight
@@ -32,6 +37,8 @@ Read the profile first, as `/gogogo:dev` does:
 ```bash
 python3 "${CLAUDE_PLUGIN_ROOT}/scripts/profile_check.py" --for auto-dev --show
 ```
+
+Any `warning:` line the check printed goes, verbatim, at the top of your report to the person; if it printed none, the report says so.
 
 `<tracker.tool>` below means the profile's `tracker.tool`; when that is
 `shared`, it is `python3 "${CLAUDE_PLUGIN_ROOT}/scripts/tracker.py"`.
@@ -137,13 +144,17 @@ python3 "${CLAUDE_PLUGIN_ROOT}/scripts/spec_lint.py" <scratch>/issue-<n>-body.md
 
 ## 2. Triage each issue before touching it
 
-Per `/gogogo:dev` §2. An issue is workable here only if every decision it
-depends on was made by a person, or listed under *Decided without asking*, and
-is **in the body**. Skip and record, never guess, when it has an open decision
-of a kind the profile's `independence` asks about (§ *Who decides* in
-`/gogogo:spec`), not answered in the body, a Hard Stop no Approvals row names,
-or a two-licence change whose apply row is missing (that one is buildable:
-build and test it, then stop that issue before applying).
+Per `/gogogo:dev` §2. That includes folding in comments (§2 *Fold in comments
+the description does not hold yet*), after `/gogogo:dev` §1's two reads; an
+issue whose answer sits in such a comment is taken, not skipped. Here a fold
+that stops the issue is a skip: reason `decision`, or `lint` when the folded
+body fails the lint. An issue is workable here only if every
+decision it depends on was made by a person, or listed under *Decided without
+asking*, and is **in the body**, once folded in. Skip and record, never guess,
+when it has an open decision of a kind the profile's `independence` asks about
+(§ *Who decides* in `/gogogo:spec`), not answered in the body, a Hard Stop no
+Approvals row names, or a two-licence change whose apply row is missing (that
+one is buildable: build and test it, then stop that issue before applying).
 
 **Hand back a skip.** Every skip from §1's lint and from this section, outside
 triage-only mode, once per issue per run: a later pass that reads the issue
@@ -163,7 +174,7 @@ apply row is missing, which is built and then stopped (§4), not skipped:
 
    | reason | when |
    |---|---|
-   | `lint` | no ready label, and `spec_lint.py` failed or withheld it (§1) |
+   | `lint` | no ready label, and `spec_lint.py` failed or withheld it (§1); or a body §2 folded comments into failed it |
    | `nospec` | a feature with no analysis pass (`/gogogo:dev` §2) |
    | `decision` | an open decision of a kind the level asks about, not answered in the body |
    | `hard-stop` | a Hard Stop no Approvals row names |
@@ -193,8 +204,52 @@ by the run* for §8 and §9.
 
 ## 3. Branch from a fresh base
 
+First look for the issue's earlier work, from a fresh base:
+
 ```bash
 git switch <integration.base> && git pull --ff-only
+python3 "${CLAUDE_PLUGIN_ROOT}/scripts/issue_work.py" <issue-number>
+```
+
+`issue_work.py` (after `git fetch origin`, which the pull does) says whether
+the issue already has work:
+
+- Exit 0: take the card and branch, below.
+- Exactly one `candidate:` line and no `fork PR` line: take the card, below,
+  then **continue on it**, without asking. Check it out (`git switch <branch>`,
+  or `git switch --track origin/<branch>` when it is only on `origin`), then
+  `git merge origin/<integration.base>`, never a rebase or a force push.
+  Resolve a conflict as a code change. Push to that branch, and merge its
+  open PR when it has one rather than opening another. The whole process
+  (spec check, review, tests compared, mutation, verify, gates, merge) runs
+  on the updated branch, and the run report and the issue's report name the
+  branch continued and its PR. A conflict you cannot resolve: hand the card
+  back to `tracker.columns.needs_human` as `/gogogo:dev` §8 says, stop
+  reason `gate`, the Needs-you line naming the conflicting files.
+- Two or more `candidate:` lines, or any `fork PR` line: **skip** the issue
+  with the reason `earlier work: <each line, joined by "; ">`, and leave its
+  card where it is. Never build a competing version of a contributor's PR.
+- Exit 2: **skip** with the reason `could not check for earlier work: <the reason>`.
+
+Then take the card, before any branch exists, so anyone glancing at the board
+sees which issue is live and a card another session took since §1 read the
+queue is not taken twice:
+
+```bash
+<tracker.tool> move <n> --from "<tracker.queue>" --to in_progress
+```
+
+- Exit 3: another session took the issue meanwhile. **Skip** it with
+  `taken meanwhile: the card is in <column>` (the column the refusal names),
+  create no branch, and leave the card where it is: this skip is not handed
+  back (§2), and the card in `tracker.columns.in_progress` is the other
+  session's take, never this run's. It is not taken again in this run (§4).
+- Any other non-zero exit: **skip** the issue with `could not move the
+  card: <its message>`, leave the card where it is, and go on.
+
+Then branch, unless you continue on earlier work:
+
+```bash
 git switch -c fix/<issue-number>-<short-slug>
 ```
 
@@ -202,8 +257,9 @@ Always from a fresh base: the previous iteration merged into it, and branching
 from a stale one silently reverts that work in the squash. The branch name
 carries the issue number, so the work is never stranded.
 
-Then move the card to `tracker.columns.in_progress`, before the change starts,
-so anyone glancing at the board sees which issue is live.
+When branching, or checking out the earlier work, fails, first put the card back with
+`<tracker.tool> move <n> --from in_progress --to "<tracker.queue>"`, then
+**skip** the issue with `could not branch: <its message>` and go on.
 
 Push the branch as soon as it has its first commit (`git push -u origin
 <branch>`), so the work survives a run that dies.
@@ -213,8 +269,8 @@ Push the branch as soon as it has its first commit (`git push -u origin
 `/gogogo:dev` §3–6, with these differences because nobody is watching:
 
 - **Every rung in `verify.rungs` is mandatory** for every issue.
-- The regression test must be seen failing, then the whole suite green. Record
-  how many new tests went red.
+- The regression test must be seen failing, then the whole suite green (by
+  exit status, `/gogogo:dev` §6). Record how many new tests went red.
 - **Mutation testing** as `/gogogo:dev` §6 says, for every lane with a `mutate`
   command, to its end, in the foreground or polled. When it stops the issue (a
   run that failed twice, or survivors left after the third run): commit
@@ -277,8 +333,9 @@ Push the branch as soon as it has its first commit (`git push -u origin
 ## 5. Gates
 
 Run the profile's `gates.always`, and each `gates.when` entry whose pattern the
-change touches, before merging. A gate failure is a finding: fix it rather than
-raise a budget, or stop the issue and hand its card back to
+change touches, before merging. A gate passes on its exit status, read as
+`/gogogo:dev` §6 says, never on filtered output. A gate failure is a finding:
+fix it rather than raise a budget, or stop the issue and hand its card back to
 `tracker.columns.needs_human` as `/gogogo:dev` §8 says.
 
 ## 6. Merge, by the profile's integration strategy
@@ -436,7 +493,7 @@ each, `<repo>` being the name part of `tracker.code_repo`:
 - `<repo> #<n> started: <title>`;
 - after the issue's merge is verified: `<repo> #<n> merged (<short sha>) -> <column>`;
 - `<repo> #<n> needs you -> <tracker.columns.needs_human>: <the Needs-you line>`, for an issue taken and then stopped, never for a triage skip (its skip line says it);
-- *run closed*, from §9 only: `<repo> auto-dev: run closed: <a> merged, <b> need you, <c> skipped`, where `<b>` counts issues taken and stopped, and `<c>` the triage skips, each issue once.
+- *run closed*, from §9 only: `<repo> auto-dev: run closed: <a> merged, <b> need you, <c> skipped`, where `<b>` counts issues taken and stopped, and `<c>` the triage skips and §3's skips, each issue once.
 
 A `send` that exits non-zero is a `notify failed: <its line>`, and the run
 goes on. Each is given once, in the next report to the person in this session
@@ -495,9 +552,10 @@ integration and merging follow this skill and the profile. See the profile's
   when it is unset.
 - **Polling background work** (§4): `rm -f <scratch>/job.pid`, then start the
   job so it records a pid that lives as long as it does,
-  `sh -c 'echo $$ > <scratch>/job.pid.tmp && mv <scratch>/job.pid.tmp <scratch>/job.pid; <command>' > <output file> 2>&1`
+  `sh -c 'echo $$ > <scratch>/job.pid.tmp && mv <scratch>/job.pid.tmp <scratch>/job.pid; <command>; echo "exit=$?"' > <output file> 2>&1`
   (the background tool's task id is not a pid), and once `<scratch>/job.pid`
-  exists use its number as `<pid>`. Then one foreground command at a time, each
+  exists use its number as `<pid>`. The output file's last line, `exit=<n>`, is
+  the job's own exit status; no `exit=` last line means the job failed. Then one foreground command at a time, each
   under the shell tool's 10-minute limit, for example
   ```bash
   timeout 540 sh -c 'while kill -0 <pid> 2>/dev/null; do sleep 15; done'; kill -0 <pid> 2>/dev/null && echo running || echo finished

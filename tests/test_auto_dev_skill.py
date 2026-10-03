@@ -35,6 +35,11 @@ class QueueSelection(unittest.TestCase):
     def test_the_lint_verdict_is_named(self):
         self.assertIn("label: apply", self.text)
 
+    def test_branching_looks_for_earlier_work(self):
+        self.assertIn("issue_work.py", section(self.text, "3. Branch from a fresh base"))
+        dev = (SKILL.parents[1] / "dev" / "SKILL.md").read_text(encoding="utf-8")
+        self.assertIn("issue_work.py", section(dev, "4. Change"))
+
     def test_the_skip_marker_matches_the_parser(self):
         triage = section(self.text, "2. Triage each issue before touching it")
         markers = re.findall(r"<!-- gogogo:skip (.*?) -->", triage)
@@ -58,6 +63,12 @@ class QueueSelection(unittest.TestCase):
 
     def test_triage_only_names_the_ready_label(self):
         self.assertIn("ready label", section(self.text, "Triage-only mode"))
+
+    def test_triage_folds_in_comments(self):
+        """gogogo#108: an answer in a comment is folded in, not skipped; a preview folds nothing."""
+        triage = section(self.text, "2. Triage each issue before touching it")
+        self.assertIn("Fold in comments", triage)
+        self.assertIn("folds nothing", section(self.text, "Triage-only mode"))
 
 
 class NeverWaits(unittest.TestCase):
@@ -91,6 +102,30 @@ class Independence(unittest.TestCase):
             text = skill.read_text(encoding="utf-8")
             for name in ("independence", "Decided without asking"):
                 self.assertIn(name, text, f"{skill.parent.name}: {name}")
+
+
+class TakeWithFrom(unittest.TestCase):
+    """§3 takes the card with `move --from` before it branches (gogogo#101)."""
+
+    def setUp(self):
+        self.step = section(SKILL.read_text(encoding="utf-8"), "3. Branch from a fresh base")
+
+    def test_the_move_carries_from_and_comes_before_the_branch(self):
+        lines = self.step.splitlines()
+        moves = [i for i, ln in enumerate(lines) if " move <n>" in ln and "--to in_progress" in ln]
+        branch = next(i for i, ln in enumerate(lines) if "git switch -c" in ln)
+        self.assertEqual(len(moves), 1, moves)
+        self.assertIn("--from", lines[moves[0]])
+        self.assertLess(moves[0], branch)
+
+    def test_the_look_for_earlier_work_comes_before_the_move(self):
+        lines = self.step.splitlines()
+        look = next(i for i, ln in enumerate(lines) if "issue_work.py" in ln)
+        move = next(i for i, ln in enumerate(lines) if " move <n>" in ln and "--to in_progress" in ln)
+        self.assertLess(look, move)
+
+    def test_a_failed_branch_moves_the_card_back_from_in_progress(self):
+        self.assertIn("--from in_progress", self.step)
 
 
 if __name__ == "__main__":

@@ -18,6 +18,7 @@ incomplete. Problems go to stderr, one per line, each naming the field.
 Standard library only (tomllib needs Python 3.11+).
 """
 import argparse
+import copy
 import json
 import sys
 import tomllib
@@ -25,6 +26,10 @@ from pathlib import Path
 
 DEFAULT_PATH = ".agents/dev-process.md"
 PROFILE_VERSION = 1
+# The versions this checker reads. A change with no safe default bumps
+# PROFILE_VERSION and keeps the previous version here, with warnings, until the
+# bump after it (references/profile-schema.md § Versions and defaults).
+ACCEPTED_VERSIONS = {1}
 
 EXIT_OK, EXIT_MISSING, EXIT_INVALID = 0, 2, 3
 
@@ -53,8 +58,9 @@ FIELDS = {
     "tracker.project_number": (int, (), "Number of the GitHub project board."),
     "tracker.queue": (str, (LOOP,), "Board column the loop works."),
     "tracker.columns.in_progress": (str, (ONE, LOOP), "Column of an issue being worked now."),
-    "tracker.columns.needs_human": (str, (ONE, LOOP), "Column of an issue stopped for a person: an unreviewed fix, "
-                                    "a decision or Hard Stop found mid-change, or verification that gave up."),
+    "tracker.columns.needs_human": (str, (), "Column of an issue stopped for a person: an unreviewed fix, "
+                                    "a decision or Hard Stop found mid-change, or verification that gave up. "
+                                    "Optional; absent means the in_progress column."),
     "environments": (list, SKILLS, "Where code runs: name, roles, and url/serves/reached_by/data/writes."),
     "stages": (list, (ONE, LOOP, TEST), "The path a change takes after it merges: code_is, column, environment."),
     "hard_stops.source": (str, SKILLS, "Where the repo's Hard Stop rules live (file#anchor)."),
@@ -81,14 +87,15 @@ FIELDS = {
     "integration.final_target": (str, (), "Branch the run's PR targets, for run-branch-pr."),
     "integration.mode_check": (str, (), "Command that proves unattended mode is on."),
     "integration.ci_before_merge": (bool, (LOOP,), "True if CI must pass on each issue before it merges."),
-    "handback.reporter": (str, (ONE, LOOP), "trailer | assign | none. trailer: each merge writes a Ships-issue "
-                          "trailer naming the reporter, and stage sync assigns them when the card enters a "
-                          "stage with a tag."),
+    "handback.reporter": (str, (), "trailer | assign | none. Optional; absent means none. trailer: each merge "
+                          "writes a Ships-issue trailer naming the reporter, and stage sync assigns them when "
+                          "the card enters a stage with a tag."),
     "preflight.extra": (list, (), "Extra checks before a run."),
     "stop.extra": (list, (), "Extra conditions that stop a whole run."),
-    "notify": (str, (), "none / telegram. Optional; absent means none. telegram: sent by scripts/notify.py; "
-               "bot token and chat id from TELEGRAM_BOT_TOKEN and TELEGRAM_CHAT_ID in the environment or "
-               "~/.claude/gogogo/notify.env, never in the profile."),
+    "notify": (str, (), "none / telegram. Optional; absent means telegram when this machine has credentials, "
+               "else off. Credentials come from TELEGRAM_BOT_TOKEN and TELEGRAM_CHAT_ID in the environment, "
+               "the repo's git-ignored .claude/gogogo/notify.env, or the per-user notify.env, never the "
+               "profile."),
     "review.coverage": (str, (), "precise / broad / exhaustive. Optional; absent means broad. How wide a net "
                         "the first review round casts; correction rounds are always precise."),
     "independence": (str, (), "junior-dev / senior-dev / architect. Optional; absent means junior-dev. Which "
@@ -118,6 +125,55 @@ ROLES = ("pre-merge", "pre-production", "production")
 # Other keys of `tracker.columns` are column roles a repo may add for its own
 # tool (references/tracker-contract.md), so they do not warn.
 RETIRED = {"tracker.columns.back_to_queue": "retired: no skill reads it since gogogo#26"}
+
+
+def _in_progress(settings):
+    value, present = _lookup(settings, "tracker.columns.in_progress")
+    return value if present and isinstance(value, str) and value.strip() else None
+
+
+# Settings added to the format after repos adopted it: path -> (resolver, issue).
+# A resolver returns the value used when the profile lacks the path, or None
+# when it cannot tell (the path then stays absent). Each use warns, naming the
+# issue, and effective() applies them, so every reader sees the same value.
+DEFAULTS = {
+    "tracker.columns.needs_human": (_in_progress, "gogogo#32"),
+    "handback.reporter": (lambda settings: "none", "gogogo#9"),
+}
+
+# What profile version 1 requires, pinned: a test fails when FIELDS drifts from
+# it. A new required setting gets a DEFAULTS entry instead, or a version bump
+# with its own REQUIRED_V<n>.
+REQUIRED_V1 = frozenset({
+    ("profile", SKILLS),
+    ("tracker.kind", SKILLS),
+    ("tracker.issues_repo", SKILLS),
+    ("tracker.code_repo", SKILLS),
+    ("tracker.public", SKILLS),
+    ("tracker.ready_marker", (SPEC, LOOP)),
+    ("tracker.tool", (ONE, LOOP, TEST, ROADMAP)),
+    ("tracker.queue", (LOOP,)),
+    ("tracker.columns.in_progress", (ONE, LOOP)),
+    ("environments", SKILLS),
+    ("stages", (ONE, LOOP, TEST)),
+    ("hard_stops.source", SKILLS),
+    ("hard_stops.form", (SPEC, ONE, LOOP)),
+    ("hard_stops.items", (SPEC, ONE, LOOP)),
+    ("lanes", (SPEC, ONE, LOOP)),
+    ("verify.agent", (ONE, LOOP)),
+    ("verify.human", (SPEC, TEST)),
+    ("verify.rungs", (ONE, LOOP)),
+    ("state.forbidden", (ONE, LOOP)),
+    ("gates.always", (LOOP,)),
+    ("integration.strategy", (LOOP,)),
+    ("integration.base", (LOOP,)),
+    ("integration.ci_before_merge", (LOOP,)),
+    ("auto_test.pass_column", (TEST,)),
+    ("auto_test.fail_column", (TEST,)),
+    ("auto_test.fail_label", (TEST,)),
+    ("auto_test.human_label", (TEST,)),
+    ("auto_test.pass_closes", (TEST,)),
+})
 
 # The `tracker.columns` roles the profile format defines, from FIELDS.
 COLUMN_ROLES = tuple(p.split(".", 2)[2] for p in FIELDS if p.startswith("tracker.columns."))
@@ -174,6 +230,26 @@ def _lookup(settings, path):
             return None, False
         node = node[part]
     return node, True
+
+
+def effective(settings):
+    """A copy of `settings` with each absent DEFAULTS path filled in, where its
+    resolver can tell the value and the tables above it are tables."""
+    out = copy.deepcopy(settings)
+    for path, (resolve, _) in DEFAULTS.items():
+        if _lookup(out, path)[1]:
+            continue
+        value = resolve(out)
+        if value is None:
+            continue
+        node, parts = out, path.split(".")
+        for part in parts[:-1]:
+            node = node.setdefault(part, {})
+            if not isinstance(node, dict):
+                break
+        else:
+            node[parts[-1]] = value
+    return out
 
 
 def _leaf_paths(node, prefix=""):
@@ -309,17 +385,25 @@ def _check_auto_test(settings, sections):
     return errors
 
 
-def check(settings, sections, skill=None):
+def check(settings, sections, skill=None, root=None):
     """Return (errors, warnings); each entry starts with the field it is about.
 
     With no skill, every skill's needs are checked, and auto-test's only when the
     settings have an [auto_test] table (a repo that never adopted it must pass).
+    `root`: the repo root, for checking that a merge script exists; None skips it.
     """
     errors, warnings = [], []
     if skill:
         wanted = (skill,)
     else:
         wanted = tuple(s for s in SKILLS if s != TEST or "auto_test" in settings)
+
+    raw, settings = settings, effective(settings)
+    for path, (_, issue) in DEFAULTS.items():
+        value, present = _lookup(settings, path)
+        if present and not _lookup(raw, path)[1]:
+            warnings.append(f"{path}: missing; using {value!r} (default since {issue}). "
+                            "/gogogo:setup adds it to the profile.")
 
     columns, columns_present = _lookup(settings, "tracker.columns")
     columns_bad = columns_present and not isinstance(columns, dict)
@@ -343,8 +427,17 @@ def check(settings, sections, skill=None):
             errors.append(f"{path}: '{value}' is not one of {', '.join(sorted(ENUMS[path]))}")
 
     version, present = _lookup(settings, "profile")
-    if present and isinstance(version, int) and version != PROFILE_VERSION:
+    if present and isinstance(version, int) and version not in ACCEPTED_VERSIONS:
         errors.append(f"profile: version {version} is not supported (this checker reads {PROFILE_VERSION})")
+
+    strategy, _ = _lookup(settings, "integration.strategy")
+    command, _ = _lookup(settings, "integration.command")
+    if (root is not None and strategy == "merge-script" and (ONE in wanted or LOOP in wanted)
+            and isinstance(command, str) and command.split()):
+        # A command, not a path: only a first word with a / in it names a file.
+        token = command.split()[0]
+        if "/" in token and not (Path(root) / token).exists():
+            errors.append(f"integration.command: {token} does not exist in {root}")
 
     lanes, present = _lookup(settings, "lanes")
     if present and isinstance(lanes, list):
@@ -424,8 +517,8 @@ def main(argv=None):
 
     path = Path(args.path) if args.path else find_profile()
     if not path.is_file():
-        print(f"profile: no file at {path}. This repo has not adopted gogogo; "
-              f"see references/profile-schema.md", file=sys.stderr)
+        print(f"profile: no file at {path}. Run /gogogo:setup to adopt gogogo in this repo "
+              f"(references/profile-schema.md describes the file).", file=sys.stderr)
         return EXIT_MISSING
     try:
         settings, sections = split_profile(path.read_text(encoding="utf-8"))
@@ -433,7 +526,8 @@ def main(argv=None):
         print(str(exc), file=sys.stderr)
         return EXIT_INVALID
 
-    errors, warnings = check(settings, sections, args.skill)
+    # The profile sits at <repo>/.agents/dev-process.md.
+    errors, warnings = check(settings, sections, args.skill, root=path.resolve().parent.parent)
     for line in warnings:
         print(f"warning: {line}", file=sys.stderr)
     for line in errors:
@@ -441,7 +535,7 @@ def main(argv=None):
     if errors:
         return EXIT_INVALID
     if args.show:
-        json.dump({"settings": settings, "sections": sorted(sections)}, sys.stdout, indent=2)
+        json.dump({"settings": effective(settings), "sections": sorted(sections)}, sys.stdout, indent=2)
         print()
     scope = args.skill or "all skills"
     print(f"profile ok for {scope}: {path}", file=sys.stderr)
