@@ -175,6 +175,14 @@ git log origin/<integration.base> --grep "#<n>"
 The paragraphs after each table, blockquotes, and other cells that state something about
 the tracker. Fix only what the new state makes false; add no reasoning.
 
+Then link every issue the document names, not only in the `Issue` column: in `Note` and
+`Notes` cells, after a mark, in other cells and in prose. A bare `#<n>` becomes
+`[#<n>](https://github.com/<tracker.issues_repo>/issues/<n>)`, and `<owner>/<repo>#<n>`
+links to that repo's issue. Leave code spans, fenced blocks and existing links as they
+are. One exception: in a table with no `Issue` column, the script reads the first link in
+the `State` cell as the row's own issue, so in a row that has none, leave references in
+that cell unlinked.
+
 ## 5. Rows the script cannot check
 
 Rows that name no issue in `tracker.issues_repo` are counted ("rows name no issue") and
