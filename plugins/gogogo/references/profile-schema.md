@@ -112,8 +112,8 @@ patterns naming the lane's test files) and `ci` (true if CI runs it).
 
 `tests` patterns are matched against repo-relative paths, with `*` matching `/`
 as well. `/gogogo:dev` §6 compares the test files they match before and after a
-change (`test_guard.py`). A repo where no lane has `tests` is reported as
-"tests not checked", never as passed.
+change (`test_guard.py`). A lane without `tests` is "not checked", never
+passed; when no lane has it, the report says "tests not checked".
 
 ```toml
 [[lanes]]

@@ -160,6 +160,39 @@ class Listing(unittest.TestCase):
         items, _ = self.items()
         self.assertEqual(items, [])
 
+    def test_a_test_file_moved_out_of_the_patterns_is_deleted(self):
+        (self.r.repo / "attic").mkdir()
+        git(self.r.repo, "mv", "tests/test_a.py", "attic/test_a.py")
+        self.r.commit("hide")
+        items, _ = self.items()
+        self.assertEqual(items, ["H1  deleted  tests/test_a.py"])
+
+    def test_deleting_every_test_file_is_listed_not_unchecked(self):
+        git(self.r.repo, "rm", "-q", "-r", "tests")
+        self.r.commit("drop all")
+        items, _ = self.items()
+        self.assertEqual(sorted(items), ["H1  deleted  tests/test_a.py", "H2  deleted  tests/test_keep.py"])
+
+    def test_a_deleted_binary_or_empty_test_file_is_listed(self):
+        self.r.write("tests/empty.txt", "")
+        (self.r.repo / "tests").joinpath("fixture.bin").write_bytes(bytes(range(256)))
+        self.r.commit("fixtures")
+        git(self.r.repo, "branch", "-f", "main")
+        git(self.r.repo, "rm", "-q", "tests/empty.txt", "tests/fixture.bin")
+        self.r.commit("drop fixtures")
+        items, _ = self.items()
+        self.assertEqual(sorted(items), ["H1  deleted  tests/empty.txt", "H2  deleted  tests/fixture.bin"])
+
+    def test_a_name_with_a_space_keeps_its_path(self):
+        self.r.write("tests/test b.py", TEST_A)
+        self.r.commit("spaced")
+        git(self.r.repo, "branch", "-f", "main")
+        self.r.write("tests/test b.py", TEST_A.replace("    assert four() == 4\n", ""))
+        out = self.r.run("list", "--json")
+        import json
+        paths = [i["path"] for i in json.loads(out.stdout)["items"]]
+        self.assertEqual(paths, ["tests/test b.py"])
+
     def test_an_uncommitted_edit_is_listed(self):
         self.r.write("tests/test_keep.py", "def test_keep():\n    pass\n")
         items, _ = self.items()

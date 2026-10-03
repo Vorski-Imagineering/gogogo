@@ -91,56 +91,53 @@ def is_test(path: str, globs: list[str]) -> bool:
     return any(fnmatch.fnmatchcase(path, g) for g in globs)
 
 
-def _unquote(path: str) -> str:
-    return path[2:] if path[:2] in ("a/", "b/") else path
+def _hunks(fork: str, paths: list[str]) -> list[dict]:
+    """The `@@` hunks of one file's diff, with its `-` and `+` lines."""
+    diff = _git(["--literal-pathspecs", "diff", "-M", "--unified=0", "--no-color", "--no-ext-diff",
+                 fork, "--", *paths])
+    hunks: list[dict] = []
+    for line in diff.splitlines():
+        match = HUNK.match(line)
+        if match:
+            hunks.append({"line": int(match.group(1)), "context": match.group(2).strip(),
+                          "minus": [], "plus": []})
+        elif hunks and line.startswith("-"):
+            hunks[-1]["minus"].append(line[1:])
+        elif hunks and line.startswith("+"):
+            hunks[-1]["plus"].append(line[1:])
+    return hunks
 
 
 def items(base: str, globs: list[str]) -> list[dict]:
-    tracked = _git(["ls-files"]).splitlines()
-    if not any(is_test(p, globs) for p in tracked):
-        raise NotChecked(f"no file matches {', '.join(globs)}")
     fork = _git(["merge-base", base, "HEAD"]).strip()
-    diff = _git(["-c", "core.quotepath=off", "diff", "-M", "--unified=0", "--no-color", fork])
+    tracked = set(_git(["ls-files", "-z"]).split("\0"))
+    tracked |= set(_git(["ls-tree", "-r", "-z", "--name-only", fork]).split("\0"))
+    files = sorted(p for p in tracked if p and is_test(p, globs))
+    if not files:
+        raise NotChecked(f"no file matches {', '.join(globs)}")
+    # Limited to the test files at the base and now, so a test file moved out
+    # of the patterns reads as deleted, not as a rename that lists nothing.
+    fields = _git(["--literal-pathspecs", "diff", "-M", "--name-status", "-z", fork, "--", *files]).split("\0")
     found: list[dict] = []
-    for block in re.split(r"^diff --git ", diff, flags=re.M)[1:]:
-        lines = block.splitlines()
-        old = new = None
-        deleted = created = False
-        renamed_from = None
-        for line in lines[1:]:
-            if line.startswith("@@"):
-                break
-            if line.startswith("deleted file mode"):
-                deleted = True
-            elif line.startswith("new file mode"):
-                created = True
-            elif line.startswith("rename from "):
-                renamed_from = line[len("rename from "):]
-            elif line.startswith("rename to "):
-                new = line[len("rename to "):]
-            elif line.startswith("--- ") and line != "--- /dev/null":
-                old = _unquote(line[4:])
-            elif line.startswith("+++ ") and line != "+++ /dev/null":
-                new = _unquote(line[4:])
-        old = renamed_from or old
-        if created or old is None or not (is_test(old, globs) or (new and is_test(new, globs))):
-            continue
-        if deleted:
+    i = 0
+    while i < len(fields) and fields[i]:
+        status = fields[i]
+        if status[0] in "RC":
+            old, new = fields[i + 1], fields[i + 2]
+            i += 3
+        else:
+            old = new = fields[i + 1]
+            i += 2
+        if status[0] == "A" or status[0] == "C":
+            continue  # new since the base: it cannot weaken anything
+        if status[0] == "D":
             found.append({"kind": "deleted", "path": old, "line": None, "context": "", "minus": [], "plus": []})
             continue
-        path = new or old
-        current = None
-        for line in lines:
-            match = HUNK.match(line)
-            if match:
-                current = {"kind": "changed", "path": path, "line": int(match.group(1)),
-                           "context": match.group(2).strip(), "minus": [], "plus": [],
-                           "renamed_from": renamed_from}
-                found.append(current)
-            elif current is not None and line.startswith("-"):
-                current["minus"].append(line[1:])
-            elif current is not None and line.startswith("+"):
-                current["plus"].append(line[1:])
+        if status == "R100":
+            continue
+        renamed_from = old if status[0] == "R" else None
+        for hunk in _hunks(fork, [old, new] if renamed_from else [new]):
+            found.append({"kind": "changed", "path": new, "renamed_from": renamed_from, **hunk})
     for k, item in enumerate(found, 1):
         item["id"] = f"H{k}"
     return found
