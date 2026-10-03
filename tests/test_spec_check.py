@@ -157,7 +157,8 @@ class Items(unittest.TestCase):
         listed = items(body)
         texts = {i["id"]: i["text"] for i in listed["items"]}
         self.assertEqual([i for i in texts if i.startswith("D")], ["D1", "D2"])
-        self.assertIn("The filter", texts["D1"])
+        self.assertTrue(texts["D1"].startswith("The filter"), texts["D1"])
+        self.assertEqual(texts["D2"], "The list shows rows.")
         self.assertNotIn("Design", listed["unlisted"])
 
     EDIT_SLASHLESS = "**Edit:** `README.md`, `review_stats.py` and `preflight.extra`."
@@ -168,6 +169,9 @@ class Items(unittest.TestCase):
         listed = items(body, tree=lambda: ["README.md", "plugins/x/review_stats.py"])
         self.assertEqual([i["id"] for i in listed["items"] if i["id"].startswith("F:")],
                          ["F:tests/test_list.py", "F:README.md", "F:review_stats.py"])
+        body = body.replace(self.EDIT_SLASHLESS, "**Edit:** `preflight.extra` and `README.md`.")
+        listed = items(body, tree=lambda: ["README.md"])
+        self.assertIn("F:README.md", [i["id"] for i in listed["items"]])
 
     def test_create_names_are_not_checked_against_the_tree(self):
         body = BODY.replace("**Create:** `tests/test_list.py`.",
