@@ -104,7 +104,8 @@ Every tracker command targets `tracker.issues_repo`. When it differs from
    *specced and labelled* line ends with its card's result from Posting step
    8: moved, already there, left in `<column>`, closed, no card, could not
    be read, the move failed, or step 8 skipped (and which of its conditions
-   was not met).
+   was not met). The line also names any dependent Posting step 4 edited or
+   commented on.
    Then each issue filed during the run, with `/gogogo:spec <n>`.
 
 ## The issue body IS these sections, in this order
@@ -303,7 +304,7 @@ The profile's `lanes` are the lanes that exist here. Name real cases in every
 applicable lane, and give a reason for any lane you skip. Do not invent a lane
 the profile does not list.
 
-Four rules hold in all of them:
+Five rules hold in all of them:
 
 1. **"No evidence" must fail, not pass.**
 2. **Include a step that proves the test fails**: pin a value, name which tests
@@ -312,6 +313,8 @@ Four rules hold in all of them:
    only re-reads what the actor itself just wrote passes against the broken
    code.
 4. **A lane you call impossible costs the same proof as a lane you write.**
+5. **Another issue's body as test data is asserted in its narrowest form**,
+   and that issue is named in `## Context` as a dependency.
 
 **REQUIRED REFERENCE:** read `references/test-rules.md` for what each rule
 means in practice, and the profile's `## Lane constraints` for what each lane
@@ -354,6 +357,7 @@ profile's `## Recon traps` for what this codebase specifically hides.
 | The spec itself lists open questions | Go ask them. A spec is not a questionnaire. |
 | "Blocked on user answers" as a status | Only valid for an external unknown, never a decision. |
 | A lane in the profile with no case and no reason given | Lane silently skipped. |
+| A step that reads another issue's body, asserted broadly ("no line containing …") | The next re-spec of that issue breaks it. Use the narrowest form and name the dependency in Context. |
 | "cannot be automated / not testable" | Name the missing capability, or you are excusing a lane you did not investigate. |
 | No `## Verify by hand` | The reporter cannot check their own issue. Required in every spec. |
 | A placeholder URL in Verify by hand | Find a real record that reproduces it; do not hand the recon back. |
@@ -398,11 +402,49 @@ order, checking each step before starting the next:
    reporter's own `#` headings from splitting the spec's section structure.
    Do not edit, summarise, or correct the report; corrections go in
    `## Context`.
-4. **Lint it before it leaves the machine**:
+4. **Lint it, then check the open specs that read this issue**, before it
+   leaves the machine:
    ```bash
    python3 "${CLAUDE_PLUGIN_ROOT}/scripts/spec_lint.py" <composed file>
    ```
    Fix every error it reports. A lint error is a rewrite, not a judgement call.
+   Once the lint passes:
+   1. List the open issues whose body has a command that reads `<N>`:
+      ```bash
+      gh issue list --repo <tracker.issues_repo> --state open --limit 1000 --json number,body -q '.[] | select(.body|test("(gh issue view|spec_check\\.py|spec_lint\\.py)[^\\n]*\\b<N>\\b")) | .number'
+      ```
+      A non-zero exit: post nothing, add no label, and report that the check
+      could not run. A failed listing is not "none".
+   2. Drop `<N>` itself. For each other number `<D>`, read its body below its
+      `---` rule (a quoted report above it holds no steps). `<D>` is a
+      *dependent* only when a matched line's command reads issue `<N>`; a
+      line number such as `spec_check.py:94` is not an issue. None: say "no
+      open spec reads #<N>" in the reply and go to step 5.
+   3. For each dependent, re-read every step, test case or verification line
+      that reads `<N>`'s body, against the composed new body. Record each as
+      *still holds* or *would fail*.
+   4. All still hold: go to step 5, and name each dependent and the steps
+      re-read in the reply.
+   5. A step would fail: find the narrowest form of its assertion that passes
+      against the new body and still proves what the step was for (for
+      example "no line starting `F:preflight.extra`" in place of "no line
+      containing `preflight.extra`").
+      - No such form: ask the person, naming the step: **post anyway and
+        leave that spec to you**, or **post nothing**. A decline, or no
+        person to ask: post nothing on `<N>`, add no label, and report it.
+      - The dependent's card is in `tracker.columns.in_progress`, or an open
+        pull request names it: say so and ask before editing it. A no, a
+        decline, or no person to ask: do not edit it; after step 6, comment
+        on it naming the step, why it now fails, and the narrower form.
+      - Otherwise fix it after step 6: save `<D>`'s current body to the
+        scratchpad, change only those lines, add one line to its
+        `## Context` (`<date>: <step> narrowed because #<N> was re-specced`),
+        lint it, `gh issue edit <D> --repo <tracker.issues_repo> --body-file <file>`,
+        and re-read it. Its report, Approvals, label and card stay as they
+        were. The fix changes only an assertion's wording, so this check is
+        not run again on `<D>`.
+   6. The reply names every dependent, each step re-read, and each one
+      changed, commented on or left.
 5. `gh issue edit <N> --body-file <composed file>`.
 6. **Re-read the description** and confirm both the report and the spec are
    there.
@@ -500,6 +542,8 @@ Then as the tracker:
 9. Is the spec in the issue **body**?
 10. Does the issue carry the ready label, and did Posting step 8 move the
     card or say why it did not? Or did I say which withholding case applies?
+11. Were the open specs that read this issue checked (Posting step 4), and
+    each failing step fixed, commented on or reported?
 
 Any "no" is a rewrite.
 
