@@ -557,7 +557,7 @@ Then as the tracker:
 10. Does the issue carry the ready label, and did Posting step 8 move the
     card or say why it did not? Or did I say which withholding case applies?
 11. Was the issue checked for work in flight before anything was written (or
-    is it an idea not yet filed), and
+    did it start as an idea not yet filed), and
     does `## Context` name the case that hits it today?
 
 Any "no" is a rewrite.
