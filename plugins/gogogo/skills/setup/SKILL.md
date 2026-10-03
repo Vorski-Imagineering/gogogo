@@ -234,7 +234,8 @@ What each fix involves:
        `python3 "${CLAUDE_PLUGIN_ROOT}/scripts/notify.py" chat-id`. Show the
        chats it prints; once they say which one is theirs, run
        `python3 "${CLAUDE_PLUGIN_ROOT}/scripts/notify.py" chat-id --save <its id>`.
-    3. Run `python3 "${CLAUDE_PLUGIN_ROOT}/scripts/notify.py" send --text "<repo>: notifications on"`,
+    3. Send the person a message that names this machine, with the hostname from `uname -n`:
+       `python3 "${CLAUDE_PLUGIN_ROOT}/scripts/notify.py" send --text "✅ gogogo is connected on $(uname -n). auto-dev runs on this machine will report here: when an issue merges, when one needs you, and when a run ends."`,
        and re-run the check: the row must be `PASS notify: telegram (by default): bot @… -> …`
        (`PASS notify: telegram: …` when the profile names the transport).
   - `WARN notify: telegram: <reason>`: show the reason. The usual causes are a

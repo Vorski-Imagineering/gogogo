@@ -26,6 +26,7 @@ CASES = {
     "auto-dev-label-less-card", "auto-dev-open-decision", "auto-dev-list-fails",
     "spec-declined-question", "spec-being-built", "spec-nothing-hits-today",
     "status-sweep-lists-only", "wrap-up-asks-before-removing",
+    "setup-connected-message",
 }
 TAGS = re.compile(r"^tags:\s*\[([^\]]*)\]\s*$", re.M)
 TYPE = re.compile(r"^type:\s*(\S+)\s*$", re.M)
