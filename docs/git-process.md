@@ -81,13 +81,13 @@ decides.
 
 ## Who commits, pushes and merges
 
-| Skill | Git |
-|---|---|
-| `/gogogo:dev` | Changes the working tree only. Commits, pushes or opens a PR only when asked, and says which branch the change is on. |
-| `/gogogo:auto-dev` | Branches, commits, pushes, opens PRs and merges. Running it is the authorisation for the branch switching it does; a `CLAUDE.md` rule against switching branches still holds outside the loop. |
-| `/gogogo:setup` | Commits its setup changes on the default branch and pushes. If the branch is protected, it opens a PR instead and merges once the user approves. |
-| `/gogogo:wrap-up` | Reports uncommitted and unpushed work, stashes, worktrees and stranded branches. Never commits, stashes or pushes to make the tree look clean. |
-| `/gogogo:status` | Reads only: no fetch, no switch, no push. |
+`/gogogo:auto-dev` branches, commits, pushes and merges on its own
+([§3 to §6](../plugins/gogogo/skills/auto-dev/SKILL.md#3-branch-from-a-fresh-base));
+`/gogogo:dev` creates the issue's `fix/<n>-<slug>` branch before its first edit,
+and commits, pushes or merges only when asked
+([§4](../plugins/gogogo/skills/dev/SKILL.md#4-change),
+[§8](../plugins/gogogo/skills/dev/SKILL.md#name-the-issue-without-closing-it));
+the other skills say in their own text what, if anything, they write.
 
 ## Before a PR merges
 
@@ -206,25 +206,22 @@ The trailer is how a tag later finds the issues it ships
 
 ## After the merge
 
-**Check that it landed.** A merge command's exit code is not proof:
-
-```bash
-python3 "${CLAUDE_PLUGIN_ROOT}/scripts/verify_merged.py" <pr> <base> [--ships owner/repo#<n>]
-```
-
-It asks GitHub for the PR's merge commit and asks git whether the remote base
-contains it. It checks the merge commit, not the local branch: after a squash
-the branch's own commits are never on the base. Nothing is commented and no
-card moves until it prints `MERGED`. `NOT-MERGED`, or "cannot tell", stops the
-whole run. Exit 3 means merged but the `Ships-issue` link is missing: the issue
-is handed back as merged, and the report says its card must be moved by hand
-when its tag ships.
+**Check that it landed.** A merge command's exit code is not proof.
+`verify_merged.py` reads the PR's merge commit back from the remote base, and
+can also confirm the `Ships-issue` link and that the issue is still open;
+nothing is commented and no card moves until it prints `MERGED`. What each
+exit means, and what the loop does next, is in
+[`/gogogo:auto-dev` § Verify the merge landed](../plugins/gogogo/skills/auto-dev/SKILL.md#verify-the-merge-landed-never-trust-an-exit-code-alone).
 
 **Move the card only as far as the code has got.** A verified merge moves the
 card to the first of the profile's `stages`: for example "In Dev" when the base
-is served by a dev site, or "Released" when the base is production. A later
-stage is reached by a deploy or a promotion, not by the loop. The issue stays
-open, and no skill moves a card to Done: a person confirms the fix.
+is served by a dev site, or "Released" when the base is production. Under
+`run-branch-pr`, when the loop sees the run's final PR merge, it moves every
+card the run landed to the next stage. Any other later stage is reached by a
+deploy or a promotion. The issue stays open. No skill that writes code moves a
+card to Done: a person confirms the fix, or, where the repo runs
+`/gogogo:auto-test`, a PASS moves the card to `auto_test.pass_column` (Done, in
+some repos) and closes the issue when `auto_test.pass_closes` is true.
 
 ## Releases and tags
 
@@ -253,21 +250,9 @@ on the base ([versioning.md](../plugins/gogogo/references/versioning.md)):
 
 ## What stops the whole run
 
-On the git side, the loop stops and asks when:
-
-- the working tree is not clean before it starts (uncommitted changes are not
-  its to commit or discard);
-- the base is red before it starts, or the run branch goes red mid-run;
-- a merge conflicts;
-- the merge check says NOT-MERGED or cannot tell;
-- a `run-branch-pr` final PR that is a release fails its checks;
-- the unattended-mode check fails, at the start or before any merge.
-
-A missing approval, a failed review or a verification that gave up stops only
-that issue: its branch is pushed and left, and the loop goes on to the next.
-
-Stranded work found at the start (branches and worktrees no open issue claims)
-is listed at the top of the run report, and never deleted, merged or rebased.
+The loop stops and asks for the reasons in
+[`/gogogo:auto-dev` § Stop the whole run and ask when](../plugins/gogogo/skills/auto-dev/SKILL.md#stop-the-whole-run-and-ask-when),
+and before the first issue when its preflight fails, a browser not logged in to the pre-merge environment among them; a missing approval, a failed review or a verification that gave up stops only that issue.
 
 ## In this repo
 
