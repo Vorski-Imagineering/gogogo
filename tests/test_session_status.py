@@ -57,7 +57,9 @@ LINE = ("gogogo · {name}: Dev Ready 3 · In progress 1 · Human!Help! 2 · Rele
 
 def cards():
     counts = {"Dev Ready": 3, "In progress": 1, "Human!Help!": 2, "Released": 4, "New": 5, "Done": 6}
-    return [{"number": i, "status": col} for col, n in counts.items() for i in range(n)]
+    # A pull request on the board is not counted, as /gogogo:status leaves it out.
+    return ([{"number": i, "kind": "Issue", "status": col} for col, n in counts.items() for i in range(n)]
+            + [{"number": 99, "kind": "PullRequest", "status": "Released"}])
 
 
 def fields_output(columns):
@@ -139,13 +141,28 @@ class Line(unittest.TestCase):
         self.assertTrue(all(c[c.index("--profile") + 1] == profile for c in tracker_cmds))
         gh = [c for c, _ in board.calls if c[0] == "gh"]
         self.assertEqual(gh, [["gh", "pr", "list", "--repo", "o/r", "--state", "open",
-                               "--json", "number", "-q", "length"]])
+                               "--limit", "1000", "--json", "number", "-q", "length"]])
         self.assertEqual([c[:2] for c in tracker_cmds], [[sys.executable, str(SCRIPTS / "tracker.py")]] * 2)
         for _, kw in board.calls:
             self.assertGreater(kw["timeout"], 0)
             self.assertLessEqual(kw["timeout"], 15)
             self.assertIs(kw["capture_output"], True)
             self.assertIs(kw["text"], True)
+
+    def test_columns_match_without_regard_to_case(self):
+        repo = repo_with_profile()
+        board = Board(columns=[c.upper() if c == "Dev Ready" else c for c in COLUMNS])
+        code, out, _ = run_main(repo, board)
+        self.assertEqual(code, 0)
+        self.assertIn("Dev Ready 3 ·", json.loads(out)["systemMessage"])
+
+    def test_a_python_without_tomllib_says_nothing(self):
+        # macOS's own python3 is 3.9: the hook must not show an error in every session.
+        code = ("import sys, runpy; sys.modules['tomllib'] = None; sys.argv = ['x']; "
+                f"runpy.run_path({str(SCRIPTS / 'session_status.py')!r}, run_name='__main__')")
+        env = dict(os.environ, CLAUDE_PROJECT_DIR=str(repo_with_profile()))
+        run = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True, env=env, timeout=60)
+        self.assertEqual((run.returncode, run.stdout), (0, ""))
 
     def test_column_missing_from_board_shows_question_mark(self):
         repo = repo_with_profile()

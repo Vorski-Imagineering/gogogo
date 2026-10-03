@@ -31,7 +31,10 @@ from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
-import profile_check  # noqa: E402
+try:
+    import profile_check  # noqa: E402
+except ImportError:  # a Python before 3.11 has no tomllib: say nothing, never a hook error
+    profile_check = None
 
 BUDGET = 15  # seconds for every read together; hooks.json's timeout (20) is the outer bound
 UNAVAILABLE = "gogogo: status unavailable: "
@@ -96,16 +99,19 @@ def status_line(profile, settings, run, clock):
         on_board = board_columns(_read("board", [*tool, "fields"], run, clock, deadline))
         listing = _read("board", [*tool, "list", "--json"], run, clock, deadline)
         try:
-            statuses = [card.get("status") for card in json.loads(listing)]
+            # Issues only, and any case: as /gogogo:status counts and as tracker.py matches columns.
+            statuses = [(card.get("status") or "").lower() for card in json.loads(listing)
+                        if card.get("kind") != "PullRequest"]
         except (json.JSONDecodeError, AttributeError, TypeError):
             raise ReadFailed("board unreadable: tracker.py list printed no card list") from None
         for name in profile_columns(settings):
-            parts.append(f"{name} {statuses.count(name)}" if name in on_board else f"{name} ?")
+            known = name.lower() in {c.lower() for c in on_board}
+            parts.append(f"{name} {statuses.count(name.lower())}" if known else f"{name} ?")
     repo = tracker.get("code_repo")
     if not repo:
         raise ReadFailed("pull requests unreadable: tracker.code_repo is not set")
     prs = _read("pull requests", ["gh", "pr", "list", "--repo", repo, "--state", "open",
-                                  "--json", "number", "-q", "length"], run, clock, deadline).strip()
+                                  "--limit", "1000", "--json", "number", "-q", "length"], run, clock, deadline).strip()
     if not prs.isdigit():
         raise ReadFailed(f"pull requests unreadable: gh printed {prs[:40]!r}")
     parts.append(f"{prs} PRs open")
@@ -127,6 +133,8 @@ def message(profile, run, clock):
 def main(start=None, run=None, clock=None):
     """Print the systemMessage (or nothing) and return 0, whatever happens."""
     profile = line = None
+    if profile_check is None:
+        return 0
     try:
         found = profile_check.find_profile(start or os.environ.get("CLAUDE_PROJECT_DIR") or Path.cwd())
         if found.is_absolute():  # not found: find_profile answers with the bare relative default
