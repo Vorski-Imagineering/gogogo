@@ -11,8 +11,10 @@ the first of these that applies decides:
   2. detached                                -> keep, `detached HEAD`
   3. no issue number in the branch           -> keep, `no issue number in <branch>`
   4. `git status --porcelain` not empty      -> keep, `uncommitted changes`
-  5. commits on no remote                    -> keep, `<k> commit(s) on no remote`
-  6. a same-repo pull request MERGED         -> remove, `PR #<m> merged`
+  5. commits on no remote, unless a merged    -> keep, `<k> commit(s) on no remote`
+     pull request's head is the branch's tip
+  6. a same-repo pull request MERGED from    -> remove, `PR #<m> merged`
+     the branch's tip
   7. the issue is closed                     -> remove, `issue #<n> closed`
   8. otherwise                               -> keep, `issue #<n> open, work not merged`
 
@@ -94,17 +96,22 @@ def decide(tree, issues_repo, code_repo):
         return KEEP, f"cannot tell: {_first_line(status, 'git status')}"
     if status.stdout.strip():
         return KEEP, "uncommitted changes"
-    ahead = git("rev-list", "--count", branch, "--not", "--remotes")
-    if ahead.returncode != 0:
-        return KEEP, f"cannot tell: {_first_line(ahead, 'git rev-list')}"
-    if int(ahead.stdout) > 0:
-        return KEEP, f"{ahead.stdout.strip()} commit(s) on no remote"
+    ref = f"refs/heads/{branch}"
+    tip = git("rev-parse", "--verify", "-q", ref)
+    ahead = git("rev-list", "--count", ref, "--not", "--remotes", "--")
+    if tip.returncode != 0 or ahead.returncode != 0:
+        return KEEP, f"cannot tell: {_first_line(ahead if tip.returncode == 0 else tip, 'git rev-list')}"
     if not code_repo or not issues_repo:
         return KEEP, "cannot tell: the profile names no tracker.code_repo or tracker.issues_repo"
     prs, error = pull_requests(code_repo, branch)
     if error:
         return KEEP, f"cannot tell: {error}"
-    merged = [p for p in prs if p.get("state") == "MERGED"]
+    # A squash merge leaves the branch's commits off the base, and a pruned
+    # remote branch leaves them on no remote: a merged PR whose head is this tip
+    # carried them. A merged PR from an older tip does not cover newer work.
+    merged = [p for p in prs if p.get("state") == "MERGED" and p.get("headRefOid") == tip.stdout.strip()]
+    if int(ahead.stdout) > 0 and not merged:
+        return KEEP, f"{ahead.stdout.strip()} commit(s) on no remote"
     if merged:
         return REMOVE_WITH_BRANCH, f"PR #{merged[0]['number']} merged"
     issue = issue_view(issues_repo, number)

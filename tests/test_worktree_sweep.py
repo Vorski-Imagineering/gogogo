@@ -45,8 +45,8 @@ print(json.dumps(answer))
 """
 
 
-def pr(number, state, repo="o/code"):
-    return {"number": number, "state": state, "headRefOid": "0" * 40,
+def pr(number, state, repo="o/code", oid="0" * 40):
+    return {"number": number, "state": state, "headRefOid": oid,
             "headRepository": {"name": repo.split("/")[1], "nameWithOwner": repo}}
 
 
@@ -86,6 +86,12 @@ class Sweep(unittest.TestCase):
         self.git("worktree", "add", "-q", "-b", branch, str(path), "main")
         return path
 
+    def tip(self, branch):
+        return self.git("rev-parse", f"refs/heads/{branch}").stdout.strip()
+
+    def merged(self, branch, number=3):
+        return {"pr": {branch: [pr(number, "MERGED", oid=self.tip(branch))]}}
+
     def branches(self):
         return self.git("branch", "--format=%(refname:short)").stdout.split()
 
@@ -98,7 +104,7 @@ class Sweep(unittest.TestCase):
 
     def test_1_a_merged_pr_removes_the_worktree_and_its_branch(self):
         path = self.worktree("fix/12-x")
-        fixture = {"pr": {"fix/12-x": [pr(3, "MERGED")]}}
+        fixture = self.merged("fix/12-x")
         self.assertEqual(self.sweep(fixture=fixture), (0, [f"remove {path} (fix/12-x): PR #3 merged"]))
         self.assertTrue(path.exists(), "removed without --apply")
         self.assertEqual(self.sweep("--apply", fixture=fixture), (0, [f"remove {path} (fix/12-x): PR #3 merged"]))
@@ -239,7 +245,7 @@ class Sweep(unittest.TestCase):
 
     def test_a_refused_branch_delete_is_said_and_the_worktree_counts_as_removed(self):
         path = self.worktree("fix/12-x")
-        code, lines = self.in_process(("branch", "-D"), "--apply", fixture={"pr": {"fix/12-x": [pr(3, "MERGED")]}})
+        code, lines = self.in_process(("branch", "-D"), "--apply", fixture=self.merged("fix/12-x"))
         self.assertEqual(code, 0)
         self.assertEqual(lines, [f"remove {path} (fix/12-x): PR #3 merged", "  branch fix/12-x kept: refused"])
         self.assertFalse(path.exists())
@@ -248,6 +254,32 @@ class Sweep(unittest.TestCase):
         path = self.worktree("fix/12-x")
         code, lines = self.in_process(("rev-list",), fixture={"pr": {"fix/12-x": [pr(3, "MERGED")]}})
         self.assertEqual((code, lines), (1, [f"keep {path} (fix/12-x): cannot tell: refused"]))
+
+    def test_a_squash_merged_branch_whose_remote_was_pruned_is_removed(self):
+        path = self.worktree("fix/12-x")
+        self.run_git(path, "commit", "-q", "--allow-empty", "-m", "the fix")
+        self.run_git(path, "push", "-q", "origin", "fix/12-x")
+        fixture = self.merged("fix/12-x")
+        self.run_git(self.tmp / "origin.git", "branch", "-D", "fix/12-x")
+        self.git("fetch", "-q", "--prune")
+        self.assertEqual(self.sweep(fixture=fixture), (0, [f"remove {path} (fix/12-x): PR #3 merged"]))
+
+    def test_a_merged_pr_from_an_older_tip_does_not_remove_new_work(self):
+        path = self.worktree("fix/12-x")
+        fixture = self.merged("fix/12-x")
+        self.run_git(path, "commit", "-q", "--allow-empty", "-m", "more work")
+        self.run_git(path, "push", "-q", "origin", "fix/12-x")
+        fixture["issue"] = {"12": {"state": "OPEN", "comments": []}}
+        self.assertEqual(self.sweep("--apply", fixture=fixture),
+                         (1, [f"keep {path} (fix/12-x): issue #12 open, work not merged"]))
+        self.assertIn("fix/12-x", self.branches())
+
+    def test_a_tag_named_like_the_branch_does_not_hide_unpushed_commits(self):
+        self.git("tag", "fix/12-x", "main")
+        path = self.worktree("fix/12-x")
+        self.run_git(path, "commit", "-q", "--allow-empty", "-m", "local only")
+        fixture = {"issue": {"12": {"state": "CLOSED", "comments": []}}}
+        self.assertEqual(self.sweep(fixture=fixture), (1, [f"keep {path} (fix/12-x): 1 commit(s) on no remote"]))
 
     def test_an_unreadable_worktree_list_exits_2(self):
         code, _ = self.sweep(cwd=self.tmp)

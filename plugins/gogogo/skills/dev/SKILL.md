@@ -713,7 +713,8 @@ python3 "${CLAUDE_PLUGIN_ROOT}/scripts/worktree_sweep.py" --apply --only <that w
 ```
 
 Put the line it prints in the §7 report. It never forces: a worktree with
-uncommitted changes or commits on no remote is kept, and the line says why.
+uncommitted changes or commits on no remote is kept, and the line says why;
+its exit 1 then means only that, not a failed merge.
 
 ### When you merge with `gh`: the squash body carries the link
 
