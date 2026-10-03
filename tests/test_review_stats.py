@@ -589,6 +589,35 @@ class SkipsAndSessions(StatsBase):
         self.assertIn(f"  {SESSION[:8]} 2026-10-03 09:00–11:30  2 taken, 1 needs you, 1 skipped", out)
         self.assertIn(f"  {OTHER[:8]} 2026-10-03 12:00–12:00  1 taken, 0 needs you, 0 skipped", out)
 
+    def test_the_skip_and_session_lines_are_whole_lines(self):
+        comments = [(1, v2(extra=f"session={OTHER}"), self.at("12:00")),
+                    (2, skip("lint", SESSION), self.at("23:00")), (3, skip("lint", SESSION), self.at("23:10")),
+                    (4, skip("decision", SESSION), self.at("23:20")),
+                    (5, stop("spec", SESSION), self.at("01:00", day="04")),
+                    (6, skip("lunch")), (7, skip("lunch"))]
+        code, out, _ = self.run_stats(comments)
+        self.assertEqual(code, 0)
+        lines = out.splitlines()
+        self.assertIn("skips: lint 2, decision 1 (2 unreadable)", lines)
+        self.assertIn("sessions: 2 with a session id (0 records without one)", lines)
+        self.assertIn(f"  {OTHER[:8]} 2026-10-03 12:00–12:00  1 taken, 0 needs you, 0 skipped", lines)
+        self.assertIn(f"  {SESSION[:8]} 2026-10-03 23:00–2026-10-04 01:00  1 taken, 1 needs you, 3 skipped", lines)
+        self.assertEqual(lines.index(f"  {OTHER[:8]} 2026-10-03 12:00–12:00  1 taken, 0 needs you, 0 skipped") + 1,
+                         lines.index(f"  {SESSION[:8]} 2026-10-03 23:00–2026-10-04 01:00  1 taken, 1 needs you, 3 skipped"))
+
+    def test_a_run_with_no_times_is_listed_last_with_a_dash(self):
+        comments = [(1, v2(extra=f"session={SESSION}")), (2, v2(extra=f"session={OTHER}"), self.at("08:00"))]
+        code, out, _ = self.run_stats(comments)
+        lines = out.splitlines()
+        first = lines.index(f"  {OTHER[:8]} 2026-10-03 08:00–08:00  1 taken, 0 needs you, 0 skipped")
+        self.assertEqual(lines[first + 1], f"  {SESSION[:8]} -  1 taken, 0 needs you, 0 skipped")
+
+    def test_the_lines_with_nothing_recorded_are_whole_lines(self):
+        code, out, _ = self.run_stats([(1, v2())])
+        lines = out.splitlines()
+        self.assertIn("skips: none recorded", lines)
+        self.assertIn("sessions: none recorded (1 records without one)", lines)
+
     def test_skips_and_stops_alone_are_still_no_records(self):
         code, out, _ = self.run_stats([(1, skip("lint", SESSION)), (2, stop("spec", SESSION))])
         self.assertEqual(code, 1)
