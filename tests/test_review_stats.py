@@ -560,6 +560,12 @@ class SkipsAndSessions(StatsBase):
         self.assertEqual((a["first"], a["last"]), (self.at("09:00"), self.at("11:30")))
         self.assertEqual((b["taken"], b["needs_you"], b["skipped"]), (1, 0, 0))
 
+    def test_runs_are_ordered_by_their_first_marker_not_by_issue(self):
+        comments = [(1, v2(extra=f"session={OTHER}"), self.at("12:00")),
+                    (2, v2(extra=f"session={SESSION}"), self.at("09:00"))]
+        sessions = self.json_of(comments)["summary"]["sessions"]
+        self.assertEqual([x["session"] for x in sessions], [SESSION, OTHER])
+
     def test_a_run_counts_distinct_issues(self):
         comments = [(40, v2(extra=f"session={SESSION}") + "\n" + stop("review", SESSION), self.at("09:00")),
                     (40, stop("review", SESSION), self.at("10:00"))]
