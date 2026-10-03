@@ -2,8 +2,10 @@
 """Tests for tools/mutate.py, this repo's own `mutate` lane command (gogogo#45).
 
 Git runs for real in a temporary repository; the mutation tool itself never
-runs: `mutate._run` is patched to answer for it, and GOGOGO_MUTMUT points at a
-path that does not exist, so nothing is installed.
+runs: `mutate._run` and `mutate._run_mutmut` are patched to answer for it, and
+GOGOGO_MUTMUT points at a path that does not exist, so nothing is installed.
+The wrapper and the stall check (gogogo#96) run for real, against a fake tool
+that is a small Python script.
 
     python3 -m unittest tests.test_mutate
 """
@@ -14,6 +16,7 @@ import os
 import subprocess
 import sys
 import tempfile
+import time
 import unittest
 from pathlib import Path
 from unittest import mock
@@ -81,6 +84,7 @@ def run_main(repo, *argv, fake=None):
 
     out, err = io.StringIO(), io.StringIO()
     with contextlib.chdir(repo), mock.patch.object(mutate, "_run", patched), \
+            mock.patch.object(mutate, "_run_mutmut", patched), \
             mock.patch.dict(os.environ, {"GOGOGO_MUTMUT": TOOL}), \
             contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
         code = mutate.main(["main", *argv])
@@ -169,8 +173,115 @@ class Runner(unittest.TestCase):
             (root / "tests" / "test_b.py").write_text("")
             both = mutate.runner([f"{SCRIPTS}/a.py", f"{SCRIPTS}/b.py"], root)
             one_missing = mutate.runner([f"{SCRIPTS}/a.py", f"{SCRIPTS}/c.py"], root)
-        self.assertEqual(both, "python3 -m unittest tests.test_a tests.test_b")
-        self.assertEqual(one_missing, "python3 -m unittest discover -s tests")
+        self.assertEqual(both, "python3 .gogogo-run.py python3 -m unittest tests.test_a tests.test_b")
+        self.assertEqual(one_missing, "python3 .gogogo-run.py python3 -m unittest discover -s tests")
+
+
+class Wrapper(unittest.TestCase):
+    """The script every test run goes through, inside the copy."""
+
+    def setUp(self):
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        self.dir = Path(tmp.name)
+        mutate.write_wrapper(self.dir)
+
+    def wrap(self, code):
+        return subprocess.run([sys.executable, mutate.WRAPPER, sys.executable, "-c", code],
+                              cwd=self.dir, capture_output=True, timeout=60)
+
+    def test_unreadable_output_is_made_readable_and_the_exit_code_kept(self):
+        run = self.wrap("import sys; sys.stdout.buffer.write(b'\\xff\\xfe ok\\n'); sys.exit(3)")
+        self.assertIn("ok", run.stdout.decode("utf-8"))
+        self.assertEqual(run.returncode, 3)
+
+    def test_the_heartbeat_is_written_before_and_after_the_command(self):
+        run = self.wrap(f"import pathlib; print(pathlib.Path({mutate.HEARTBEAT!r}).read_text())")
+        during = run.stdout.decode("utf-8").split()
+        after = (self.dir / mutate.HEARTBEAT).read_text().split()
+        self.assertEqual(run.returncode, 0)
+        self.assertIn("start", during)
+        self.assertNotIn("end", during)
+        self.assertEqual(after.count("start"), 1)
+        self.assertEqual(after.count("end"), 1)
+
+
+# A stand-in for the mutation tool: `run` starts the --runner command RUNS times,
+# PAUSE seconds apart, then sleeps STALL seconds with a child of its own; it writes
+# its pid and the child's to PIDS. Every other subcommand answers from IDS.
+FAKE_TOOL = """#!{python}
+import json, os, shlex, subprocess, sys, time
+argv = sys.argv[1:]
+if argv[0] == "run":
+    runner = shlex.split(argv[argv.index("--runner") + 1])
+    child = subprocess.Popen(["sleep", "60"])
+    with open(os.environ["FAKE_PIDS"], "w") as f:
+        f.write(f"{{os.getpid()}} {{child.pid}}")
+    for _ in range(int(os.environ["FAKE_RUNS"])):
+        subprocess.run(runner, capture_output=True)
+        time.sleep(float(os.environ["FAKE_PAUSE"]))
+    time.sleep(float(os.environ["FAKE_STALL"]))
+    child.kill()
+    sys.exit(0)
+if argv[0] == "result-ids":
+    print(json.loads(os.environ["FAKE_IDS"]).get(argv[1], ""))
+"""
+
+
+def gone(pid):
+    """True once `pid` no longer exists; an orphan is reaped by init, so allow it a moment."""
+    for _ in range(50):
+        try:
+            os.kill(pid, 0)
+        except ProcessLookupError:
+            return True
+        time.sleep(0.1)
+    return False
+
+
+class StallCheck(unittest.TestCase):
+    """A tool that stops starting test runs is ended; one that keeps starting them is not."""
+
+    def setUp(self):
+        self.r = Repo()
+        self.addCleanup(self.r.close)
+        self.r.write(f"{SCRIPTS}/a.py", "def a():\n    return 2\n")
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        self.tmp = Path(tmp.name)
+        self.tool = self.tmp / "mutmut"
+        self.tool.write_text(FAKE_TOOL.format(python=sys.executable))
+        self.tool.chmod(0o755)
+        for name, value in (("STALL_MIN", 1), ("STALL_TIMES", 10), ("STALL_POLL", 0.1), ("KILL_AFTER", 1)):
+            patcher = mock.patch.object(mutate, name, value)
+            patcher.start()
+            self.addCleanup(patcher.stop)
+
+    def run_tool(self, runs, pause, stall, ids=""):
+        env = {"GOGOGO_MUTMUT": str(self.tool), "FAKE_PIDS": str(self.tmp / "pids"), "FAKE_RUNS": str(runs),
+               "FAKE_PAUSE": str(pause), "FAKE_STALL": str(stall), "FAKE_IDS": ids or "{}"}
+        out, err = io.StringIO(), io.StringIO()
+        with contextlib.chdir(self.r.dir), mock.patch.dict(os.environ, env), \
+                contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
+            code = mutate.main(["main"])
+        return code, out.getvalue(), err.getvalue()
+
+    def test_a_tool_that_stops_starting_tests_is_ended_as_a_failed_run(self):
+        # The fake gives up by itself after 20 seconds, so a missing check is red, not a hang.
+        code, out, err = self.run_tool(runs=1, pause=0, stall=20)
+        self.assertEqual(code, 2, err)
+        self.assertTrue(err.startswith("stalled:"), err)
+        self.assertFalse([ln for ln in out.splitlines() if ln.startswith("mutants:")])
+        pids = [int(p) for p in (self.tmp / "pids").read_text().split()]
+        self.assertTrue(all(gone(pid) for pid in pids), pids)
+        with self.assertRaises(ProcessLookupError):
+            os.killpg(pids[0], 0)
+
+    def test_a_run_that_keeps_starting_tests_is_not_stalled(self):
+        # Five runs 0.4 seconds apart: two seconds in all, twice the one-second window.
+        code, out, err = self.run_tool(runs=5, pause=0.4, stall=0, ids='{"killed": "1 2 3"}')
+        self.assertEqual(code, 0, err)
+        self.assertEqual(out.splitlines()[-1], "mutants: 3 killed: 3 survived: 0 timeout: 0")
 
 
 class Counts(unittest.TestCase):
