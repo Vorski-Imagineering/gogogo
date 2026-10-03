@@ -102,12 +102,15 @@ Every tracker command targets `tracker.issues_repo`. When it differs from
    case); *left open* (with the question); *skipped* (closed, a pull request,
    or already ready); *skipped: being built* (with the column or pull
    request); *closed: nothing hits it today*; *not filed: nothing hits it
-   today*; *stopped: nothing hits it today, no answer*; or *not reached* (with
-   why the run stopped). Each
+   today*; *stopped: nothing hits it today, no answer*;
+   *skipped: changed by someone else meanwhile* (kept, or nobody to ask;
+   Posting step 1); *replaced a version posted meanwhile*; or *not reached*
+   (with why the run stopped). Each
    *specced and labelled* line ends with its card's result from Posting step
    8: moved, already there, left in `<column>`, closed, no card, could not
    be read, the move failed, or step 8 skipped (and which of its conditions
-   was not met).
+   was not met). Every line, whatever its outcome, also names any dependent
+   Posting step 4 edited or commented on.
    Then each issue filed during the run, with `/gogogo:spec <n>`.
 
 ## The issue body IS these sections, in this order
@@ -306,7 +309,7 @@ The profile's `lanes` are the lanes that exist here. Name real cases in every
 applicable lane, and give a reason for any lane you skip. Do not invent a lane
 the profile does not list.
 
-Four rules hold in all of them:
+Five rules hold in all of them:
 
 1. **"No evidence" must fail, not pass.**
 2. **Include a step that proves the test fails**: pin a value, name which tests
@@ -315,6 +318,8 @@ Four rules hold in all of them:
    only re-reads what the actor itself just wrote passes against the broken
    code.
 4. **A lane you call impossible costs the same proof as a lane you write.**
+5. **Another issue's body as test data is asserted in its narrowest form**,
+   and that issue is named in `## Context` as a dependency.
 
 **REQUIRED REFERENCE:** read `references/test-rules.md` for what each rule
 means in practice, and the profile's `## Lane constraints` for what each lane
@@ -354,6 +359,13 @@ has no card and no pull request.
    in a comment, move it into the body before doing anything else. That alone
    is what unblocks it. Do this even when the user asked for something else on
    the issue; a spec an agent will not act on is not a spec.
+
+   **Then take the start snapshot**, in every run, one issue or several, when
+   the issue actually starts (after this step's own edit, which is this run's
+   change):
+   `gh issue view <N> --repo <tracker.issues_repo> --json body,labels > <scratch>/issue-<N>-start.json`.
+   Posting step 1 compares the issue with it. In a run of several, rule 3's
+   read before starting stays as it is; it only decides skipping.
 1. **Read the code before believing the ticket.** It describes a symptom.
 2. **Hunt for data already on the wire before proposing new state.** Highest
    leverage, most skipped. Grep for the field, not the feature.
@@ -407,6 +419,8 @@ profile's `## Recon traps` for what this codebase specifically hides.
 | The spec itself lists open questions | Go ask them. A spec is not a questionnaire. |
 | "Blocked on user answers" as a status | Only valid for an external unknown, never a decision. |
 | A lane in the profile with no case and no reason given | Lane silently skipped. |
+| Posting over a body that changed since the issue started | Someone else's work quoted as the report or overwritten. Compare with the start snapshot first. |
+| A step that reads another issue's body, asserted broadly ("no line containing …") | The next re-spec of that issue breaks it. Use the narrowest form and name the dependency in Context. |
 | "cannot be automated / not testable" | Name the missing capability, or you are excusing a lane you did not investigate. |
 | No `## Verify by hand` | The reporter cannot check their own issue. Required in every spec. |
 | A placeholder URL in Verify by hand | Find a real record that reproduces it; do not hand the recon back. |
@@ -433,10 +447,36 @@ order, checking each step before starting the next:
    first in `tracker.issues_repo`, with a short title and the user's own words
    as the body: `gh issue create --repo <tracker.issues_repo> --title "<title>"
    --body-file <scratch>/idea.md`. Its number is `<N>` below, and those words
-   become the original report.
-1. **Save the current body to the scratchpad before anything else**:
-   `gh issue view <N> --json body -q .body > <scratch>/issue-<N>-original.md`.
-   Confirm the file is non-empty (unless the issue body is empty).
+   become the original report. Then take its start snapshot
+   (*Before you write* § 0) at once: the issue starts here.
+1. **Save the current body to the scratchpad before anything else**, and
+   check nobody changed the issue since it started:
+   `gh issue view <N> --repo <tracker.issues_repo> --json body,labels > <scratch>/issue-<N>-now.json`,
+   then write its body, from that same read, to `<scratch>/issue-<N>-original.md`
+   (`python3 -c 'import json,sys; print(json.load(sys.stdin)["body"])' < <scratch>/issue-<N>-now.json > <scratch>/issue-<N>-original.md`).
+   Confirm the file is non-empty (unless the issue body is empty). Then
+   compare `body` and the set of label names with `issue-<N>-start.json`
+   (*Before you write* § 0). Comments and `updatedAt` are not compared.
+   - The same: go on to step 2.
+   - Different: post nothing and add no label. Show the person what changed
+     (a diff of the two bodies, and the labels added or removed), then ask:
+     **keep the other version**, or **replace it with this run's answers**.
+     - keep: stop this issue, and name the draft's scratchpad path. In a run
+       of several, its final-report line is *skipped: changed by someone else
+       meanwhile, kept*.
+     - replace: the report section follows *Which report to keep* applied to
+       the current body (never quote the other spec as the report); the spec
+       below the `---` is this run's. Go on to step 2. When step 7 then
+       withholds the label and the other version left it on, remove it
+       (`gh issue edit <N> --repo <tracker.issues_repo> --remove-label "<ready_marker>"`):
+       the label describes the spec now in the body. When the card is in
+       `tracker.queue` (where the other version's step 8 put it), leave it
+       and say so in the reply: a person moves it, since a run would take
+       it from there. The final-report line
+       says *replaced a version posted meanwhile*, then the line steps 7 and 8
+       would give it.
+     - A decline, or no person to ask: as keep, and the line says *skipped:
+       changed by someone else meanwhile, nobody to ask*.
 2. **Write the spec to the scratchpad**, so a failed call is re-postable.
    Inline `--body` mangles markdown; always use a file.
 3. **Compose the body file**: the report section, a `---` rule, then the spec.
@@ -454,11 +494,58 @@ order, checking each step before starting the next:
    reporter's own `#` headings from splitting the spec's section structure.
    Do not edit, summarise, or correct the report; corrections go in
    `## Context`.
-4. **Lint it before it leaves the machine**:
+4. **Lint it, then check the open specs that read this issue**, before it
+   leaves the machine:
    ```bash
    python3 "${CLAUDE_PLUGIN_ROOT}/scripts/spec_lint.py" <composed file>
    ```
    Fix every error it reports. A lint error is a rewrite, not a judgement call.
+   Once the lint passes:
+   1. List the open issues whose body has a command that reads `<N>`:
+      ```bash
+      gh issue list --repo <tracker.issues_repo> --state open --limit 1000 --json number,body -q '.[] | select(.body|test("(gh issue view|spec_check\\.py|spec_lint\\.py)[^\\n]*\\b<N>\\b")) | .number'
+      ```
+      A non-zero exit: post nothing, add no label, and report that the check
+      could not run. A failed listing is not "none".
+   2. Drop `<N>` itself. For each other number `<D>`, read its body below its
+      `---` rule (a quoted report above it holds no steps). `<D>` is a
+      *dependent* only when a matched line's command reads issue `<N>`; a
+      line number such as `spec_check.py:94` is not an issue. None: say "no
+      open spec reads #<N>" in the reply and go to step 5.
+   3. For each dependent, re-read every step, test case or verification line
+      that reads `<N>`'s body, against the composed new body. Record each as
+      *still holds* or *would fail*.
+   4. All still hold: go to step 5, and name each dependent and the steps
+      re-read in the reply.
+   5. A step would fail: find the narrowest form of its assertion that passes
+      against the new body and still proves what the step was for (for
+      example "no line starting `F:preflight.extra`" in place of "no line
+      containing `preflight.extra`").
+      - No such form: ask the person, naming the step: **post anyway and
+        leave that spec to you**, or **post nothing**. A decline, or no
+        person to ask: post nothing on `<N>`, add no label, and report it.
+      - The dependent's card is in `tracker.columns.in_progress` (read with
+        `<tracker.tool> show <D>`; for `shared`,
+        `python3 "${CLAUDE_PLUGIN_ROOT}/scripts/tracker.py" show <D>`), or an
+        open pull request references it
+        (`gh pr list --repo <tracker.code_repo> --state open --search "<D>"`,
+        a PR whose title or body names `#<D>`): say so and ask before editing
+        it. A read that fails counts as in flight; a profile with no
+        `tracker.tool` or no `tracker.columns.in_progress` has no such column,
+        so only the pull request check applies. A no, a
+        decline, or no person to ask: do not edit it; after step 6, comment
+        on it naming the step, why it now fails, and the narrower form.
+      - Otherwise fix it after step 6: save `<D>`'s current body to the
+        scratchpad, change only those lines, add one line to its
+        `## Context` (`<date>: <step> narrowed because #<N> was re-specced`),
+        lint it, `gh issue edit <D> --repo <tracker.issues_repo> --body-file <file>`,
+        and re-read it. When the lint fails only on lines you did not change
+        (an older spec, linted by newer rules), do not edit it: comment
+        instead, as for an in-flight dependent, and say why. Its report, Approvals, label and card stay as they
+        were. The fix changes only an assertion's wording, so this check is
+        not run again on `<D>`.
+   6. The reply names every dependent, each step re-read, and each one
+      changed, commented on or left.
 5. `gh issue edit <N> --body-file <composed file>`.
 6. **Re-read the description** and confirm both the report and the spec are
    there.
@@ -479,6 +566,10 @@ order, checking each step before starting the next:
 
    A spec that stops at a gate is still worth posting; it just is not ready
    until the gate is cleared.
+
+   Then take the start snapshot again (*Before you write* § 0): the body and
+   labels are now this run's own, so a later pass through Posting in this
+   run does not read them as someone else's change.
 8. **Move the card to the queue.** Only when step 7 applied the label, the
    profile has both `tracker.tool` and `tracker.queue`, and `tracker.queue` is
    one of the board's columns (`<tracker.tool> fields --check` lists them);
@@ -521,8 +612,9 @@ Which report to keep:
 - **Body is empty** → no report section; the spec starts at `## Verify by hand`.
 
 **Correcting a spec you already posted:** edit the scratchpad file and re-run
-`gh issue edit --body-file`, so the issue carries one accurate spec rather than
-a spec plus errata.
+Posting steps 4 to 6 (the lint and the check of open specs that read this
+issue, `gh issue edit --body-file`, the re-read), so the issue carries one accurate
+spec rather than a spec plus errata.
 
 **Never leave a second copy** of the spec or of the report. If an earlier
 version is sitting in a comment (including a spec you just rescued into the
@@ -556,7 +648,10 @@ Then as the tracker:
 9. Is the spec in the issue **body**?
 10. Does the issue carry the ready label, and did Posting step 8 move the
     card or say why it did not? Or did I say which withholding case applies?
-11. Was the issue checked for work in flight before anything was written (or
+11. Were the open specs that read this issue checked (Posting step 4), and
+    does each failing step have its narrower form and its outcome decided
+    (fixed or commented on after step 6, or reported)?
+12. Was the issue checked for work in flight before anything was written (or
     did it start as an idea not yet filed), and
     does `## Context` name the case that hits it today?
 
