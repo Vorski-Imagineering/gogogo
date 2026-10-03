@@ -9,6 +9,7 @@ The structure cases pin the names the skills depend on, never sentences
     python3 -m unittest tests.test_test_guard
 """
 
+import json
 import re
 import subprocess
 import sys
@@ -43,6 +44,19 @@ TEST_A = """def test_a():
 def test_b():
     assert three() == 3
     assert four() == 4
+"""
+
+TEST_CLASS = """import unittest
+
+
+class T(unittest.TestCase):
+    def test_a(self):
+        self.assertEqual(one(), 1)
+        self.assertEqual(two(), 2)
+
+    def test_b(self):
+        self.assertEqual(three(), 3)
+        self.assertEqual(four(), 4)
 """
 
 BODY = """## Design
@@ -99,6 +113,13 @@ class Repo:
     def branch(self):
         git(self.repo, "switch", "-q", "-c", "change")
 
+    def at_base(self, path, text):
+        """Add a file to the base (main) and start the change branch again from it."""
+        git(self.repo, "switch", "-q", "main")
+        self.write(path, text)
+        self.commit(f"base {path}")
+        git(self.repo, "switch", "-q", "-C", "change")
+
     def close(self):
         self._tmp.cleanup()
 
@@ -136,6 +157,7 @@ class Listing(unittest.TestCase):
         self.assertEqual(len(items), 1, items)
         self.assertIn("changed  tests/test_moved.py:3", items[0])
         self.assertIn("(renamed from tests/test_a.py)", items[0])
+        self.assertEqual(items[0], "H1  changed  tests/test_moved.py:3  def test_a():  (renamed from tests/test_a.py)")
 
     def test_a_removed_line_is_listed_with_its_minus_line(self):
         self.r.write("tests/test_a.py", TEST_A.replace("    assert four() == 4\n", ""))
@@ -198,6 +220,69 @@ class Listing(unittest.TestCase):
         items, _ = self.items()
         self.assertEqual(len(items), 1, items)
         self.assertIn("tests/test_keep.py", items[0])
+
+
+class Enclosing(unittest.TestCase):
+    """The line printed for a hunk is the innermost enclosing line at the base (gogogo#76)."""
+
+    def setUp(self):
+        self.r = Repo()
+        self.addCleanup(self.r.close)
+        self.r.branch()
+        self.r.at_base("tests/test_c.py", TEST_CLASS)
+
+    def items(self):
+        out = self.r.run("list")
+        self.assertEqual(out.returncode, 0, out.stderr)
+        return [ln for ln in out.stdout.splitlines() if re.match(r"H\d+  ", ln)]
+
+    def change(self, text):
+        self.r.write("tests/test_c.py", text)
+        self.r.commit("change")
+
+    def test_a_method_hunk_shows_its_def_not_the_class(self):
+        self.change(TEST_CLASS.replace("        self.assertEqual(two(), 2)\n", ""))
+        self.assertEqual(self.items(), ["H1  changed  tests/test_c.py:7  def test_a(self):"])
+
+    def test_json_keeps_the_chain_and_gits_header(self):
+        self.change(TEST_CLASS.replace("        self.assertEqual(two(), 2)\n", ""))
+        out = self.r.run("list", "--json")
+        self.assertEqual(out.returncode, 0, out.stderr)
+        item = json.loads(out.stdout)["items"][0]
+        self.assertEqual(item["enclosing"], ["def test_a(self):", "class T(unittest.TestCase):"])
+        self.assertEqual(item["context"], "class T(unittest.TestCase):")
+
+    def test_a_line_added_after_the_def_is_inside_it(self):
+        self.change(TEST_CLASS.replace("    def test_b(self):\n",
+                                       "    def test_b(self):\n        self.skipTest(\"x\")\n"))
+        items = self.items()
+        self.assertEqual(len(items), 1, items)
+        self.assertTrue(items[0].endswith("def test_b(self):"), items)
+        out = self.r.run("verify", body=body(cases="1. `tests/test_c.py::test_b` rewritten"),
+                         answers="H1\tweaker\ta skip\n")
+        self.assertEqual(out.returncode, 0, out.stdout + out.stderr)
+        self.assertIn("H1  licensed", out.stdout)
+
+    def test_a_removed_method_shows_the_class_and_is_licensed_by_its_name(self):
+        self.change(TEST_CLASS.replace("\n    def test_b(self):\n        self.assertEqual(three(), 3)\n"
+                                       "        self.assertEqual(four(), 4)\n", ""))
+        items = self.items()
+        self.assertEqual(len(items), 1, items)
+        self.assertTrue(items[0].endswith("class T(unittest.TestCase):"), items)
+        out = self.r.run("verify", body=body(cases="1. `tests/test_c.py::test_b` removed"),
+                         answers="H1\tweaker\tthe test is gone\n")
+        self.assertEqual(out.returncode, 0, out.stdout + out.stderr)
+        self.assertIn("H1  licensed", out.stdout)
+
+    def test_no_enclosing_line_falls_back_to_gits_header(self):
+        self.r.at_base("tests/test_a.py", TEST_A + "\n\nX = 1\n")
+        self.r.write("tests/test_a.py", TEST_A + "\n\nX = 2\n")
+        self.r.commit("change X")
+        items = self.items()
+        self.assertEqual(len(items), 1, items)
+        self.assertTrue(items[0].endswith("def test_b():"), items)
+        out = self.r.run("list", "--json")
+        self.assertEqual(json.loads(out.stdout)["items"][0]["enclosing"], [])
 
 
 class NotChecked(unittest.TestCase):
@@ -265,6 +350,34 @@ class Verify(unittest.TestCase):
         self.assertIn("H1  licensed", out.stdout)
         self.assertIn("H2  NOT LICENSED", out.stdout)
         self.assertIn("unlicensed=1", out.stdout)
+
+    def method_hunks(self):
+        self.r.at_base("tests/test_c.py", TEST_CLASS)
+        self.r.write("tests/test_c.py", TEST_CLASS.replace("        self.assertEqual(two(), 2)\n", "")
+                     .replace("        self.assertEqual(four(), 4)\n", ""))
+        self.r.commit("loosen both methods")
+
+    def test_a_method_licence_covers_only_its_method(self):
+        self.method_hunks()
+        for licence in ("tests/test_c.py::test_a", "tests/test_c.py::T::test_a"):
+            with self.subTest(licence=licence):
+                out = self.verify("H1\tweaker\tdropped\nH2\tweaker\tdropped\n", cases=f"1. `{licence}` removed")
+                self.assertEqual(out.returncode, 1, out.stdout + out.stderr)
+                self.assertIn("H1  licensed", out.stdout)
+                self.assertIn("H2  NOT LICENSED", out.stdout)
+                self.assertIn("unlicensed=1", out.stdout)
+
+    def test_a_name_matches_as_a_whole_word(self):
+        text = ("def test_parse():\n    assert a() == 1\n    assert b() == 2\n\n\n"
+                "def test_parse_v2():\n    assert c() == 3\n    assert d() == 4\n")
+        self.r.at_base("tests/test_p.py", text)
+        self.r.write("tests/test_p.py", text.replace("    assert b() == 2\n", "").replace("    assert d() == 4\n", ""))
+        self.r.commit("loosen both")
+        out = self.verify("H1\tweaker\tdropped\nH2\tweaker\tdropped\n",
+                          cases="1. `tests/test_p.py::test_parse` rewritten")
+        self.assertEqual(out.returncode, 1, out.stdout + out.stderr)
+        self.assertIn("H1  licensed", out.stdout)
+        self.assertIn("H2  NOT LICENSED", out.stdout)
 
     def test_a_licence_in_files_or_without_the_word_licenses_nothing(self):
         self.two_hunks()
