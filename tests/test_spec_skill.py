@@ -118,6 +118,30 @@ class Skill(unittest.TestCase):
 RUN = "## Several issues in one run"
 
 
+class ChangedMeanwhile(unittest.TestCase):
+    """Posting compares the issue with a snapshot taken when it started (gogogo#91)."""
+
+    def test_before_you_write_takes_the_start_snapshot(self):
+        before = "\n".join(section(skill_text(), "## Before you write"))
+        self.assertIn("issue-<N>-start.json", before)
+        self.assertIn("--json body,labels", before)
+
+    def test_posting_step_one_compares_and_asks(self):
+        posting = section(skill_text(), "## Posting")
+        steps = {int(m.group(1)): i for i, line in enumerate(posting) if (m := re.match(r"(\d+)\. ", line))}
+        one = "\n".join(posting[steps[1]:steps[2]])
+        for text in ("issue-<N>-start.json", "issue-<N>-now.json", "keep", "replace"):
+            self.assertIn(text, one)
+
+    def test_the_final_report_names_a_changed_issue(self):
+        rules = "\n".join(section(skill_text(), "## Several issues in one run"))
+        self.assertIn("changed by someone else meanwhile", rules)
+
+    def test_red_flags_name_the_start_snapshot(self):
+        flags = [l for l in section(skill_text(), "## Red flags") if l.startswith("|")]
+        self.assertTrue(any("start snapshot" in l for l in flags))
+
+
 class Dependents(unittest.TestCase):
     """Posting step 4 checks the open specs that read this issue's body (gogogo#93)."""
 
