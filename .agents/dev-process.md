@@ -70,6 +70,11 @@ ci_before_merge = true
 
 [handback]
 reporter = "none"
+
+# deploy-<build> tags and <major>.0.<build> versions (references/versioning.md),
+# cut by .github/workflows/release.yml on every push to main that passes the tests.
+[release]
+major = 1
 +++
 
 # Process profile: gogogo
