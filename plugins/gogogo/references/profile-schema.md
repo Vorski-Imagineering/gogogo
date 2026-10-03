@@ -76,7 +76,7 @@ no skill requires it; a skill that finds it uses it.
 | `technology.register` | str | optional | Path of the technology decisions register, from the repo root. |
 | `roadmap.file` | str | optional | Path of the roadmap document, from the folder holding `.agents/`; it may sit in another git repo checked out inside this one. |
 | `release.major` | int | optional | Hand-set major version. A production release is tagged `deploy-<build>` and versioned `<major>.0.<build>`; see `references/versioning.md`. |
-| `lanes` | list | `spec`, `dev`, `auto-dev` | Test lanes: name, plus run/focused/env/ci. |
+| `lanes` | list | `spec`, `dev`, `auto-dev` | Test lanes: name, plus run/focused/tests/env/ci. |
 | `verify.agent` | list | `dev`, `auto-dev` | Environments where the implementing agent checks its work. |
 | `verify.human` | str | `spec`, `auto-test` | Environment where a person confirms a fix. |
 | `verify.rungs` | list | `dev`, `auto-dev` | Ordered verification steps. |
@@ -107,13 +107,20 @@ no skill requires it; a skill that finds it uses it.
 
 `lanes` is a list of tables. Each needs a `name`, and either `run` (a command)
 or `env` (where the lane is checked). Optional: `focused` (the command for one
-test or module, used for the seen-failing step) and `ci` (true if CI runs it).
+test or module, used for the seen-failing step), `tests` (a list of file
+patterns naming the lane's test files) and `ci` (true if CI runs it).
+
+`tests` patterns are matched against repo-relative paths, with `*` matching `/`
+as well. `/gogogo:dev` §6 compares the test files they match before and after a
+change (`test_guard.py`). A lane without `tests` is "not checked", never
+passed; when no lane has it, the report says "tests not checked".
 
 ```toml
 [[lanes]]
 name = "automated"
 run = "make test"
 focused = "make test TEST=<module>"
+tests = ["tests/*"]
 ci = false
 
 [[lanes]]

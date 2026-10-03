@@ -188,8 +188,10 @@ class SpecCheck(StatsBase):
         self.assertEqual(code, 0)
         header = next(line for line in out.splitlines() if line.startswith("issue"))
         line = next(line for line in out.splitlines() if line.startswith("#40"))
-        self.assertEqual(header.split()[-3:], ["spec_items", "spec_unmet", "spec_declared"])
-        self.assertEqual(line.split()[-3:], ["-", "-", "-"])
+        names = header.split()
+        at = [names.index(n) for n in ("spec_items", "spec_unmet", "spec_declared")]
+        self.assertEqual(at, [at[0], at[0] + 1, at[0] + 2])
+        self.assertEqual([line.split()[i] for i in at], ["-", "-", "-"])
         self.assertIn("spec check: 0 records", out)
         self.assertNotIn("spec check ended", out)
 
@@ -211,6 +213,32 @@ class SpecCheck(StatsBase):
         self.assertEqual(spec["readers"], {"fresh": 1, "self": 0, "none": 0})
         self.assertEqual((spec["records"], spec["items"], spec["missing"], spec["differs"], spec["fixed"],
                           spec["declared"]), (1, 62, 1, 3, 2, 3))
+
+
+TESTS_RECORD = ("<!-- gogogo:tests v=1 checked=yes hunks=3 weaker=1 licensed=1 restored=0 attempts=0 "
+                "end=clean -->")
+
+
+class TestsRecord(StatsBase):
+    def test_a_tests_record_fills_its_column_and_the_summary(self):
+        comments = [(58, v2() + "\n" + TESTS_RECORD)]
+        row = self.json_of(comments)["rows"][0]
+        self.assertEqual(row["weaker"], 1)
+        code, out, _ = self.run_stats(comments)
+        self.assertEqual(code, 0)
+        self.assertIn("tests: 1 checked, 0 not checked, 1 weaker (1 licensed, 0 restored), 0 stopped", out)
+
+    def test_unreadable_tests_records_are_counted_never_zero(self):
+        for bad in (TESTS_RECORD.replace("v=1", "v=2"), TESTS_RECORD.replace(" attempts=0", "")):
+            code, out, _ = self.run_stats([(58, v2() + "\n" + bad)])
+            self.assertEqual(code, 0)
+            self.assertIn("1 unreadable skipped", out.splitlines()[0], bad)
+            self.assertIn("tests: no records", out)
+        code, out, _ = self.run_stats([(40, v2())])
+        line = next(line for line in out.splitlines() if line.startswith("#40"))
+        header = next(line for line in out.splitlines() if line.startswith("issue"))
+        self.assertEqual(line.split()[header.split().index("weaker")], "-")
+        self.assertIn("tests: no records", out)
 
 
 if __name__ == "__main__":

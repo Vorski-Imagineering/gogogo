@@ -285,6 +285,34 @@ confirm it survived.
 Report how many of the new tests went red. Guards that were already true are
 fine; name them as guards. Then run every lane's `run` command that applies.
 
+**The tests the change touched, compared.** Once every lane is green, check
+that the change did not get there by weakening a test. In order:
+
+1. Run
+   `python3 "${CLAUDE_PLUGIN_ROOT}/scripts/test_guard.py" list --base origin/<base>`
+   from the change's working tree, after `git fetch origin`, where `<base>` is
+   the branch the change merges into (`integration.base`, or the repo's
+   default branch when the profile has none).
+2. Exit 3: say "tests not checked" and why in §7, write the record with
+   `checked=no end=unchecked`, and go on. Exit 2: fix the call. `hunks=0`: the
+   record is `checked=yes hunks=0 end=clean`.
+3. Otherwise give a reader that has not seen how the change was made only the
+   `list` output and the issue body. It writes an answers file, one line per
+   item, `H<k><TAB><same|stronger|weaker><TAB><reason>`: `same` when the hunk
+   guards the same claim, `stronger`, or `weaker` when it guards less (a test or
+   case gone, a new skip or expected-failure marker, an assertion removed or
+   loosened).
+4. Run `test_guard.py verify <body file> <answers file> --base origin/<base>`.
+   On exit 2, give the reader the errors and have it answer again.
+5. Exit 1: for each `NOT LICENSED` item, restore what the test guarded (put
+   back the base version of that hunk, or the deleted file) and make the change
+   pass with it. Then run the lanes and steps 1 to 4 again. Up to three
+   attempts, each naming a hypothesis different from the last. After the
+   third, the issue stops for a person (§8), with "stop reason: tests" in the
+   Needs-you line and each unlicensed item named in §7.
+6. Run steps 1 to 4 again after any later step of this section that changed a
+   test file.
+
 **The real thing, on real data.** Drive the path the issue describes in the
 pre-merge environment and confirm the reported behaviour is gone. Hard-reload
 rather than trusting a cached bundle. Read back real content (text, an
@@ -350,6 +378,16 @@ Comment in the reporter's language, not the codebase's:
     does not. Otherwise both are `none`.
   - `impl` and `reviewer` are the model that made the change and the model
     that reviewed it, as the agent's tool names them, or `unknown`.
+- **How the tests were compared** (§6): how many test hunks were checked, and
+  how many were `weaker`, `licensed` and restored, or "tests not checked" and
+  why. End the comment with this record on its own line, after the review
+  record, with no spaces inside a value:
+  `<!-- gogogo:tests v=1 checked=<yes|no> hunks=<n> weaker=<n> licensed=<n> restored=<n> attempts=<n> end=<clean|restored|stopped|unchecked> -->`
+  - `weaker`, `licensed` and `restored` are from the first `verify`.
+    `attempts` counts restore attempts (0 when none was needed).
+  - `end` is `clean` when nothing was unlicensed, `restored` when every
+    unlicensed item was restored and the change passes, `stopped` after the
+    third attempt, and `unchecked` with `checked=no`.
 - **Anything they still own**: data, configuration, a decision left open.
 - **Where it is now, and only what is true when you post**: in the working
   tree, on a branch, or merged. Name the stage in the repo's words (the
@@ -371,7 +409,8 @@ and no further. Take the first case that fits:
   finding you could not fix, a prose file's second-round fix, or the breaker
   at round 13), a spec check that stopped (§5: two parts of the spec
   disagree, a difference that is not small, a piece that could not be built,
-  or items left after the third reading), a decision or Hard Stop found
+  or items left after the third reading), a weakened test the change could
+  not pass without (§6), a decision or Hard Stop found
   mid-change (§4), a gate you could not make pass, or verification that gave up →
   `tracker.columns.needs_human`, whether or not
   the work sits on a branch or PR. The §7 report's first line is
