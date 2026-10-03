@@ -15,7 +15,8 @@ close an issue or move its card. Every mark comes from `roadmap_status.py`, whic
 the issue's state and its card's column from the tracker.
 
 **This skill reads the tracker and never writes to it**: no card move, no label, no
-comment. Its one write is the roadmap document.
+comment. Its one write is the roadmap document, and, when the document shares the repo,
+the refresh branch and the PR that carries it (step 7).
 
 ## First: read this repo's profile
 
@@ -108,7 +109,8 @@ git rev-parse --show-toplevel
        --jq '.[] | select(.headRefName | startswith("roadmap-refresh-")) | "#\(.number) \(.headRefName) \(.url)"'
      ```
      Any line printed: **stop and report it** as "merge or close #N first; a new refresh
-     cut from `<B>` would conflict with it". The checkout is untouched.
+     cut from `<B>` would conflict with it". The checkout is untouched. A non-zero exit
+     is a stop too: report its error, since a list it could not read is not an empty one.
   3. **Record the start branch `S`**: `git branch --show-current`. When it prints nothing
      (a detached HEAD), or a name starting with `roadmap-refresh-`, `S` is `B`.
   4. Cut the refresh branch from the remote base `B`:
@@ -121,7 +123,8 @@ git rev-parse --show-toplevel
 
 **Stopping early (the same repo).** Any stop between the cut and §7's push (step 2's
 "every mark agrees", its exit 2, or a stop a later step asks for) ends, when
-`git status --porcelain -- <file>` prints nothing, with:
+`git status --porcelain -- <file>` and `git log --oneline origin/<B>..HEAD` both print
+nothing, with:
 
 ```bash
 git switch <S>
@@ -130,7 +133,8 @@ git branch -D roadmap-refresh-<YYYY-MM-DD-HHMM>
 
 and the report says the branch was removed; nothing was pushed, so nothing is lost. When
 the document has an uncommitted change, leave the branch and say which branch holds the
-change.
+change. When the branch holds a commit that was not pushed (a refused push in step 7),
+leave the branch too and say which branch holds the commit.
 
 ## 2. Report
 
@@ -205,8 +209,11 @@ point at.
   git switch <S>
   git branch -d roadmap-refresh-<YYYY-MM-DD-HHMM>
   ```
-  The body file holds the step 8 report. When `gh pr create` says a PR already exists
-  for the branch, read it with
+  Stop and report at the first command that fails, except the one case below; the
+  checkout stays on the refresh branch, and a pushed branch is a person's to open the PR
+  from. The body file holds step 8's account of what moved, which prose changed and which
+  rows were left for a person; the PR's number and the return to `S` come after it. When
+  `gh pr create` says a PR already exists for the branch, read it with
   `gh pr list --head roadmap-refresh-<YYYY-MM-DD-HHMM> --json number,url` and carry on.
   The PR is how the refresh lands under every `integration.strategy`; a person merges it
   the way the repo lands PRs. This skill never merges into the base itself.
