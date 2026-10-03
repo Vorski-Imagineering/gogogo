@@ -40,6 +40,20 @@ survivors killed by added tests), a `mutation declined by reason:` line and a
 `mutation ended:` line. A mutation marker that does not parse or add up, or
 that sits in a comment with no readable review record, counts as unreadable.
 
+Since gogogo#62 a v2 record may end with `session=<id>`, `t_branch=<time>` and
+`t_verified=<time>` (UTC, `YYYY-MM-DDTHH:MMZ`); each may be `unknown`, and a
+record without them still parses. A value that is neither `unknown` nor a
+session id or time is left out and the record counted as having malformed
+fields, as is a record whose `t_verified` is before its `t_branch`. Each row
+gains those three and `posted`, the comment's time, and the summary adds a
+`phase times:` line (records with both times; median minutes from branch to
+verified, and from verified to the report being posted, `-` when none) and a
+`session ids:` line. A hand-back to a person carries
+`<!-- gogogo:stop v=1 reason=<reason> -->` under its Needs-you line; the
+summary counts them by reason in a `stops:` line, wherever they sit, and counts
+one that does not parse or names an unknown reason as unreadable. Stop markers
+alone are not review records: zero records still exits 1.
+
 The outcome of a row is the verdict of the latest `<!-- auto-test v1 … -->`
 marker on the issue (pass, fail, needs-human); else `confirmed` when the issue
 is closed as completed, `dropped` when it is closed otherwise, else `waiting`.
@@ -81,6 +95,10 @@ TESTS_KEYS = ("v", "checked", "hunks", "weaker", "licensed", "restored", "attemp
 TESTS_ENDS = ("clean", "restored", "stopped", "unchecked")
 SPEC_CHECK_COUNTS = ("items", "met", "missing", "differs", "na", "outside", "runs", "fixed", "declared")
 AUTO_TEST = re.compile(r"<!-- auto-test v1 (.*?) -->")
+STOP = re.compile(r"<!-- gogogo:stop (.*?) -->")
+STOPS = ("hard-stop", "decision", "spec", "review", "tests", "mutation", "verify", "gate", "ci")
+TIME = re.compile(r"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}Z")
+UUID = re.compile(r"[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}")
 APPLIED_AS = ("spec", "regression", "bug", "risk", "added")
 DECLINED_AS = ("hypothetical", "style", "settled", "reversal", "beyond", "late")
 ENDS = ("clean", "third-attempt", "reversal", "unfixable", "prose", "breaker")
@@ -122,6 +140,17 @@ def _reasons(value: str, names: tuple[str, ...]) -> dict[str, int]:
     return {name: int(counts[name]) for name in names}
 
 
+def _real(key: str, value: str) -> bool:
+    """A time that names a real minute (`T25:00Z` matches TIME but is not one); any session id is real."""
+    if key == "session":
+        return True
+    try:
+        datetime.datetime.strptime(value, "%Y-%m-%dT%H:%MZ")
+    except ValueError:
+        return False
+    return True
+
+
 def parse_review(text: str) -> dict | None:
     """The first review record in `text` as a dict, or None when it does not parse."""
     match = REVIEW.search(text)
@@ -136,7 +165,8 @@ def parse_review(text: str) -> dict | None:
                       "declined": _ints(fields["declined"]), "refix": None, "applied_as": None,
                       "declined_as": None, "followups": None,
                       "end": {"no": "clean", "yes": "stopped"}[fields["stopped"]],
-                      "escaped_from": None, "escaped_as": None, "impl": None, "reviewer": None}
+                      "escaped_from": None, "escaped_as": None, "impl": None, "reviewer": None,
+                      "session": None, "t_branch": None, "t_verified": None, "malformed": []}
             record["consistent"] = all(len(record[k]) == record["rounds"] for k in ("applied", "declined"))
             return record
         if fields["v"] != "2":
@@ -149,7 +179,12 @@ def parse_review(text: str) -> dict | None:
                   "followups": int(fields["followups"]), "end": fields["end"],
                   "escaped_from": None if fields["escaped_from"] == "none" else int(fields["escaped_from"]),
                   "escaped_as": None if fields["escaped_as"] == "none" else fields["escaped_as"],
-                  "impl": fields["impl"], "reviewer": fields["reviewer"]}
+                  "impl": fields["impl"], "reviewer": fields["reviewer"], "malformed": []}
+        for key, shape in (("session", UUID), ("t_branch", TIME), ("t_verified", TIME)):
+            value = fields.get(key)
+            record[key] = value if value and shape.fullmatch(value) and _real(key, value) else None
+            if value not in (None, "unknown") and record[key] is None:
+                record["malformed"].append(key)
     except (KeyError, ValueError):
         return None
     record["consistent"] = (all(len(record[k]) == record["rounds"] for k in ("applied", "declined", "refix"))
@@ -234,13 +269,14 @@ def _date(value: str) -> str:
     return value
 
 
-def collect(repo: str, since: str | None) -> tuple[list[dict], int, dict[int, str], dict[int, dict]]:
-    """(records, unreadable markers, latest auto-test verdict by issue, issue data by number)."""
+def collect(repo: str, since: str | None) -> tuple[list[dict], int, dict[int, str], dict[int, dict], list[dict], int]:
+    """(records, unreadable markers, latest auto-test verdict by issue, issue data by number,
+    stop markers, unreadable stop markers)."""
     url = f"repos/{repo}/issues/comments?per_page=100"
     if since:
         url += f"&since={since}T00:00:00Z"
     pages = json.loads(_gh(["api", "--paginate", "--slurp", url]) or "[]")
-    records, unreadable, verdicts = [], 0, {}
+    records, unreadable, verdicts, stops, unreadable_stops = [], 0, {}, [], 0
     for comment in (c for page in pages for c in page):
         issue = int(str(comment.get("issue_url", "")).rsplit("/", 1)[-1])
         body = comment.get("body") or ""
@@ -266,7 +302,7 @@ def collect(repo: str, since: str | None) -> tuple[list[dict], int, dict[int, st
                 unreadable += 1
             else:
                 records.append({**record, "issue": issue, "spec_check": spec_check, "tests": tests,
-                                "mutation": mutations})
+                                "mutation": mutations, "posted": comment.get("created_at")})
                 read += 1
         if spec_check is not None and not read:
             unreadable += 1
@@ -274,6 +310,12 @@ def collect(repo: str, since: str | None) -> tuple[list[dict], int, dict[int, st
             unreadable += 1
         if not read:
             unreadable += len(mutations)
+        for match in STOP.finditer(body):
+            fields = _fields(match.group(1))
+            if fields and fields.get("v") == "1" and fields.get("reason") in STOPS:
+                stops.append({"issue": issue, "reason": fields["reason"]})
+            else:
+                unreadable_stops += 1
         for match in AUTO_TEST.finditer(body):
             fields = _fields(match.group(1)) or {}
             if fields.get("verdict") in VERDICTS:
@@ -281,7 +323,13 @@ def collect(repo: str, since: str | None) -> tuple[list[dict], int, dict[int, st
     issues = {}
     for n in dict.fromkeys(r["issue"] for r in records):
         issues[n] = json.loads(_gh(["api", f"repos/{repo}/issues/{n}"]))
-    return records, unreadable, verdicts, issues
+    return records, unreadable, verdicts, issues, stops, unreadable_stops
+
+
+def _minutes(start: str, end: str) -> float:
+    def at(value):
+        return datetime.datetime.fromisoformat(value.replace("Z", "+00:00"))
+    return (at(end) - at(start)).total_seconds() / 60
 
 
 def outcome(n: int, verdicts: dict[int, str], issue: dict) -> str:
@@ -292,7 +340,7 @@ def outcome(n: int, verdicts: dict[int, str], issue: dict) -> str:
     return "waiting"
 
 
-def build(records, unreadable, verdicts, issues) -> dict:
+def build(records, unreadable, verdicts, issues, stops=(), unreadable_stops=0) -> dict:
     rows = []
     for r in records:
         rows.append({"issue": r["issue"], "title": issues.get(r["issue"], {}).get("title"),
@@ -300,7 +348,8 @@ def build(records, unreadable, verdicts, issues) -> dict:
                      "kind": r["kind"], "coverage": r["coverage"], "rounds": r["rounds"],
                      "applied": r["applied"], "declined": r["declined"], "refix": r["refix"], "end": r["end"],
                      "outcome": outcome(r["issue"], verdicts, issues.get(r["issue"], {})), "escaped": [],
-                     "impl": r["impl"], "reviewer": r["reviewer"]})
+                     "impl": r["impl"], "reviewer": r["reviewer"], "session": r["session"],
+                     "t_branch": r["t_branch"], "t_verified": r["t_verified"], "posted": r.get("posted")})
         spec = r.get("spec_check")
         rows[-1].update(spec_items=spec["items"] if spec else None,
                         spec_unmet=spec["missing"] + spec["differs"] if spec else None,
@@ -321,6 +370,9 @@ def build(records, unreadable, verdicts, issues) -> dict:
     checks = [r["spec_check"] for r in records if r.get("spec_check")]
     guarded = [r["tests"] for r in records if r.get("tests")]
     mutated = [m for r in records for m in r.get("mutation") or []]
+    both = [r for r in new if r["t_branch"] and r["t_verified"]]
+    timed = [r for r in both if _minutes(r["t_branch"], r["t_verified"]) >= 0]
+    reported = [r for r in timed if r.get("posted") and _minutes(r["t_verified"], r["posted"]) >= 0]
     summary = {
         "repo_records": len(records), "old_format": sum(r["v"] == 1 for r in records), "unreadable": unreadable,
         "median_rounds": statistics.median(r["rounds"] for r in records),
@@ -342,6 +394,15 @@ def build(records, unreadable, verdicts, issues) -> dict:
                   "not_checked": sum(t["checked"] == "no" for t in guarded),
                   **{k: sum(t[k] for t in guarded) for k in ("weaker", "licensed", "restored")},
                   "stopped": sum(t["end"] == "stopped" for t in guarded)},
+        "with_session": sum(r["session"] is not None for r in new),
+        "timed": len(timed),
+        "median_branch_to_verified": (statistics.median(_minutes(r["t_branch"], r["t_verified"]) for r in timed)
+                                      if timed else None),
+        "median_verified_to_report": (statistics.median(_minutes(r["t_verified"], r["posted"]) for r in reported)
+                                      if reported else None),
+        "malformed": sum(bool(r["malformed"]) or (r in both and r not in timed) for r in records),
+        "stops": {k: sum(s["reason"] == k for s in stops) for k in STOPS},
+        "unreadable_stops": unreadable_stops,
     }
     return {"rows": rows, "summary": summary}
 
@@ -357,8 +418,9 @@ def _cell(row: dict, column: str) -> str:
 
 def render(repo: str, data: dict) -> str:
     s = data["summary"]
+    malformed = f", {s['malformed']} with malformed fields" if s["malformed"] else ""
     lines = [f"{repo}: {s['repo_records']} review records ({s['old_format']} old format, "
-             f"{s['unreadable']} unreadable skipped)", ""]
+             f"{s['unreadable']} unreadable skipped{malformed})", ""]
     table = [list(COLUMNS)] + [[_cell(row, c) for c in COLUMNS] for row in data["rows"]]
     widths = [max(len(r[i]) for r in table) for i in range(len(COLUMNS))]
     lines += ["  ".join(cell.ljust(w) for cell, w in zip(r, widths)).rstrip() for r in table]
@@ -371,6 +433,18 @@ def render(repo: str, data: dict) -> str:
               "declined by reason: " + ", ".join(f"{k} {v}" for k, v in s["declined_as"].items()),
               "outcomes: " + ", ".join(f"{k} {v}" for k, v in sorted(s["outcomes"].items())),
               f"escaped bugs: {s['escaped']['declined']} declined, {s['escaped']['missed']} missed"]
+    new = s["repo_records"] - s["old_format"]
+
+    def median(value):
+        return "-" if value is None else f"{value:g}"
+    lines += [f"phase times: {s['timed']} of {new} new records (median branch→verified "
+              f"{median(s['median_branch_to_verified'])} min, verified→report "
+              f"{median(s['median_verified_to_report'])} min)",
+              f"session ids: {s['with_session']} of {new} new records"]
+    counted = {k: v for k, v in s["stops"].items() if v}
+    lines.append("stops: " + ", ".join(f"{k} {v}" for k, v in counted.items())
+                 + f" ({s['unreadable_stops']} unreadable)" if counted or s["unreadable_stops"]
+                 else "stops: none recorded")
     m = s["mutation"]
     if m["records"]:
         pct = f"{m['survived'] / m['mutants']:.0%}" if m["mutants"] else "-"
@@ -406,14 +480,14 @@ def main(argv=None) -> int:
         print(exc, file=sys.stderr)
         return 2
     try:
-        records, unreadable, verdicts, issues = collect(repo, args.since)
+        records, unreadable, verdicts, issues, stops, unreadable_stops = collect(repo, args.since)
     except (GhError, json.JSONDecodeError, ValueError) as exc:
         print(f"cannot read {repo}: {exc}", file=sys.stderr)
         return 2
     if not records:
         print(f"0 review records in {repo}" + (f" ({unreadable} unreadable skipped)" if unreadable else ""))
         return 1
-    data = build(records, unreadable, verdicts, issues)
+    data = build(records, unreadable, verdicts, issues, stops, unreadable_stops)
     print(json.dumps(data, indent=2) if args.json else render(repo, data))
     return 0
 
