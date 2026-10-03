@@ -418,6 +418,21 @@ class PhaseTimesExact(StatsBase):
                            "2026-10-03T10:30:30Z")])["summary"]
         self.assertEqual(s["median_verified_to_report"], 0.5)
 
+    def test_other_markers_still_count_mid_line(self):
+        code, out, _ = self.run_stats([(40, "Report. " + v2())])
+        self.assertEqual(code, 0)
+        self.assertIn("1 review records", out.splitlines()[0])
+
+    def test_medians_print_whole_minutes_rounded_half_up(self):
+        extra = "t_branch=2026-10-03T09:00Z t_verified=2026-10-03T10:30Z"
+        for posted, shown, exact in (("2026-10-03T10:32:11Z", "2", 2.1833), ("2026-10-03T10:32:30Z", "3", 2.5)):
+            with self.subTest(posted=posted):
+                code, out, _ = self.run_stats([(40, v2(extra=extra), posted)])
+                self.assertIn(f"phase times: 1 of 1 new records (median branch→verified 90 min, "
+                              f"verified→report {shown} min)", out.splitlines())
+                s = self.json_of([(40, v2(extra=extra), posted)])["summary"]
+                self.assertAlmostEqual(s["median_verified_to_report"], exact, places=3)
+
     def test_each_empty_new_value_names_its_key(self):
         for key in ("session", "t_branch", "t_verified"):
             record = rs.parse_review(v2(extra=f"{key}="))
@@ -473,8 +488,29 @@ class Stops(StatsBase):
         self.assertIn("stops: none recorded", out)
 
     def test_only_unreadable_stops_say_none_recorded_and_count_them(self):
-        code, out, _ = self.run_stats([(40, "quoted: <!-- gogogo:stop … -->\n" + v2())])
+        code, out, _ = self.run_stats([(40, "<!-- gogogo:stop v=1 reason=lunch -->\n" + v2())])
         self.assertIn("stops: none recorded (1 unreadable)", out.splitlines())
+
+    def test_a_mention_inside_a_sentence_is_ignored(self):
+        comments = [(40, "Each hand-back gets `<!-- gogogo:stop v=1 reason=gate -->` under it.\n" + v2()),
+                    (41, "see <!-- gogogo:stop … --> above\n" + v2(pr=2))]
+        s = self.json_of(comments)["summary"]
+        self.assertEqual(set(s["stops"].values()), {0})
+        self.assertEqual(s["unreadable_stops"], 0)
+        code, out, _ = self.run_stats(comments)
+        self.assertIn("stops: none recorded", out.splitlines())
+
+    def test_an_own_line_marker_with_spaces_and_crlf_counts(self):
+        body = "**Needs you:** x.\r\n  <!-- gogogo:stop v=1 reason=gate -->  \r\n" + v2()
+        s = self.json_of([(40, body)])["summary"]
+        self.assertEqual(s["stops"]["gate"], 1)
+        self.assertEqual(s["unreadable_stops"], 0)
+
+    def test_two_markers_on_one_line_are_not_read(self):
+        body = "<!-- gogogo:stop v=1 reason=gate --> <!-- gogogo:stop v=1 reason=ci -->\n" + v2()
+        s = self.json_of([(40, body)])["summary"]
+        self.assertEqual(set(s["stops"].values()), {0})
+        self.assertEqual(s["unreadable_stops"], 1)
 
     def test_stops_alone_are_still_no_records(self):
         code, out, _ = self.run_stats([(40, stop("gate"))])
