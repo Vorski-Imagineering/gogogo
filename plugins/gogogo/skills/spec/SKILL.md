@@ -104,8 +104,8 @@ Every tracker command targets `tracker.issues_repo`. When it differs from
    *specced and labelled* line ends with its card's result from Posting step
    8: moved, already there, left in `<column>`, closed, no card, could not
    be read, the move failed, or step 8 skipped (and which of its conditions
-   was not met). The line also names any dependent Posting step 4 edited or
-   commented on.
+   was not met). Every line, whatever its outcome, also names any dependent
+   Posting step 4 edited or commented on.
    Then each issue filed during the run, with `/gogogo:spec <n>`.
 
 ## The issue body IS these sections, in this order
@@ -432,15 +432,20 @@ order, checking each step before starting the next:
       - No such form: ask the person, naming the step: **post anyway and
         leave that spec to you**, or **post nothing**. A decline, or no
         person to ask: post nothing on `<N>`, add no label, and report it.
-      - The dependent's card is in `tracker.columns.in_progress`, or an open
-        pull request names it: say so and ask before editing it. A no, a
+      - The dependent's card is in `tracker.columns.in_progress` (read with
+        `<tracker.tool> show <D>`), or an open pull request references it
+        (`gh pr list --repo <tracker.code_repo> --state open --search "<D>"`,
+        a PR whose title or body names `#<D>`): say so and ask before editing
+        it. A read that fails counts as in flight. A no, a
         decline, or no person to ask: do not edit it; after step 6, comment
         on it naming the step, why it now fails, and the narrower form.
       - Otherwise fix it after step 6: save `<D>`'s current body to the
         scratchpad, change only those lines, add one line to its
         `## Context` (`<date>: <step> narrowed because #<N> was re-specced`),
         lint it, `gh issue edit <D> --repo <tracker.issues_repo> --body-file <file>`,
-        and re-read it. Its report, Approvals, label and card stay as they
+        and re-read it. When the lint fails only on lines you did not change
+        (an older spec, linted by newer rules), do not edit it: comment
+        instead, as for an in-flight dependent, and say why. Its report, Approvals, label and card stay as they
         were. The fix changes only an assertion's wording, so this check is
         not run again on `<D>`.
    6. The reply names every dependent, each step re-read, and each one
@@ -507,8 +512,9 @@ Which report to keep:
 - **Body is empty** → no report section; the spec starts at `## Verify by hand`.
 
 **Correcting a spec you already posted:** edit the scratchpad file and re-run
-`gh issue edit --body-file`, so the issue carries one accurate spec rather than
-a spec plus errata.
+Posting from step 4 (the lint and the check of open specs that read this
+issue, then `gh issue edit --body-file`), so the issue carries one accurate
+spec rather than a spec plus errata.
 
 **Never leave a second copy** of the spec or of the report. If an earlier
 version is sitting in a comment (including a spec you just rescued into the
@@ -543,7 +549,8 @@ Then as the tracker:
 10. Does the issue carry the ready label, and did Posting step 8 move the
     card or say why it did not? Or did I say which withholding case applies?
 11. Were the open specs that read this issue checked (Posting step 4), and
-    each failing step fixed, commented on or reported?
+    does each failing step have its narrower form and its outcome decided
+    (fixed or commented on after step 6, or reported)?
 
 Any "no" is a rewrite.
 
