@@ -206,7 +206,9 @@ What each fix involves:
   request whose named check passes, and nobody can bypass it. For a default
   branch that is not the merge target, also say that a promotion pushed
   straight to it will then be refused. Give the undo command the row prints.
-  Ask, then run the command the row prints (it pipes
+  When the row replaces an existing ruleset, say that its save command runs
+  first and that the undo restores the saved ruleset.
+  Ask, then run the commands the row prints, in order (it pipes
   `setup_check.py --ruleset <branch>` into `gh api`) and re-run the check. If
   the user declines, leave the row failing and say so. An INFO row saying a
   required check is not offered is reported and never acted on.

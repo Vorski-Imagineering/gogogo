@@ -872,6 +872,33 @@ class Audit(unittest.TestCase):
             self.assertIn("only in classic branch protection", rows[0]["detail"])
             self.assertNotIn("add a CI workflow", rows[0]["fix"])
 
+    def test_an_unreadable_checks_read_reaches_the_classic_detail(self):
+        rows = self._rules(rules=self.FULL[:2], classic=self.BYPASSABLE_CHECK, checks="HTTP 502", needs_ci=True)
+        self.assertEqual([r["level"] for r in rows], ["FAIL"])
+        for text in ("tests", "classic branch protection", "HTTP 502"):
+            self.assertIn(text, rows[0]["detail"])
+        self.assertNotIn("whose checks pass", rows[0]["fix"])
+        rows = self._rules(rules=self.FULL[:2], classic=self.BYPASSABLE_CHECK, checks=[], needs_ci=True)
+        self.assertIn("whose checks pass", rows[0]["fix"])
+        self.assertTrue(rows[0]["detail"].endswith("(enforce admins is off)"), rows[0]["detail"])
+
+    def test_the_put_fix_saves_first_and_its_undo_restores(self):
+        rules = [dict(r, bypass_actors=[{"actor_type": "RepositoryRole", "actor_id": 5}]) for r in self.FULL]
+        rep = sc.Report()
+        sc.check_branch_rules("o/r", "main", rules, {}, ["tests"], True, False, rep, existing=7)
+        fix = rep.rows[0]["fix"]
+        fix_part, undo = fix.split("undo", 1)
+        order = [fix_part.index(t) for t in ("gh api repos/o/r/rulesets/7 --jq", "gogogo-ruleset-7-before.json",
+                                             "-X PUT repos/o/r/rulesets/7 --input -")]
+        self.assertEqual(order, sorted(order))
+        self.assertIn("-X PUT repos/o/r/rulesets/7 --input", undo)
+        self.assertIn("gogogo-ruleset-7-before.json", undo)
+        self.assertNotIn("-X DELETE", fix)
+        rep = sc.Report()
+        sc.check_branch_rules("o/r", "main", self.FULL[:2], {}, ["tests"], True, True, rep)
+        self.assertIn("-X POST repos/o/r/rulesets", rep.rows[0]["fix"])
+        self.assertIn("-X DELETE repos/o/r/rulesets/", rep.rows[0]["fix"])
+
     def test_classic_protection_admins_can_bypass_fails(self):
         classic = {"allow_force_pushes": {"enabled": False}, "allow_deletions": {"enabled": False},
                    "required_status_checks": {"contexts": ["tests"], "checks": []},

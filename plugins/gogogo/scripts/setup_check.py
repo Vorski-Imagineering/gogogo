@@ -241,8 +241,12 @@ def _ruleset_fix(repo, branch, existing):
     if existing is None:
         return (f"`python3 \"{script}\" --ruleset {branch} | gh api -X POST repos/{repo}/rulesets --input -` "
                 f"(undo: `gh api -X DELETE repos/{repo}/rulesets/<id from the POST's output>`)")
-    return (f"`python3 \"{script}\" --ruleset {branch} | gh api -X PUT repos/{repo}/rulesets/{existing} --input -` "
-            f"(undo: `gh api -X DELETE repos/{repo}/rulesets/{existing}`)")
+    saved = f'"$(git rev-parse --git-dir)/gogogo-ruleset-{existing}-before.json"'
+    return (f"first save the existing ruleset: `gh api repos/{repo}/rulesets/{existing} "
+            f"--jq '{{name,target,enforcement,bypass_actors,conditions,rules}}' > {saved}`, then "
+            f"`python3 \"{script}\" --ruleset {branch} | gh api -X PUT repos/{repo}/rulesets/{existing} --input -` "
+            f"(undo: `gh api -X PUT repos/{repo}/rulesets/{existing} --input {saved}`; undo before applying "
+            f"this fix a second time, or the save holds the state after the first PUT)")
 
 
 def check_branch_rules(repo, branch, rules, classic, checks, wants_check, needs_ci, rep, *, target=True,
@@ -316,8 +320,12 @@ def check_branch_rules(repo, branch, rules, classic, checks, wants_check, needs_
         names = ", ".join(required.get("contexts") or [c.get("context", "?") for c in required.get("checks") or []])
         detail = (f"{repo} {branch} requires {names} only in classic branch protection, which admins can bypass "
                   "(enforce admins is off)")
-        level_fix = fix if not no_names else (f"merge a PR into `{branch}` whose checks pass, then re-run to get "
-                                              "the ruleset command")
+        if isinstance(checks, str):
+            detail += f" ({checks})"
+            level_fix = "re-run once the latest merged PR's checks can be read, to get the ruleset command"
+        else:
+            level_fix = fix if not no_names else (f"merge a PR into `{branch}` whose checks pass, then re-run to "
+                                                  "get the ruleset command")
     elif no_names:
         detail = f"{repo} {branch} requires no check, and no check passed on the latest PR merged into {branch}"
         if isinstance(checks, str):
