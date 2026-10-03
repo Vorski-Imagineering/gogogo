@@ -194,14 +194,9 @@ class Items(unittest.TestCase):
                 raise sc.GitError("fatal: not a git repository")
             return ""
 
-        with tempfile.TemporaryDirectory() as tmp:
-            (Path(tmp) / "body.md").write_text(body)
-            out = io.StringIO()
-            with mock.patch.object(sc, "_git", side_effect=fake_git), \
-                    contextlib.redirect_stdout(out), contextlib.redirect_stderr(out):
-                code = sc.main(["items", str(Path(tmp) / "body.md")])
+        out, code = call("items", body=body, git=fake_git)
         self.assertEqual(code, 2)
-        self.assertIn("fatal: not a git repository", out.getvalue())
+        self.assertIn("fatal: not a git repository", out)
 
     def test_no_spec_in_this_body(self):
         out, code = call("items", body="## Request\n\nPlease fix it.\n")
@@ -241,6 +236,44 @@ class ChangedFiles(unittest.TestCase):
         self.assertIn("outside: README.md", lines)
         self.assertFalse([ln for ln in lines if ln.startswith("outside: plugins/")], lines)
 
+    def slashless_repo(self, tmp, edit_line):
+        repo = Path(tmp)
+        git(repo, "init", "-q", "-b", "main")
+        git(repo, "config", "user.email", "t@example.org")
+        git(repo, "config", "user.name", "t")
+        for path in ("old.py", "README.md", "sub/x.py"):
+            (repo / path).parent.mkdir(parents=True, exist_ok=True)
+            (repo / path).write_text("one\n")
+        git(repo, "add", "-A")
+        git(repo, "commit", "-q", "-m", "base")
+        body = BODY.replace(BODY[BODY.index("**Edit:**"):BODY.index("\n", BODY.index("**Edit:**"))], edit_line)
+        (repo / "body.md").write_text(body)
+        (repo / ".gitignore").write_text("body.md\n.gitignore\n")
+        return repo
+
+    def test_a_top_level_edit_file_the_change_deletes_is_still_listed(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            repo = self.slashless_repo(tmp, "**Edit:** `old.py`, `README.md`.")
+            git(repo, "switch", "-q", "-c", "change")
+            git(repo, "rm", "-q", "old.py")
+            git(repo, "commit", "-q", "-m", "drop old.py")
+            out = subprocess.run([sys.executable, str(SCRIPT), "items", "body.md", "--base", "main"],
+                                 cwd=repo, capture_output=True, text=True)
+        self.assertEqual(out.returncode, 0, out.stderr)
+        lines = out.stdout.splitlines()
+        self.assertIn("F:old.py\told.py\tmet", lines)
+        self.assertNotIn("outside: old.py", lines)
+
+    def test_slashless_edit_names_are_read_from_the_repo_top_in_a_subfolder(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            repo = self.slashless_repo(tmp, "**Edit:** `README.md`, `x.py`.")
+            out = subprocess.run([sys.executable, str(SCRIPT), "items", "../body.md"],
+                                 cwd=repo / "sub", capture_output=True, text=True)
+        self.assertEqual(out.returncode, 0, out.stderr)
+        f_ids = [ln.split("\t")[0] for ln in out.stdout.splitlines() if ln.startswith("F:")]
+        self.assertIn("F:README.md", f_ids)
+        self.assertIn("F:x.py", f_ids)
+
     def test_slashless_edit_names_against_a_real_tree(self):
         body = BODY.replace(BODY[BODY.index("**Edit:**"):BODY.index("\n", BODY.index("**Edit:**"))],
                             "**Edit:** `README.md`, `views.py`, `preflight.extra`.")
@@ -267,7 +300,7 @@ class ChangedFiles(unittest.TestCase):
         self.assertNotIn("outside: README.md", lines)
 
 
-def call(*argv, body=BODY, answers=None, changed=None, cwd=None):
+def call(*argv, body=BODY, answers=None, changed=None, cwd=None, git=None):
     """Run main() with the body (and answers) in temp files; returns (stdout+stderr, exit)."""
     with tempfile.TemporaryDirectory() as tmp:
         base = Path(cwd or tmp)
@@ -279,6 +312,8 @@ def call(*argv, body=BODY, answers=None, changed=None, cwd=None):
         args += list(argv[1:])
 
         def fake_git(a):
+            if git is not None:
+                return git(a)
             if a[0] == "merge-base":
                 return "abc\n"
             if a[0] == "diff":

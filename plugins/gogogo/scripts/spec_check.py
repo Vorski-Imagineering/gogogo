@@ -76,7 +76,8 @@ def _strip_number(line: str) -> str:
 
 
 def _tree() -> list[str]:
-    out = _git(["ls-files", "-z", "--cached", "--others", "--exclude-standard"])
+    """Every tracked or unignored file, named from the repo top wherever this runs."""
+    out = _git(["ls-files", "-z", "--full-name", "--cached", "--others", "--exclude-standard", "--", ":/"])
     return [p for p in out.split("\0") if p]
 
 
@@ -232,7 +233,8 @@ def main(argv=None) -> int:
         body = sys.stdin.read() if args.body == "-" else Path(args.body).read_text(encoding="utf-8")
         answers = Path(args.answers).read_text(encoding="utf-8") if args.command == "verify" else ""
         changed = changed_files(args.base) if args.base else None
-        listed = list_items(body, changed, _tree)
+        # A file the change deletes is no longer in the tree but was there before it.
+        listed = list_items(body, changed, lambda: _tree() + (changed or []))
     except (OSError, UnicodeDecodeError, GitError) as exc:
         print(exc, file=sys.stderr)
         return 2
