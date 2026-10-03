@@ -154,7 +154,11 @@ def _real(key: str, value: str) -> bool:
 def parse_review(text: str) -> dict | None:
     """The first review record in `text` as a dict, or None when it does not parse."""
     match = REVIEW.search(text)
-    fields = _fields(match.group(1)) if match else None
+    # An empty gogogo#62 key (`session=`, from an unset variable) is malformed, never an unreadable record.
+    parts = match.group(1).split() if match else []
+    blank = ("session=", "t_branch=", "t_verified=")
+    empty = [p[:-1] for p in parts if p in blank]
+    fields = _fields(" ".join(p for p in parts if p not in blank)) if match else None
     if fields is None:
         return None
     try:
@@ -185,6 +189,7 @@ def parse_review(text: str) -> dict | None:
             record[key] = value if value and shape.fullmatch(value) and _real(key, value) else None
             if value not in (None, "unknown") and record[key] is None:
                 record["malformed"].append(key)
+        record["malformed"] += empty
     except (KeyError, ValueError):
         return None
     record["consistent"] = (all(len(record[k]) == record["rounds"] for k in ("applied", "declined", "refix"))

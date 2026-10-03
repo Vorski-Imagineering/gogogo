@@ -335,6 +335,12 @@ class PhaseTimes(StatsBase):
         self.assertIsNone(data["rows"][0]["t_branch"])
         self.assertEqual(data["summary"]["malformed"], 1)
 
+    def test_an_empty_new_value_is_malformed_not_unreadable(self):
+        code, out, _ = self.run_stats([(40, v2(extra="session= t_branch=unknown t_verified=unknown"))])
+        self.assertEqual(code, 0)
+        self.assertIn("1 review records", out.splitlines()[0])
+        self.assertIn("0 unreadable skipped, 1 with malformed fields", out.splitlines()[0])
+
     def test_unknown_is_not_malformed(self):
         data = self.json_of([(40, v2(extra="session=unknown t_branch=unknown"))])
         self.assertEqual((data["rows"][0]["session"], data["rows"][0]["t_branch"]), (None, None))
