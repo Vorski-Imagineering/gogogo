@@ -1,0 +1,13 @@
+{
+  "description": "gogogo: a one-line board status when a session opens",
+  "hooks": {
+    "SessionStart": [
+      {
+        "matcher": "startup|resume",
+        "hooks": [
+          {"type": "command", "command": "python3 \"${CLAUDE_PLUGIN_ROOT}/scripts/session_status.py\"", "timeout": 20}
+        ]
+      }
+    ]
+  }
+}

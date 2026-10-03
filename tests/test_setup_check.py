@@ -961,5 +961,43 @@ class Notify(unittest.TestCase):
         self.assertEqual((failed["level"], failed["detail"]), ("WARN", "telegram: Unauthorized"))
 
 
+class SessionHook(unittest.TestCase):
+    """The plugin's own SessionStart hook: reported, never a FAIL."""
+
+    def row(self, files):
+        rep = sc.Report()
+        sc.check_session_hook(repo(files), rep)
+        rows = [r for r in rep.rows if r["check"] == "session-status"]
+        self.assertEqual(len(rows), 1)
+        self.assertFalse(rep.failed())
+        return rows[0]
+
+    def test_main_checks_this_plugin(self):
+        self.assertEqual(sc.PLUGIN_ROOT, ROOT / "plugins" / "gogogo")
+
+    def test_the_shipped_hook_is_info(self):
+        rep = sc.Report()
+        sc.check_session_hook(ROOT / "plugins" / "gogogo", rep)
+        self.assertEqual([(r["level"], r["check"]) for r in rep.rows], [("INFO", "session-status")])
+        self.assertEqual(rep.rows[0]["detail"], "shown at session start (plugin hook)")
+
+    def test_hook_present_is_info(self):
+        hooks = {"hooks": {"SessionStart": [{"matcher": "startup", "hooks": [
+            {"type": "command", "command": 'python3 "${CLAUDE_PLUGIN_ROOT}/scripts/session_status.py"'}]}]}}
+        self.assertEqual(self.row({"hooks/hooks.json": json.dumps(hooks)})["level"], "INFO")
+
+    def test_no_hooks_file_warns(self):
+        row = self.row({})
+        self.assertEqual((row["level"], row["detail"]), ("WARN", "the plugin's session-status hook is missing"))
+
+    def test_hook_under_another_event_or_unreadable_warns(self):
+        other = {"hooks": {"Stop": [{"hooks": [{"type": "command", "command": "session_status.py"}]}]}}
+        self.assertEqual(self.row({"hooks/hooks.json": json.dumps(other)})["level"], "WARN")
+        self.assertEqual(self.row({"hooks/hooks.json": "{not json"})["level"], "WARN")
+        self.assertEqual(self.row({"hooks/hooks.json": "[]"})["level"], "WARN")
+        no_command = {"hooks": {"SessionStart": [{"hooks": [{"type": "command"}]}]}}
+        self.assertEqual(self.row({"hooks/hooks.json": json.dumps(no_command)})["level"], "WARN")
+
+
 if __name__ == "__main__":
     unittest.main()
