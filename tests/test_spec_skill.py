@@ -88,6 +88,11 @@ class Skill(unittest.TestCase):
             self.assertIn(name, eight)
         for setting in ("tracker.tool", "tracker.queue", "tracker.ready_marker"):
             self.assertIn(setting, pc.FIELDS, setting)
+        queue_moves = [ln for ln in eight.splitlines()
+                       if re.search(r"move <N> .*--to \"<tracker\.queue>\"", ln) and "--add-missing" not in ln]
+        self.assertTrue(queue_moves, eight)
+        for line in queue_moves:
+            self.assertIn("--from", line)
         named = set(re.findall(r"`(tracker\.[a-z_]+(?:\.[a-z_]+)*)`", skill_text()))
         for setting in named:
             self.assertIn(setting, pc.FIELDS, setting)

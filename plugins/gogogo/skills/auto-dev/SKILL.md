@@ -191,6 +191,23 @@ by the run* for §8 and §9.
 
 ## 3. Branch from a fresh base
 
+First take the card, before any branch exists, so anyone glancing at the board
+sees which issue is live and a card another session took since §1 read the
+queue is not taken twice:
+
+```bash
+<tracker.tool> move <n> --from "<tracker.queue>" --to in_progress
+```
+
+- Exit 3: another session took the issue meanwhile. **Skip** it with
+  `taken meanwhile: the card is in <column>` (the column the refusal names),
+  create no branch, and leave the card where it is: this skip is not handed
+  back (§2), and the card in `tracker.columns.in_progress` is the other
+  session's take, never this run's. It is not taken again in this run (§4).
+- Any other non-zero exit: the move failed; handle it as any failed move.
+
+Then branch:
+
 ```bash
 git switch <integration.base> && git pull --ff-only
 git switch -c fix/<issue-number>-<short-slug>
@@ -200,8 +217,9 @@ Always from a fresh base: the previous iteration merged into it, and branching
 from a stale one silently reverts that work in the squash. The branch name
 carries the issue number, so the work is never stranded.
 
-Then move the card to `tracker.columns.in_progress`, before the change starts,
-so anyone glancing at the board sees which issue is live.
+When branching fails, first put the card back with
+`<tracker.tool> move <n> --from in_progress --to "<tracker.queue>"`, then stop
+as a failed branch does.
 
 Push the branch as soon as it has its first commit (`git push -u origin
 <branch>`), so the work survives a run that dies.

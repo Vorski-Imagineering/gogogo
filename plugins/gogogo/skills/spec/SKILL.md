@@ -102,8 +102,9 @@ Every tracker command targets `tracker.issues_repo`. When it differs from
    case); *left open* (with the question); *skipped* (closed, a pull request,
    or already ready); or *not reached* (with why the run stopped). Each
    *specced and labelled* line ends with its card's result from Posting step
-   8: moved, already there, left in `<column>`, closed, no card, could not
-   be read, the move failed, or step 8 skipped (and which of its conditions
+   8: moved, already there, left in `<column>`, moved meanwhile to
+   `<column>`, closed, no card, could not be read, the move failed, or step 8
+   skipped (and which of its conditions
    was not met).
    Then each issue filed during the run, with `/gogogo:spec <n>`.
 
@@ -445,10 +446,14 @@ order, checking each step before starting the next:
    5. When the issue has no card: for `tracker.tool` `shared`, run
       `move <N> --to "<tracker.queue>" --add-missing`. For any other tool, say
       the issue has no card on the board and leave it.
-   6. Otherwise: `move <N> --to "<tracker.queue>"`.
-   7. Report the result. Only a zero exit counts as moved. On any other exit,
-      say the move failed, give its message, and leave the card. The label
-      stays: it describes the spec, not the card.
+   6. Otherwise: `move <N> --from "<the column read in 8.1>" --to "<tracker.queue>"`,
+      so a card another session moved since that read is not moved back. A
+      card 8.1 read with no column has none to name: move it without `--from`.
+   7. Report the result. Only a zero exit counts as moved. On exit 3 the card
+      moved meanwhile: read it again with `show <N>`, say it moved meanwhile
+      and name its column (*already in `<tracker.queue>`* when it is there),
+      and leave it. On any other exit, say the move failed, give its message,
+      and leave the card. The label stays: it describes the spec, not the card.
 
    Nothing in this step asks the user anything.
 

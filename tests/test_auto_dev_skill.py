@@ -83,5 +83,24 @@ class NeverWaits(unittest.TestCase):
             self.assertIn(name, claude)
 
 
+
+class TakeWithFrom(unittest.TestCase):
+    """§3 takes the card with `move --from` before it branches (gogogo#101)."""
+
+    def setUp(self):
+        self.step = section(SKILL.read_text(encoding="utf-8"), "3. Branch from a fresh base")
+
+    def test_the_move_carries_from_and_comes_before_the_branch(self):
+        lines = self.step.splitlines()
+        moves = [i for i, ln in enumerate(lines) if " move <n>" in ln and "--to in_progress" in ln]
+        branch = next(i for i, ln in enumerate(lines) if "git switch -c" in ln)
+        self.assertEqual(len(moves), 1, moves)
+        self.assertIn("--from", lines[moves[0]])
+        self.assertLess(moves[0], branch)
+
+    def test_a_failed_branch_moves_the_card_back_from_in_progress(self):
+        self.assertIn("--from in_progress", self.step)
+
+
 if __name__ == "__main__":
     unittest.main()
