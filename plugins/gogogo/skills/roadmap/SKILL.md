@@ -1,6 +1,6 @@
 ---
 name: roadmap
-description: Use when asked to update, refresh or sync the repo's roadmap document against the tracker, when its status marks look out of date, or when /gogogo:roadmap is invoked. Re-derives every row's mark from the issue's state and board column, fixes the marks and the prose they make false, and commits the document.
+description: Use when asked to update, refresh or sync the repo's roadmap document against the tracker, when its status marks look out of date, or when /gogogo:roadmap is invoked. Re-derives every row's mark from the issue's state and board column, fixes the marks and the prose they make false, and commits the document, opening a PR for it when the document shares the repo.
 ---
 
 # Keeping a roadmap document in step with the board
@@ -100,14 +100,37 @@ git rev-parse --show-toplevel
   `git -C "$D" status -sb`. Stop and report if the document has uncommitted changes
   (another session's edit), or the branch has no upstream. If it is behind,
   `git -C "$D" pull --ff-only`; stop and report if that refuses.
-- **The same repo:** `git fetch`. Stop and report if the document has uncommitted
-  changes. Then cut the refresh branch from the remote base `B`:
-  ```bash
-  git switch -c roadmap-refresh-<YYYY-MM-DD-HHMM> origin/<B>
-  ```
-  `B` is `integration.final_target` when `integration.strategy` is `run-branch-pr`,
-  otherwise `integration.base` (or the default branch when it is unset). Stop and report
-  if the switch fails. Steps 2 to 6 run on this branch.
+- **The same repo:** in order.
+  1. `git fetch`. Stop and report if the document has uncommitted changes.
+  2. **An earlier refresh still open?**
+     ```bash
+     gh pr list --state open --limit 100 --json number,headRefName,url \
+       --jq '.[] | select(.headRefName | startswith("roadmap-refresh-")) | "#\(.number) \(.headRefName) \(.url)"'
+     ```
+     Any line printed: **stop and report it** as "merge or close #N first; a new refresh
+     cut from `<B>` would conflict with it". The checkout is untouched.
+  3. **Record the start branch `S`**: `git branch --show-current`. When it prints nothing
+     (a detached HEAD), or a name starting with `roadmap-refresh-`, `S` is `B`.
+  4. Cut the refresh branch from the remote base `B`:
+     ```bash
+     git switch -c roadmap-refresh-<YYYY-MM-DD-HHMM> origin/<B>
+     ```
+     `B` is `integration.final_target` when `integration.strategy` is `run-branch-pr`,
+     otherwise `integration.base` (or the default branch when it is unset). Stop and
+     report if the switch fails. Steps 2 to 6 run on this branch.
+
+**Stopping early (the same repo).** Any stop between the cut and §7's push (step 2's
+"every mark agrees", its exit 2, or a stop a later step asks for) ends, when
+`git status --porcelain -- <file>` prints nothing, with:
+
+```bash
+git switch <S>
+git branch -D roadmap-refresh-<YYYY-MM-DD-HHMM>
+```
+
+and the report says the branch was removed; nothing was pushed, so nothing is lost. When
+the document has an uncommitted change, leave the branch and say which branch holds the
+change.
 
 ## 2. Report
 
@@ -172,12 +195,25 @@ point at.
   git -C "$D" commit -m "roadmap: refresh marks from the tracker (<#n A → B>, ...)"
   git -C "$D" push
   ```
-- **The same repo:** on the refresh branch step 1 cut, commit the document, push the
-  branch (`git push -u origin roadmap-refresh-<YYYY-MM-DD-HHMM>`), and report it for the
-  repo's own integration path (`integration.strategy`). This skill never merges into the
-  base itself.
+- **The same repo:** on the refresh branch step 1 cut, in order:
+  ```bash
+  git add <file>
+  git commit -m "roadmap: refresh marks from the tracker (<#n A → B>, ...)"
+  git push -u origin roadmap-refresh-<YYYY-MM-DD-HHMM>
+  gh pr create --base <B> --head roadmap-refresh-<YYYY-MM-DD-HHMM> \
+    --title "roadmap: refresh marks from the tracker" --body-file <scratch>/roadmap-pr.md
+  git switch <S>
+  git branch -d roadmap-refresh-<YYYY-MM-DD-HHMM>
+  ```
+  The body file holds the step 8 report. When `gh pr create` says a PR already exists
+  for the branch, read it with
+  `gh pr list --head roadmap-refresh-<YYYY-MM-DD-HHMM> --json number,url` and carry on.
+  The PR is how the refresh lands under every `integration.strategy`; a person merges it
+  the way the repo lands PRs. This skill never merges into the base itself.
+  `git branch -d` removes only the local copy; the branch stays on origin inside the PR.
 
 ## 8. Report
 
 What moved (`#n A → B`), which prose changed, which rows were left for a person and why,
-and the commit or the branch.
+and then: in another repo, the commit; in the same repo, the PR as the thing still to
+do, "merge #N to land the refresh" with its URL, and that the checkout is back on `S`.
