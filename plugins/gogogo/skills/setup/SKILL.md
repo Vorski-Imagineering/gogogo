@@ -183,7 +183,7 @@ What each fix involves:
 - **Pull requests on the board**
   (`WARN tracker: pull requests on the board`). Pull requests are cards because Auto-add includes, or included,
   them. Set Auto-add's filter to `is:issue is:open` (the *Workflows* bullet's
-  steps). Then list every own-repo pull-request card (`tracker.py list
+  steps). Then list every own-repo pull-request card (`<tracker.tool> list
   --json`, `kind` `PullRequest`) by number and column, and ask whether to
   archive them all. On yes, run
   `gh project item-archive <tracker.project_number> --owner <tracker.project_owner> --id <item_id>`

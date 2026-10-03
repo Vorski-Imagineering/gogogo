@@ -34,7 +34,9 @@ fetch would be a write.
 
 The report gives no verdicts: no "stranded", "stale" or "should", and no
 "behind" offered as a problem. It offers no fixes and asks no questions about
-fixing. Print large numbers as they are, without explaining them. If the user
+fixing. The one exception is the BOARD block's pull-request-card line
+(*Shape*), which names where the filter is set and that `/gogogo:setup`
+archives them. Print large numbers as they are, without explaining them. If the user
 asks what to do about something, point them to `/gogogo:wrap-up`,
 `/gogogo:setup` or `/gogogo:dev`, and do not do it within status.
 
@@ -66,7 +68,13 @@ in its place in the report, and the others still run.
    python3 "${CLAUDE_PLUGIN_ROOT}/scripts/tracker.py" list --json
    ```
    `fields` gives the column order; `list --json` gives the cards, each with
-   `number`, `title`, `state`, `repo`, `status` and `kind`. If either exits
+   `number`, `title`, `state`, `repo`, `status` and `kind`. Only when a card
+   is an own-repo pull request (*Shape*), also read the board's URL:
+   ```bash
+   gh project view <tracker.project_number> --owner <tracker.project_owner> --format json -q .url
+   ```
+   Its failure prints no `unreadable` line; *Shape* says what replaces the
+   URL. If `fields` or `list` exits
    non-zero, the BOARD block is one line and prints no counts:
    `BOARD  unreadable: tracker.py exited <n>: <its last stderr line>`.
    An unreadable board is not an empty one. When `tracker.tool` is missing or
@@ -113,10 +121,10 @@ These rules apply, in order.
   `repo` is `tracker.issues_repo` or `tracker.code_repo` (compared ignoring
   case), the BOARD block ends with one line:
   `<N> pull-request card(s) on the board: set Auto-add to project's filter to is:issue is:open at <workflows URL>; /gogogo:setup archives them.`
-  The URL is the board's own (`gh project view <tracker.project_number> --owner <tracker.project_owner> --format json -q .url`,
-  which is `/orgs/<owner>/projects/<n>` or `/users/<owner>/projects/<n>`)
-  followed by `/workflows`, so it reads `…/projects/<n>/workflows`. When
-  that command fails, the line names `the board's ⋯ → Workflows` instead.
+  The URL is the board's own, read in Gather step 2 (`/orgs/<owner>/projects/<n>`
+  or `/users/<owner>/projects/<n>`), followed by `/workflows`, so it reads
+  `…/projects/<n>/workflows`. When that read fails, the line names
+  `the board's ⋯ → Workflows` instead.
   No line when there are none.
 - **A pull request** reads `#<n> <headRefName>`, then ` → <issue>` when the
   branch name carries an issue number (next rule), then ` (draft)` if it is
