@@ -147,6 +147,9 @@ def configure(profile_path: str | None = None) -> Path:
         settings, _ = profile_check.split_profile(path.read_text(encoding="utf-8"))
     except profile_check.ProfileError as exc:
         raise ProfileMissing(str(exc)) from None
+    # With the format's defaults filled in: a profile without needs_human still
+    # has that role, in its in_progress column.
+    settings = profile_check.effective(settings)
     tracker = settings.get("tracker") or {}
     for key in ("project_owner", "project_number", "issues_repo"):
         if not tracker.get(key):

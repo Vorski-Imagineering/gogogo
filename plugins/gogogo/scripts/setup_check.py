@@ -774,6 +774,8 @@ def main(argv=None):
             sections = None
         if sections is not None:
             check_profile_skills(settings, sections, rep)
+        # From here on, the values the skills use: the format's defaults filled in.
+        settings = profile_check.effective(settings)
     if settings:
         check_release_shape(settings, rep)
         check_release(settings, rep)

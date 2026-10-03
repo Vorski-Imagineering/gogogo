@@ -532,6 +532,21 @@ columns = { in_progress = "Doing", needs_human = "Human!Help!" }
         self.assertEqual(board.missing_columns({"options": ["Doing"]}), ["Human!Help!"])
         self.assertEqual(board.missing_columns({"options": ["Doing", "human!help!"]}), [])
 
+    def test_a_profile_without_needs_human_uses_the_in_progress_column(self):
+        # gogogo#87: the default profile_check.effective() fills in, so a move to
+        # needs_human has a column rather than an unknown role.
+        path = self.write("""+++
+profile = 1
+[tracker]
+project_owner = "someone"
+project_number = 7
+issues_repo = "someone/tracker"
+columns = { in_progress = "In progress" }
++++
+""")
+        board.configure(path)
+        self.assertEqual(board.COLUMNS["needs_human"].name, "In progress")
+
     def test_a_profile_without_a_board_is_refused(self):
         path = self.write('+++\nprofile = 1\n[tracker]\nissues_repo = "a/b"\n+++\n')
         with self.assertRaises(board.ProfileMissing):

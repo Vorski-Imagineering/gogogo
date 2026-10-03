@@ -40,6 +40,8 @@ python3 "${CLAUDE_PLUGIN_ROOT}/scripts/profile_check.py" --for spec --show
 - Any other exit: **stop and report the line it printed.** It names the missing
   field. Do not guess a tracker, a label, a test command or a URL.
 
+Any `warning:` line the check printed goes, verbatim, at the top of your report to the person; if it printed none, the report says so.
+
 Then read the profile's `## Recon traps` and `## Lane constraints` sections, and
 the Hard Stop rules at `hard_stops.source`. They are required reading before
 you write anything, and nothing here repeats them.

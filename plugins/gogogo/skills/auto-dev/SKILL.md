@@ -33,6 +33,8 @@ Read the profile first, as `/gogogo:dev` does:
 python3 "${CLAUDE_PLUGIN_ROOT}/scripts/profile_check.py" --for auto-dev --show
 ```
 
+Any `warning:` line the check printed goes, verbatim, at the top of your report to the person; if it printed none, the report says so.
+
 `<tracker.tool>` below means the profile's `tracker.tool`; when that is
 `shared`, it is `python3 "${CLAUDE_PLUGIN_ROOT}/scripts/tracker.py"`.
 
