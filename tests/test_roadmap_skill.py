@@ -64,6 +64,19 @@ class Skill(unittest.TestCase):
     def test_runs_the_script(self):
         self.assertIn('scripts/roadmap_status.py"', skill_text())
 
+    def test_same_repo_path_opens_the_pr(self):
+        self.assertIn("gh pr create --base <B>", skill_text())
+
+    def test_same_repo_path_returns_the_checkout(self):
+        text = skill_text()
+        for command in ("git switch <S>", "git branch -d roadmap-refresh-", "git branch -D roadmap-refresh-"):
+            self.assertIn(command, text, command)
+
+    def test_checks_for_an_open_refresh_pr(self):
+        text = skill_text()
+        self.assertIn('startswith("roadmap-refresh-")', text)
+        self.assertIn("gh pr list --state open", text)
+
     def test_its_legend_template_passes_the_script(self):
         blocks = re.findall(r"```[^\n]*\n(.*?)```", skill_text(), re.S)
         templates = [b for b in blocks if LEGEND_HEADER in b]
