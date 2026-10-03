@@ -24,7 +24,7 @@ at `6dd73fc` and against a Claude Code 2.1.287 transcript.
 | **B** | board item history | when a card entered and left each column | not confirmed: the shared `tracker.py` reads current columns only; whether GitHub exposes column-change history for a Project item has to be checked before relying on it |
 | **X** | Claude Code session transcripts, `~/.claude/projects/<folder>/<session>.jsonl` on the machine that ran the session | per line: `sessionId`, `timestamp`, `gitBranch`, `isSidechain`; per model reply: `usage` (`input_tokens`, `output_tokens`, `cache_read_input_tokens`, `cache_creation_input_tokens`); `cost-state` lines with `totalCostUSD` | **30 days by default**: Claude Code deletes session data older than `cleanupPeriodDays` at startup ([costs](https://code.claude.com/docs/en/costs), read 2026-10-02) |
 | **O** | Claude Code OpenTelemetry, when enabled | `claude_code.token.usage`, `claude_code.cost.usage`, `claude_code.active_time.total`, `claude_code.commit.count`, `claude_code.pull_request.count`, each with `session.id`; custom labels through `OTEL_RESOURCE_ATTRIBUTES` ([monitoring](https://code.claude.com/docs/en/monitoring-usage), read 2026-10-02) | as long as the collector keeps it |
-| **R** | the run report and between-issues log of `/gogogo:auto-dev` (`skills/auto-dev/SKILL.md:313-356`), and notify messages | issues taken, skipped and why, stops, merges per run | **only in the session**: nothing writes them to a file or the tracker (notify messages go to a chat, when on) |
+| **R** | the run report and between-issues log of `/gogogo:auto-dev` (`skills/auto-dev/SKILL.md:313-356`), and notify messages | issues taken, skipped and why, stops, merges per run | the narrative **only in the session**; since #63 each triage skip is a `gogogo:skip` marker on its issue, and a run is the set of markers sharing a session id (C) |
 
 ## Who may see what
 
@@ -74,7 +74,7 @@ not the issues inside one; the branch is the per-issue key.
 
 | Measure | Question | Definition | Unit | Source | History | Public or local | Recording that would close the gap |
 |---|---|---|---|---|---|---|---|
-| **Q5 Triage skips** | How often does a queued issue turn out not to be workable? | issues skipped at triage ÷ issues read from the queue, per run | ratio, with n | R | **no**: the run report is not kept | public | a skip recorded on the skipped issue (#63) |
+| **Q5 Triage skips** | How often does a queued issue turn out not to be workable? | issues skipped at triage ÷ issues read from the queue, per run | ratio, with n | C | **no** before #63: the run report was not kept | public | the `gogogo:skip` marker on the skipped issue, read by `review_stats.py` |
 | **Q6 Spec edits after ready** | How often does a spec change after it was called ready? | specced issues whose body was edited after the ready label was added ÷ specced issues | ratio, with n | I (`labeled` time), issue edit history | **partly**: edit history is readable through GitHub's GraphQL `userContentEdits`, not REST | public | none |
 
 ### Quality: is the review worth it?
@@ -98,7 +98,7 @@ not the issues inside one; the branch is the per-issue key.
 | Measure | Question | Definition | Unit | Source | History | Public or local | Recording that would close the gap |
 |---|---|---|---|---|---|---|---|
 | **P1 Time per phase** | Where does an issue's time go? | per issue, wall time between: branch created, first commit, review start, review end, verification end, merge verified | minutes | X (first and last line on the issue's branch; skill and tool calls in between), G | **partly**: start and end from X for the last 30 days; the phases inside need markers | public (times only) | `t_branch=` and `t_verified=` in the review record (since #62); the review end is the report's posted time, and the merge comes from G and P |
-| **P2 Run size and length** | How much does one unattended run get through? | per run: issues taken, merged, sent to a person, skipped; wall time | count, hours | R, X | **partly**: X for the last 30 days, by session | public | per-issue markers grouped by session (#63) |
+| **P2 Run size and length** | How much does one unattended run get through? | per run: issues taken, merged, sent to a person, skipped; wall time | count, hours | C, X | **partly**: X for the last 30 days, by session | public | the `sessions:` section of `review_stats.py`, from markers sharing a session id |
 | **P3 Owner wait** | How long does work wait for the owner? | (a) time a card spends in `needs_human`; (b) time from entering the `verify.human` stage's column to closed as completed | hours | B, I | **partly**: (b) from the close event if the stage entry is known; (a) needs board history | public | a hand-back comment already marks entry to `needs_human`; a comment or event when the owner moves it on would close (a) |
 
 ### Token efficiency
@@ -123,9 +123,9 @@ Compute in this order. Each line says what it needs from the adopting repo.
 7. **Q7 Review rounds and yield**: review records.
 8. **Q6 Spec edits after ready**: edit history, through GraphQL.
 9. **K1-K4**: transcripts on the owner's machine, for the days they cover; say which days.
-10. **P1 Time per phase** (start and end only) and **P2 Run size**: transcripts.
+10. **P1 Time per phase** (start and end only) and **P2 Run size**: transcripts, and for P2 since #63 the `sessions:` section of `review_stats.py` (C).
 
-Report as *no data*, with the reason, never as zero: Q1, Q5, Q8, the inside of
+Report as *no data*, with the reason, never as zero: Q1, Q5 (before #63), Q8, the inside of
 P1, and P3 (a) unless board history turns out to be readable.
 
 Every number is given per period with its sample size. A period with a few

@@ -29,6 +29,8 @@ python3 "${CLAUDE_PLUGIN_ROOT}/scripts/profile_check.py" --for roadmap --show
 - `roadmap.file` unset: **stop** and say this repo has no roadmap document. Setting it is
   described in `references/profile-schema.md` § Roadmap.
 
+Any `warning:` line the check printed goes, verbatim, at the top of your report to the person; if it printed none, the report says so.
+
 The document is at `roadmap.file`, from the folder holding `.agents/`. It may sit in
 another git repo checked out inside this one.
 
@@ -78,7 +80,7 @@ A repo starting a legend can begin from this one:
 | 🔵 | **ready** | carries the ready label | ready label |
 | 🟡 | **in progress** | being built | In progress |
 | 🆘 | **needs you** | stopped; waiting for a person | Human!Help! |
-| 🟠 | **released** | on its last stage, not yet closed | Released |
+| 🟢 | **released** | on its last stage, not yet closed | Released |
 | ✅ | **Closed** | closed as completed | closed |
 | ⚫ | **dropped** | closed as not planned | not planned |
 ```
@@ -174,6 +176,14 @@ git log origin/<integration.base> --grep "#<n>"
 
 The paragraphs after each table, blockquotes, and other cells that state something about
 the tracker. Fix only what the new state makes false; add no reasoning.
+
+Then link every issue the document names, not only in the `Issue` column: in `Note` and
+`Notes` cells, after a mark, in other cells and in prose. A bare `#<n>` becomes
+`[#<n>](https://github.com/<tracker.issues_repo>/issues/<n>)`, and `<owner>/<repo>#<n>`
+links to that repo's issue. Leave code spans, fenced blocks and existing links as they
+are. One exception: in a table with no `Issue` column, the script reads the first link in
+the `State` cell as the row's own issue, so in a row that has none, leave references in
+that cell unlinked.
 
 ## 5. Rows the script cannot check
 

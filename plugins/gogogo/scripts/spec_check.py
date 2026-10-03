@@ -6,9 +6,15 @@
 
 `items` prints one line per item of the spec in BODY_FILE (an issue body, or
 `-` for stdin): `V<k>` each numbered step of Verify by hand, `A<k>` each
-Approvals row and `A0` the Not approved line, `D<k>` each numbered Design item,
-`T<k>` each numbered test case, `N<k>` each bullet under Explicitly not in
-scope, and `F:<path>` each path under Create and Edit. Ids are by position. A
+Approvals row and `A0` the Not approved line, `D<k>` each numbered Design item
+and `T<k>` each numbered test case (both count items numbered `1.` or `**1.**`
+at the start of a line), `N<k>` each bullet under Explicitly not in scope, and
+`F:<path>` each backticked path under Create and Edit.
+Under Edit, a backticked name with no `/` counts only when a tracked or
+unignored file in the working tree equals it or ends with `/` + it (a setting
+such as `preflight.extra` is not a file); under Create every backticked path
+counts. So a name with no / under Edit counts only when a file by that name
+exists in the working tree. Ids are by position. A
 Design or Test cases section with no numbered item is one item, `D0` or `T0`,
 and is printed as `unlisted:`; so is Files when it is missing or has no Create
 or Edit group naming a path. With `--base`, each `F:` item is `met` when the change
@@ -66,19 +72,34 @@ def _git(args: list[str]) -> str:
 
 
 def _strip_number(line: str) -> str:
-    return re.sub(r"^\d+[.)]\s+", "", line.strip())
+    return re.sub(r"^\*{0,2}\d+[.)]\*{0,2}\s+", "", line.strip())
 
 
-def _paths(lines: list[str]) -> list[str]:
-    found = []
+def _tree() -> list[str]:
+    """Every tracked or unignored file, named from the repo top wherever this runs."""
+    out = _git(["ls-files", "-z", "--full-name", "--cached", "--others", "--exclude-standard", "--", ":/"])
+    return [p for p in out.split("\0") if p]
+
+
+def _paths(lines: list[str], tree=None) -> list[str]:
+    """Backticked paths in lines. With tree (a callable listing the working tree's
+    files, called at most once), a name with no `/` is kept only when a file
+    equals it or ends with `/` + it."""
+    found, files = [], None
     for line in lines:
         while PARENS.search(line):
             line = PARENS.sub("", line)
-        found += PATH.findall(line)
+        for path in PATH.findall(line):
+            if tree is not None and "/" not in path:
+                if files is None:
+                    files = tree()
+                if not any(f == path or f.endswith("/" + path) for f in files):
+                    continue
+            found.append(path)
     return list(dict.fromkeys(found))
 
 
-def list_items(body: str, changed: list[str] | None = None) -> dict | None:
+def list_items(body: str, changed: list[str] | None = None, tree=None) -> dict | None:
     """{items: [{id, text, status?}], unlisted: [...], outside: [...]}, or None when there is no spec."""
     _, sections = split_sections(body)
     by_title = {title: lines for title, _, lines in reversed(sections)}
@@ -115,7 +136,7 @@ def list_items(body: str, changed: list[str] | None = None) -> dict | None:
     for k, text in enumerate(bullets, 1):
         add(f"N{k}", text)
     outside = []
-    paths = _paths(groups.get("create", []) + groups.get("edit", []))
+    paths = list(dict.fromkeys(_paths(groups.get("create", [])) + _paths(groups.get("edit", []), tree)))
     if not paths:
         unlisted.append("Files")
     for path in paths:
@@ -131,8 +152,17 @@ def list_items(body: str, changed: list[str] | None = None) -> dict | None:
     return {"items": items, "unlisted": unlisted, "outside": outside}
 
 
+def _fork(base: str) -> str:
+    return _git(["merge-base", base, "HEAD"]).strip()
+
+
+def _tree_at(rev: str) -> list[str]:
+    """Every file in commit rev, named from the repo top."""
+    return [p for p in _git(["ls-tree", "-r", "-z", "--name-only", "--full-tree", rev]).split("\0") if p]
+
+
 def changed_files(base: str) -> list[str]:
-    fork = _git(["merge-base", base, "HEAD"]).strip()
+    fork = _fork(base)
     names = _git(["diff", "--name-only", fork]).splitlines()
     names += _git(["ls-files", "--others", "--exclude-standard"]).splitlines()
     return list(dict.fromkeys(n for n in names if n))
@@ -212,10 +242,12 @@ def main(argv=None) -> int:
         body = sys.stdin.read() if args.body == "-" else Path(args.body).read_text(encoding="utf-8")
         answers = Path(args.answers).read_text(encoding="utf-8") if args.command == "verify" else ""
         changed = changed_files(args.base) if args.base else None
+        # An Edit file exists before the change: with a base, the tree at the fork
+        # counts too, so a file the change deletes or renames is still found.
+        listed = list_items(body, changed, (lambda: _tree() + _tree_at(_fork(args.base))) if args.base else _tree)
     except (OSError, UnicodeDecodeError, GitError) as exc:
         print(exc, file=sys.stderr)
         return 2
-    listed = list_items(body, changed)
     if listed is None:
         print("no spec in this body")
         return 1

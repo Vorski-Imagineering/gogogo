@@ -100,6 +100,14 @@ class Skill(unittest.TestCase):
         self.assertIn("Pull requests:", after)
         self.assertIn("Branches ahead of", after)
 
+    def test_board_names_pull_request_cards_and_where_to_stop_them(self):
+        shape = skill_text().split("## Shape", 1)[1].split("## Template", 1)[0]
+        line = next((l for l in shape.splitlines() if "pull-request card(s)" in l), "")
+        for text in ("is:issue is:open", "<workflows URL>", "/gogogo:setup"):
+            self.assertIn(text, line)
+        self.assertIn("/projects/<n>/workflows", shape)
+        self.assertIn("PullRequest", shape)
+
     def test_no_project_names(self):
         self.assertIsNone(re.search(PROJECT_NAMES, skill_text(), re.I))
 

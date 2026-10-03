@@ -47,12 +47,27 @@ session id or time is left out and the record counted as having malformed
 fields, as is a record whose `t_verified` is before its `t_branch`. Each row
 gains those three and `posted`, the comment's time, and the summary adds a
 `phase times:` line (records with both times; median minutes from branch to
-verified, and from verified to the report being posted, `-` when none) and a
+verified, and from verified to the report being posted, `-` when none, rounded
+half up to whole minutes in the text (the JSON keeps them unrounded)) and a
 `session ids:` line. A hand-back to a person carries
 `<!-- gogogo:stop v=1 reason=<reason> -->` under its Needs-you line; the
-summary counts them by reason in a `stops:` line, wherever they sit, and counts
-one that does not parse or names an unknown reason as unreadable. Stop markers
+summary counts them by reason in a `stops:` line. Only a marker alone on its
+own line is read (gogogo#82); a mention inside a sentence is ignored. An
+own-line marker that does not parse, or names an unknown reason, counts as
+unreadable. Stop markers
 alone are not review records: zero records still exits 1.
+
+Since gogogo#63 a stop marker may end with `session=<id|unknown>`, and a card
+`/gogogo:auto-dev` skips at triage is handed back with
+`<!-- gogogo:skip v=1 reason=<lint|nospec|decision|hard-stop> session=<id|unknown> -->`.
+The summary counts skips by reason in a `skips:` line (read only on its own
+line, as a stop is; one with an unknown reason, or that does not parse, is
+unreadable), and a `sessions:` block
+rebuilds each run from the review records, stops and skips sharing a session
+id: its first and last time, the distinct issues it took (records and stops),
+the distinct issues it handed to a person (stops), and its skips. `unknown`,
+or anything that is not a full session id, is no session; those markers are
+counted apart.
 
 The outcome of a row is the verdict of the latest `<!-- auto-test v1 … -->`
 marker on the issue (pass, fail, needs-human); else `confirmed` when the issue
@@ -95,8 +110,10 @@ TESTS_KEYS = ("v", "checked", "hunks", "weaker", "licensed", "restored", "attemp
 TESTS_ENDS = ("clean", "restored", "stopped", "unchecked")
 SPEC_CHECK_COUNTS = ("items", "met", "missing", "differs", "na", "outside", "runs", "fixed", "declared")
 AUTO_TEST = re.compile(r"<!-- auto-test v1 (.*?) -->")
-STOP = re.compile(r"<!-- gogogo:stop (.*?) -->")
+STOP = re.compile(r"^[ \t]*<!-- gogogo:stop (.*?) -->[ \t\r]*$", re.M)
 STOPS = ("hard-stop", "decision", "spec", "review", "tests", "mutation", "verify", "gate", "ci")
+SKIP = re.compile(r"^[ \t]*<!-- gogogo:skip (.*?) -->[ \t\r]*$", re.M)
+SKIPS = ("lint", "nospec", "decision", "hard-stop")
 TIME = re.compile(r"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}Z")
 UUID = re.compile(r"[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}")
 APPLIED_AS = ("spec", "regression", "bug", "risk", "added")
@@ -274,14 +291,20 @@ def _date(value: str) -> str:
     return value
 
 
-def collect(repo: str, since: str | None) -> tuple[list[dict], int, dict[int, str], dict[int, dict], list[dict], int]:
+def _session(fields: dict) -> str | None:
+    """A marker's session id, or None when it is `unknown`, missing or not a full id."""
+    value = fields.get("session") or ""
+    return value if UUID.fullmatch(value) else None
+
+
+def collect(repo: str, since: str | None) -> tuple:
     """(records, unreadable markers, latest auto-test verdict by issue, issue data by number,
-    stop markers, unreadable stop markers)."""
+    stop markers, unreadable stop markers, skip markers, unreadable skip markers)."""
     url = f"repos/{repo}/issues/comments?per_page=100"
     if since:
         url += f"&since={since}T00:00:00Z"
     pages = json.loads(_gh(["api", "--paginate", "--slurp", url]) or "[]")
-    records, unreadable, verdicts, stops, unreadable_stops = [], 0, {}, [], 0
+    records, unreadable, verdicts, stops, unreadable_stops, skips, unreadable_skips = [], 0, {}, [], 0, [], 0
     for comment in (c for page in pages for c in page):
         issue = int(str(comment.get("issue_url", "")).rsplit("/", 1)[-1])
         body = comment.get("body") or ""
@@ -318,9 +341,17 @@ def collect(repo: str, since: str | None) -> tuple[list[dict], int, dict[int, st
         for match in STOP.finditer(body):
             fields = _fields(match.group(1))
             if fields and fields.get("v") == "1" and fields.get("reason") in STOPS:
-                stops.append({"issue": issue, "reason": fields["reason"]})
+                stops.append({"issue": issue, "reason": fields["reason"], "session": _session(fields),
+                              "posted": comment.get("created_at")})
             else:
                 unreadable_stops += 1
+        for match in SKIP.finditer(body):
+            fields = _fields(match.group(1))
+            if fields and fields.get("v") == "1" and fields.get("reason") in SKIPS:
+                skips.append({"issue": issue, "reason": fields["reason"], "session": _session(fields),
+                              "posted": comment.get("created_at")})
+            else:
+                unreadable_skips += 1
         for match in AUTO_TEST.finditer(body):
             fields = _fields(match.group(1)) or {}
             if fields.get("verdict") in VERDICTS:
@@ -328,7 +359,7 @@ def collect(repo: str, since: str | None) -> tuple[list[dict], int, dict[int, st
     issues = {}
     for n in dict.fromkeys(r["issue"] for r in records):
         issues[n] = json.loads(_gh(["api", f"repos/{repo}/issues/{n}"]))
-    return records, unreadable, verdicts, issues, stops, unreadable_stops
+    return records, unreadable, verdicts, issues, stops, unreadable_stops, skips, unreadable_skips
 
 
 def _minutes(start: str, end: str) -> float:
@@ -345,7 +376,29 @@ def outcome(n: int, verdicts: dict[int, str], issue: dict) -> str:
     return "waiting"
 
 
-def build(records, unreadable, verdicts, issues, stops=(), unreadable_stops=0) -> dict:
+def sessions(records, stops, skips) -> list[dict]:
+    """One run per session id: its time span, distinct issues taken and handed back, and its skips."""
+    runs = {}
+    for kind, items in (("record", records), ("stop", stops), ("skip", skips)):
+        for item in items:
+            if item.get("session"):
+                run = runs.setdefault(item["session"], {"taken": set(), "needs_you": set(), "skipped": 0,
+                                                        "times": []})
+                if kind in ("record", "stop"):
+                    run["taken"].add(item["issue"])
+                if kind == "stop":
+                    run["needs_you"].add(item["issue"])
+                if kind == "skip":
+                    run["skipped"] += 1
+                if item.get("posted"):
+                    run["times"].append(item["posted"])
+    out = [{"session": sid, "first": min(r["times"]) if r["times"] else None,
+            "last": max(r["times"]) if r["times"] else None, "taken": len(r["taken"]),
+            "needs_you": len(r["needs_you"]), "skipped": r["skipped"]} for sid, r in runs.items()]
+    return sorted(out, key=lambda r: (r["first"] is None, r["first"] or ""))
+
+
+def build(records, unreadable, verdicts, issues, stops=(), unreadable_stops=0, skips=(), unreadable_skips=0) -> dict:
     rows = []
     for r in records:
         rows.append({"issue": r["issue"], "title": issues.get(r["issue"], {}).get("title"),
@@ -408,6 +461,10 @@ def build(records, unreadable, verdicts, issues, stops=(), unreadable_stops=0) -
         "malformed": sum(bool(r["malformed"]) or (r in both and r not in timed) for r in records),
         "stops": {k: sum(s["reason"] == k for s in stops) for k in STOPS},
         "unreadable_stops": unreadable_stops,
+        "skips": {k: sum(s["reason"] == k for s in skips) for k in SKIPS},
+        "unreadable_skips": unreadable_skips,
+        "sessions": sessions(records, stops, skips),
+        "without_session": sum(not x.get("session") for x in (*records, *stops, *skips)),
     }
     return {"rows": rows, "summary": summary}
 
@@ -419,6 +476,15 @@ def _cell(row: dict, column: str) -> str:
     if isinstance(value, list):
         return ",".join(map(str, value)) if column != "escaped" else ("; ".join(value) or "-")
     return "-" if value is None else str(value)
+
+
+def _span(first: str | None, last: str | None) -> str:
+    """`YYYY-MM-DD HH:MM–HH:MM`, the end date added when it differs; `-` when unknown."""
+    if not first or not last:
+        return "-"
+    start, end = first.replace("Z", "").split("T"), last.replace("Z", "").split("T")
+    tail = end[1][:5] if end[0] == start[0] else f"{end[0]} {end[1][:5]}"
+    return f"{start[0]} {start[1][:5]}–{tail}"
 
 
 def render(repo: str, data: dict) -> str:
@@ -441,7 +507,7 @@ def render(repo: str, data: dict) -> str:
     new = s["repo_records"] - s["old_format"]
 
     def median(value):
-        return "-" if value is None else f"{value:g}"
+        return "-" if value is None else str(int(value + 0.5))
     lines += [f"phase times: {s['timed']} of {new} new records (median branch→verified "
               f"{median(s['median_branch_to_verified'])} min, verified→report "
               f"{median(s['median_verified_to_report'])} min)",
@@ -449,6 +515,16 @@ def render(repo: str, data: dict) -> str:
     counted = ", ".join(f"{k} {v}" for k, v in s["stops"].items() if v) or "none recorded"
     unread = f" ({s['unreadable_stops']} unreadable)" if s["unreadable_stops"] else ""
     lines.append(f"stops: {counted}{unread}")
+    counted = ", ".join(f"{k} {v}" for k, v in s["skips"].items() if v) or "none recorded"
+    unread = f" ({s['unreadable_skips']} unreadable)" if s["unreadable_skips"] else ""
+    lines.append(f"skips: {counted}{unread}")
+    if s["sessions"]:
+        lines.append(f"sessions: {len(s['sessions'])} with a session id ({s['without_session']} records without one)")
+        for run in s["sessions"]:
+            lines.append(f"  {run['session'][:8]} {_span(run['first'], run['last'])}  {run['taken']} taken, "
+                         f"{run['needs_you']} needs you, {run['skipped']} skipped")
+    else:
+        lines.append(f"sessions: none recorded ({s['without_session']} records without one)")
     m = s["mutation"]
     if m["records"]:
         pct = f"{m['survived'] / m['mutants']:.0%}" if m["mutants"] else "-"
@@ -484,14 +560,15 @@ def main(argv=None) -> int:
         print(exc, file=sys.stderr)
         return 2
     try:
-        records, unreadable, verdicts, issues, stops, unreadable_stops = collect(repo, args.since)
+        records, unreadable, verdicts, issues, stops, unreadable_stops, skips, unreadable_skips = collect(
+            repo, args.since)
     except (GhError, json.JSONDecodeError, ValueError) as exc:
         print(f"cannot read {repo}: {exc}", file=sys.stderr)
         return 2
     if not records:
         print(f"0 review records in {repo}" + (f" ({unreadable} unreadable skipped)" if unreadable else ""))
         return 1
-    data = build(records, unreadable, verdicts, issues, stops, unreadable_stops)
+    data = build(records, unreadable, verdicts, issues, stops, unreadable_stops, skips, unreadable_skips)
     print(json.dumps(data, indent=2) if args.json else render(repo, data))
     return 0
 

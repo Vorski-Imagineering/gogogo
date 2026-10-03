@@ -106,7 +106,10 @@ reporter = "none"
   `plugins/gogogo/` in that tree while the run is going. On this repo, in place
   of auto-dev §3's `git switch` steps, branch the worktree from a freshly
   fetched base: `git fetch origin && git worktree add -b fix/<n>-<slug> <path>
-  origin/main`. Switching branches in the loaded tree, or pulling into it,
+  origin/main`. When auto-dev §3 continues on an issue's earlier branch, the
+  worktree is `git worktree add <path> <branch>`, or
+  `git worktree add --track -b <branch> <path> origin/<branch>` for a branch
+  only on `origin`. Switching branches in the loaded tree, or pulling into it,
   changes the skills under the running loop (`CLAUDE.md` § What a change here
   does). The 2026-10-01 runs used a worktree per issue.
 - **confirming a Released card**: `/gogogo:auto-test` is browser-based and is
