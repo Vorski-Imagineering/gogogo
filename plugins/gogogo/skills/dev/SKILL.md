@@ -705,6 +705,16 @@ words) and that it was reopened. If the reopen fails, still hand back as
 merged, with `**Needs you:** reopen #<n>` as that report's first line. When the
 output also names a missing `Ships-issue`, also do what exit 3 says (below).
 
+Once the merge is confirmed, when the issue's work was in a worktree, remove it
+from the main worktree, never from inside the one being removed:
+
+```bash
+python3 "${CLAUDE_PLUGIN_ROOT}/scripts/worktree_sweep.py" --apply --only <that worktree's path>
+```
+
+Put the line it prints in the §7 report. It never forces: a worktree with
+uncommitted changes or commits on no remote is kept, and the line says why.
+
 ### When you merge with `gh`: the squash body carries the link
 
 Applies when you merge a PR yourself with `gh` (`integration.strategy` is

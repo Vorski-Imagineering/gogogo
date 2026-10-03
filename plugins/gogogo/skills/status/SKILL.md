@@ -95,8 +95,11 @@ in its place in the report, and the others still run.
    git for-each-ref refs/heads --format='%(refname:short)|%(upstream:short)|%(upstream:track)'
    git rev-list --count <base>..<branch>      # each branch other than the base
    git worktree list --porcelain
+   python3 "${CLAUDE_PLUGIN_ROOT}/scripts/worktree_sweep.py"
    ```
-   Keep a branch only when its count is above 0.
+   Keep a branch only when its count is above 0. `worktree_sweep.py` runs
+   without `--apply`, so it removes nothing; show its lines under
+   `Worktrees, sweep:`.
 
 ## Shape
 
