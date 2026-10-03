@@ -268,6 +268,11 @@ def check_branch_rules(repo, branch, rules, classic, checks, wants_check, needs_
                   "no deletion": (old.get("allow_deletions") or {}).get("enabled") is False,
                   "a required check": bool(required.get("contexts") or required.get("checks"))}
     present = {name: by_rules[name] or by_classic[name] for name in by_rules}
+    # Classic protection with enforce admins off binds nobody who has an admin's
+    # login, and the agents use one. A check held only there counts as missing.
+    admins_bypass = (old.get("enforce_admins") or {}).get("enabled") is not True
+    if admins_bypass and not by_rules["a required check"]:
+        present["a required check"] = False
     fix = _ruleset_fix(repo, branch, existing)
     basic = [name for name in ("no force push", "no deletion") if not present[name]]
     if basic and isinstance(classic, str):
@@ -287,8 +292,8 @@ def check_branch_rules(repo, branch, rules, classic, checks, wants_check, needs_
                  f"empty the bypass list of ruleset {', '.join(sorted(map(str, bypassing)))} in the repo's "
                  "Settings > Rules")
         return
-    classic_only = [name for name in by_classic if by_classic[name] and not by_rules[name]]
-    if classic_only and (old.get("enforce_admins") or {}).get("enabled") is not True:
+    classic_only = [name for name in ("no force push", "no deletion") if by_classic[name] and not by_rules[name]]
+    if classic_only and admins_bypass:
         rep.fail(check, f"{repo} {branch} has {', '.join(classic_only)} only in classic branch protection, which "
                         "admins can bypass (enforce admins is off), and agents use an admin's login", fix)
         return
@@ -431,8 +436,13 @@ def print_ruleset(settings, default_branch, branch):
     code_repo = (settings.get("tracker") or {}).get("code_repo")
     checks = check_names(code_repo, branch) if wanted[branch] else []
     if isinstance(checks, str):
-        print(f"could not read the checks to require on {branch}: {checks}", file=sys.stderr)
-        return 2
+        # A new ruleset still gets no force push and no deletion; replacing an
+        # existing one without its check could drop a check it already requires.
+        rulesets, error = _gh_json("api", f"repos/{code_repo}/rulesets")
+        if error or any(isinstance(r, dict) and r.get("name") == f"gogogo: {branch}" for r in rulesets or []):
+            print(f"could not read the checks to require on {branch}: {checks}", file=sys.stderr)
+            return 2
+        checks = []
     print(json.dumps(ruleset_body(branch, checks if isinstance(checks, list) else [], wanted[branch]), indent=2))
     return 0
 

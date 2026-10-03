@@ -701,16 +701,28 @@ class Audit(unittest.TestCase):
             sc.check_branches("o/code", {"integration": {"strategy": "pr-squash", "base": "main"}}, "main", rep)
         self.assertEqual([r["level"] for r in rep.rows], ["WARN"])
 
-    def test_ruleset_refuses_to_print_when_the_check_names_cannot_be_read(self):
+    def _print_ruleset_with_unreadable_checks(self, rulesets):
         def fake_run(*cmd, cwd=None):
-            if "pr list" in " ".join(cmd):
+            joined = " ".join(cmd)
+            if "pr list" in joined:
                 return subprocess.CompletedProcess(cmd, 1, "", "gh: HTTP 502")
+            if cmd[:2] == ("gh", "api") and cmd[2].endswith("/rulesets"):
+                return subprocess.CompletedProcess(cmd, 0, json.dumps(rulesets), "")
             return self._gh([])(*cmd, cwd=cwd)
         settings = {"tracker": {"code_repo": "o/code"}, "integration": {"strategy": "pr-squash", "base": "main"}}
         out = io.StringIO()
         with mock.patch.object(sc, "run", fake_run), mock.patch("sys.stdout", out), mock.patch("sys.stderr"):
-            self.assertEqual(sc.print_ruleset(settings, "main", "main"), 2)
-        self.assertEqual(out.getvalue(), "")
+            code = sc.print_ruleset(settings, "main", "main")
+        return code, out.getvalue()
+
+    def test_ruleset_refuses_to_replace_an_existing_one_when_the_check_names_cannot_be_read(self):
+        code, out = self._print_ruleset_with_unreadable_checks([{"id": 7, "name": "gogogo: main"}])
+        self.assertEqual((code, out), (2, ""))
+
+    def test_a_new_ruleset_still_prints_without_a_check_when_the_names_cannot_be_read(self):
+        code, out = self._print_ruleset_with_unreadable_checks([])
+        self.assertEqual(code, 0)
+        self.assertEqual(sorted(r["type"] for r in json.loads(out)["rules"]), ["deletion", "non_fast_forward"])
 
     def test_a_missing_check_with_classic_unread_is_uncertain(self):
         rows = self._rules(rules=self.FULL[:2], classic="HTTP 403", needs_ci=True)
@@ -723,6 +735,20 @@ class Audit(unittest.TestCase):
         sc.check_branch_rules("o/r", "main", rules, {}, ["tests"], True, False, rep, existing=7)
         self.assertEqual([r["level"] for r in rep.rows], ["FAIL"])
         self.assertIn("-X PUT repos/o/r/rulesets/7", rep.rows[0]["fix"])
+
+    BYPASSABLE_CHECK = {"required_status_checks": {"contexts": ["tests"], "checks": []},
+                        "enforce_admins": {"enabled": False}}
+
+    def test_a_bypassable_classic_check_on_a_merge_script_base_is_info(self):
+        rows = self._rules(rules=self.FULL[:2], classic=self.BYPASSABLE_CHECK, wants_check=False, needs_ci=True)
+        self.assertEqual([r["level"] for r in rows], ["INFO"])
+
+    def test_a_bypassable_classic_check_is_graded_as_missing(self):
+        rows = self._rules(rules=self.FULL[:2], classic=self.BYPASSABLE_CHECK, checks=[], needs_ci=False)
+        self.assertEqual([r["level"] for r in rows], ["WARN"])
+        rows = self._rules(rules=self.FULL[:2], classic=self.BYPASSABLE_CHECK, needs_ci=True)
+        self.assertEqual([r["level"] for r in rows], ["FAIL"])
+        self.assertIn("--ruleset main", rows[0]["fix"])
 
     def test_classic_protection_admins_can_bypass_fails(self):
         classic = {"allow_force_pushes": {"enabled": False}, "allow_deletions": {"enabled": False},
