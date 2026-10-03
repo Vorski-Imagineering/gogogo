@@ -26,6 +26,8 @@ passed; the label would be added)`; one that failed is `skip` with §1's reason.
 For each issue taken, also run §3's `issue_work.py` (after `git fetch origin`)
 and report the outcome §3 would take: `continue on <branch>` (with its PR, if
 any), or §3's skip reason.
+Per issue, name each comment `/gogogo:dev` §2 would fold in or stop on, with
+its link; triage-only folds nothing.
 Create no branch, move no card, add no label, post nothing, send no message.
 
 ## Before anything: preflight
@@ -94,6 +96,19 @@ means finished work sits unverified while you go and ask.
 10. **The profile's `preflight.extra`**, each as it says. A check that says
    "report only" is reported and never acted on.
 
+## The loop never waits on chat
+
+- Inside the loop, never put a question about an issue to the person, with
+  `AskUserQuestion` or in chat. A fork this skill's rules settle is settled by
+  them; one they do not is a hand-back to `tracker.columns.needs_human`
+  (`/gogogo:dev` §8), and the loop goes on. Only *Stop the whole run and ask
+  when* waits on a person.
+- A message from the person mid-run is answered in a few lines from the run
+  log (issues taken, merged, handed back, skipped, the one in hand, what is
+  left), and the loop goes on in the same turn. It is not a reason to pause.
+- A side request the person makes (another skill) runs as that skill says;
+  when it ends, the loop goes on.
+
 ## 1. Select the queue
 
 ```bash
@@ -127,8 +142,13 @@ python3 "${CLAUDE_PLUGIN_ROOT}/scripts/spec_lint.py" <scratch>/issue-<n>-body.md
 
 ## 2. Triage each issue before touching it
 
-Per `/gogogo:dev` §2. An issue is workable here only if every decision it
-depends on was made by a person and is **in the body**. Skip and record, never
+Per `/gogogo:dev` §2. That includes folding in comments (§2 *Fold in comments
+the description does not hold yet*), after `/gogogo:dev` §1's two reads; an
+issue whose answer sits in such a comment is taken, not skipped. Here a fold
+that stops the issue is a skip: reason `decision`, or `lint` when the folded
+body fails the lint. An issue is workable here only if every
+decision it depends on was made by a person and is **in the body**, once
+folded in. Skip and record, never
 guess, when it has an open product decision, a Hard Stop no Approvals row
 names, or a two-licence change whose apply row is missing (that one is
 buildable: build and test it, then stop that issue before applying).
@@ -151,7 +171,7 @@ apply row is missing, which is built and then stopped (§4), not skipped:
 
    | reason | when |
    |---|---|
-   | `lint` | no ready label, and `spec_lint.py` failed or withheld it (§1) |
+   | `lint` | no ready label, and `spec_lint.py` failed or withheld it (§1); or a body §2 folded comments into failed it |
    | `nospec` | a feature with no analysis pass (`/gogogo:dev` §2) |
    | `decision` | an open product decision not answered in the body |
    | `hard-stop` | a Hard Stop no Approvals row names |
@@ -222,8 +242,8 @@ Push the branch as soon as it has its first commit (`git push -u origin
 `/gogogo:dev` §3–6, with these differences because nobody is watching:
 
 - **Every rung in `verify.rungs` is mandatory** for every issue.
-- The regression test must be seen failing, then the whole suite green. Record
-  how many new tests went red.
+- The regression test must be seen failing, then the whole suite green (by
+  exit status, `/gogogo:dev` §6). Record how many new tests went red.
 - **Mutation testing** as `/gogogo:dev` §6 says, for every lane with a `mutate`
   command, to its end, in the foreground or polled. When it stops the issue (a
   run that failed twice, or survivors left after the third run): commit
@@ -276,15 +296,17 @@ Push the branch as soon as it has its first commit (`git push -u origin
 - A change that needs a two-licence apply (for example a migration on a shared
   environment) is applied only with its apply row, by the profile's procedure
   for it, never improvised.
-- **In a headless run (for example `claude -p`), never end a turn to wait for
-  background work**: ending the turn ends the process, and the work is lost.
-  Run verification in the foreground, or poll until it has finished.
+- **Never end a turn to wait for background work**, in any run, interactive
+  or headless. Ending the turn hands control back, and a job that hangs never
+  sends the notice that would resume it. Poll it in the foreground until it
+  has finished (*Claude-specific*).
 
 ## 5. Gates
 
 Run the profile's `gates.always`, and each `gates.when` entry whose pattern the
-change touches, before merging. A gate failure is a finding: fix it rather than
-raise a budget, or stop the issue and hand its card back to
+change touches, before merging. A gate passes on its exit status, read as
+`/gogogo:dev` §6 says, never on filtered output. A gate failure is a finding:
+fix it rather than raise a budget, or stop the issue and hand its card back to
 `tracker.columns.needs_human` as `/gogogo:dev` §8 says.
 
 ## 6. Merge, by the profile's integration strategy
@@ -499,3 +521,17 @@ integration and merging follow this skill and the profile. See the profile's
 - In the skip marker (§2, *Hand back a skip*), `session` is
   `$CLAUDE_CODE_SESSION_ID`, as in `/gogogo:dev`'s record, and `unknown`
   when it is unset.
+- **Polling background work** (§4): `rm -f <scratch>/job.pid`, then start the
+  job so it records a pid that lives as long as it does,
+  `sh -c 'echo $$ > <scratch>/job.pid.tmp && mv <scratch>/job.pid.tmp <scratch>/job.pid; <command>; echo "exit=$?"' > <output file> 2>&1`
+  (the background tool's task id is not a pid), and once `<scratch>/job.pid`
+  exists use its number as `<pid>`. The output file's last line, `exit=<n>`, is
+  the job's own exit status; no `exit=` last line means the job failed. Then one foreground command at a time, each
+  under the shell tool's 10-minute limit, for example
+  ```bash
+  timeout 540 sh -c 'while kill -0 <pid> 2>/dev/null; do sleep 15; done'; kill -0 <pid> 2>/dev/null && echo running || echo finished
+  ```
+  then read the job's output file, and repeat until it says `finished`. Where
+  there is no `timeout` command (macOS), bound the loop itself:
+  `sh -c 'n=0; while [ $n -lt 36 ] && kill -0 <pid> 2>/dev/null; do sleep 15; n=$((n+1)); done'`.
+- Never `AskUserQuestion` inside the loop (*The loop never waits on chat*).
