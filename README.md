@@ -242,6 +242,13 @@ commands, the environments, the Hard Stop rules) lives in one file per repo,
    confirms the fix, or, where the repo runs `/gogogo:auto-test`, a PASS there
    moves the card to the profile's `auto_test.pass_column` (Done, in some
    repos) and closes the issue when `auto_test.pass_closes` is true.
+5. **Waiting for you.** Each Claude Code session in an adopting repo opens with
+   a line such as `13 card(s) wait for you in Released, oldest 2 days: run /gogogo:status`
+   when cards wait in a stage column, and nothing when none do (the plugin's
+   SessionStart hook runs `waiting.py`). A fix later reverted on the base goes
+   back to `Human!Help!` with a comment naming the revert (`stage_sync.py reverts`,
+   run at the start of every auto-dev run), and an issue closed as not planned
+   is archived off the board rather than filed under Done.
 
 **What makes it safe to leave running:**
 
@@ -314,7 +321,7 @@ Scripts the skills call, all in `plugins/gogogo/scripts/`:
 - `spec_check.py`: lists a spec's items and checks that a reader answered every one against the change.
 - `tracker.py`: lists and moves cards on a GitHub Project board, by column name, with read-back, and refuses a move to the needs-a-person column unless the issue's newest comment says why.
 - `verify_merged.py`: confirms a PR's merge is really on the base branch.
-- `stage_sync.py`: writes the `Ships-issue` link at merge, and moves cards to a stage when a tag ships their commits (run by a repo's CI).
+- `stage_sync.py`: writes the `Ships-issue` link at merge, moves cards to a stage when a tag ships their commits (run by a repo's CI), and with `reverts` hands back a card whose shipped fix was reverted.
 - `release.py`: numbers a production release, cuts its annotated `deploy-<build>` tag after the deploy, and prints the notes listing the issues it shipped.
 - `waiting.py`: the session-start line: how many cards wait in each stage column and how old the oldest is. Silent on any error.
 - `stranded_work.py`: finds branches holding work no open issue or open pull request points to, and says what became of each branch's pull request.
@@ -434,6 +441,12 @@ writes need approval.
 - [`docs/process-measures.md`](docs/process-measures.md): what to measure about the process (quality, speed, tokens) and where the data is.
 - [`CONTRIBUTING.md`](CONTRIBUTING.md) and [`SECURITY.md`](SECURITY.md).
 - [`.agents/dev-process.md`](.agents/dev-process.md): this repo's own profile, as a worked example.
+
+**Releases.** Every push to `main` that passes the tests is a release of the
+plugin: `.github/workflows/release.yml` tags it `deploy-<build>`, version
+`1.0.<build>`, the build being `main`'s commit count, with notes listing what it
+shipped ([`references/versioning.md`](plugins/gogogo/references/versioning.md)).
+Quote the version, or the tag, when you report a problem.
 
 ## License
 
