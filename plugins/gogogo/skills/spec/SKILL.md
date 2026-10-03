@@ -1,6 +1,6 @@
 ---
 name: spec
-description: Use when turning a tracker issue, or an idea not yet filed as one, into a specification another agent will implement, when triaging whether an issue is ready to hand off, or when an agent came back blocked on an issue that looked fully specified.
+description: Use when turning a tracker issue, or an idea not yet filed as one, into a specification another agent will implement (also a list of issues or a board column, such as "spec these five" or "spec everything in New", specced one at a time), when triaging whether an issue is ready to hand off, or when an agent came back blocked on an issue that looked fully specified.
 ---
 
 # spec
@@ -46,6 +46,65 @@ you write anything, and nothing here repeats them.
 
 Every tracker command targets `tracker.issues_repo`. When it differs from
 `tracker.code_repo`, pass `--repo <issues_repo>` on every `gh issue` call.
+
+## Several issues in one run
+
+1. **When it applies.** The user gives more than one issue (numbers, `#n`,
+   issue URLs, in any mix) or a board column ("everything in New"). One issue
+   works exactly as before, and none of this section applies.
+2. **The list is fixed at the start.** Keep issue numbers in the order given.
+   For a column, match the user's words against the board's columns from
+   `<tracker.tool> fields`: use the single column whose name contains them,
+   ignoring case and any emoji. When none or several match, ask which column,
+   naming the matches. Then read it once:
+   ```bash
+   <tracker.tool> list --status "<column>" --issues-only --open-only --json
+   ```
+   and keep the order it prints. A column needs `tracker.tool`; without it,
+   say the tracker has no columns to read, and ask for issue numbers. Say the
+   list and its order in one line before starting. An issue filed during the
+   run, such as a split-off, is never added; it goes in the final report
+   (rule 8).
+3. **Skip before starting an issue**, and record why: it is closed; it is a
+   pull request; or it is ready already, which means it carries
+   `tracker.ready_marker` (compared ignoring case) **and** its current body
+   passes the lint:
+   ```bash
+   gh issue view <n> --repo <tracker.issues_repo> --json body -q .body > <scratch>/issue-<n>-body.md
+   python3 "${CLAUDE_PLUGIN_ROOT}/scripts/spec_lint.py" <scratch>/issue-<n>-body.md
+   ```
+   exits 0 with a last line `label: apply`. Any other result means it is
+   specced like any other issue.
+4. **One issue at a time.** Each issue goes through this whole skill: *Before
+   you write*, the question rounds, and Posting steps 0 to 7. Only then does
+   the next issue start. Ask about one issue only in each question call, and
+   name it in every question (`#<n>: …`).
+5. **Research one issue ahead.** When an issue starts, start background
+   research of the next one in the list, and only that one (see
+   *Claude-specific*). It is read-only: it reads the issue, its comments and
+   the code, then returns its findings with `file:line` and the forks it sees.
+   It posts nothing, labels nothing, moves no card and asks no question. Its
+   result is neither shown nor used until the current issue is posted, left
+   open or skipped. When the next issue starts, take its research. Before its
+   first question, re-read any file that the just-posted spec lists under
+   `## Files` and that the research relied on, and state any order between
+   the two issues as the chain rule in *Hard-stop verdict* says.
+6. **Leave it open ends that issue only.** Choice 4 of *When the user declines
+   a question*, or a declined menu, posts nothing and adds no label on that
+   issue. Record the question left open, and go on to the next issue. When the
+   question tool errors (no person to ask), stop the whole run and report
+   every issue not reached.
+7. **Card moves come once, at the end.** Posting step 8 is not run per issue.
+   After the last issue, apply step 8's conditions to every issue labelled in
+   this run. Read each card's column, then ask **one** question listing every
+   card not already in `tracker.queue` with its current column: move them all,
+   or none. On yes, move each one and report each result as step 8.3 says. On
+   no or a decline, say which column each stays in.
+8. **The final report** has one line per issue in the list: *specced and
+   labelled*; *posted without the label* (naming Posting step 7's withholding
+   case); *left open* (with the question); *skipped* (closed, a pull request,
+   or already ready); or *not reached* (with why the run stopped). Then each
+   issue filed during the run, with `/gogogo:spec <n>`.
 
 ## The issue body IS these sections, in this order
 
@@ -161,6 +220,8 @@ question. All four are always offered:
 3. **You decide**: you pick the option you recommend, say why, and record it
    as `Chosen: delegated — <what was picked>`.
 4. **Leave it open**: stop, post nothing, apply no label, and say what remains.
+   In a run of several issues, this ends that issue only
+   (§ *Several issues in one run*, rule 6).
 
 After choice 1 or 2, ask the original question again. After 3, continue the
 round. After 4, stop. A declined menu is choice 4: stop, and do not offer it
@@ -361,7 +422,9 @@ order, checking each step before starting the next:
 
    A spec that stops at a gate is still worth posting; it just is not ready
    until the gate is cleared.
-8. **Offer to move the card to the queue.** Only when step 7 applied the label,
+8. **Offer to move the card to the queue.** In a run of several issues, this
+   step runs once, after the last issue (§ *Several issues in one run*,
+   rule 7). Only when step 7 applied the label,
    the profile has both `tracker.tool` and `tracker.queue`, and
    `tracker.queue` is one of the board's columns (`<tracker.tool> fields
    --check` lists them); otherwise skip this
@@ -443,6 +506,12 @@ Listed in one place so an adapter for another agent knows what to replace.
   session that is the decline *When the user declines a question* describes.
   A run with no person (`claude -p`) gets the same refusal, which is why that
   subsection shows the menu once and stops when the menu is refused too.
+- **Research one issue ahead** (*Several issues in one run*, rule 5) is an
+  `Agent` call with `subagent_type: "fork"`, run in the background. Its prompt
+  names the one issue, says it is research only for the spec run above, and
+  forbids `AskUserQuestion`, any `gh issue edit`, `comment` or `create`, any
+  label and any card move. Start a new one only when the issue it researched
+  has started.
 
 ## Working alongside superpowers
 

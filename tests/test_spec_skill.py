@@ -98,5 +98,49 @@ class Skill(unittest.TestCase):
         self.assertFalse([e for e in errors if e.startswith(("tracker.tool", "tracker.queue"))], errors)
 
 
+RUN = "## Several issues in one run"
+
+
+class SeveralIssues(unittest.TestCase):
+    """A list or a column is specced one issue at a time (gogogo#70)."""
+
+    def test_several_issues_section_placed(self):
+        lines = skill_text().splitlines()
+        heads = [i for i, line in enumerate(lines) if line.startswith(RUN)]
+        self.assertEqual(len(heads), 1)
+        profile = next(i for i, line in enumerate(lines) if line.startswith("## First: read this repo's profile"))
+        body = next(i for i, line in enumerate(lines) if line.startswith("## The issue body IS"))
+        self.assertLess(profile, heads[0])
+        self.assertLess(heads[0], body)
+
+    def test_several_issues_rules(self):
+        sub = "\n".join(section(skill_text(), RUN))
+        self.assertEqual([int(m) for m in re.findall(r"^(\d+)\. ", sub, re.M)], list(range(1, 9)))
+        for name in ("list --status", "--issues-only", "--open-only", "spec_lint.py", "tracker.ready_marker"):
+            self.assertIn(name, sub)
+        for setting in re.findall(r"`(tracker\.[a-z_.]+)`", sub):
+            self.assertIn(setting, pc.FIELDS, setting)
+
+    def test_choice_four_points_at_run_rule(self):
+        sub = section(skill_text(), DECLINED, "### ")
+        start = next(i for i, line in enumerate(sub) if line.startswith("4. "))
+        end = next((i for i in range(start + 1, len(sub)) if not sub[i].startswith("   ")), len(sub))
+        self.assertIn("Several issues in one run", " ".join(sub[start:end]))
+
+    def test_step_eight_deferred_in_run(self):
+        lines = section(skill_text(), "## Posting")
+        start = next(i for i, line in enumerate(lines) if line.startswith("8. "))
+        end = next((i for i in range(start + 1, len(lines)) if re.match(r"\S", lines[i])), len(lines))
+        self.assertIn("Several issues in one run", "\n".join(lines[start:end]))
+
+    def test_claude_specific_names_fork(self):
+        sub = "\n".join(section(skill_text(), "## Claude-specific"))
+        self.assertIn("subagent_type", sub)
+        self.assertIn('"fork"', sub)
+
+    def test_readme_shows_list_example(self):
+        self.assertRegex((ROOT / "README.md").read_text(encoding="utf-8"), r"`/gogogo:spec #\d+ #\d+")
+
+
 if __name__ == "__main__":
     unittest.main()
