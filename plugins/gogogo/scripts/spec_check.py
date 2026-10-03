@@ -6,13 +6,15 @@
 
 `items` prints one line per item of the spec in BODY_FILE (an issue body, or
 `-` for stdin): `V<k>` each numbered step of Verify by hand, `A<k>` each
-Approvals row and `A0` the Not approved line, `D<k>` each numbered Design item,
-`T<k>` each numbered test case (numbered `1.` or `**1.**` at the start of a
-line), `N<k>` each bullet under Explicitly not in scope, and `F:<path>` each
-backticked path under Create and Edit. Under Edit, a backticked name with no
-`/` counts only when a tracked or unignored file in the working tree equals it
-or ends with `/` + it (a setting such as `preflight.extra` is not a file);
-under Create every backticked path counts. Ids are by position. A
+Approvals row and `A0` the Not approved line, `D<k>` each numbered Design item
+and `T<k>` each numbered test case (both count items numbered `1.` or `**1.**`
+at the start of a line), `N<k>` each bullet under Explicitly not in scope, and
+`F:<path>` each backticked path under Create and Edit.
+Under Edit, a backticked name with no `/` counts only when a tracked or
+unignored file in the working tree equals it or ends with `/` + it (a setting
+such as `preflight.extra` is not a file); under Create every backticked path
+counts. So a name with no / under Edit counts only when a file by that name
+exists in the working tree. Ids are by position. A
 Design or Test cases section with no numbered item is one item, `D0` or `T0`,
 and is printed as `unlisted:`; so is Files when it is missing or has no Create
 or Edit group naming a path. With `--base`, each `F:` item is `met` when the change
