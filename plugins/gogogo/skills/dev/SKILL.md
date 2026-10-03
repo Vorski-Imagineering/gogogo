@@ -292,8 +292,8 @@ confirm it survived.
 Report how many of the new tests went red. Guards that were already true are
 fine; name them as guards. Then run every lane's `run` command that applies.
 
-**A lane passes on its command's own exit status.** Save its output and read
-the status:
+**A lane's `run` command passes on its own exit status.** Save its output and
+read the status:
 
 ```bash
 <the lane's run command> > <scratch>/<lane>.log 2>&1; echo "exit=$?"
@@ -302,7 +302,9 @@ the status:
 `exit=0` is green; anything else is red, whatever the log says. Read the
 summary from the log afterwards. Never put a filter (`| grep`, `| tail`,
 `| head`) between the command and a decision: a pipeline's status is its last
-command's, so `| grep -E 'OK|FAILED'` passes a failed run.
+command's, so `| grep -E 'OK|FAILED'` passes a failed run. The `echo` itself always
+succeeds, so read the printed `exit=` value before any commit, push or merge;
+never chain one onto the `echo`.
 
 **The tests the change touched, compared.** Once every lane is green, check
 that the change did not get there by weakening a test. In order:
@@ -646,7 +648,7 @@ the link itself; never write one around it. Otherwise merge as before.
 
 - Write to anything `state.forbidden` lists, or to production data.
 - Report "fixed" on a green suite alone.
-- Chain a commit, push or merge on a command whose output is piped through a filter.
+- Chain a commit, push or merge on anything but the run's own exit status: output piped through a filter, or the `echo "exit=$?"` after it.
 - Commit, push, or open a PR unless asked (outside `auto-dev`).
 - Move a card ahead of the code, or to Done.
 
