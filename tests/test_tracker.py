@@ -366,13 +366,13 @@ class MoveFromTests(unittest.TestCase):
         code, sent, err = self._move(None)
         self.assertEqual(code, 3)
         self.assertEqual(sent, [])
-        self.assertIn("no column", err)
+        self.assertEqual(err.strip(), "#7 is in no column, not Dev Ready; not moved")
 
     def test_add_missing_with_from_and_no_card_adds_nothing(self):
         code, sent, err = self._move(None, card=False, add_missing=True)
         self.assertEqual(code, 3)
         self.assertEqual(sent, [])
-        self.assertIn("not on the board", err)
+        self.assertEqual(err.strip(), "#7 is in not on the board, not Dev Ready; not moved")
 
     def test_the_from_option_reaches_move_card(self):
         argv = ["tracker.py", "move", "7", "--from", "queue", "--to", "in_progress"]
@@ -381,6 +381,17 @@ class MoveFromTests(unittest.TestCase):
              mock.patch.object(board, "move_card", return_value=3) as moved:
             self.assertEqual(board.main(), 3)
         self.assertEqual(moved.call_args.kwargs.get("expect_from"), "queue")
+
+    def test_move_help_names_from_and_that_it_only_narrows_the_gap(self):
+        out = io.StringIO()
+        with mock.patch.object(sys, "argv", ["tracker.py", "move", "--help"]), \
+             mock.patch.object(board, "configure"), redirect_stdout(out):
+            with self.assertRaises(SystemExit):
+                board.main()
+        text = " ".join(out.getvalue().split())
+        self.assertIn("[--from COLUMN]", text)
+        self.assertRegex(text, r"--from COLUMN profile role key or column name; exit 3.* It narrows, "
+                               r"but does not close, the gap between reading a card and moving it --to ")
 
     def test_the_help_names_from_and_its_exit_code(self):
         doc = board.__doc__

@@ -728,7 +728,7 @@ def move_card(number: int, repo: str, to: str, *, add_missing: bool = False,
 
     if expect_from:
         current = ((card or {}).get("fieldValueByName") or {}).get("name")
-        if not card or (current or "").lower() != column(expect_from).lower():
+        if not current or current.lower() != column(expect_from).lower():
             where = current or ("no column" if card else "not on the board")
             print(f"#{number} is in {where}, not {column(expect_from)}; not moved", file=sys.stderr)
             return 3
