@@ -706,6 +706,11 @@ class SchemaDoc(unittest.TestCase):
         doc = (PLUGIN / "references" / "profile-schema.md").read_text()
         row = next(line for line in doc.splitlines() if line.startswith("| `notify` |"))
         self.assertEqual(row.split("|")[4].strip(), pc.FIELDS["notify"][2])
+
+    def test_doc_and_checker_describe_independence_the_same(self):
+        doc = (PLUGIN / "references" / "profile-schema.md").read_text()
+        row = next(line for line in doc.splitlines() if line.startswith("| `independence` |"))
+        self.assertEqual(row.split("|")[4].strip(), pc.FIELDS["independence"][2])
         self.assertIn("absent means telegram", pc.FIELDS["notify"][2])
         self.assertIn(".claude/gogogo/notify.env", pc.FIELDS["notify"][2])
 
