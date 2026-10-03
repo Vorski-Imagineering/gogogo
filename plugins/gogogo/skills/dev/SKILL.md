@@ -292,8 +292,9 @@ confirm it survived.
 Report how many of the new tests went red. Guards that were already true are
 fine; name them as guards. Then run every lane's `run` command that applies.
 
-**A lane's `run` command passes on its own exit status.** Save its output and
-read the status:
+**A lane passes on its command's own exit status** (its `run` command; a
+`mutate` run is judged by its `mutants:` line, below). Save its output and read
+the status:
 
 ```bash
 <the lane's run command> > <scratch>/<lane>.log 2>&1; echo "exit=$?"

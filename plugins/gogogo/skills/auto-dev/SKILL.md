@@ -495,7 +495,7 @@ integration and merging follow this skill and the profile. See the profile's
   `sh -c 'echo $$ > <scratch>/job.pid.tmp && mv <scratch>/job.pid.tmp <scratch>/job.pid; <command>; echo "exit=$?"' > <output file> 2>&1`
   (the background tool's task id is not a pid), and once `<scratch>/job.pid`
   exists use its number as `<pid>`. The output file's last line, `exit=<n>`, is
-  the job's own exit status. Then one foreground command at a time, each
+  the job's own exit status; no `exit=` last line means the job failed. Then one foreground command at a time, each
   under the shell tool's 10-minute limit, for example
   ```bash
   timeout 540 sh -c 'while kill -0 <pid> 2>/dev/null; do sleep 15; done'; kill -0 <pid> 2>/dev/null && echo running || echo finished
