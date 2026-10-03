@@ -76,10 +76,12 @@ class DocsInStep(unittest.TestCase):
         for line in lines[start + 2:]:
             if not line.startswith("|"):
                 break
-            names += [n for n in SPAN.findall(line.split("|")[1]) if "." not in n]
+            cell = line.split("|")[1].strip()
+            if cell.startswith("`"):  # "a lane's `mutate`" names a part of a setting, not one
+                names += [n for n in SPAN.findall(cell) if "." not in n]
         self.assertIn("stages", names)
         for name in names:
-            self.assertIn(name, pc.FIELDS, f"git-process.md's settings table names {name}, which profile_check does not know")
+            self.assertTrue(name in pc.FIELDS, f"git-process.md's settings table names {name}, which profile_check does not know")
 
     def test_file_names_are_not_settings(self):
         text = ("`profile-schema.md` `.claude/settings.json` `stage-sync.md` `tests.yml` `spec_lint.py` "
