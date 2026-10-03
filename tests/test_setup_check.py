@@ -1,6 +1,7 @@
 import json
 import os
 import re
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -992,6 +993,40 @@ class Notify(unittest.TestCase):
         self.assertEqual(self.row(notify.NO_CREDENTIALS, "notify: telegram, but no bot credentials")["level"], "WARN")
         failed = self.row(notify.FAILED, "notify: telegram: Unauthorized")
         self.assertEqual((failed["level"], failed["detail"]), ("WARN", "telegram: Unauthorized"))
+
+    def real_row(self, repo_file_ignored):
+        """The row from notify's own status, in a temp repo with no `notify` line and full credentials."""
+        import notify
+        tmp = Path(tempfile.mkdtemp())
+        self.addCleanup(shutil.rmtree, tmp, ignore_errors=True)
+        subprocess.run(["git", "init", "-q", str(tmp)], check=True)
+        (tmp / ".gitignore").write_text(".claude/gogogo/\n" if repo_file_ignored else "")
+        creds = tmp / "home-notify.env"
+        creds.write_text(f"{notify.TOKEN_KEY}=1:abc\n{notify.CHAT_KEY}=7\n")
+        repo_file = tmp / ".claude" / "gogogo" / "notify.env"
+        repo_file.parent.mkdir(parents=True)
+        repo_file.write_text(f"{notify.CHAT_KEY}=8\n")
+        profile = tmp / ".agents" / "dev-process.md"
+        profile.parent.mkdir()
+        profile.write_text("+++\nprofile = 1\n+++\n\n## superpowers boundary\nx\n")
+        answers = [{"ok": True, "result": {"username": "b"}}, {"ok": True, "result": {"first_name": "Vic"}}]
+        rep = sc.Report()
+        with mock.patch.object(notify, "CREDENTIALS", creds), \
+                mock.patch.dict(os.environ, {}, clear=True), \
+                mock.patch.object(notify, "_call", side_effect=lambda *a, **k: answers.pop(0)["result"]):
+            sc.check_notify(profile, rep)
+        rows = [r for r in rep.rows if r["check"] == "notify"]
+        self.assertEqual(len(rows), 1)
+        self.assertFalse(rep.failed())
+        return rows[0]
+
+    def test_the_default_passes_and_a_file_that_is_not_ignored_warns(self):
+        default = self.real_row(True)
+        self.assertEqual(default["level"], "PASS")
+        self.assertIn("(by default)", default["detail"])
+        unread = self.real_row(False)
+        self.assertEqual(unread["level"], "WARN")
+        self.assertIn("not git-ignored", unread["detail"])
 
 
 class SessionHook(unittest.TestCase):

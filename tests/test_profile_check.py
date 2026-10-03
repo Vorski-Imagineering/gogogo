@@ -687,6 +687,13 @@ class SchemaDoc(unittest.TestCase):
         row = next(line for line in doc.splitlines() if line.startswith("| `lanes` |"))
         self.assertEqual(row.split("|")[4].strip(), pc.FIELDS["lanes"][2])
 
+    def test_doc_and_checker_describe_notify_the_same(self):
+        doc = (PLUGIN / "references" / "profile-schema.md").read_text()
+        row = next(line for line in doc.splitlines() if line.startswith("| `notify` |"))
+        self.assertEqual(row.split("|")[4].strip(), pc.FIELDS["notify"][2])
+        self.assertIn("absent means telegram", pc.FIELDS["notify"][2])
+        self.assertIn(".claude/gogogo/notify.env", pc.FIELDS["notify"][2])
+
     def test_doc_example_is_valid_toml(self):
         doc = (PLUGIN / "references" / "profile-schema.md").read_text()
         for block in doc.split("```toml\n")[1:]:

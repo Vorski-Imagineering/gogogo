@@ -92,9 +92,10 @@ FIELDS = {
                           "the card enters a stage with a tag."),
     "preflight.extra": (list, (), "Extra checks before a run."),
     "stop.extra": (list, (), "Extra conditions that stop a whole run."),
-    "notify": (str, (), "none / telegram. Optional; absent means none. telegram: sent by scripts/notify.py; "
-               "bot token and chat id from TELEGRAM_BOT_TOKEN and TELEGRAM_CHAT_ID in the environment or "
-               "~/.claude/gogogo/notify.env, never in the profile."),
+    "notify": (str, (), "none / telegram. Optional; absent means telegram when this machine has credentials, "
+               "else off. Credentials come from TELEGRAM_BOT_TOKEN and TELEGRAM_CHAT_ID in the environment, "
+               "the repo's git-ignored .claude/gogogo/notify.env, or the per-user notify.env, never the "
+               "profile."),
     "review.coverage": (str, (), "precise / broad / exhaustive. Optional; absent means broad. How wide a net "
                         "the first review round casts; correction rounds are always precise."),
     "auto_test.pass_column": (str, (TEST,), "Column a card moves to on PASS."),

@@ -123,7 +123,7 @@ no skill requires it; a skill that finds it uses it.
 | `handback.reporter` | str | optional | trailer / assign / none. Optional; absent means none. trailer: each merge writes a Ships-issue trailer naming the reporter, and stage sync assigns them when the card enters a stage with a tag. |
 | `preflight.extra` | list | optional | Extra checks before a run. |
 | `stop.extra` | list | optional | Extra conditions that stop a whole run. |
-| `notify` | str | optional | none / telegram. Optional; absent means none. telegram: sent by scripts/notify.py; bot token and chat id from TELEGRAM_BOT_TOKEN and TELEGRAM_CHAT_ID in the environment or ~/.claude/gogogo/notify.env, never in the profile. |
+| `notify` | str | optional | none / telegram. Optional; absent means telegram when this machine has credentials, else off. Credentials come from TELEGRAM_BOT_TOKEN and TELEGRAM_CHAT_ID in the environment, the repo's git-ignored .claude/gogogo/notify.env, or the per-user notify.env, never the profile. |
 | `review.coverage` | str | optional | precise / broad / exhaustive. Optional; absent means broad. How wide a net the first review round casts; correction rounds are always precise. |
 | `auto_test.pass_column` | str | `auto-test` | Column a card moves to on PASS. |
 | `auto_test.fail_column` | str | `auto-test` | Column a card moves to on FAIL. |

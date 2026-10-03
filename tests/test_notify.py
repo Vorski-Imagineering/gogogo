@@ -3,7 +3,7 @@
 
 Telegram is never called: `urlopen` is patched, the credentials file is a temp
 file, the environment is cleared of the two keys, and each case writes its own
-profile.
+profile in its own temp folder, which is the repo root the repo file is read from.
 
     python3 -m unittest tests.test_notify
 """
@@ -12,6 +12,7 @@ import io
 import json
 import os
 import stat
+import subprocess
 import sys
 import tempfile
 import unittest
@@ -67,13 +68,27 @@ class Case(unittest.TestCase):
 
     def profile(self, notify_value="telegram"):
         line = f'notify = "{notify_value}"\n' if notify_value is not None else ""
-        path = self.tmp / "dev-process.md"
+        path = self.tmp / ".agents" / "dev-process.md"
+        path.parent.mkdir(exist_ok=True)
         path.write_text(f"+++\nprofile = 1\n{line}+++\n\n## superpowers boundary\nx\n")
         return str(path)
 
     def write_creds(self, token=TOKEN, chat=CHAT, extra=""):
         self.creds.parent.mkdir(parents=True, exist_ok=True)
         self.creds.write_text(f"{extra}{notify.TOKEN_KEY}={token}\n{notify.CHAT_KEY}={chat}\n")
+
+    def git_repo(self, ignored=True):
+        """Make the temp folder a git repo, with `.claude/gogogo/` ignored or not."""
+        subprocess.run(["git", "init", "-q", str(self.tmp)], check=True)
+        (self.tmp / ".gitignore").write_text(".claude/gogogo/\n" if ignored else "*.pem\n")
+
+    def write_repo(self, text):
+        self.repo_file.parent.mkdir(parents=True, exist_ok=True)
+        self.repo_file.write_text(text)
+
+    @property
+    def repo_file(self):
+        return self.tmp / ".claude" / "gogogo" / "notify.env"
 
     def run_main(self, *argv, stdin=None):
         out, err = io.StringIO(), io.StringIO()
@@ -103,7 +118,7 @@ class Send(Case):
 
     def test_2_off_sends_nothing(self):
         self.write_creds()
-        for value in ("none", None):
+        for value in ("none",):
             code, out, _ = self.run_main("send", "--profile", self.profile(value), "--text", "x")
             self.assertEqual((code, out.strip()), (0, "notify: off"), value)
         self.urlopen.assert_not_called()
@@ -316,6 +331,236 @@ class ChatId(Case):
         self.assertIn("no messages yet", out)
         self.creds.unlink()
         self.assertEqual(self.run_main("chat-id")[0], 2)
+
+
+class ByDefault(Case):
+    """An absent `notify` sends when this machine has credentials; "none" opts out."""
+
+    def test_1_absent_with_credentials_is_telegram_by_default(self):
+        self.write_creds()
+        self.urlopen.side_effect = [ok({"username": "gobot"}), ok({"first_name": "Vic"})]
+        state, line, _ = notify.status(self.profile(None))
+        self.assertEqual(state, notify.READY)
+        self.assertIn("(by default)", line)
+        self.urlopen.side_effect = None
+        self.urlopen.return_value = ok({})
+        code, out, _ = self.run_main("send", "--profile", self.profile(None), "--text", "x")
+        self.assertEqual((code, out.strip()), (0, "sent"))
+        self.assertEqual(self.urlopen.call_count, 3)
+        self.assertTrue(self.posted(self.urlopen.call_args)[0].endswith("/sendMessage"))
+
+    def test_2_absent_without_credentials_is_off(self):
+        code, out, _ = self.run_main("status", "--profile", self.profile(None))
+        self.assertEqual((code, out.strip()), (0, "notify: off"))
+        code, out, _ = self.run_main("send", "--profile", self.profile(None), "--text", "x")
+        self.assertEqual((code, out.strip()), (0, "notify: off"))
+        self.write_creds(chat="")
+        self.assertEqual(self.run_main("status", "--profile", self.profile(None))[1].strip(), "notify: off")
+        self.urlopen.assert_not_called()
+
+    def test_3_none_stays_off_with_credentials(self):
+        self.write_creds()
+        code, out, _ = self.run_main("status", "--profile", self.profile("none"))
+        self.assertEqual((code, out.strip()), (0, "notify: off"))
+        code, out, _ = self.run_main("send", "--profile", self.profile("none"), "--text", "x")
+        self.assertEqual((code, out.strip()), (0, "notify: off"))
+        self.urlopen.assert_not_called()
+
+    def test_explicit_telegram_prints_as_before(self):
+        self.write_creds()
+        self.urlopen.side_effect = [ok({"username": "gobot"}), ok({"first_name": "Vic"})]
+        code, out, _ = self.run_main("status", "--profile", self.profile())
+        self.assertEqual((code, out.strip()), (0, "notify: telegram: bot @gobot -> Vic"))
+
+
+class RepoFile(Case):
+    """<root>/.claude/gogogo/notify.env: read key by key, only when git-ignored."""
+
+    def test_4_each_key_from_the_first_source_that_has_it(self):
+        self.git_repo()
+        self.write_creds(chat="111")
+        self.write_repo(f"{notify.CHAT_KEY}=222\n")
+        self.assertEqual(notify.credentials(self.tmp)[:2], (TOKEN, "222"))
+        self.assertEqual(notify.credentials()[:2], (TOKEN, "111"))
+
+    def test_5_the_environment_wins_over_the_repo_file(self):
+        self.git_repo()
+        self.write_creds(chat="111")
+        self.write_repo(f"{notify.CHAT_KEY}=222\n")
+        os.environ[notify.CHAT_KEY] = "333"
+        self.assertEqual(notify.credentials(self.tmp)[:2], (TOKEN, "333"))
+
+    def test_6_a_file_that_is_not_ignored_is_never_read(self):
+        self.git_repo(ignored=False)
+        self.write_creds(chat="111")
+        self.write_repo(f"{notify.TOKEN_KEY}=999:REPO\n{notify.CHAT_KEY}=222\n")
+        self.assertEqual(notify.credentials(self.tmp)[:2], (TOKEN, "111"))
+        code, out, _ = self.run_main("status", "--profile", self.profile())
+        self.assertEqual(code, 1)
+        self.assertIn("not git-ignored", out)
+        self.assertIn(".claude/gogogo/", out)
+        self.urlopen.assert_not_called()
+        self.urlopen.return_value = ok({})
+        code, out, err = self.run_main("send", "--profile", self.profile(), "--text", "x")
+        self.assertEqual((code, out.strip()), (0, "sent"))
+        self.assertIn("not git-ignored", err)
+        url, params = self.posted(self.urlopen.call_args)
+        self.assertIn(TOKEN, url)
+        self.assertEqual(params["chat_id"], "111")
+
+    def test_6_outside_a_git_repo_the_file_is_not_read(self):
+        self.write_creds(chat="111")
+        self.write_repo(f"{notify.CHAT_KEY}=222\n")
+        self.assertEqual(notify.credentials(self.tmp)[:2], (TOKEN, "111"))
+
+    def test_an_app_env_file_is_never_read(self):
+        self.git_repo()
+        (self.tmp / ".env").write_text(f"{notify.TOKEN_KEY}=999:APP\n{notify.CHAT_KEY}=222\n")
+        self.assertEqual(notify.credentials(self.tmp)[:2], ("", ""))
+
+    def test_7_init_repo_refuses_unless_ignored(self):
+        self.git_repo(ignored=False)
+        code, out, err = self.run_main("--profile", self.profile(), "init", "--repo")
+        self.assertEqual(code, 2)
+        self.assertIn("not git-ignored", out + err)
+        self.assertFalse(self.repo_file.exists())
+        self.git_repo()
+        code, out, _ = self.run_main("--profile", self.profile(), "init", "--repo")
+        self.assertEqual(code, 0)
+        self.assertIn(str(self.repo_file), out)
+        self.assertEqual(stat.S_IMODE(self.repo_file.stat().st_mode), 0o600)
+        self.assertEqual(self.repo_file.read_text(), notify.TEMPLATE)
+        self.assertFalse(self.creds.exists())
+
+    def test_7_init_repo_outside_a_git_repo_writes_nothing(self):
+        code, _, _ = self.run_main("--profile", self.profile(), "init", "--repo")
+        self.assertEqual(code, 2)
+        self.assertFalse(self.repo_file.exists())
+
+    def test_8_chat_id_save_repo_writes_only_the_repo_file(self):
+        self.git_repo()
+        self.write_creds(chat="111")
+        before = self.creds.read_bytes()
+        self.urlopen.return_value = ok([{"update_id": 1, "message": {"chat": {"id": 5, "first_name": "Ann"}}}])
+        code, _, _ = self.run_main("--profile", self.profile(), "chat-id", "--save", "5", "--repo")
+        self.assertEqual(code, 0)
+        self.assertIn(f"{notify.CHAT_KEY}=5\n", self.repo_file.read_text())
+        self.assertEqual(stat.S_IMODE(self.repo_file.stat().st_mode), 0o600)
+        self.assertEqual(self.creds.read_bytes(), before)
+
+    def test_8_chat_id_save_repo_refuses_unless_ignored(self):
+        self.git_repo(ignored=False)
+        self.write_creds(chat="")
+        code, out, err = self.run_main("--profile", self.profile(), "chat-id", "--save", "5", "--repo")
+        self.assertEqual(code, 2)
+        self.assertIn("not git-ignored", out + err)
+        self.assertFalse(self.repo_file.exists())
+        self.urlopen.assert_not_called()
+
+    def test_9_no_new_line_prints_the_token(self):
+        self.git_repo(ignored=False)
+        self.write_creds()
+        self.write_repo(f"{notify.TOKEN_KEY}={TOKEN}\n")
+        self.urlopen.side_effect = urllib.error.URLError(f"cannot reach /bot{TOKEN}/getMe")
+        for argv in (("status", "--profile", self.profile(None)),
+                     ("send", "--profile", self.profile(None), "--text", "x"),
+                     ("--profile", self.profile(), "init", "--repo"),
+                     ("--profile", self.profile(), "chat-id", "--save", "5", "--repo")):
+            code, out, err = self.run_main(*argv)
+            self.assertNotIn(TOKEN, out + err, argv)
+        self.git_repo()
+        code, out, err = self.run_main("status", "--profile", self.profile(None))
+        self.assertEqual(code, 1)
+        self.assertIn("(by default)", out)
+        self.assertIn("<token>", out)
+        self.assertNotIn(TOKEN, out + err)
+
+
+class RepoFileLines(Case):
+    """The exact lines Design 3 and the --repo commands print, and how the ignore test is asked."""
+
+    def unread_line(self):
+        path = self.tmp.resolve() / ".claude" / "gogogo" / "notify.env"
+        return f"notify: {path} is not git-ignored, so it is not read: add .claude/gogogo/ to .gitignore"
+
+    def test_status_and_init_print_the_not_ignored_line(self):
+        self.git_repo(ignored=False)
+        self.write_repo(f"{notify.CHAT_KEY}=222\n")
+        code, out, _ = self.run_main("status", "--profile", self.profile())
+        self.assertEqual((code, out.strip()), (1, self.unread_line()))
+        code, out, err = self.run_main("init", "--repo", "--profile", self.profile())
+        self.assertEqual((code, out, err.strip()), (2, "", self.unread_line()))
+
+    def test_the_not_ignored_line_is_scrubbed_on_send_and_init(self):
+        root = self.tmp / TOKEN
+        subprocess.run(["git", "init", "-q", str(root)], check=True)
+        (root / ".gitignore").write_text("*.pem\n")
+        (root / ".claude" / "gogogo").mkdir(parents=True)
+        (root / ".claude" / "gogogo" / "notify.env").write_text(f"{notify.CHAT_KEY}=222\n")
+        (root / ".agents").mkdir()
+        profile = root / ".agents" / "dev-process.md"
+        profile.write_text('+++\nprofile = 1\nnotify = "telegram"\n+++\n\n## superpowers boundary\nx\n')
+        self.write_creds()
+        self.urlopen.return_value = ok({"message_id": 1})
+        _, out, err = self.run_main("send", "--profile", str(profile), "--text", "hello")
+        self.assertIn("not git-ignored", err)
+        self.assertNotIn(TOKEN, out + err)
+        code, out, err = self.run_main("init", "--repo", "--profile", str(profile))
+        self.assertEqual(code, 2)
+        self.assertIn("not git-ignored", err)
+        self.assertNotIn(TOKEN, out + err)
+
+    def test_by_default_lines_name_the_default(self):
+        self.git_repo()
+        self.write_creds()
+        self.urlopen.side_effect = [ok({"username": "gobot"}), ok({"first_name": "Vic"})]
+        code, out, _ = self.run_main("status", "--profile", self.profile(None))
+        self.assertEqual((code, out.strip()), (0, "notify: telegram (by default): bot @gobot -> Vic"))
+        self.urlopen.side_effect = [ok({"username": "gobot"}),
+                                    Answer({"ok": False, "description": "Bad Request: chat not found"})]
+        code, out, _ = self.run_main("status", "--profile", self.profile(None))
+        self.assertEqual((code, out.strip()), (1, "notify: telegram (by default): Bad Request: chat not found"))
+
+    def test_init_repo_names_the_repo_file_and_never_overwrites(self):
+        self.git_repo()
+        code, out, _ = self.run_main("init", "--repo", "--profile", self.profile())
+        self.assertEqual((code, out.strip()), (0, f"created: {self.tmp.resolve() / '.claude/gogogo/notify.env'}"))
+        code, out, _ = self.run_main("init", "--repo", "--profile", self.profile())
+        self.assertEqual((code, out.strip()),
+                         (0, f"already there: {self.tmp.resolve() / '.claude/gogogo/notify.env'}"))
+
+    def test_chat_id_repo_lines_name_the_repo_file(self):
+        self.git_repo()
+        repo_file = self.tmp.resolve() / ".claude" / "gogogo" / "notify.env"
+        code, out, _ = self.run_main("chat-id", "--repo", "--profile", self.profile())
+        self.assertEqual((code, out.strip()), (2, f"no bot token: put it after {notify.TOKEN_KEY}= in "
+                                                  f"{repo_file} (`notify.py init --repo` creates the file)"))
+        code, out, _ = self.run_main("chat-id")
+        self.assertEqual((code, out.strip()), (2, f"no bot token: put it after {notify.TOKEN_KEY}= in "
+                                                  f"{self.creds} (`notify.py init` creates the file)"))
+        self.write_repo(f"{notify.TOKEN_KEY}={TOKEN}\n")
+        self.urlopen.return_value = ok([{"update_id": 1, "message": {"chat": {"id": 5, "first_name": "Ann"}}}])
+        code, out, _ = self.run_main("chat-id", "--save", "5", "--repo", "--profile", self.profile())
+        self.assertEqual((code, out.strip().splitlines()[-1]),
+                         (0, f"saved {notify.CHAT_KEY}=5 in {repo_file}"))
+
+    def test_the_ignore_test_is_a_quiet_git_check_ignore(self):
+        with mock.patch("subprocess.run", return_value=mock.Mock(returncode=0)) as run:
+            self.assertTrue(notify._ignored(self.tmp))
+        run.assert_called_once_with(["git", "-C", str(self.tmp), "check-ignore", "-q",
+                                     str(Path(".claude") / "gogogo" / "notify.env")], capture_output=True)
+        with mock.patch("subprocess.run", side_effect=FileNotFoundError("git")):
+            self.assertFalse(notify._ignored(self.tmp))
+
+    def test_help_names_the_repo_option(self):
+        for argv, pattern in ((["--help"], r"init\s+create "),
+                              (["init", "--help"], r"--repo\s+the repo's git-ignored <root>/"),
+                              (["chat-id", "--help"], r"--repo\s+the repo's git-ignored <root>/")):
+            out = io.StringIO()
+            with redirect_stdout(out), mock.patch.dict(os.environ, {"COLUMNS": "400"}), \
+                    self.assertRaises(SystemExit):
+                notify.main(argv)
+            self.assertRegex(out.getvalue(), pattern, argv)
 
 
 if __name__ == "__main__":
