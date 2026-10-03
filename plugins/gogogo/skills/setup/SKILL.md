@@ -206,7 +206,9 @@ What each fix involves:
   the process skills come from the `gogogo` plugin and this repo's specifics
   are in `.agents/dev-process.md`.
 - **Independence** (the `independence` row). How much Claude decides on its
-  own in this repo, and how much it brings to a person. Ask once with
+  own in this repo, and how much it brings to a person. The row is `INFO`, so
+  this question is asked on every setup run, after the `FAIL` and `WARN`
+  lines, a repo that is already set up included. Ask once with
   `AskUserQuestion`, in plain words: which level Claude should work at in
   this repo. One option per level, each one line on what it asks and what it
   decides, with the current level marked:

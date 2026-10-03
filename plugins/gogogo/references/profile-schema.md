@@ -389,8 +389,7 @@ could undo it without anyone noticing a difference).
 | `architect` | approvals | product, engineering |
 
 Approvals are asked at every level: no level lets a skill approve its own Hard
-Stop or apply row. Absent means `junior-dev`, which is how the skills worked
-before the setting existed. `/gogogo:setup` asks which level a repo wants.
+Stop or apply row. Absent means `junior-dev`. `/gogogo:setup` asks which level a repo wants.
 `senior-dev` and `architect` are recommended for an Opus-class model at medium
 effort or higher. The reasons are in
 [`docs/independence-mode.md`](https://github.com/Vorski-Imagineering/gogogo/blob/main/docs/independence-mode.md).

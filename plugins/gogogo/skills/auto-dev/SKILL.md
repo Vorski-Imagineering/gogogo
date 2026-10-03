@@ -149,8 +149,8 @@ the description does not hold yet*), after `/gogogo:dev` §1's two reads; an
 issue whose answer sits in such a comment is taken, not skipped. Here a fold
 that stops the issue is a skip: reason `decision`, or `lint` when the folded
 body fails the lint. An issue is workable here only if every
-decision it depends on was made by a person, or listed under *Decided without
-asking*, and is **in the body**, once folded in. Skip and record, never guess,
+decision it depends on of a kind the level asks about was made by a person and
+is **in the body**, once folded in. Skip and record, never guess,
 when it has an open decision of a kind the profile's `independence` asks about
 (§ *Who decides* in `/gogogo:spec`), not answered in the body, a Hard Stop no
 Approvals row names, or a two-licence change whose apply row is missing (that
