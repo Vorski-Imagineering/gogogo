@@ -55,6 +55,7 @@ class Lane(unittest.TestCase):
         for s in ("dev", "auto-dev", "spec", "idea"):
             write(self.root, f"plugins/gogogo/skills/{s}/SKILL.md")
         case(self.root, "dev-reversal", "dev")
+        case(self.root, "dev-third-attempt", "dev")
         case(self.root, "auto-dev-list-fails", "auto-dev")
         case(self.root, "spec-being-built", "spec")
         write(self.root, "README.md")
@@ -174,6 +175,31 @@ class Lane(unittest.TestCase):
         git(self.root, "commit", "-q", "-am", "change")
         self.run_lane(result=doc())
         self.assertEqual(self.calls[0][-2:], ["--tag", "spec"])
+
+
+    def test_a_deleted_case_selects_the_skill_it_was_tagged_for(self):
+        git(self.root, "rm", "-q", "-r", "plugins/gogogo/evals/dev-reversal")
+        self.run_lane(result=doc())
+        self.assertEqual(self.calls[0][-2:], ["--tag", "dev"])
+
+    def test_a_retagged_case_selects_its_old_and_new_skill(self):
+        write(self.root, "plugins/gogogo/evals/dev-reversal/prompt.md", "---\ntags: [spec]\n---\n\nQuestion?\n")
+        self.run_lane(result=doc())
+        self.assertEqual(self.calls[0][-3:], ["--tag", "dev", "spec"])
+
+    def test_a_file_moved_out_of_a_skill_selects_that_skill(self):
+        write(self.root, "plugins/gogogo/skills/dev/references/review.md", "rules\n" * 20)
+        git(self.root, "add", "-A")
+        git(self.root, "commit", "-q", "-m", "add")
+        git(self.root, "branch", "-f", "main", "HEAD")
+        git(self.root, "mv", "plugins/gogogo/skills/dev/references/review.md", "docs-review.md")
+        self.run_lane(result=doc())
+        self.assertEqual(self.calls[0][-2:], ["--tag", "dev"])
+
+    def test_runs_go_three_at_a_time(self):
+        self.run_lane(["--skill", "dev"], result=doc())
+        args = self.calls[0]
+        self.assertEqual(args[args.index("--concurrency") + 1], "3")
 
 
 if __name__ == "__main__":

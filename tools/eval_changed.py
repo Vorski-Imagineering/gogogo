@@ -42,7 +42,7 @@ PLUGIN = "plugins/gogogo"
 SKILLS = f"{PLUGIN}/skills/"
 EVALS = f"{PLUGIN}/evals/"
 TAGS = re.compile(r"^tags:\s*\[([^\]]*)\]\s*$", re.M)
-FIXED = ["--runs", "3", "--threshold", "0.66"]
+FIXED = ["--runs", "3", "--threshold", "0.66", "--concurrency", "3"]
 
 
 def _git(args: list[str], cwd: Path) -> str:
@@ -54,29 +54,46 @@ def _run_eval(args: list[str], cwd: Path) -> int:
     return subprocess.run(args, cwd=cwd).returncode
 
 
+def _tags(text: str) -> list[str]:
+    m = TAGS.search(text)
+    return [t.strip().strip("'\"") for t in m.group(1).split(",")] if m else []
+
+
 def case_tags(root: Path) -> dict[str, list[str]]:
     """Each case folder's name, and the tags its prompt.md names."""
+    return {p.parent.name: _tags(p.read_text(encoding="utf-8"))
+            for p in sorted((root / EVALS).glob("*/prompt.md"))}
+
+
+def case_tags_at(root: Path, ref: str) -> dict[str, list[str]]:
+    """The same, as the cases stood at `ref`, so a deleted or retagged case still names its skill."""
     cases = {}
-    for prompt in sorted((root / EVALS).glob("*/prompt.md")):
-        m = TAGS.search(prompt.read_text(encoding="utf-8"))
-        cases[prompt.parent.name] = [t.strip().strip("'\"") for t in m.group(1).split(",")] if m else []
+    for path in _git(["ls-tree", "-r", "--name-only", ref, EVALS], root).splitlines():
+        if path.endswith("/prompt.md"):
+            cases[path[len(EVALS):].split("/")[0]] = _tags(_git(["show", f"{ref}:{path}"], root))
     return cases
 
 
-def changed_files(root: Path, base: str) -> list[str]:
-    fork = _git(["merge-base", base, "HEAD"], root).strip()
-    files = _git(["diff", "--name-only", fork], root).splitlines()
+def fork_point(root: Path, base: str) -> str:
+    return _git(["merge-base", base, "HEAD"], root).strip()
+
+
+def changed_files(root: Path, fork: str) -> list[str]:
+    # --no-renames: a file moved out of a skill shows its old path too.
+    files = _git(["diff", "--name-only", "--no-renames", fork], root).splitlines()
     files += _git(["ls-files", "--others", "--exclude-standard"], root).splitlines()
     return files
 
 
-def skills_touched(files: list[str], cases: dict[str, list[str]]) -> set[str]:
+def skills_touched(files: list[str], *case_maps: dict[str, list[str]]) -> set[str]:
     skills = set()
     for f in files:
         if f.startswith(SKILLS):
             skills.add(f[len(SKILLS):].split("/")[0])
         elif f.startswith(EVALS):
-            skills.update(cases.get(f[len(EVALS):].split("/")[0], []))
+            name = f[len(EVALS):].split("/")[0]
+            for cases in case_maps:
+                skills.update(cases.get(name, []))
     return skills
 
 
@@ -88,7 +105,11 @@ def main(argv=None, root: Path = ROOT) -> int:
     a = ap.parse_args(argv)
 
     cases = case_tags(root)
-    skills = set(a.skill) if a.skill else skills_touched(changed_files(root, a.base), cases)
+    if a.skill:
+        skills = set(a.skill)
+    else:
+        fork = fork_point(root, a.base)
+        skills = skills_touched(changed_files(root, fork), cases, case_tags_at(root, fork))
     if not skills:
         print("evals: no skill changed")
         return 0
