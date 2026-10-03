@@ -97,7 +97,9 @@ refuses to start or stops for you, the evaluator only sees "not met yet" and
 tells the next turn to keep going, so the agent works around the skill: it
 builds issues with its own subagents, skips review, verification and merge,
 and parks cards in `Human!Help!` with no note
-([#84](https://github.com/Vorski-Imagineering/gogogo/issues/84)).
+([#84](https://github.com/Vorski-Imagineering/gogogo/issues/84); the shared
+`tracker.py` now refuses that move unless the issue's newest comment says why,
+but a goal can still route around the skill in other ways).
 
 Use a goal when all of these hold:
 

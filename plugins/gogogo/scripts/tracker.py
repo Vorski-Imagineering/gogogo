@@ -665,7 +665,10 @@ mutation($project: ID!, $item: ID!, $field: ID!, $option: String!) {
 def newest_comment(number: int, repo: str) -> str:
     """The issue's newest comment body, or "" when it has none. A failed read raises BoardError."""
     owner, name = repo.split("/", 1)
-    nodes = graphql(NEWEST_COMMENT_QUERY, owner=owner, name=name, number=number)["repository"]["issue"]["comments"]["nodes"]
+    issue = (graphql(NEWEST_COMMENT_QUERY, owner=owner, name=name, number=number).get("repository") or {}).get("issue")
+    if not issue:
+        raise BoardError(f"{repo}#{number} does not exist (or this login cannot see it)")
+    nodes = issue["comments"]["nodes"]
     return (nodes[-1].get("body") or "") if nodes else ""
 
 

@@ -260,6 +260,11 @@ class NeedsHumanGuardTests(unittest.TestCase):
         import review_stats
         self.assertEqual(board.STOP_REASONS, review_stats.STOPS)
 
+    def test_newest_comment_of_a_missing_issue_is_a_board_error(self):
+        with mock.patch.object(board, "graphql", return_value={"repository": {"issue": None}}):
+            with self.assertRaisesRegex(board.BoardError, "does not exist"):
+                board.newest_comment(99999, "acme/issues")
+
     def test_newest_comment_reads_the_last_comment_or_nothing(self):
         def answer(nodes):
             return {"repository": {"issue": {"comments": {"nodes": nodes}}}}
@@ -274,7 +279,7 @@ class NeedsHumanGuardTests(unittest.TestCase):
                 / "tracker-contract.md").read_text(encoding="utf-8")
         section = text.split("## The shared tool", 1)[1].split("\n## ", 1)[0]
         self.assertIn("needs_human", section)
-        self.assertIn("4", section)
+        self.assertRegex(section, r"refuses a move to `tracker\.columns\.needs_human`[^.]*exiting 4")
 
 
 def issue_page(issues, has_next=False, cursor="next"):
