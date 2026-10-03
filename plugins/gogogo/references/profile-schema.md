@@ -114,8 +114,9 @@ naming the lane's test files) and `ci` (true if CI runs it).
 `mutate` is a command `/gogogo:dev` §6 runs last, to find changed lines the
 lane's tests do not check. Its contract:
 
-1. `<base>` is replaced with the branch the change merges into:
-   `integration.base`, or the repo's default branch when the profile has none.
+1. `<base>` is replaced with the branch the change merges into
+   (`integration.base`, or the repo's default branch when the profile has
+   none), as its remote-tracking ref after a fetch, `origin/<branch>`.
 2. It mutates only the lines changed between the point where the change left
    that branch (`git merge-base <base> HEAD`) and the working tree,
    uncommitted work included, and runs this lane's tests against each mutant.

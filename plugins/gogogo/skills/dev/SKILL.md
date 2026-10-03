@@ -326,9 +326,10 @@ opened that holds a resource (a room, a camera, a browser left running).
 1. It runs last in §6, once every applicable lane's `run` command is green and
    the real run has been made. When no lane has a `mutate` command, nothing
    runs and §7 says so.
-2. Run the lane's `mutate` command with `<base>` replaced by the branch the
-   change merges into (`integration.base`, or the repo's default branch when
-   the profile has none), and let it finish: there is no time limit.
+2. Run the lane's `mutate` command, after `git fetch origin`, with `<base>`
+   replaced by `origin/<branch>`, where `<branch>` is the branch the change
+   merges into (`integration.base`, or the repo's default branch when the
+   profile has none), and let it finish: there is no time limit.
 3. A run whose output has no `mutants:` line is a failed run, never a pass.
    Run it once more. A second failed run stops the issue for a person (§8).
 4. `mutants: 0` means nothing on the changed lines can be mutated in this
@@ -401,7 +402,8 @@ Comment in the reporter's language, not the codebase's:
   line, the change in a few words and its reason word, inside a `<details>`
   block when there are more than five. A stop names what is left. Then the
   record, one line per lane that has a `mutate` command, on its own line
-  directly before the review record, with no spaces inside a value:
+  after any spec-check record and directly before the review record, with no
+  spaces inside a value (a space in the lane's name is written as `-`):
   `<!-- gogogo:mutation v=1 lane=<name> mutants=<n> killed=<n> survived=<n> timeout=<n> runs=<n> added=<n> declined_as=equivalent:<n>,text:<n>,outside:<n> end=<clean|survivors|failed> -->`
   - `mutants`, `killed`, `survived` and `timeout` are the first run's counts:
     what the tests caught as the change was written. `mutants` is the sum of

@@ -42,6 +42,8 @@ SCRIPTS = "plugins/gogogo/scripts"
 VERSION = "2.5.1"
 PINS = (f"mutmut=={VERSION}", "whatthepatch==1.0.7")
 HUNK = re.compile(r"^@@ -(\d+)")
+# Fixed whatever the user's git config says: the tool reads paths after a/ and b/.
+PLAIN_DIFF = ["--src-prefix=a/", "--dst-prefix=b/", "--no-color", "--no-ext-diff"]
 
 
 class Stop(Exception):
@@ -81,10 +83,10 @@ def changed_scripts(fork: str) -> list[str]:
 
 def make_patch(fork: str, scripts: list[str]) -> str:
     tracked = set(_git("ls-files", "--", *scripts).splitlines())
-    patch = _git("diff", fork, "--", *[s for s in scripts if s in tracked]) if tracked else ""
+    patch = _git("diff", *PLAIN_DIFF, fork, "--", *[s for s in scripts if s in tracked]) if tracked else ""
     for path in scripts:
         if path not in tracked:
-            out = _run(["git", "diff", "--no-index", "--", "/dev/null", path])
+            out = _run(["git", "diff", *PLAIN_DIFF, "--no-index", "--", "/dev/null", path])
             if out.returncode not in (0, 1):
                 raise Stop(f"cannot diff the new file {path}")
             patch += out.stdout
@@ -158,10 +160,15 @@ def mutate(base: str, keep: bool) -> int:
                        or f"the mutation tool exited {run.returncode}")
 
         def ids(status):
-            return _run([exe, "result-ids", status], cwd=str(copy)).stdout.split()
+            out = _run([exe, "result-ids", status], cwd=str(copy))
+            if out.returncode != 0:
+                raise Stop(f"could not read the {status} mutants: "
+                           + ((out.stderr or out.stdout).strip().splitlines() or ["no output"])[-1])
+            return out.stdout.split()
 
-        killed, timeout = ids("killed"), ids("timeout")
-        survived = ids("survived") + ids("suspicious")
+        # "suspicious" is the tool's word for a mutant the tests killed, slowly.
+        killed, timeout = ids("killed") + ids("suspicious"), ids("timeout")
+        survived = ids("survived")
         missing = ids("untested") + ids("skipped")
         if missing:
             raise Stop(f"incomplete: {len(missing)} mutants were not run")
@@ -186,6 +193,11 @@ def main(argv=None) -> int:
         return mutate(args.base, args.keep)
     except Stop as exc:
         print(exc, file=sys.stderr)
+        return 2
+    except OSError as exc:
+        print(f"could not start a command: {exc}; if the tool's cache is broken, delete "
+              f"{Path(os.environ.get('XDG_CACHE_HOME') or Path.home() / '.cache') / 'gogogo'} and run again",
+              file=sys.stderr)
         return 2
 
 

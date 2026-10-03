@@ -132,6 +132,16 @@ class Changes(unittest.TestCase):
         self.assertIn(f"{SCRIPTS}/b.py", copied)
         self.assertNotIn(".env", copied)
 
+    def test_the_patch_keeps_a_b_prefixes_whatever_the_git_config(self):
+        git(self.r.dir, "config", "diff.mnemonicPrefix", "true")
+        self.r.write(f"{SCRIPTS}/a.py", "def a():\n    return 2\n")
+        self.r.write(f"{SCRIPTS}/b.py", "def b():\n    return 1\n")
+        with contextlib.chdir(self.r.dir), contextlib.redirect_stdout(io.StringIO()):
+            fork = mutate.merge_base("main")
+            patch = mutate.make_patch(fork, mutate.changed_scripts(fork))
+        self.assertIn("+++ b/plugins/gogogo/scripts/a.py", patch)
+        self.assertIn("+++ b/plugins/gogogo/scripts/b.py", patch)
+
     def test_nothing_to_mutate_installs_and_copies_nothing(self):
         self.r.write("README.md", "prose\n")
         with mock.patch.dict(os.environ, {}, clear=False):
@@ -170,10 +180,27 @@ class Counts(unittest.TestCase):
         self.r.write(f"{SCRIPTS}/a.py", "def a():\n    return 2\n")
 
     def test_counts_and_survivors(self):
+        # The tool's "suspicious" means the tests failed (killed) but ran slowly.
         ids = {"killed": "1 2 3", "survived": "4", "suspicious": "5", "timeout": "6"}
         code, out, _, _ = run_main(self.r.dir, fake=tool(run_code=2, ids=ids))
         self.assertEqual(code, 1)
-        self.assertEqual(out.splitlines()[-1], "mutants: 6 killed: 3 survived: 2 timeout: 1")
+        self.assertEqual(out.splitlines()[-1], "mutants: 6 killed: 4 survived: 1 timeout: 1")
+
+    def test_a_failed_result_read_is_no_evidence(self):
+        def fake(args, cwd):
+            if args[1] == "result-ids":
+                return done(args, "", 1)
+            return tool()(args, cwd)
+        code, out, _, _ = run_main(self.r.dir, fake=fake)
+        self.assertEqual(code, 2)
+        self.assertFalse([ln for ln in out.splitlines() if ln.startswith("mutants:")])
+
+    def test_a_tool_that_cannot_start_exits_2(self):
+        def fake(args, cwd):
+            raise FileNotFoundError(2, "No such file or directory", args[0])
+        code, out, err, _ = run_main(self.r.dir, fake=fake)
+        self.assertEqual(code, 2)
+        self.assertIn("No such file", err)
 
     def test_untested_mutants_are_no_evidence(self):
         code, out, err, _ = run_main(self.r.dir, fake=tool(ids={"killed": "1", "untested": "2 3"}))
