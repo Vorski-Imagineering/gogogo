@@ -100,7 +100,9 @@ Every tracker command targets `tracker.issues_repo`. When it differs from
 7. **The final report** has one line per issue in the list: *specced and
    labelled*; *posted without the label* (naming Posting step 7's withholding
    case); *left open* (with the question); *skipped* (closed, a pull request,
-   or already ready); or *not reached* (with why the run stopped). Each
+   or already ready); *skipped: changed by someone else meanwhile* (kept, or
+   nobody to ask; Posting step 1); *replaced a version posted meanwhile*; or
+   *not reached* (with why the run stopped). Each
    *specced and labelled* line ends with its card's result from Posting step
    8: moved, already there, left in `<column>`, closed, no card, could not
    be read, the move failed, or step 8 skipped (and which of its conditions
@@ -323,6 +325,13 @@ must specify in this codebase.
    in a comment, move it into the body before doing anything else. That alone
    is what unblocks it. Do this even when the user asked for something else on
    the issue; a spec an agent will not act on is not a spec.
+
+   **Then take the start snapshot**, in every run, one issue or several, when
+   the issue actually starts (after this step's own edit, which is this run's
+   change):
+   `gh issue view <N> --repo <tracker.issues_repo> --json body,labels > <scratch>/issue-<N>-start.json`.
+   Posting step 1 compares the issue with it. In a run of several, rule 3's
+   read before starting stays as it is; it only decides skipping.
 1. **Read the code before believing the ticket.** It describes a symptom.
 2. **Hunt for data already on the wire before proposing new state.** Highest
    leverage, most skipped. Grep for the field, not the feature.
@@ -354,6 +363,7 @@ profile's `## Recon traps` for what this codebase specifically hides.
 | The spec itself lists open questions | Go ask them. A spec is not a questionnaire. |
 | "Blocked on user answers" as a status | Only valid for an external unknown, never a decision. |
 | A lane in the profile with no case and no reason given | Lane silently skipped. |
+| Posting over a body that changed since the issue started | Someone else's work quoted as the report or overwritten. Compare with the start snapshot first. |
 | "cannot be automated / not testable" | Name the missing capability, or you are excusing a lane you did not investigate. |
 | No `## Verify by hand` | The reporter cannot check their own issue. Required in every spec. |
 | A placeholder URL in Verify by hand | Find a real record that reproduces it; do not hand the recon back. |
@@ -378,9 +388,27 @@ order, checking each step before starting the next:
    as the body: `gh issue create --repo <tracker.issues_repo> --title "<title>"
    --body-file <scratch>/idea.md`. Its number is `<N>` below, and those words
    become the original report.
-1. **Save the current body to the scratchpad before anything else**:
-   `gh issue view <N> --json body -q .body > <scratch>/issue-<N>-original.md`.
-   Confirm the file is non-empty (unless the issue body is empty).
+1. **Save the current body to the scratchpad before anything else**, and
+   check nobody changed the issue since it started:
+   `gh issue view <N> --repo <tracker.issues_repo> --json body,labels > <scratch>/issue-<N>-now.json`,
+   and its body to `<scratch>/issue-<N>-original.md` as before
+   (`gh issue view <N> --json body -q .body > <scratch>/issue-<N>-original.md`).
+   Confirm the file is non-empty (unless the issue body is empty). Then
+   compare `body` and the set of label names with `issue-<N>-start.json`
+   (*Before you write* § 0). Comments and `updatedAt` are not compared.
+   - The same: go on to step 2.
+   - Different: post nothing and add no label. Show the person what changed
+     (a diff of the two bodies, and the labels added or removed), then ask:
+     **keep the other version**, or **replace it with this run's answers**.
+     - keep: stop this issue, and name the draft's scratchpad path. In a run
+       of several, its final-report line is *skipped: changed by someone else
+       meanwhile, kept*.
+     - replace: the report section follows *Which report to keep* applied to
+       the current body (never quote the other spec as the report); the spec
+       below the `---` is this run's. Go on to step 2. The final-report line
+       says *replaced a version posted meanwhile*.
+     - A decline, or no person to ask: as keep, and the line says *skipped:
+       changed by someone else meanwhile, nobody to ask*.
 2. **Write the spec to the scratchpad**, so a failed call is re-postable.
    Inline `--body` mangles markdown; always use a file.
 3. **Compose the body file**: the report section, a `---` rule, then the spec.
