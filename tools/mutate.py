@@ -20,7 +20,8 @@ every exit, unless `--keep`. The tool is installed on first use into
 ${XDG_CACHE_HOME:-~/.cache}/gogogo/mutmut-2.5.1, or taken from GOGOGO_MUTMUT.
 
 Output: each survivor as `SURVIVED <path>:<line>` and its `-` and `+` lines,
-then exactly `mutants: <n> killed: <n> survived: <n> timeout: <n>`.
+then exactly `mutants: <n> killed: <n> survived: <n> timeout: <n>`. The tool's
+`suspicious` (the tests failed, but ran slowly) counts as killed.
 
 Exit codes: 0 no survivors; 1 survivors; 2 it could not finish (no `mutants:`
 line is printed then). There is no time limit.
@@ -166,8 +167,8 @@ def mutate(base: str, keep: bool) -> int:
                            + ((out.stderr or out.stdout).strip().splitlines() or ["no output"])[-1])
             return out.stdout.split()
 
-        killed, timeout = ids("killed"), ids("timeout")
-        survived = ids("survived") + ids("suspicious")
+        killed = ids("killed") + ids("suspicious")
+        survived, timeout = ids("survived"), ids("timeout")
         missing = ids("untested") + ids("skipped")
         if missing:
             raise Stop(f"incomplete: {len(missing)} mutants were not run")
