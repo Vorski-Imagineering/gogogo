@@ -93,6 +93,9 @@ reporter = "none"
   Its `mutate` command covers the `.py` files directly in
   `plugins/gogogo/scripts`, each against its own `tests/test_<name>.py`, takes
   minutes, and downloads its tool into the user's cache on first use.
+  Run `tools/mutate.py` with nothing heavy running alongside: under load the
+  tool marks killed mutants "suspicious", and the run counts them as survivors
+  (#45's first run showed 4 that way).
 - **live**: a real run of the changed skill in an adopting repo, read-only
   unless the spec says otherwise. Triage-only (`/gogogo:auto-dev
   --triage-only`) and dry runs with posting blocked are the default. Say which
