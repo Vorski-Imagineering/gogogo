@@ -132,9 +132,10 @@ def enclosing(old_lines: list[str], line: int, content_indent: int) -> list[str]
 
 
 def _content_indent(hunk: dict) -> int:
-    """The least indentation among the hunk's non-blank lines, so a hunk that runs
-    into the next definition is not taken as inside the one it starts in."""
-    return min((_indent(t) for t in hunk["minus"] + hunk["plus"] if t.strip()), default=0)
+    for text in hunk["minus"] + hunk["plus"]:
+        if text.strip():
+            return _indent(text)
+    return 0
 
 
 def _base_lines(fork: str, path: str) -> list[str]:

@@ -282,13 +282,23 @@ class Enclosing(unittest.TestCase):
         self.assertEqual(len(items), 1, items)
         self.assertTrue(items[0].endswith("def test_b(self):"), items)
 
-    def test_a_hunk_running_into_the_next_method_is_not_licensed_by_the_first(self):
-        self.change(TEST_CLASS.replace("        self.assertEqual(two(), 2)\n\n    def test_b(self):\n"
-                                       "        self.assertEqual(three(), 3)\n        self.assertEqual(four(), 4)\n", ""))
-        out = self.r.run("verify", body=body(cases="1. `tests/test_c.py::test_a` rewritten"),
-                         answers="H1\tweaker\ttest_b is gone\n")
-        self.assertEqual(out.returncode, 1, out.stdout + out.stderr)
-        self.assertIn("H1  NOT LICENSED", out.stdout)
+    def test_a_hunk_of_blank_lines_has_no_enclosing_line(self):
+        self.change(TEST_CLASS.replace("        self.assertEqual(two(), 2)\n\n", "        self.assertEqual(two(), 2)\n"))
+        out = self.r.run("list", "--json")
+        self.assertEqual(out.returncode, 0, out.stderr)
+        self.assertEqual(json.loads(out.stdout)["items"][0]["enclosing"], [])
+
+    def test_no_context_and_no_enclosing_line_print_a_dash(self):
+        self.r.write("tests/test_keep.py", "def test_kept():\n    assert True\n")
+        self.r.commit("rename the test")
+        self.assertEqual(self.items(), ["H1  changed  tests/test_keep.py:1  -"])
+
+    def test_a_deleted_file_has_the_same_keys_as_a_hunk(self):
+        (self.r.repo / "tests/test_a.py").unlink()
+        self.r.commit("drop")
+        out = self.r.run("list", "--json")
+        item = json.loads(out.stdout)["items"][0]
+        self.assertEqual((item["kind"], item["line"], item["context"], item["enclosing"]), ("deleted", None, "", []))
 
     def test_no_enclosing_line_falls_back_to_gits_header(self):
         self.r.at_base("tests/test_a.py", TEST_A + "\n\nX = 1\n")
@@ -299,6 +309,24 @@ class Enclosing(unittest.TestCase):
         self.assertTrue(items[0].endswith("def test_b():"), items)
         out = self.r.run("list", "--json")
         self.assertEqual(json.loads(out.stdout)["items"][0]["enclosing"], [])
+
+
+class EnclosingFunction(unittest.TestCase):
+    """`enclosing()` on its own, for the edges the repository cases do not reach."""
+
+    def setUp(self):
+        import test_guard
+        self.enclosing = test_guard.enclosing
+
+    def test_an_addition_at_the_top_has_no_enclosing_line(self):
+        self.assertEqual(self.enclosing(["def f():", "    x"], 0, 4), [])
+
+    def test_blank_lines_are_passed_over(self):
+        self.assertEqual(self.enclosing(["class T:", "    def f():", "", "        x"], 4, 8),
+                         ["def f():", "class T:"])
+
+    def test_the_walk_goes_on_to_indentation_0(self):
+        self.assertEqual(self.enclosing(["a:", " b:", "  c"], 3, 2), ["b:", "a:"])
 
 
 class NotChecked(unittest.TestCase):
