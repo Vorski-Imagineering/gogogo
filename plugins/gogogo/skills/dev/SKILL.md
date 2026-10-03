@@ -22,6 +22,8 @@ Exit 0 prints the settings; use them wherever this skill says *the profile*.
 Any other exit: **stop and report the line it printed**. Do not guess a
 tracker, a test command, an environment or a column.
 
+Any `warning:` line the check printed goes, verbatim, at the top of your report to the person; if it printed none, the report says so.
+
 Then read the profile's sections before touching code: `## Recon traps`,
 `## Lane constraints`, and any section it names for reading real state,
 verifying, or handing back. The repo's Hard Stop rules are at

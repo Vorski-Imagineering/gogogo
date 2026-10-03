@@ -29,6 +29,8 @@ python3 "${CLAUDE_PLUGIN_ROOT}/scripts/profile_check.py" --for roadmap --show
 - `roadmap.file` unset: **stop** and say this repo has no roadmap document. Setting it is
   described in `references/profile-schema.md` § Roadmap.
 
+Any `warning:` line the check printed goes, verbatim, at the top of your report to the person; if it printed none, the report says so.
+
 The document is at `roadmap.file`, from the folder holding `.agents/`. It may sit in
 another git repo checked out inside this one.
 

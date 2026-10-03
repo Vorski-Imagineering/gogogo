@@ -28,6 +28,8 @@ one: the repo's own checks, run alongside the ones below, and anything it says
 blocks closing. A repo with no profile (exit 2) gets the checks below and nothing else;
 say so in the report.
 
+Any `warning:` line the check printed goes, verbatim, at the top of your report to the person; if it printed none, the report says so.
+
 ## 1. Find what's hanging
 
 Run every check. Report each one, even when it is clean; a silent check

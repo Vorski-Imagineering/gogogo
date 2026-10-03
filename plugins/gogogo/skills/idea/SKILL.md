@@ -20,6 +20,8 @@ Exit 0 prints the settings; use them wherever this skill says *the profile*.
 Any other exit: **stop and report the line it printed**. Every `gh issue` call
 below passes `--repo <tracker.issues_repo>`.
 
+Any `warning:` line the check printed goes, verbatim, at the top of your report to the person; if it printed none, the report says so.
+
 ## Only what the session already has
 
 No further work is the whole point. You will want to "just check" one more file

@@ -147,6 +147,9 @@ def configure(profile_path: str | None = None) -> Path:
         settings, _ = profile_check.split_profile(path.read_text(encoding="utf-8"))
     except profile_check.ProfileError as exc:
         raise ProfileMissing(str(exc)) from None
+    # With the format's defaults filled in: a profile without needs_human still
+    # has that role, in its in_progress column.
+    settings = profile_check.effective(settings)
     tracker = settings.get("tracker") or {}
     for key in ("project_owner", "project_number", "issues_repo"):
         if not tracker.get(key):
@@ -706,7 +709,12 @@ def move_card(number: int, repo: str, to: str, *, add_missing: bool = False,
     option_id = resolve_option(meta, target)
 
     needs_human = COLUMNS.get("needs_human")
-    if needs_human and _bare(target) == _bare(needs_human.name) and not has_reason(newest_comment(number, repo)):
+    in_progress = COLUMNS.get("in_progress")
+    # A profile without needs_human hands back into the in_progress column (#87): there the
+    # column name is shared, so only the role key is a hand-back, and starting work is not.
+    shared = needs_human and in_progress and _bare(needs_human.name) == _bare(in_progress.name)
+    handing_back = to == "needs_human" if shared else needs_human and _bare(target) == _bare(needs_human.name)
+    if handing_back and not has_reason(newest_comment(number, repo)):
         print(f"#{number}: refused: a move to {needs_human.name} needs the issue's newest comment to carry "
               "a stop marker (post the Needs-you comment first). Nothing written.", file=sys.stderr)
         return 4
