@@ -750,6 +750,13 @@ class Audit(unittest.TestCase):
         self.assertEqual([r["level"] for r in rows], ["FAIL"])
         self.assertIn("--ruleset main", rows[0]["fix"])
 
+    def test_a_bypassable_classic_check_is_named_not_called_absent(self):
+        for checks in (["tests"], []):
+            rows = self._rules(rules=self.FULL[:2], classic=self.BYPASSABLE_CHECK, checks=checks, needs_ci=True)
+            self.assertNotIn("requires no check", rows[0]["detail"], checks)
+            self.assertIn("only in classic branch protection", rows[0]["detail"])
+            self.assertNotIn("add a CI workflow", rows[0]["fix"])
+
     def test_classic_protection_admins_can_bypass_fails(self):
         classic = {"allow_force_pushes": {"enabled": False}, "allow_deletions": {"enabled": False},
                    "required_status_checks": {"contexts": ["tests"], "checks": []},

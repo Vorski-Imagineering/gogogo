@@ -311,7 +311,13 @@ def check_branch_rules(repo, branch, rules, classic, checks, wants_check, needs_
     if no_names and not target:
         rep.warn(check, f"no check name can be derived: no PR with a passing check has been merged into {branch}")
         return
-    if no_names:
+    if by_classic["a required check"]:
+        names = ", ".join(required.get("contexts") or [c.get("context", "?") for c in required.get("checks") or []])
+        detail = (f"{repo} {branch} requires {names} only in classic branch protection, which admins can bypass "
+                  "(enforce admins is off)")
+        level_fix = fix if not no_names else (f"merge a PR into `{branch}` whose checks pass, then re-run to get "
+                                              "the ruleset command")
+    elif no_names:
         detail = f"{repo} {branch} requires no check, and no check passed on the latest PR merged into {branch}"
         if isinstance(checks, str):
             detail += f" ({checks})"
