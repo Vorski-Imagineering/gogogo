@@ -78,7 +78,7 @@ A repo starting a legend can begin from this one:
 | 🔵 | **ready** | carries the ready label | ready label |
 | 🟡 | **in progress** | being built | In progress |
 | 🆘 | **needs you** | stopped; waiting for a person | Human!Help! |
-| 🟠 | **released** | on its last stage, not yet closed | Released |
+| 🟢 | **released** | on its last stage, not yet closed | Released |
 | ✅ | **Closed** | closed as completed | closed |
 | ⚫ | **dropped** | closed as not planned | not planned |
 ```
