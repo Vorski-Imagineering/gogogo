@@ -433,10 +433,14 @@ order, checking each step before starting the next:
         leave that spec to you**, or **post nothing**. A decline, or no
         person to ask: post nothing on `<N>`, add no label, and report it.
       - The dependent's card is in `tracker.columns.in_progress` (read with
-        `<tracker.tool> show <D>`), or an open pull request references it
+        `<tracker.tool> show <D>`; for `shared`,
+        `python3 "${CLAUDE_PLUGIN_ROOT}/scripts/tracker.py" show <D>`), or an
+        open pull request references it
         (`gh pr list --repo <tracker.code_repo> --state open --search "<D>"`,
         a PR whose title or body names `#<D>`): say so and ask before editing
-        it. A read that fails counts as in flight. A no, a
+        it. A read that fails counts as in flight; a profile with no
+        `tracker.tool` or no `tracker.columns.in_progress` has no such column,
+        so only the pull request check applies. A no, a
         decline, or no person to ask: do not edit it; after step 6, comment
         on it naming the step, why it now fails, and the narrower form.
       - Otherwise fix it after step 6: save `<D>`'s current body to the
@@ -512,8 +516,8 @@ Which report to keep:
 - **Body is empty** → no report section; the spec starts at `## Verify by hand`.
 
 **Correcting a spec you already posted:** edit the scratchpad file and re-run
-Posting from step 4 (the lint and the check of open specs that read this
-issue, then `gh issue edit --body-file`), so the issue carries one accurate
+Posting steps 4 to 6 (the lint and the check of open specs that read this
+issue, `gh issue edit --body-file`, the re-read), so the issue carries one accurate
 spec rather than a spec plus errata.
 
 **Never leave a second copy** of the spec or of the report. If an earlier
