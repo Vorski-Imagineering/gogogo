@@ -132,10 +132,18 @@ def enclosing(old_lines: list[str], line: int, content_indent: int) -> list[str]
 
 
 def _content_indent(hunk: dict) -> int:
-    for text in hunk["minus"] + hunk["plus"]:
-        if text.strip():
-            return _indent(text)
-    return 0
+    """The least indentation among the hunk's non-blank lines, so a hunk that runs
+    into the next definition is not taken as inside the one it starts in."""
+    return min((_indent(t) for t in hunk["minus"] + hunk["plus"] if t.strip()), default=0)
+
+
+def _base_lines(fork: str, path: str) -> list[str]:
+    """The file at the base, split on newlines only, as git numbers its lines."""
+    out = subprocess.run(["git", "show", f"{fork}:{path}"], capture_output=True)
+    if out.returncode != 0:
+        err = out.stderr.decode("utf-8", "replace").strip().splitlines()
+        raise GitError((err or [f"git exited {out.returncode}"])[0])
+    return out.stdout.decode("utf-8").split("\n")
 
 
 def items(base: str, globs: list[str]) -> list[dict]:
@@ -168,7 +176,7 @@ def items(base: str, globs: list[str]) -> list[dict]:
             continue
         renamed_from = old if status[0] == "R" else None
         hunks = _hunks(fork, [old, new] if renamed_from else [new])
-        old_lines = _git(["show", f"{fork}:{old}"]).splitlines() if hunks else []
+        old_lines = _base_lines(fork, old) if hunks else []
         for hunk in hunks:
             hunk["enclosing"] = enclosing(old_lines, hunk["line"], _content_indent(hunk))
             found.append({"kind": "changed", "path": new, "renamed_from": renamed_from, **hunk})

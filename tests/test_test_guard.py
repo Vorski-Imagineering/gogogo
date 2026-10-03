@@ -274,6 +274,22 @@ class Enclosing(unittest.TestCase):
         self.assertEqual(out.returncode, 0, out.stdout + out.stderr)
         self.assertIn("H1  licensed", out.stdout)
 
+    def test_lines_are_counted_as_git_counts_them(self):
+        base = TEST_CLASS.replace("import unittest\n", "import unittest\n\x0c\n")
+        self.r.at_base("tests/test_c.py", base)
+        self.change(base.replace("    def test_b(self):\n", "    def test_b(self):\n        self.skipTest(\"x\")\n"))
+        items = self.items()
+        self.assertEqual(len(items), 1, items)
+        self.assertTrue(items[0].endswith("def test_b(self):"), items)
+
+    def test_a_hunk_running_into_the_next_method_is_not_licensed_by_the_first(self):
+        self.change(TEST_CLASS.replace("        self.assertEqual(two(), 2)\n\n    def test_b(self):\n"
+                                       "        self.assertEqual(three(), 3)\n        self.assertEqual(four(), 4)\n", ""))
+        out = self.r.run("verify", body=body(cases="1. `tests/test_c.py::test_a` rewritten"),
+                         answers="H1\tweaker\ttest_b is gone\n")
+        self.assertEqual(out.returncode, 1, out.stdout + out.stderr)
+        self.assertIn("H1  NOT LICENSED", out.stdout)
+
     def test_no_enclosing_line_falls_back_to_gits_header(self):
         self.r.at_base("tests/test_a.py", TEST_A + "\n\nX = 1\n")
         self.r.write("tests/test_a.py", TEST_A + "\n\nX = 2\n")
