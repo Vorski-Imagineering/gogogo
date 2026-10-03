@@ -47,6 +47,34 @@ incomplete. Each problem is one line on stderr that starts with the field.
 With no `--for` it checks every skill, and `auto-test` only when the profile
 has an `[auto_test]` table, so a repo that never adopted it still passes.
 
+## Versions and defaults
+
+The profile format changes under repos that have already adopted it, and a
+plugin update reaches all of them at once. So a change to the format follows
+one rule:
+
+- **A new setting ships with a default.** It is optional, and
+  `profile_check.py` has a `DEFAULTS` entry for it naming the gogogo issue
+  that added it. A profile without it passes with a warning such as
+  `tracker.columns.needs_human: missing; using 'In progress' (default since
+  gogogo#32)`, and `--show` prints the default, so every skill and script
+  reads the same value. `/gogogo:setup` offers to write it into the profile.
+- **A change with no safe default** (a setting removed, renamed, or given a
+  new meaning) raises `profile`. The checker accepts the previous version,
+  warning about each change, until the version after that.
+
+Every skill puts the check's `warning:` lines at the top of its report, so a
+default in use reaches a person. A test pins what each version requires: a
+change that makes a setting required, or requires it for another skill, fails
+it unless it follows the rule.
+
+Defaults today:
+
+| Setting | Absent means | Since |
+|---|---|---|
+| `tracker.columns.needs_human` | the `tracker.columns.in_progress` column | gogogo#32 |
+| `handback.reporter` | `none` | gogogo#9 |
+
 ## Settings
 
 "Required by" lists the skills that stop without the field. "optional" means
@@ -65,7 +93,7 @@ no skill requires it; a skill that finds it uses it.
 | `tracker.project_number` | int | optional | Number of the GitHub project board. |
 | `tracker.queue` | str | `auto-dev` | Board column the loop works. |
 | `tracker.columns.in_progress` | str | `dev`, `auto-dev` | Column of an issue being worked now. |
-| `tracker.columns.needs_human` | str | `dev`, `auto-dev` | Column of an issue stopped for a person: an unreviewed fix, a decision or Hard Stop found mid-change, or verification that gave up. |
+| `tracker.columns.needs_human` | str | optional | Column of an issue stopped for a person: an unreviewed fix, a decision or Hard Stop found mid-change, or verification that gave up. Optional; absent means the `in_progress` column. |
 | `environments` | list | all | Where code runs: name, roles, and url/serves/reached_by/data/writes. |
 | `stages` | list | `dev`, `auto-dev`, `auto-test` | The path a change takes after it merges: code_is, column, environment. |
 | `hard_stops.source` | str | all | Where the repo's Hard Stop rules live (file#anchor). |
@@ -92,7 +120,7 @@ no skill requires it; a skill that finds it uses it.
 | `integration.final_target` | str | optional | Branch the run's PR targets, for run-branch-pr. |
 | `integration.mode_check` | str | optional | Command that proves unattended mode is on. |
 | `integration.ci_before_merge` | bool | `auto-dev` | True if CI must pass on each issue before it merges. |
-| `handback.reporter` | str | `dev`, `auto-dev` | trailer / assign / none. trailer: each merge writes a Ships-issue trailer naming the reporter, and stage sync assigns them when the card enters a stage with a tag. |
+| `handback.reporter` | str | optional | trailer / assign / none. Optional; absent means none. trailer: each merge writes a Ships-issue trailer naming the reporter, and stage sync assigns them when the card enters a stage with a tag. |
 | `preflight.extra` | list | optional | Extra checks before a run. |
 | `stop.extra` | list | optional | Extra conditions that stop a whole run. |
 | `notify` | str | optional | none / telegram. Optional; absent means telegram when this machine has credentials, else off. Credentials come from TELEGRAM_BOT_TOKEN and TELEGRAM_CHAT_ID in the environment, the repo's git-ignored .claude/gogogo/notify.env, or the per-user notify.env, never the profile. |

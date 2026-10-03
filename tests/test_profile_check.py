@@ -1,5 +1,6 @@
 import copy
 import io
+import json
 import sys
 import tempfile
 import tomllib
@@ -103,7 +104,7 @@ always = ["make lint"]
 [integration]
 strategy = "merge-script"
 base = "main"
-command = "./merge.sh"
+command = "make merge"
 mode_check = "./require_bypass.sh"
 ci_before_merge = false
 
@@ -238,13 +239,11 @@ class MissingFields(unittest.TestCase):
 class Columns(unittest.TestCase):
     """tracker.columns: the keys dev and auto-dev move cards to (gogogo#26)."""
 
-    def test_needs_human_is_required_by_dev_and_auto_dev_only(self):
+    def test_needs_human_missing_is_no_error_for_any_skill(self):
+        # gogogo#87: it defaults to the in_progress column, with a warning.
         settings, sections = parse()
         dropped = drop(settings, "tracker.columns.needs_human")
-        for skill in (pc.ONE, pc.LOOP):
-            errors, _ = pc.check(dropped, sections, skill)
-            self.assertTrue(any(e.startswith("tracker.columns.needs_human: missing") for e in errors), skill)
-        for skill in (pc.SPEC, pc.TECH, pc.ROADMAP):
+        for skill in (None, *pc.SKILLS):
             errors, _ = pc.check(dropped, sections, skill)
             self.assertEqual(errors, [], skill)
 
@@ -699,6 +698,162 @@ class SchemaDoc(unittest.TestCase):
         doc = (PLUGIN / "references" / "profile-schema.md").read_text()
         for block in doc.split("```toml\n")[1:]:
             tomllib.loads(block.split("```")[0])
+
+
+
+NO_NEEDS_HUMAN = COMPLETE.replace('columns = { in_progress = "In progress", needs_human = "Human!Help!" }',
+                                  'columns = { in_progress = "In progress" }')
+NO_HANDBACK = COMPLETE.replace('[handback]\nreporter = "trailer"\n', "")
+
+
+def write_profile(text, folder):
+    """`text` as `<folder>/.agents/dev-process.md`; returns its path."""
+    path = Path(folder) / ".agents" / "dev-process.md"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(text)
+    return path
+
+
+class Defaults(unittest.TestCase):
+    """A setting added to the format ships with a default and a warning (gogogo#87)."""
+
+    def test_fixtures_differ_from_complete(self):
+        self.assertNotEqual(NO_NEEDS_HUMAN, COMPLETE)
+        self.assertNotEqual(NO_HANDBACK, COMPLETE)
+
+    def test_missing_needs_human_warns_with_the_in_progress_column_and_passes(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            code, _, err = run_main("--for", pc.LOOP, "--path", str(write_profile(NO_NEEDS_HUMAN, tmp)))
+        self.assertEqual(code, pc.EXIT_OK, err)
+        line = [ln for ln in err.splitlines()
+                if ln.startswith("warning: tracker.columns.needs_human: missing; using 'In progress'")]
+        self.assertEqual(len(line), 1, err)
+        self.assertIn("gogogo#32", line[0])
+
+    def test_show_prints_the_default_needs_human_column(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            code, out, err = run_main("--for", pc.LOOP, "--show", "--path",
+                                      str(write_profile(NO_NEEDS_HUMAN, tmp)))
+        self.assertEqual(code, pc.EXIT_OK, err)
+        self.assertEqual(json.loads(out)["settings"]["tracker"]["columns"]["needs_human"], "In progress")
+
+    def test_missing_handback_reporter_warns_none_and_passes(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = str(write_profile(NO_HANDBACK, tmp))
+            code, _, err = run_main("--for", pc.ONE, "--path", path)
+            self.assertEqual(code, pc.EXIT_OK, err)
+            line = [ln for ln in err.splitlines() if ln.startswith("warning: handback.reporter:")]
+            self.assertEqual(len(line), 1, err)
+            for text in ("'none'", "gogogo#9"):
+                self.assertIn(text, line[0])
+            code, out, _ = run_main("--for", pc.ONE, "--show", "--path", path)
+        self.assertEqual(code, pc.EXIT_OK)
+        self.assertEqual(json.loads(out)["settings"]["handback"]["reporter"], "none")
+
+    def test_a_default_that_cannot_resolve_invents_no_column(self):
+        text = COMPLETE.replace('columns = { in_progress = "In progress", needs_human = "Human!Help!" }\n', "")
+        self.assertNotEqual(text, COMPLETE)
+        with tempfile.TemporaryDirectory() as tmp:
+            code, _, err = run_main("--for", pc.ONE, "--path", str(write_profile(text, tmp)))
+        self.assertEqual(code, pc.EXIT_INVALID)
+        self.assertIn("error: tracker.columns.in_progress: missing", err)
+        self.assertFalse([ln for ln in err.splitlines() if "needs_human" in ln and "using" in ln], err)
+
+    def test_required_settings_of_this_version_are_pinned(self):
+        required = frozenset((path, required_by) for path, (_, required_by, _) in pc.FIELDS.items() if required_by)
+        pinned = getattr(pc, f"REQUIRED_V{pc.PROFILE_VERSION}")
+        self.assertEqual(required, pinned,
+                         "the settings a skill requires changed within profile version "
+                         f"{pc.PROFILE_VERSION}. A new required setting needs a DEFAULTS entry (and stays "
+                         "optional), or a bump of PROFILE_VERSION with the previous version kept in "
+                         "ACCEPTED_VERSIONS and its own REQUIRED_V<n>; references/profile-schema.md "
+                         "§ Versions and defaults")
+        self.assertIn(pc.PROFILE_VERSION, pc.ACCEPTED_VERSIONS)
+
+    def test_each_default_is_a_known_optional_setting_naming_its_issue(self):
+        self.assertTrue(pc.DEFAULTS)
+        for path, (_, issue) in pc.DEFAULTS.items():
+            self.assertIn(path, pc.FIELDS)
+            self.assertEqual(pc.FIELDS[path][1], (), path)
+            self.assertRegex(issue, r"^gogogo#\d+$")
+
+    def test_a_version_this_checker_does_not_know_is_refused(self):
+        for version in (2, 0):
+            with tempfile.TemporaryDirectory() as tmp:
+                text = COMPLETE.replace("profile = 1\n", f"profile = {version}\n")
+                code, _, err = run_main("--path", str(write_profile(text, tmp)))
+            self.assertEqual(code, pc.EXIT_INVALID, version)
+            self.assertIn(f"profile: version {version} is not supported", err)
+
+    def test_a_merge_script_that_does_not_exist_is_an_error(self):
+        script = COMPLETE.replace('command = "make merge"', 'command = "deploy/merge.sh <pr>"')
+        self.assertNotEqual(script, COMPLETE)
+        with tempfile.TemporaryDirectory() as tmp:
+            path = str(write_profile(script, tmp))
+            code, _, err = run_main("--for", pc.LOOP, "--path", path)
+            self.assertEqual(code, pc.EXIT_INVALID)
+            self.assertIn("error: integration.command: deploy/merge.sh does not exist", err)
+            (Path(tmp) / "deploy").mkdir()
+            (Path(tmp) / "deploy" / "merge.sh").write_text("#!/bin/sh\n")
+            self.assertEqual(run_main("--for", pc.LOOP, "--path", path)[0], pc.EXIT_OK)
+        with tempfile.TemporaryDirectory() as tmp:
+            code, _, err = run_main("--for", pc.LOOP, "--path", str(write_profile(COMPLETE, tmp)))
+            self.assertEqual(code, pc.EXIT_OK, err)
+            self.assertNotIn("integration.command", err)
+            squash = script.replace('strategy = "merge-script"', 'strategy = "pr-squash"')
+            self.assertNotEqual(squash, script)
+            code, _, err = run_main("--for", pc.LOOP, "--path", str(write_profile(squash, tmp)))
+            self.assertEqual(code, pc.EXIT_OK, err)
+            self.assertNotIn("integration.command", err)
+
+    def test_no_profile_names_setup(self):
+        code, _, err = run_main("--for", pc.ONE, "--path", "/nonexistent/dev-process.md")
+        self.assertEqual(code, pc.EXIT_MISSING)
+        self.assertEqual(err, "profile: no file at /nonexistent/dev-process.md. Run /gogogo:setup to adopt "
+                              "gogogo in this repo (references/profile-schema.md describes the file).\n")
+
+    def test_the_default_warning_says_setup_adds_it(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            _, _, err = run_main("--for", pc.ONE, "--path", str(write_profile(NO_HANDBACK, tmp)))
+        self.assertIn("warning: handback.reporter: missing; using 'none' (default since gogogo#9). "
+                      "/gogogo:setup adds it to the profile.\n", err)
+
+    def test_show_lists_the_sections(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            code, out, err = run_main("--for", pc.ONE, "--show", "--path", str(write_profile(COMPLETE, tmp)))
+        self.assertEqual(code, pc.EXIT_OK, err)
+        self.assertIn("Recon traps", json.loads(out)["sections"])
+
+    def test_a_merge_script_that_does_not_exist_is_an_error_for_dev_alone(self):
+        script = COMPLETE.replace('command = "make merge"', 'command = "deploy/merge.sh <pr>"')
+        self.assertNotEqual(script, COMPLETE)
+        with tempfile.TemporaryDirectory() as tmp:
+            code, _, err = run_main("--for", pc.ONE, "--path", str(write_profile(script, tmp)))
+        self.assertEqual(code, pc.EXIT_INVALID)
+        self.assertIn("error: integration.command: deploy/merge.sh does not exist", err)
+
+    def test_an_in_progress_that_is_not_a_column_name_resolves_no_needs_human(self):
+        for value in (5, "  "):
+            settings = {"tracker": {"columns": {"in_progress": value}}}
+            self.assertNotIn("needs_human", pc.effective(settings)["tracker"]["columns"], value)
+
+    def test_a_default_that_cannot_resolve_does_not_stop_the_next(self):
+        self.assertEqual(pc.effective({})["handback"]["reporter"], "none")
+
+    def test_a_default_under_a_value_that_is_not_a_table_is_left_out(self):
+        self.assertEqual(pc.effective({"handback": "x"})["handback"], "x")
+
+
+class SkillsReportWarnings(unittest.TestCase):
+    """Every skill that runs the profile check passes its warnings on (gogogo#87)."""
+
+    def test_each_skill_running_the_check_names_its_warnings(self):
+        skills = [p for p in sorted((PLUGIN / "skills").glob("*/SKILL.md"))
+                  if "profile_check.py" in p.read_text(encoding="utf-8")]
+        self.assertGreaterEqual(len(skills), 8, skills)
+        for path in skills:
+            with self.subTest(skill=path.parent.name):
+                self.assertIn("warning:", path.read_text(encoding="utf-8"))
 
 
 if __name__ == "__main__":

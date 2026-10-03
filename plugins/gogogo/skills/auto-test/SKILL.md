@@ -43,6 +43,8 @@ Any non-zero exit: **stop** and report the lines it printed. A repo that has
 not set up auto-test stops here, naming the first missing setting; that is
 the safe answer, not a problem to work around.
 
+Any `warning:` line the check printed goes, verbatim, at the top of your report to the person; if it printed none, the report says so.
+
 Then read the profile's `## Test data` section, all six headings (*Running
 build*, *Finding the change*, *Sandbox and fixtures*, *Optional lanes*, *Extra
 step rules*, *Never call*), and the environment `verify.human` names: its `url`

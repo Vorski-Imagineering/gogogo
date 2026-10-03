@@ -96,12 +96,16 @@ What each fix involves:
   Show the draft to the user before writing it. It describes how their project
   works; they approve it.
 - **A profile missing a setting the skills now require.** Add it with the
-  value the board uses, shown to the user first. `tracker.columns.needs_human`
-  is `"Human!Help!"`, and the board needs that column too (below). When the
-  profile sets `roadmap.file`, that document's legend needs a row covering the
-  new column, as `/gogogo:roadmap` shows; offer to add it. When the
+  value the board uses, shown to the user first. When the setting names a new
+  column, the board needs that column too (below), and when the profile sets
+  `roadmap.file`, that document's legend needs a row covering it, as
+  `/gogogo:roadmap` shows; offer to add it. When the
   check warns that a setting is unknown (a key retired from the profile
   format, such as a column role no skill reads any more), offer to remove it.
+- **A setting the check filled with a default.** A warning
+  `<path>: missing; using <value> (default since gogogo#<n>)` means the skills
+  already run on `<value>`. Offer to write `<path>` into the profile with that
+  value, shown to the user first, and write it only on a yes.
 - **No board, or missing columns.** Every board uses the same Status
   columns, in this order:
 

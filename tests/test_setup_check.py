@@ -152,6 +152,39 @@ class ProfileSkills(unittest.TestCase):
         self.assertIn("auto_test.fail_label", rows[0]["detail"])
 
 
+class ColumnCheck(unittest.TestCase):
+    """The board-columns row reads the profile with its defaults filled in (gogogo#87)."""
+
+    def test_a_profile_without_needs_human_needs_no_extra_column(self):
+        import tracker
+        from test_profile_check import NO_NEEDS_HUMAN
+        root = repo({".agents/dev-process.md": NO_NEEDS_HUMAN.replace('tool = "python3 tools/board.py"',
+                                                                       'tool = "shared"')})
+        import profile_check
+        settings, _ = profile_check.split_profile((root / ".agents" / "dev-process.md").read_text())
+        self.assertEqual(settings["tracker"]["tool"], "shared")
+        meta = {"title": "t", "total": 0, "options": {"Dev Priority": "a", "In progress": "b",
+                                                      "In Dev": "c", "In Production": "d"}}
+        ok = subprocess.CompletedProcess([], 0, "[]", "")
+        rep = sc.Report()
+        saved = (tracker.ORG, tracker.PROJECT_NUMBER, tracker.DEFAULT_REPO, dict(tracker.COLUMNS))
+        try:
+            with mock.patch.object(sc, "run", return_value=ok), \
+                 mock.patch.object(tracker, "board_meta", return_value=meta), \
+                 mock.patch.object(tracker, "list_cards", side_effect=tracker.BoardError("offline")), \
+                 mock.patch.object(tracker, "graphql", side_effect=tracker.BoardError("offline")), \
+                 mock.patch.object(sc, "check_board_tidiness"):
+                sc.check_tracker(root, settings, rep)
+        finally:
+            tracker.ORG, tracker.PROJECT_NUMBER, tracker.DEFAULT_REPO = saved[:3]
+            tracker.COLUMNS.clear()
+            tracker.COLUMNS.update(saved[3])
+        rows = [r for r in rep.rows if r["check"] == "tracker: columns"]
+        self.assertEqual([r["level"] for r in rows], ["PASS"], rep.rows)
+        self.assertEqual(rows[0]["detail"].split(", ").count("In progress"), 1, rows[0]["detail"])
+        self.assertNotIn("Human!Help!", rows[0]["detail"])
+
+
 def shape_rows(settings):
     rep = sc.Report()
     sc.check_release_shape(settings, rep)
@@ -994,6 +1027,44 @@ class Notify(unittest.TestCase):
         unread = self.real_row(False)
         self.assertEqual(unread["level"], "WARN")
         self.assertIn("not git-ignored", unread["detail"])
+
+
+class SessionHook(unittest.TestCase):
+    """The plugin's own SessionStart hook: reported, never a FAIL."""
+
+    def row(self, files):
+        rep = sc.Report()
+        sc.check_session_hook(repo(files), rep)
+        rows = [r for r in rep.rows if r["check"] == "session-status"]
+        self.assertEqual(len(rows), 1)
+        self.assertFalse(rep.failed())
+        return rows[0]
+
+    def test_main_checks_this_plugin(self):
+        self.assertEqual(sc.PLUGIN_ROOT, ROOT / "plugins" / "gogogo")
+
+    def test_the_shipped_hook_is_info(self):
+        rep = sc.Report()
+        sc.check_session_hook(ROOT / "plugins" / "gogogo", rep)
+        self.assertEqual([(r["level"], r["check"]) for r in rep.rows], [("INFO", "session-status")])
+        self.assertEqual(rep.rows[0]["detail"], "shown at session start (plugin hook)")
+
+    def test_hook_present_is_info(self):
+        hooks = {"hooks": {"SessionStart": [{"matcher": "startup", "hooks": [
+            {"type": "command", "command": 'python3 "${CLAUDE_PLUGIN_ROOT}/scripts/session_status.py"'}]}]}}
+        self.assertEqual(self.row({"hooks/hooks.json": json.dumps(hooks)})["level"], "INFO")
+
+    def test_no_hooks_file_warns(self):
+        row = self.row({})
+        self.assertEqual((row["level"], row["detail"]), ("WARN", "the plugin's session-status hook is missing"))
+
+    def test_hook_under_another_event_or_unreadable_warns(self):
+        other = {"hooks": {"Stop": [{"hooks": [{"type": "command", "command": "session_status.py"}]}]}}
+        self.assertEqual(self.row({"hooks/hooks.json": json.dumps(other)})["level"], "WARN")
+        self.assertEqual(self.row({"hooks/hooks.json": "{not json"})["level"], "WARN")
+        self.assertEqual(self.row({"hooks/hooks.json": "[]"})["level"], "WARN")
+        no_command = {"hooks": {"SessionStart": [{"hooks": [{"type": "command"}]}]}}
+        self.assertEqual(self.row({"hooks/hooks.json": json.dumps(no_command)})["level"], "WARN")
 
 
 if __name__ == "__main__":
