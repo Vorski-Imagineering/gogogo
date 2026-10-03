@@ -547,6 +547,14 @@ def check_profile_skills(settings, sections, rep):
         rep.warn("profile", w)
 
 
+def main_worktree(root):
+    """The repo's main worktree (the first entry of `git worktree list --porcelain`), which is
+    what live sessions and hooks run from; `root` when git cannot say."""
+    listing = run("git", "worktree", "list", "--porcelain", cwd=root)
+    first = (listing.stdout.splitlines() or [""])[0] if listing.returncode == 0 else ""
+    return Path(first[len("worktree "):]) if first.startswith("worktree ") else Path(root)
+
+
 def live_checkout(root, home):
     """What runs straight from this checkout, so that an issue's branch here would change it
     under other sessions: one reason per finding. Names only the path inside the repo and the
@@ -834,12 +842,12 @@ def main(argv=None):
             sections = None
         if sections is not None:
             check_profile_skills(settings, sections, rep)
-            check_workspace(root, settings, sections, rep, Path.home())
+            check_workspace(main_worktree(root), settings, sections, rep, Path.home())
         # From here on, the values the skills use: the format's defaults filled in.
         settings = profile_check.effective(settings)
-    if sections is None and live_checkout(root, Path.home()):
+    if sections is None and live_checkout(main_worktree(root), Path.home()):
         # No profile to read yet: setup asks the question while drafting one, so name what runs here.
-        check_workspace(root, {}, {}, rep, Path.home())
+        check_workspace(main_worktree(root), {}, {}, rep, Path.home())
     if settings:
         check_release_shape(settings, rep)
         check_release(settings, rep)

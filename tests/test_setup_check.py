@@ -1148,6 +1148,20 @@ class Workspace(unittest.TestCase):
         (self.root / ".agents" / "dev-process.md").write_text("no front matter\n")
         self.assertEqual([r["level"] for r in self.run_main(self.root)], ["WARN"])
 
+    def test_run_from_a_worktree_it_reads_hooks_naming_the_main_checkout(self):
+        git = ["git", "-C", str(self.root), "-c", "user.name=t", "-c", "user.email=t@t"]
+        subprocess.run(["git", "init", "-q", str(self.root)], check=True)
+        subprocess.run([*git, "commit", "-q", "--allow-empty", "-m", "x"], check=True)
+        wt = self.home / "dev" / "repo-wt-1"
+        subprocess.run([*git, "worktree", "add", "-q", "-b", "fix/1-x", str(wt)], check=True)
+        self.hooks(("SessionStart", "python3 ~/dev/repo/scripts/h.py"))
+        self.assertEqual(sc.main_worktree(wt), self.root)
+        self.assertEqual(sc.main_worktree(self.home), self.home)  # not a repo: falls back
+        rows = self.run_main(wt)
+        self.assertEqual([r["level"] for r in rows], ["WARN"])
+        self.assertTrue(rows[0]["detail"].endswith("; live checkout: your Claude Code settings run scripts/h.py "
+                                                   "on SessionStart"), rows[0]["detail"])
+
     def test_a_hook_outside_the_checkout_is_no_reason(self):
         self.hooks(("SessionStart", "python3 ~/other/h.py"))
         self.assertEqual(sc.live_checkout(self.root, self.home), [])
