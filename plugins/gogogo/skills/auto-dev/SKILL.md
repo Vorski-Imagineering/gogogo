@@ -138,10 +138,12 @@ python3 "${CLAUDE_PLUGIN_ROOT}/scripts/spec_lint.py" <scratch>/issue-<n>-body.md
 ## 2. Triage each issue before touching it
 
 Per `/gogogo:dev` §2. An issue is workable here only if every decision it
-depends on was made by a person and is **in the body**. Skip and record, never
-guess, when it has an open product decision, a Hard Stop no Approvals row
-names, or a two-licence change whose apply row is missing (that one is
-buildable: build and test it, then stop that issue before applying).
+depends on was made by a person, or listed under *Decided without asking*, and
+is **in the body**. Skip and record, never guess, when it has an open decision
+of a kind the profile's `independence` asks about (§ *Who decides* in
+`/gogogo:spec`), not answered in the body, a Hard Stop no Approvals row names,
+or a two-licence change whose apply row is missing (that one is buildable:
+build and test it, then stop that issue before applying).
 
 **Hand back a skip.** Every skip from §1's lint and from this section, outside
 triage-only mode, once per issue per run: a later pass that reads the issue
@@ -163,7 +165,7 @@ apply row is missing, which is built and then stopped (§4), not skipped:
    |---|---|
    | `lint` | no ready label, and `spec_lint.py` failed or withheld it (§1) |
    | `nospec` | a feature with no analysis pass (`/gogogo:dev` §2) |
-   | `decision` | an open product decision not answered in the body |
+   | `decision` | an open decision of a kind the level asks about, not answered in the body |
    | `hard-stop` | a Hard Stop no Approvals row names |
 
    No review record and no stop marker on this comment: a skip is not a stop.
@@ -242,12 +244,14 @@ Push the branch as soon as it has its first commit (`git push -u origin
   *known defect* with the finding for one you could not fix. Name the finding
   in the issue's `/gogogo:dev` §7 report, within its rule for a public
   tracker, and record the stop for the run report.
-- A Hard Stop, or a decision that belongs to a person and is not in the body,
-  discovered mid-change → stop **that issue**: commit what the change has so
+- A Hard Stop, or a decision of a kind the level asks about and is not in the
+  body, discovered mid-change → stop **that issue**: commit what the change has so
   far, and nothing else, to its branch, marked as stopped and naming the
   question in the commit message within the rule for a public tracker, push it, leave it unmerged, hand the card back to
   `tracker.columns.needs_human` as `/gogogo:dev` §8 says, record it, carry on
-  with the next.
+  with the next. At `architect`, a product decision the body does not settle
+  is taken, and recorded under *Decided without asking* in the issue's
+  `/gogogo:dev` §7 report.
 - **When verification fails, fix forward, bounded.** Up to three attempts, and
   each must name a hypothesis that differs from the last. If you cannot say what
   is different about an attempt, stop there, whatever budget remains. After the
@@ -502,3 +506,7 @@ integration and merging follow this skill and the profile. See the profile's
   there is no `timeout` command (macOS), bound the loop itself:
   `sh -c 'n=0; while [ $n -lt 36 ] && kill -0 <pid> 2>/dev/null; do sleep 15; n=$((n+1)); done'`.
 - Never `AskUserQuestion` inside the loop (*The loop never waits on chat*).
+- At `senior-dev` or `architect`, when your model is not Opus-class or above,
+  say in one line that this level is recommended for an Opus-class model at
+  medium effort or higher, then carry on. Say it once, at the start of the
+  run, in the run's first report line.
