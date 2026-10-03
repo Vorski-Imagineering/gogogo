@@ -15,6 +15,7 @@ import subprocess
 import sys
 import tempfile
 import unittest
+from unittest import mock
 from contextlib import redirect_stderr, redirect_stdout
 from pathlib import Path
 
@@ -162,7 +163,11 @@ class Line(unittest.TestCase):
                 f"runpy.run_path({str(SCRIPTS / 'session_status.py')!r}, run_name='__main__')")
         env = dict(os.environ, CLAUDE_PROJECT_DIR=str(repo_with_profile()))
         run = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True, env=env, timeout=60)
-        self.assertEqual((run.returncode, run.stdout), (0, ""))
+        self.assertEqual((run.returncode, run.stdout, run.stderr), (0, "", ""))
+
+    def test_main_without_profile_check_returns_0_at_once(self):
+        with mock.patch.object(session_status, "profile_check", None):
+            self.assertEqual(session_status.main(start=repo_with_profile(), run=Board()), 0)
 
     def test_column_missing_from_board_shows_question_mark(self):
         repo = repo_with_profile()
