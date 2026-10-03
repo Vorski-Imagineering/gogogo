@@ -1162,6 +1162,17 @@ class Workspace(unittest.TestCase):
         self.assertTrue(rows[0]["detail"].endswith("; live checkout: your Claude Code settings run scripts/h.py "
                                                    "on SessionStart"), rows[0]["detail"])
 
+    def test_the_printed_path_stops_where_the_command_goes_on(self):
+        self.hooks(("SessionStart", "python3 ~/dev/repo/scripts/h.py>~/log"),
+                   ("Stop", "python3 ~/dev/repo/h.py,abc"),
+                   ("PreToolUse", "python3 ~/dev/repo/a.py<in"),
+                   ("PostToolUse", "x --f=~/dev/repo/b.py=1:2"))
+        self.assertEqual(sc.live_checkout(self.root, self.home),
+                         ["your Claude Code settings run scripts/h.py on SessionStart",
+                          "your Claude Code settings run h.py on Stop",
+                          "your Claude Code settings run a.py on PreToolUse",
+                          "your Claude Code settings run b.py on PostToolUse"])
+
     def test_a_hook_outside_the_checkout_is_no_reason(self):
         self.hooks(("SessionStart", "python3 ~/other/h.py"))
         self.assertEqual(sc.live_checkout(self.root, self.home), [])

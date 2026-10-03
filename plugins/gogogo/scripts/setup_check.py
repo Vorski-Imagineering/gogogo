@@ -568,7 +568,8 @@ def live_checkout(root, home):
     except (OSError, ValueError):
         return reasons
     home_text = str(Path(home).resolve())
-    inside = re.compile(re.escape(str(root)) + r"(/[^\s'\";|&)]*)?(?![^\s'\";|&)])")
+    # A path ends where shell syntax or an argument's own punctuation starts.
+    inside = re.compile(re.escape(str(root)) + r"(/[^\s'\";|&)<>,=:]*)?(?![^\s'\";|&)<>,=:])")
     for event, entries in _table(_table(data).get("hooks")).items():
         for entry in _list(entries):
             for hook in _list(_table(entry).get("hooks")):
