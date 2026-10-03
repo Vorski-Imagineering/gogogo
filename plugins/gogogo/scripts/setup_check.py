@@ -262,12 +262,12 @@ def check_branch_rules(repo, branch, rules, classic, checks, wants_check, needs_
     types = {r.get("type") for r in rules}
     old = classic if isinstance(classic, dict) else {}
     required = old.get("required_status_checks") or {}
-    present = {
-        "no force push": "non_fast_forward" in types or (old.get("allow_force_pushes") or {}).get("enabled") is False,
-        "no deletion": "deletion" in types or (old.get("allow_deletions") or {}).get("enabled") is False,
-        "a required check": "required_status_checks" in types
-                            or bool(required.get("contexts") or required.get("checks")),
-    }
+    by_rules = {"no force push": "non_fast_forward" in types, "no deletion": "deletion" in types,
+                "a required check": "required_status_checks" in types}
+    by_classic = {"no force push": (old.get("allow_force_pushes") or {}).get("enabled") is False,
+                  "no deletion": (old.get("allow_deletions") or {}).get("enabled") is False,
+                  "a required check": bool(required.get("contexts") or required.get("checks"))}
+    present = {name: by_rules[name] or by_classic[name] for name in by_rules}
     fix = _ruleset_fix(repo, branch, existing)
     basic = [name for name in ("no force push", "no deletion") if not present[name]]
     if basic and isinstance(classic, str):
@@ -281,15 +281,26 @@ def check_branch_rules(repo, branch, rules, classic, checks, wants_check, needs_
     actors = [a for r in rules for a in r.get("bypass_actors") or []]
     if actors:
         named = ", ".join(sorted({f"{a.get('actor_type')} {a.get('actor_id')}" for a in actors}))
+        bypassing = {r.get("ruleset_id") for r in rules if r.get("bypass_actors")}
         rep.fail(check, f"{repo} {branch} can be bypassed by: {named}",
-                 f"empty the bypass list of ruleset {', '.join(sorted({str(r.get('ruleset_id')) for r in rules if r.get('bypass_actors')}))}"
-                 f" in the repo's Settings > Rules")
+                 fix if bypassing == {existing} else
+                 f"empty the bypass list of ruleset {', '.join(sorted(map(str, bypassing)))} in the repo's "
+                 "Settings > Rules")
+        return
+    classic_only = [name for name in by_classic if by_classic[name] and not by_rules[name]]
+    if classic_only and (old.get("enforce_admins") or {}).get("enabled") is not True:
+        rep.fail(check, f"{repo} {branch} has {', '.join(classic_only)} only in classic branch protection, which "
+                        "admins can bypass (enforce admins is off), and agents use an admin's login", fix)
         return
     if present["a required check"]:
         rep.ok(check, f"{repo} {branch}")
         return
     if not wants_check:
         rep.info(check, f"a required check is not offered: the merge script pushes to {branch} directly")
+        return
+    if isinstance(classic, str):
+        rep.warn(check, f"{repo} {branch} has no ruleset requiring a check; one may be required in classic branch "
+                        f"protection, which needs admin to read ({classic})", fix)
         return
     no_names = not checks or isinstance(checks, str)
     if no_names and not target:
@@ -371,6 +382,8 @@ def _rules_with_bypass(repo, branch):
         body, error = _gh_json("api", f"repos/{repo}/rulesets/{ruleset}")
         if error or not isinstance(body, dict):
             return f"ruleset {ruleset}: {error or 'gh printed something that is not a JSON object'}"
+        if "bypass_actors" not in body:
+            return f"ruleset {ruleset}: its bypass list is not shown to this gh login"
         bypass[ruleset] = body.get("bypass_actors", [])
     return [dict(r, bypass_actors=bypass[r.get("ruleset_id")]) for r in rules]
 
@@ -417,6 +430,9 @@ def print_ruleset(settings, default_branch, branch):
         return 2
     code_repo = (settings.get("tracker") or {}).get("code_repo")
     checks = check_names(code_repo, branch) if wanted[branch] else []
+    if isinstance(checks, str):
+        print(f"could not read the checks to require on {branch}: {checks}", file=sys.stderr)
+        return 2
     print(json.dumps(ruleset_body(branch, checks if isinstance(checks, list) else [], wanted[branch]), indent=2))
     return 0
 

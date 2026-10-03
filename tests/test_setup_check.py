@@ -1,3 +1,4 @@
+import io
 import json
 import os
 import subprocess
@@ -584,7 +585,8 @@ class Audit(unittest.TestCase):
 
     def test_branch_rules_read_from_classic_protection(self):
         classic = {"allow_force_pushes": {"enabled": False}, "allow_deletions": {"enabled": False},
-                   "required_status_checks": {"contexts": ["tests"], "checks": []}}
+                   "required_status_checks": {"contexts": ["tests"], "checks": []},
+                   "enforce_admins": {"enabled": True}}
         self.assertEqual([r["level"] for r in self._rules(rules=[], classic=classic)], ["PASS"])
 
     def test_branch_rules_a_bypass_fails(self):
@@ -688,6 +690,48 @@ class Audit(unittest.TestCase):
             sc.check_branches("o/code", settings, "main", rep)
         self.assertEqual([r["level"] for r in rep.rows], ["WARN"])
         self.assertIn("Upgrade to GitHub Pro", rep.rows[0]["detail"])
+
+    def test_a_ruleset_read_without_a_bypass_list_is_unreadable(self):
+        def fake_run(*cmd, cwd=None):
+            if "/rulesets/" in " ".join(cmd):
+                return subprocess.CompletedProcess(cmd, 0, json.dumps({"id": 7, "rules": []}), "")
+            return self._gh([], rules=json.dumps(self.FULL))(*cmd, cwd=cwd)
+        rep = sc.Report()
+        with mock.patch.object(sc, "run", fake_run):
+            sc.check_branches("o/code", {"integration": {"strategy": "pr-squash", "base": "main"}}, "main", rep)
+        self.assertEqual([r["level"] for r in rep.rows], ["WARN"])
+
+    def test_ruleset_refuses_to_print_when_the_check_names_cannot_be_read(self):
+        def fake_run(*cmd, cwd=None):
+            if "pr list" in " ".join(cmd):
+                return subprocess.CompletedProcess(cmd, 1, "", "gh: HTTP 502")
+            return self._gh([])(*cmd, cwd=cwd)
+        settings = {"tracker": {"code_repo": "o/code"}, "integration": {"strategy": "pr-squash", "base": "main"}}
+        out = io.StringIO()
+        with mock.patch.object(sc, "run", fake_run), mock.patch("sys.stdout", out), mock.patch("sys.stderr"):
+            self.assertEqual(sc.print_ruleset(settings, "main", "main"), 2)
+        self.assertEqual(out.getvalue(), "")
+
+    def test_a_missing_check_with_classic_unread_is_uncertain(self):
+        rows = self._rules(rules=self.FULL[:2], classic="HTTP 403", needs_ci=True)
+        self.assertEqual([r["level"] for r in rows], ["WARN"])
+        self.assertIn("classic", rows[0]["detail"])
+
+    def test_a_bypass_on_the_gogogo_ruleset_carries_the_put(self):
+        rules = [dict(r, bypass_actors=[{"actor_type": "RepositoryRole", "actor_id": 5}]) for r in self.FULL]
+        rep = sc.Report()
+        sc.check_branch_rules("o/r", "main", rules, {}, ["tests"], True, False, rep, existing=7)
+        self.assertEqual([r["level"] for r in rep.rows], ["FAIL"])
+        self.assertIn("-X PUT repos/o/r/rulesets/7", rep.rows[0]["fix"])
+
+    def test_classic_protection_admins_can_bypass_fails(self):
+        classic = {"allow_force_pushes": {"enabled": False}, "allow_deletions": {"enabled": False},
+                   "required_status_checks": {"contexts": ["tests"], "checks": []},
+                   "enforce_admins": {"enabled": False}}
+        rows = self._rules(rules=[], classic=classic)
+        self.assertEqual([r["level"] for r in rows], ["FAIL"])
+        self.assertIn("admins", rows[0]["detail"])
+        self.assertIn("--ruleset main", rows[0]["fix"])
 
     def test_ruleset_for_a_branch_the_profile_does_not_give_exits_2(self):
         calls = []
