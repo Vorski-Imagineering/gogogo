@@ -7,14 +7,14 @@ three levels, each named after the colleague Claude then behaves like:
 | Level | Claude asks you about | Claude decides, and tells you |
 |---|---|---|
 | `junior-dev` | approvals, product, engineering | nothing |
-| `senior-dev` | approvals, product | engineering |
-| `architect` | approvals | product, engineering |
+| `tech-lead` | approvals, product | engineering |
+| `product-owner` | approvals | product, engineering |
 
 - A **junior dev** checks every choice with you before making it. This is the
   default.
-- A **senior dev** decides how things are built, and checks with you on
+- A **tech lead** decides how things are built, and checks with you on
   anything people will see.
-- An **architect** decides how things are built and what they do, and comes
+- A **product owner** decides how things are built and what they do, and comes
   to you only for approvals.
 
 ## The three kinds of decision
@@ -44,7 +44,7 @@ more.
 - **Questions are put in plain words.** Each question opens with the real
   case in one sentence, and each option says what changes for people. A
   question does not name files, flags or exit codes.
-- **A `senior-dev` or `architect` asks at most one round of questions per
+- **A `tech-lead` or `product-owner` asks at most one round of questions per
   issue.** When you answer against Claude's recommendation, Claude works out
   what follows from your answer itself, rather than asking another round.
 
@@ -58,8 +58,8 @@ question, and goes on with the next:
 | Level | A run hands an issue back for |
 |---|---|
 | `junior-dev` | an approval, a product decision or an engineering decision that the issue does not settle |
-| `senior-dev` | an approval or a product decision that the issue does not settle |
-| `architect` | an approval that the issue does not settle |
+| `tech-lead` | an approval or a product decision that the issue does not settle |
+| `product-owner` | an approval that the issue does not settle |
 
 A decision the level does not ask about is taken, and the issue's report lists
 it under *Decided without asking*.
@@ -71,7 +71,7 @@ committed with the rest of the repo, so everyone working in the repo gets the
 same level:
 
 ```toml
-independence = "senior-dev"
+independence = "tech-lead"
 ```
 
 `/gogogo:setup` shows the current level and asks the person running it which
@@ -85,10 +85,10 @@ Which level suits whom:
   running it, while they learn what Claude decides well. It also suits a
   product where nearly every choice is visible to customers, or a team that
   wants every choice reviewed.
-- **`senior-dev`** suits most repos once the owner trusts how Claude builds
+- **`tech-lead`** suits most repos once the owner trusts how Claude builds
   things. The owner is asked about what people will see, and gets the
   engineering choices as a short list to skim.
-- **`architect`** suits a repo whose product direction is already settled in
+- **`product-owner`** suits a repo whose product direction is already settled in
   its issues, a stream of small, well-understood changes, or an owner who
   mostly wants to approve risky changes and review results afterwards. It
   interrupts least, and puts the most weight on the list of decisions Claude
@@ -96,7 +96,7 @@ Which level suits whom:
 
 ## Which model to run
 
-`senior-dev` and `architect` need the judgement to take decisions a person
+`tech-lead` and `product-owner` need the judgement to take decisions a person
 used to take. They also need to tell a product choice from an engineering one,
 and a misjudged kind is the mistake a less capable model makes more often. Run
 them on an Opus-class model or better, at medium effort or higher.
@@ -114,7 +114,7 @@ Knight First Amendment Institute's *Levels of Autonomy for AI Agents* names
 five levels by the role the user plays: operator, collaborator, consultant,
 approver and observer. It treats the level as a choice made when designing the
 system, separate from how capable the agent is. `junior-dev` is close to its
-consultant level, and `architect` to its approver level. There is no observer
+consultant level, and `product-owner` to its approver level. There is no observer
 level here, because approvals always stay with a person.
 
 **The rule for what to ask belongs to the process, not to the agent's

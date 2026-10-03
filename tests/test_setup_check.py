@@ -1097,13 +1097,13 @@ class Independence(unittest.TestCase):
 
     def test_independence_row(self):
         self.assertTrue(self.audit().startswith("junior-dev (not set)"))
-        self.assertEqual(self.audit('independence = "architect"\n'), "architect")
+        self.assertEqual(self.audit('independence = "product-owner"\n'), "product-owner")
 
     def test_setup_skill_names_the_independence_row(self):
         text = (ROOT / "plugins" / "gogogo" / "skills" / "setup" / "SKILL.md").read_text(encoding="utf-8")
         bullet = re.search(r"(?ms)^- \*\*Independence\*\*.*?(?=^- \*\*)", text)
         self.assertIsNotNone(bullet)
-        for name in ("`independence`", "junior-dev", "senior-dev", "architect", "AskUserQuestion"):
+        for name in ("`independence`", "junior-dev", "tech-lead", "product-owner", "AskUserQuestion"):
             self.assertIn(name, bullet.group(0))
 
 

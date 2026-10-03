@@ -69,15 +69,15 @@ The profile's `independence` sets which kinds you ask about. Absent means
 | Level | You ask about | You decide |
 |---|---|---|
 | `junior-dev` | approvals, product, engineering | nothing |
-| `senior-dev` | approvals, product | engineering |
-| `architect` | approvals | product, engineering |
+| `tech-lead` | approvals, product | engineering |
+| `product-owner` | approvals | product, engineering |
 
 Approvals are asked at every level. A kind the level does not ask about is
 yours to decide: pick, and record it under *Decided without asking* in
 `## Approvals` with its reason (§ *`## Approvals`*), and build the spec's
 `## Design` on it.
 
-At `senior-dev` or `architect`, when your model is not Opus-class or above,
+At `tech-lead` or `product-owner`, when your model is not Opus-class or above,
 say in one line that this level is recommended for an Opus-class model at
 medium effort or higher, then carry on.
 
@@ -234,7 +234,7 @@ stop it assuming approval nobody gave.
 The Approvals table is the **output of a loop**, not of a single pass. Keep
 asking until pre-post check question 1 answers *"none"*.
 
-- At `senior-dev` and `architect`, ask at most one round per issue. When the
+- At `tech-lead` and `product-owner`, ask at most one round per issue. When the
   person answers against the recommendation, work out what follows from the
   answer yourself.
 - Every question opens with the real case in one plain sentence, and each

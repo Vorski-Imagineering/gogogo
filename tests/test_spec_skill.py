@@ -239,7 +239,7 @@ class WhoDecides(unittest.TestCase):
         between = [line for line in lines[profile + 1:heads[0]] if line.startswith("## ")]
         self.assertEqual(between, [], "## Who decides must come directly after the profile section")
         sub = "\n".join(section(skill_text(), WHO))
-        for name in ("`independence`", "junior-dev", "senior-dev", "architect", "Decided without asking"):
+        for name in ("`independence`", "junior-dev", "tech-lead", "product-owner", "Decided without asking"):
             self.assertIn(name, sub)
         self.assertIn("independence", pc.FIELDS)
         named = set(re.findall(r"`([a-z_]+(?:\.[a-z_]+)+)`", skill_text()))

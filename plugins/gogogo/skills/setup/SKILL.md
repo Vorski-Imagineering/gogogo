@@ -213,11 +213,11 @@ What each fix involves:
   this repo. One option per level, each one line on what it asks and what it
   decides, with the current level marked:
   - `junior-dev`: asks about every choice, and decides nothing itself;
-  - `senior-dev`: asks about approvals and anything people will see, and
+  - `tech-lead`: asks about approvals and anything people will see, and
     decides how things are built;
-  - `architect`: asks only for approvals, and decides what is built and how.
+  - `product-owner`: asks only for approvals, and decides what is built and how.
 
-  Say that `senior-dev` and `architect` are best run on an Opus-class model at
+  Say that `tech-lead` and `product-owner` are best run on an Opus-class model at
   medium effort or higher. On an answer different from the current level,
   write `independence = "<level>"` to the profile (a top-level key, above the
   first `[table]`) and commit it as setup commits any other profile change. On

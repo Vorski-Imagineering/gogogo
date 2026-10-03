@@ -19,7 +19,7 @@ the repo's profile, `.agents/dev-process.md`
 | `gates.always`, `gates.when` | Checks run before every merge, and extra ones by path. |
 | a lane's `mutate` | The command that mutation-tests the lines a change made; every mutant its tests miss is killed or accounted for before the merge. |
 | `stages` | Where a merged change goes next, and which board column says so. |
-| `independence` | Which decisions Claude asks about and which it takes itself: `junior-dev` (default), `senior-dev` or `architect`. |
+| `independence` | Which decisions Claude asks about and which it takes itself: `junior-dev` (default), `tech-lead` or `product-owner`. |
 
 ## The shape
 

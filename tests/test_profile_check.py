@@ -355,8 +355,8 @@ class WrongValues(unittest.TestCase):
             self.assertEqual(pc.check(settings, sections, skill), ([], []), skill)
         settings["independence"] = "lead"
         errors, _ = pc.check(settings, sections)
-        self.assertIn("independence: 'lead' is not one of architect, junior-dev, senior-dev", errors)
-        for level in ("junior-dev", "senior-dev", "architect"):
+        self.assertIn("independence: 'lead' is not one of junior-dev, product-owner, tech-lead", errors)
+        for level in ("junior-dev", "tech-lead", "product-owner"):
             settings["independence"] = level
             for skill in (None, *pc.SKILLS):
                 self.assertEqual(pc.check(settings, sections, skill), ([], []), (level, skill))

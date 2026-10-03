@@ -305,7 +305,7 @@ Push the branch as soon as it has its first commit (`git push -u origin
   far, and nothing else, to its branch, marked as stopped and naming the
   question in the commit message within the rule for a public tracker, push it, leave it unmerged, hand the card back to
   `tracker.columns.needs_human` as `/gogogo:dev` §8 says, record it, carry on
-  with the next. At `architect`, a product decision the body does not settle
+  with the next. At `product-owner`, a product decision the body does not settle
   is taken, and recorded under *Decided without asking* in the issue's
   `/gogogo:dev` §7 report.
 - **When verification fails, fix forward, bounded.** Up to three attempts, and
@@ -564,7 +564,7 @@ integration and merging follow this skill and the profile. See the profile's
   there is no `timeout` command (macOS), bound the loop itself:
   `sh -c 'n=0; while [ $n -lt 36 ] && kill -0 <pid> 2>/dev/null; do sleep 15; n=$((n+1)); done'`.
 - Never `AskUserQuestion` inside the loop (*The loop never waits on chat*).
-- At `senior-dev` or `architect`, when your model is not Opus-class or above,
+- At `tech-lead` or `product-owner`, when your model is not Opus-class or above,
   say in one line that this level is recommended for an Opus-class model at
   medium effort or higher, then carry on. Say it once, at the start of the
   run, in the run's first report line.

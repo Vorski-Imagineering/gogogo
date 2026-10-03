@@ -200,7 +200,7 @@ The profile's `## Recon traps` lists what this codebase specifically hides.
 - **A Hard Stop, or a decision of a kind the level asks about and is not in
   the issue body, discovered mid-change → stop** and present the repo's
   proposal format. Do not negotiate with yourself about whether it is "small".
-  Hand back as *stopped for a person* (§8). At `architect`, a product decision
+  Hand back as *stopped for a person* (§8). At `product-owner`, a product decision
   the body does not settle is taken, and recorded under *Decided without
   asking* in the §7 report.
 - **Do not commit or push unless asked.** Leave the change in the working tree
@@ -777,6 +777,6 @@ and integration follow this skill and the repo's merge path. See the profile's
   `require_unattended.sh` also reads, and `unknown` when it is unset.
 - Browser checks use the `claude-in-chrome` tools; load the ones you need in one
   `ToolSearch` call.
-- At `senior-dev` or `architect`, when your model is not Opus-class or above,
+- At `tech-lead` or `product-owner`, when your model is not Opus-class or above,
   say in one line that this level is recommended for an Opus-class model at
   medium effort or higher, then carry on.
