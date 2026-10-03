@@ -214,6 +214,14 @@ class Wrapper(unittest.TestCase):
         out, _ = proc.communicate(timeout=60)
         self.assertEqual(int(out.decode("utf-8").split()[0]), proc.pid)
 
+    def test_the_output_ends_with_the_test_run_not_with_what_it_started(self):
+        # A process the test leaves running holds the pipe; the tool must still see the end.
+        began = time.monotonic()
+        run = self.wrap("import subprocess; subprocess.Popen(['sleep', '12']); print('ok')")
+        self.assertLess(time.monotonic() - began, 8)
+        self.assertIn("ok", run.stdout.decode("utf-8"))
+        self.assertEqual(run.returncode, 0)
+
     def test_a_group_with_only_exited_members_is_not_an_error(self):
         proc = subprocess.Popen([sys.executable, "-c", "pass"], start_new_session=True)
         proc.wait()

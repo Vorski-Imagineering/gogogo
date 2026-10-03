@@ -489,10 +489,11 @@ integration and merging follow this skill and the profile. See the profile's
 - In the skip marker (§2, *Hand back a skip*), `session` is
   `$CLAUDE_CODE_SESSION_ID`, as in `/gogogo:dev`'s record, and `unknown`
   when it is unset.
-- **Polling background work** (§4): start the job so it records its own pid,
-  `sh -c 'echo $$ > <scratch>/job.pid; exec <command>' > <output file> 2>&1`
-  (the background tool's task id is not a pid), and use the number in
-  `<scratch>/job.pid` as `<pid>`. Then one foreground command at a time, each
+- **Polling background work** (§4): `rm -f <scratch>/job.pid`, then start the
+  job so it records a pid that lives as long as it does,
+  `sh -c 'echo $$ > <scratch>/job.pid; <command>' > <output file> 2>&1`
+  (the background tool's task id is not a pid), and once `<scratch>/job.pid`
+  exists use its number as `<pid>`. Then one foreground command at a time, each
   under the shell tool's 10-minute limit, for example
   ```bash
   timeout 540 sh -c 'while kill -0 <pid> 2>/dev/null; do sleep 15; done'; kill -0 <pid> 2>/dev/null && echo running || echo finished

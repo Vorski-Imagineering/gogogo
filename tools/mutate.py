@@ -77,6 +77,7 @@ It becomes the test command (exec), so the tool's own timeout kills the test run
 the exit status is the command's. A forked child passes the output on as UTF-8 and marks the end.
 """
 import os
+import select
 import sys
 import time
 from pathlib import Path
@@ -92,10 +93,21 @@ def mark(line):
 start = time.time()
 mark(f"start {{start:.3f}}")
 read_end, write_end = os.pipe()
+test_pid = os.getpid()
 if os.fork() == 0:
+    # Ends when the test run does, not when the pipe closes: a process the test started may
+    # hold the pipe open after the tool has killed the test, and the tool waits on this output.
     os.close(write_end)
-    with os.fdopen(read_end, "rb") as src:
-        data = src.read()
+    chunks = []
+    while True:
+        if select.select([read_end], [], [], 0.2)[0]:
+            chunk = os.read(read_end, 65536)
+            if not chunk:
+                break
+            chunks.append(chunk)
+        elif os.getppid() != test_pid:
+            break
+    data = b"".join(chunks)
     sys.stdout.buffer.write(data.decode("utf-8", errors="replace").encode("utf-8"))
     sys.stdout.flush()
     end = time.time()
