@@ -382,6 +382,13 @@ one step at a time, asking before anything is written:
   issues land in ⚡️ New for you to triage; the loop works Dev Ready, and moves
   an issue that stopped and needs you to Human!Help!. It can create the board,
   or check the one you have.
+- **Where each issue's work goes.** It asks you outright, explaining what
+  each choice changes day to day: the checkout you already work in
+  (recommended for one person working normally), or a worktree per issue
+  beside it (for several sessions at once, or a checkout something live runs
+  from; this support is in development). The answer is the profile's
+  `integration.workspace`, and `/gogogo:dev` and `/gogogo:auto-dev` do what it
+  says.
 - **The ready label** (`dev ready` by default).
 - **Local skills this replaces.** Their project-specific text moves into the
   profile word for word, and the old copies go to `.claude/skills-retired/`.

@@ -45,6 +45,25 @@ A branch cut from a stale base silently reverts the previous issue's work when
 it is squashed back. `--ff-only` refuses a base that has diverged rather than
 merging into it.
 
+**In the checkout, or in a worktree per issue.** The profile's
+`integration.workspace` says where the branch goes, and `/gogogo:setup` asks
+you, recommending the checkout. With `checkout` (or no setting), the commands
+above run in the folder you work in, so the work in progress is where you
+look. With `worktree`, each issue gets its own folder beside the main one,
+cut from a freshly fetched base, and the main folder never switches branches:
+
+```bash
+git fetch origin && git worktree add -b fix/<issue-number>-<short-slug> ../<repo>-wt-<n> origin/<integration.base>
+```
+
+That is for several sessions working one repo at once, or a checkout that
+something live runs from (a plugin sessions load with `--plugin-dir`, a hook
+that runs a file inside it). Setup recommends moving the live thing to an
+installed copy first, so the checkout stays possible. Worktree support is in
+development. A profile that sets nothing while its `## Lane constraints`
+mention a worktree makes dev and auto-dev stop before branching and point at
+`/gogogo:setup`.
+
 **Unless the issue already has work.** Before cutting a branch,
 `issue_work.py <n>` looks for an open pull request that references the issue,
 a local or `origin` branch named for it that is ahead of the base, and the
@@ -77,9 +96,10 @@ first commit, so the work survives a run that dies.
 It finishes an issue (merged, or stopped and handed back), returns to the base
 and cuts the next.
 
-**A checkout of its own.** An unattended run switches branches. Give it a
-clone or worktree nobody else is working in, so it never shares a working tree
-with a person.
+**A checkout of its own.** An unattended run with
+`integration.workspace = "checkout"` switches branches in the folder it runs
+in. Don't work in that folder while the run goes; give the run a clone of its
+own if you need to.
 
 **Branches left behind on purpose.** An issue that stops before its merge
 keeps its branch, pushed and unmerged, and its card moves to the
@@ -286,12 +306,7 @@ gogogo runs its own process, with `pr-squash` onto `main`
 - **`main` is production.** A merge reaches every adopting repo on its next
   plugin update, so a merge here is always a release.
 - **`/gogogo:auto-dev` on this repo** runs the plugin from this checkout, so it
-  never switches branches or pulls in that tree. Each issue gets its own
-  worktree from a freshly fetched base instead:
-  ```bash
-  git fetch origin && git worktree add -b fix/<n>-<slug> <path> origin/main
-  ```
-  or, for an issue that already has a branch, a worktree of that branch
-  (`git worktree add <path> <branch>`, or
-  `git worktree add --track -b <branch> <path> origin/<branch>` when it is
-  only on `origin`).
+  never switches branches or pulls in that tree. The profile sets
+  `integration.workspace = "worktree"` (the owner's choice, 2026-10-03), so
+  each issue gets its own worktree, `../gogogo-wt-<n>`, from a freshly fetched
+  base.

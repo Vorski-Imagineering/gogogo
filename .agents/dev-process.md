@@ -73,6 +73,7 @@ always = ["python3 -m unittest discover -s tests", "the project-name grep in CLA
 strategy = "pr-squash"
 base = "main"
 ci_before_merge = true
+workspace = "worktree"
 
 [handback]
 reporter = "none"
@@ -114,19 +115,14 @@ reporter = "none"
   --triage-only`) and dry runs with posting blocked are the default. Say which
   repo and what was checked.
 - **auto-dev on this repo**: the plugin it runs is loaded from this checkout
-  (the **live** lane). Put each issue in its own git worktree or clone, never
-  switch branches in the tree the plugin was loaded from, and do not edit
-  `plugins/gogogo/` in that tree while the run is going. On this repo, in place
-  of auto-dev §3's `git switch` steps, branch the worktree from a freshly
-  fetched base: `git fetch origin && git worktree add -b fix/<n>-<slug> <path>
-  origin/main`. When auto-dev §3 continues on an issue's earlier branch, the
-  worktree is `git worktree add <path> <branch>`, or
-  `git worktree add --track -b <branch> <path> origin/<branch>` for a branch
-  only on `origin`. Switching branches in the loaded tree, or pulling into it,
-  changes the skills under the running loop (`CLAUDE.md` § What a change here
-  does). The 2026-10-01 runs used a worktree per issue. The skills remove an
-  issue's worktree after its merge is verified (`/gogogo:dev` §8), and each
-  run starts by sweeping leftovers whose work merged (auto-dev preflight 10).
+  (the **live** lane), so never switch branches or pull in that tree during a
+  run, and do not edit `plugins/gogogo/` in it while the run is going.
+  Switching branches in the loaded tree, or pulling into it, changes the
+  skills under the running loop (`CLAUDE.md` § What a change here does). The
+  owner chose a worktree per issue here on 2026-10-03
+  (`integration.workspace`); the skills make it. The skills remove an issue's
+  worktree after its merge is verified (`/gogogo:dev` §8), and each run starts
+  by sweeping leftovers whose work merged (auto-dev preflight 11).
 - **confirming a Released card**: `/gogogo:auto-test` is browser-based and is
   not set up here. Confirm instead against a worktree of `origin/main`: scripts
   in read-only or dry-run modes, and skill behaviour as scenario runs
