@@ -94,7 +94,9 @@ These rules apply, in order.
 
 - **Columns.** Order and names come from `fields`. Every column is shown, with
   0 where it is empty. Cards with no column are counted as `no status`, after
-  the rest.
+  the rest. Columns and their lists count only cards whose `kind` is not
+  `PullRequest` (drafts and unreadable cards are counted as before), and so
+  does the `<n>` in `BOARD  <n> cards`.
 - **Listed columns.** Cards are listed, not just counted, only in
   `tracker.queue`, `tracker.columns.in_progress`, and each `stages[].column`,
   in that order, each once. A stage column carries its `stages[].environment`
@@ -104,9 +106,18 @@ These rules apply, in order.
 - **A card** reads `#<number> <title>`, the title cut to 70 characters. It is
   `<repo>#<number>` when its `repo` is not `tracker.issues_repo` (two repos on
   one board can share a number). It ends with ` (closed)` when its `state`
-  is set and not `OPEN` (a merged pull request too). A card with no
+  is set and not `OPEN`. A card with no
   `number` is a draft or deleted content: it reads `(draft) <title>`, with
   no repo and never `(closed)`.
+- **Pull-request cards.** When any card's `kind` is `PullRequest` and its
+  `repo` is `tracker.issues_repo` or `tracker.code_repo` (compared ignoring
+  case), the BOARD block ends with one line:
+  `<N> pull-request card(s) on the board: set Auto-add to project's filter to is:issue is:open at <workflows URL>; /gogogo:setup archives them.`
+  The URL is the board's own (`gh project view <tracker.project_number> --owner <tracker.project_owner> --format json -q .url`,
+  which is `/orgs/<owner>/projects/<n>` or `/users/<owner>/projects/<n>`)
+  followed by `/workflows`, so it reads `…/projects/<n>/workflows`. When
+  that command fails, the line names `the board's ⋯ → Workflows` instead.
+  No line when there are none.
 - **A pull request** reads `#<n> <headRefName>`, then ` → <issue>` when the
   branch name carries an issue number (next rule), then ` (draft)` if it is
   one. At most 10, then `+N more`, or `none`.
@@ -143,6 +154,7 @@ BOARD  <n> cards
   <queue column>:  <card> · <card> · …
   <in-progress column>:  <card> · …
   <stage column> (<environment>):  <card> · …
+  <N> pull-request card(s) on the board: set Auto-add to project's filter to is:issue is:open at <workflows URL>; /gogogo:setup archives them.
 
 CODE
   Pull requests:  <pr> · <pr> · …

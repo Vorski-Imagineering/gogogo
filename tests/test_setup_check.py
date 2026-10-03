@@ -1,5 +1,6 @@
 import json
 import os
+import re
 import subprocess
 import sys
 import tempfile
@@ -384,7 +385,9 @@ class Audit(unittest.TestCase):
                  self._card(3, self.OWN[0], "Dev Ready"),
                  self._card(4, self.OWN[0], "Released", "CLOSED")]
         rep = self._origin(cards)
-        self.assertEqual([r["check"] for r in rep.rows], ["tracker: closed cards in the queue"])
+        self.assertEqual([r["check"] for r in rep.rows],
+                         ["tracker: pull requests on the board", "tracker: closed cards in the queue"])
+        rep.rows.pop(0)
         self.assertIn("#1", rep.rows[0]["detail"])
         self.assertIn("#2", rep.rows[0]["detail"])
         self.assertNotIn("#3", rep.rows[0]["detail"])
@@ -404,6 +407,55 @@ class Audit(unittest.TestCase):
         rep = self._origin([self._card(1, "other/x", "Dev Ready", "CLOSED")], queue="")
         self.assertEqual([r["check"] for r in rep.rows], ["tracker: cards from another repo"])
 
+    # pull requests as cards (issue #85)
+    PR_ROW = "tracker: pull requests on the board"
+
+    def _pr_rows(self, rep):
+        return [r for r in rep.rows if r["check"] == self.PR_ROW]
+
+    def test_own_pull_request_cards_warn_once_with_columns_and_numbers(self):
+        cards = [self._card(11, self.OWN[0], "\u26a1\ufe0f New", kind="PullRequest"),
+                 self._card(12, self.OWN[0], "Dev Ready", kind="PullRequest"),
+                 self._card(13, self.OWN[0], "Backlog")]
+        rows = self._pr_rows(self._origin(cards))
+        self.assertEqual([r["level"] for r in rows], ["WARN"])
+        detail = rows[0]["detail"]
+        for text in ("2 pull request(s)", "\u26a1\ufe0f New", "Dev Ready", "#11", "#12", "is:issue is:open"):
+            self.assertIn(text, detail)
+        self.assertNotIn("#13", detail)
+
+    def test_merged_and_closed_pull_request_cards_count(self):
+        cards = [self._card(21, self.OWN[0], "Done", "MERGED", "PullRequest"),
+                 self._card(22, self.OWN[0], "Done", "CLOSED", "PullRequest")]
+        rows = self._pr_rows(self._origin(cards))
+        self.assertEqual(len(rows), 1)
+        self.assertIn("2 pull request(s)", rows[0]["detail"])
+        self.assertIn("Done", rows[0]["detail"])
+
+    def test_another_repos_pull_request_is_reported_once_as_foreign(self):
+        rep = self._origin([self._card(31, "other/x", "Backlog", kind="PullRequest")])
+        self.assertEqual([r["check"] for r in rep.rows], ["tracker: cards from another repo"])
+
+    def test_an_unreadable_pull_request_card_is_not_a_pr_row(self):
+        rep = self._origin([self._card(None, None, "Backlog", None, "PULL_REQUEST")])
+        self.assertEqual(self._pr_rows(rep), [])
+
+    def test_pr_row_reads_the_fields_flatten_writes(self):
+        import tracker
+        item = {"id": "i2", "type": "PULL_REQUEST", "fieldValueByName": {"name": "\u26a1\ufe0f New"},
+                "content": {"__typename": "PullRequest", "number": 9, "state": "OPEN",
+                            "repository": {"nameWithOwner": "Vorski-Imagineering/gogogo"}}}
+        rows = self._pr_rows(self._origin([tracker.flatten(item)]))
+        self.assertEqual(len(rows), 1)
+        self.assertIn("#9", rows[0]["detail"])
+
+    def test_a_long_pr_list_shows_ten_numbers_then_more(self):
+        cards = [self._card(100 + i, self.OWN[0], "Done", kind="PullRequest") for i in range(12)]
+        detail = self._pr_rows(self._origin(cards))[0]["detail"]
+        self.assertIn("12 pull request(s)", detail)
+        self.assertIn("#109, ...", detail)
+        self.assertNotIn("#110", detail)
+
     def test_auto_add_row_names_the_repo_and_says_the_api_is_blind(self):
         rep = sc.Report()
         sc.check_board_workflows([{"name": n, "enabled": True} for n in sc.BOARD_WORKFLOWS], rep, ("a/b",))
@@ -411,13 +463,15 @@ class Audit(unittest.TestCase):
         self.assertEqual(len(info), 1)
         self.assertIn("a/b", info[0]["detail"])
         self.assertIn("does not say", info[0]["detail"])
+        self.assertIn("is:issue is:open", info[0]["detail"])
         off = sc.Report()
         sc.check_board_workflows([{"name": "Auto-add to project", "enabled": False}], off, ("a/b",))
         self.assertNotIn("tracker: Auto-add repository", [r["check"] for r in off.rows])
 
     def test_origin_checks_never_fail(self):
         rep = sc.Report()
-        worst = [self._card(1, "x/y", "Dev Ready", "CLOSED"), self._card(None, None, None, None, "Unknown")]
+        worst = [self._card(1, "x/y", "Dev Ready", "CLOSED"), self._card(None, None, None, None, "Unknown"),
+                 self._card(2, self.OWN[0], "Dev Ready", kind="PullRequest")]
         sc.check_board_origin(worst, self.OWN, "Dev Ready", rep)
         sc.check_board_workflows([{"name": "Auto-add to project", "enabled": True}], rep, self.OWN)
         self.assertTrue(rep.rows and not rep.failed())
@@ -505,6 +559,18 @@ class Audit(unittest.TestCase):
         text = (ROOT / "plugins" / "gogogo" / "skills" / "setup" / "SKILL.md").read_text(encoding="utf-8")
         self.assertIn(sc.DELETE_BRANCH_CHECK, text)
         self.assertIn("gh api -X PATCH", text)
+
+    def test_setup_skill_names_the_pull_requests_row(self):
+        text = (ROOT / "plugins" / "gogogo" / "skills" / "setup" / "SKILL.md").read_text(encoding="utf-8")
+        self.assertIn("is:issue is:open", text)
+        self.assertNotIn("is:issue,pr", text)
+        self.assertIn("pull requests on the board", text)
+
+    def test_setup_skill_archives_inside_the_pull_requests_bullet(self):
+        text = (ROOT / "plugins" / "gogogo" / "skills" / "setup" / "SKILL.md").read_text(encoding="utf-8")
+        bullet = re.search(r"(?ms)^- \*\*Pull requests on the board\*\*.*?(?=^- \*\*)", text)
+        self.assertIsNotNone(bullet)
+        self.assertIn("gh project item-archive", bullet.group(0))
 
     def test_check_tracker_reads_the_code_repo(self):
         calls = []
