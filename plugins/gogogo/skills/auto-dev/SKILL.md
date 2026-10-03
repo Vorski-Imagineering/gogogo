@@ -256,7 +256,7 @@ Always from a fresh base: the previous iteration merged into it, and branching
 from a stale one silently reverts that work in the squash. The branch name
 carries the issue number, so the work is never stranded.
 
-When branching fails, first put the card back with
+When branching, or checking out the earlier work, fails, first put the card back with
 `<tracker.tool> move <n> --from in_progress --to "<tracker.queue>"`, then
 **skip** the issue with `could not branch: <its message>` and go on.
 
@@ -490,7 +490,7 @@ each, `<repo>` being the name part of `tracker.code_repo`:
 - `<repo> #<n> started: <title>`;
 - after the issue's merge is verified: `<repo> #<n> merged (<short sha>) -> <column>`;
 - `<repo> #<n> needs you -> <tracker.columns.needs_human>: <the Needs-you line>`, for an issue taken and then stopped, never for a triage skip (its skip line says it);
-- *run closed*, from §9 only: `<repo> auto-dev: run closed: <a> merged, <b> need you, <c> skipped`, where `<b>` counts issues taken and stopped, and `<c>` the triage skips, each issue once.
+- *run closed*, from §9 only: `<repo> auto-dev: run closed: <a> merged, <b> need you, <c> skipped`, where `<b>` counts issues taken and stopped, and `<c>` the triage skips and §3's skips, each issue once.
 
 A `send` that exits non-zero is a `notify failed: <its line>`, and the run
 goes on. Each is given once, in the next report to the person in this session
