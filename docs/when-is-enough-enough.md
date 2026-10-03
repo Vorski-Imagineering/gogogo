@@ -150,7 +150,7 @@ Decided on 2026-10-02 and specified in
    follow-up; it is not patched again. Anything larger is a follow-up for a
    person.
 3. **Prose is judged per file.** Markdown and text files get the prose rule
-   (two rounds at most) even inside a change that also has code. Most of the
+   (two rounds) even inside a change that also has code. Most of the
    churn above was skill text reviewed under the code rule. Since 2026-10-03 a fix made in the second round gets one more round of its own: six issues stopped there in one day, and each one with a pull request merged after a model read the fix.
 4. **Three attempts per finding, and no flip-flops.** After the first round a
    review looks only at the corrections, so a real defect there means a fix was

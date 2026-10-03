@@ -13,7 +13,7 @@ and no further. Take the first case that fits:
 
 - **stopped for a person**: a review that ended for a person (§5 rule 8: a
   defect in a finding's third attempt, a reversal the spec does not settle, a
-  finding you could not fix, a prose file's second-round fix, or the breaker
+  finding you could not fix, a defect in the round that reviews a prose file's second-round fix, or the breaker
   at round 13), a spec check that stopped (§5: two parts of the spec
   disagree, a difference that is not small, a piece that could not be built,
   or items left after the third reading), a weakened test the change could
