@@ -547,6 +547,51 @@ def check_profile_skills(settings, sections, rep):
         rep.warn("profile", w)
 
 
+def live_checkout(root, home):
+    """What runs straight from this checkout, so that an issue's branch here would change it
+    under other sessions: one reason per finding. Names only the path inside the repo and the
+    hook's event, never the rest of a hook's command (it can carry a token)."""
+    root = Path(root).resolve()
+    reasons = []
+    if (root / ".claude-plugin").is_dir():
+        reasons.append("this repo is a Claude Code plugin; sessions may load it from here with --plugin-dir")
+    try:
+        data = json.loads((Path(home) / ".claude" / "settings.json").read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return reasons
+    home_text = str(Path(home).resolve())
+    inside = re.compile(re.escape(str(root)) + r"(/[^\s'\";|&)]*)?(?![^\s'\";|&)])")
+    for event, entries in _table(_table(data).get("hooks")).items():
+        for entry in _list(entries):
+            for hook in _list(_table(entry).get("hooks")):
+                command = _table(hook).get("command")
+                if not isinstance(command, str):
+                    continue
+                command = re.sub(r"(?<![\w/])~(?=/|$|\s)", home_text, command)
+                command = re.sub(r"\$\{?HOME\}?(?!\w)", home_text, command)
+                for found in inside.finditer(command):
+                    reason = f"your Claude Code settings run {(found.group(1) or '/.')[1:]} on {event}"
+                    if reason not in reasons:
+                        reasons.append(reason)
+    return reasons
+
+
+def check_workspace(root, settings, sections, rep, home):
+    """Where dev and auto-dev do an issue's work (`integration.workspace`): WARN until the
+    profile says, INFO once it does, with what runs from this checkout either way."""
+    value = _table(settings.get("integration")).get("workspace")
+    if value is None:
+        level, detail = rep.warn, "not decided: dev and auto-dev work in the checkout"
+        if "worktree" in str(_table(sections).get("Lane constraints", "")).lower():
+            detail += "; ## Lane constraints mention a worktree, so dev and auto-dev stop until it is set"
+    else:
+        level, detail = rep.info, str(value)
+    live = live_checkout(root, home)
+    if live:
+        detail += "; live checkout: " + "; ".join(live)
+    level("workspace", detail)
+
+
 def check_local_skills(root, rep):
     skills = root / ".claude" / "skills"
     found = [n for n in REPLACED_LOCAL_SKILLS if (skills / n / "SKILL.md").is_file()]
@@ -724,7 +769,8 @@ def config_header(root, settings, rep, profile=None):
                  + "; stages " + _joined(f"{x.get('code_is')} -> {x.get('environment')} / {x.get('column')}"
                                          for x in stages)
                  + f"; verify agent {_joined(verify.get('agent'))}, human {val(verify.get('human'))}"
-                 + f"; integration {val(integration.get('strategy'))} into {val(integration.get('base'))}")
+                 + f"; integration {val(integration.get('strategy'))} into {val(integration.get('base'))}"
+                 + f", work in {val(integration.get('workspace'))}")
         stops = _table(settings.get("hard_stops"))
         rep.info("config: hard stops", f"{val(stops.get('source'))}: {_joined(stops.get('items'))}")
         lanes = [x for x in _list(settings.get("lanes")) if isinstance(x, dict)]
@@ -788,6 +834,7 @@ def main(argv=None):
             sections = None
         if sections is not None:
             check_profile_skills(settings, sections, rep)
+            check_workspace(root, settings, sections, rep, Path.home())
         # From here on, the values the skills use: the format's defaults filled in.
         settings = profile_check.effective(settings)
     if settings:

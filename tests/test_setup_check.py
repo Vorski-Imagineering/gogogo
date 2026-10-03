@@ -831,6 +831,13 @@ class ConfigHeader(unittest.TestCase):
                             ("config: lanes", "always: make lint"), ("config: profile", ".agents/dev-process.md")]:
             self.assertIn(text, rows[check], check)
 
+    def test_release_row_says_where_work_happens(self):
+        s = self.settings()
+        s["integration"]["workspace"] = "worktree"
+        self.assertTrue(self.header(s)[0]["config: release"].endswith(", work in worktree"))
+        del s["integration"]["workspace"]
+        self.assertTrue(self.header(s)[0]["config: release"].endswith(", work in missing"))
+
     def test_no_profile_prints_missing(self):
         rows, order, calls = self.header({}, profile=None)
         self.assertEqual(order, self.NAMES)
@@ -1027,6 +1034,95 @@ class Notify(unittest.TestCase):
         unread = self.real_row(False)
         self.assertEqual(unread["level"], "WARN")
         self.assertIn("not git-ignored", unread["detail"])
+
+
+class Workspace(unittest.TestCase):
+    """Where dev and auto-dev do an issue's work: the `workspace` row and the live-checkout
+    reasons behind it (gogogo#94). Read only; never a FAIL."""
+
+    def setUp(self):
+        self.home = Path(tempfile.mkdtemp()).resolve()
+        self.addCleanup(shutil.rmtree, self.home, ignore_errors=True)
+        self.root = self.home / "dev" / "repo"
+        self.root.mkdir(parents=True)
+
+    def hooks(self, *pairs):
+        """Write <home>/.claude/settings.json with one hook per (event, command)."""
+        hooks = {}
+        for event, command in pairs:
+            hooks.setdefault(event, []).append({"hooks": [{"type": "command", "command": command}]})
+        path = self.home / ".claude" / "settings.json"
+        path.parent.mkdir(exist_ok=True)
+        path.write_text(json.dumps({"hooks": hooks}))
+
+    def rows(self, workspace=None, lanes="The test host must be dev."):
+        settings = {"integration": {"strategy": "pr-squash", "base": "main"}}
+        if workspace is not None:
+            settings["integration"]["workspace"] = workspace
+        rep = sc.Report()
+        sc.check_workspace(self.root, settings, {"Lane constraints": lanes}, rep, self.home)
+        self.assertFalse(rep.failed())
+        return [r for r in rep.rows if r["check"] == "workspace"]
+
+    def test_absent_warns_not_decided(self):
+        rows = self.rows()
+        self.assertEqual([r["level"] for r in rows], ["WARN"])
+        self.assertTrue(rows[0]["detail"].startswith("not decided"), rows[0]["detail"])
+        self.assertNotIn("Lane constraints", rows[0]["detail"])
+
+    def test_absent_with_worktree_prose_names_lane_constraints(self):
+        rows = self.rows(lanes="Put each issue in its own git Worktree.")
+        self.assertEqual([r["level"] for r in rows], ["WARN"])
+        self.assertIn("## Lane constraints", rows[0]["detail"])
+
+    def test_set_is_info_with_its_value(self):
+        rows = self.rows("checkout")
+        self.assertEqual([(r["level"], r["detail"]) for r in rows], [("INFO", "checkout")])
+
+    def test_a_plugin_repo_is_a_live_checkout(self):
+        (self.root / ".claude-plugin").mkdir()
+        reasons = sc.live_checkout(self.root, self.home)
+        self.assertEqual(len(reasons), 1)
+        self.assertIn("Claude Code plugin", reasons[0])
+        rows = self.rows("worktree")
+        self.assertEqual(rows[0]["level"], "INFO")
+        self.assertTrue(rows[0]["detail"].startswith("worktree; live checkout: "), rows[0]["detail"])
+
+    def test_a_user_hook_inside_the_checkout_is_named_by_its_path_and_event(self):
+        self.hooks(("SessionStart", "python3 ~/dev/repo/scripts/h.py"),
+                   ("Stop", "sh $HOME/dev/repo/bin/stop.sh"),
+                   ("PreToolUse", "python3 ~/dev/repo-other/x.py"),
+                   ("PostToolUse", "python3 /usr/local/bin/x.py"))
+        self.assertEqual(sc.live_checkout(self.root, self.home),
+                         ["your Claude Code settings run scripts/h.py on SessionStart",
+                          "your Claude Code settings run bin/stop.sh on Stop"])
+
+    def test_a_hook_outside_the_checkout_is_no_reason(self):
+        self.hooks(("SessionStart", "python3 ~/other/h.py"))
+        self.assertEqual(sc.live_checkout(self.root, self.home), [])
+
+    def test_a_missing_or_invalid_settings_file_gives_no_reasons(self):
+        self.assertEqual(sc.live_checkout(self.root, self.home), [])
+        path = self.home / ".claude" / "settings.json"
+        path.parent.mkdir()
+        for text in ("{not json", json.dumps({"hooks": "x"}), json.dumps({"hooks": {"Stop": [1, {"hooks": 2}]}}),
+                     json.dumps([1])):
+            path.write_text(text)
+            self.assertEqual(sc.live_checkout(self.root, self.home), [], text)
+
+    def test_the_reason_never_carries_the_rest_of_the_command(self):
+        self.hooks(("SessionStart", "python3 ~/dev/repo/scripts/h.py --token abc"))
+        rows = self.rows("checkout")
+        self.assertIn("scripts/h.py on SessionStart", rows[0]["detail"])
+        self.assertNotIn("abc", rows[0]["detail"])
+        self.assertNotIn("--token", rows[0]["detail"])
+
+    def test_live_reasons_are_added_to_the_warning_too(self):
+        self.hooks(("SessionStart", "python3 ~/dev/repo/scripts/h.py"))
+        rows = self.rows()
+        self.assertEqual(rows[0]["level"], "WARN")
+        self.assertIn("; live checkout: your Claude Code settings run scripts/h.py on SessionStart",
+                      rows[0]["detail"])
 
 
 class SessionHook(unittest.TestCase):
