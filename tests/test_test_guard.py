@@ -304,6 +304,22 @@ class Enclosing(unittest.TestCase):
         self.assertEqual(out.returncode, 0, out.stdout + out.stderr)
         self.assertIn("H1  licensed", out.stdout)
 
+    def test_a_rewritten_decorator_is_inside_the_def_below(self):
+        base = TEST_CLASS.replace("    def test_b(self):\n", "    @unittest.skipIf(False, \"x\")\n    def test_b(self):\n")
+        self.r.at_base("tests/test_c.py", base)
+        self.change(base.replace("skipIf(False, \"x\")", "skip(\"x\")"))
+        items = self.items()
+        self.assertEqual(len(items), 1, items)
+        self.assertTrue(items[0].endswith("def test_b(self):"), items)
+
+    def test_a_line_added_at_the_top_of_a_file_is_inside_the_def_below(self):
+        self.r.write("tests/test_a.py", "@skip\n" + TEST_A)
+        self.r.commit("skip at the top")
+        out = self.r.run("list")
+        items = [ln for ln in out.stdout.splitlines() if re.match(r"H\d+  ", ln)]
+        self.assertEqual(len(items), 1, out.stdout)
+        self.assertTrue(items[0].endswith("def test_a():"), items)
+
     def test_a_line_added_with_a_blank_line_before_a_def_is_not_inside_it(self):
         self.change(TEST_CLASS.replace("    def test_b(self):\n", "    X = 1\n\n    def test_b(self):\n"))
         items = self.items()
@@ -391,6 +407,22 @@ class EnclosingFunction(unittest.TestCase):
         lines = ["class T:", "    def test_a(self):", "        x = '''", "a = 1", "'''", "        assert x", "",
                  "    def test_b(self):", "        assert y"]
         self.assertEqual(self.enclosing(lines, 9, 8), ["def test_b(self):", "class T:"])
+
+    def test_one_space_of_indentation_is_above_the_margin(self):
+        lines = ["class T:", " def a():", "  s = '", "x", "'", "  y"]
+        self.assertEqual(self.enclosing(lines, 6, 2), ["def a():", "class T:"])
+
+    def test_the_margin_line_is_looked_for_only_above_the_last_line_taken(self):
+        self.assertEqual(self.enclosing(["  def f():", "    a", "q", "    b"], 3, 4), ["def f():"])
+
+    def test_the_margin_line_is_found_at_any_distance(self):
+        self.assertEqual(self.enclosing(["class T:", "", "    def a(self):", "        x"], 4, 8),
+                         ["def a(self):", "class T:"])
+
+    def test_a_line_above_something_at_another_indentation_is_not_a_definition_hunk(self):
+        import test_guard
+        hunk = {"line": 1, "minus": [], "plus": ["    X = 1"]}
+        self.assertIsNone(test_guard._definition_below(["class T:", "        if x:", "            y"], hunk, 4))
 
     def test_closing_lines_at_the_margin_leave_the_walk_as_it_was(self):
         lines = ["describe('a', () => {", "  it('x', () => {", "    one()", "  });", "});", "",
