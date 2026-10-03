@@ -214,8 +214,15 @@ class NeedsHumanGuardTests(unittest.TestCase):
             wrote.assert_not_called()
         # A trailing space fails the column lookup before the guard (Design 4), so it is refused
         # as an unknown column with nothing written (Approvals row 5).
-        with self.assertRaises(board.BoardError):
-            self._move("human!help! ", "just a comment")
+        with mock.patch.object(board, "board_meta", return_value=self.META), \
+             mock.patch.object(board, "issue_card") as read, \
+             mock.patch.object(board, "graphql") as wrote, \
+             mock.patch.object(board, "newest_comment") as asked:
+            with self.assertRaisesRegex(board.BoardError, "no column named 'human!help! '"):
+                board.move_card(7, board.DEFAULT_REPO, "human!help! ")
+        asked.assert_not_called()  # refused by resolve_option, before the guard
+        wrote.assert_not_called()
+        read.assert_not_called()
 
     def test_a_move_with_a_stop_marker_goes_through(self):
         code, wrote, _, _, _ = self._move("needs_human", self.STOP)
