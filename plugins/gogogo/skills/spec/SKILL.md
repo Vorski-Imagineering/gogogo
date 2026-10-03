@@ -65,8 +65,10 @@ Every tracker command targets `tracker.issues_repo`. When it differs from
    list and its order in one line before starting. An issue filed during the
    run, such as a split-off, is never added; it goes in the final report
    (rule 8).
-3. **Skip before starting an issue**, and record why: it is closed; it is a
-   pull request; or it is ready already, which means it carries
+3. **Skip before starting an issue**, and record why: it is closed (its
+   `state` is anything but `OPEN`); it is a pull request (`gh issue view <n>
+   --json state,url` answers for one too, and its `url` contains `/pull/`);
+   or it is ready already, which means it carries
    `tracker.ready_marker` (compared ignoring case) **and** its current body
    passes the lint:
    ```bash
@@ -79,8 +81,9 @@ Every tracker command targets `tracker.issues_repo`. When it differs from
    you write*, the question rounds, and Posting steps 0 to 7. Only then does
    the next issue start. Ask about one issue only in each question call, and
    name it in every question (`#<n>: …`).
-5. **Research one issue ahead.** When an issue starts, start background
-   research of the next one in the list, and only that one (see
+5. **Research one issue ahead.** When an issue starts, run rule 3 on the
+   issues after it until one is not skipped, and start background research
+   of that one, and only that one (see
    *Claude-specific*). It is read-only: it reads the issue, its comments and
    the code, then returns its findings with `file:line` and the forks it sees.
    It posts nothing, labels nothing, moves no card and asks no question. Its
@@ -224,8 +227,8 @@ question. All four are always offered:
    (§ *Several issues in one run*, rule 6).
 
 After choice 1 or 2, ask the original question again. After 3, continue the
-round. After 4, stop. A declined menu is choice 4: stop, and do not offer it
-again.
+round. After 4, stop (in a run of several issues, stop that issue only). A
+declined menu is choice 4: stop, and do not offer it again.
 
 Only the user delegates. Never offer "you decide" as your own decision, and
 never read silence or a refusal as delegation.
@@ -489,8 +492,8 @@ Then as the tracker:
 
 9. Is the spec in the issue **body**?
 10. Does the issue carry the ready label, and was the move to the queue
-    offered or skipped for a reason Posting step 8 names? Or did I say which
-    withholding case applies?
+    offered, skipped for a reason Posting step 8 names, or deferred to the end
+    of a run of several issues? Or did I say which withholding case applies?
 
 Any "no" is a rewrite.
 
