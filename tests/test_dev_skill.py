@@ -1,10 +1,12 @@
 #!/usr/bin/env python3
-"""Structure of how /gogogo:dev and /gogogo:auto-dev judge a run green (gogogo#105).
+"""Structure of /gogogo:dev and /gogogo:auto-dev: how a run is judged green
+(gogogo#105) and how the whole issue is read (gogogo#108).
 
 A lane or gate passes on its command's own exit status, with the output saved
-to a file, never on filtered output. These pin the command and the names the
-rule depends on, never its sentences (CLAUDE.md § Tests); whether it behaves
-is a scenario run.
+to a file, never on filtered output. A comment from someone with write access
+counts like the description once §2 folds it in. These pin the commands,
+fields and names the rules depend on, never their sentences (CLAUDE.md §
+Tests); whether it behaves is a scenario run.
 
     python3 -m unittest tests.test_dev_skill
 """
@@ -17,6 +19,8 @@ from pathlib import Path
 SKILLS = Path(__file__).resolve().parents[1] / "plugins" / "gogogo" / "skills"
 DEV = SKILLS / "dev" / "SKILL.md"
 AUTO_DEV = SKILLS / "auto-dev" / "SKILL.md"
+SKILL = DEV
+FOLD = "### Fold in comments the description does not hold yet"
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from test_tech_eval import PROJECT_NAMES  # noqa: E402
@@ -24,6 +28,36 @@ from test_tech_eval import PROJECT_NAMES  # noqa: E402
 
 def section(text, heading):
     return text.split(f"\n## {heading}")[1].split("\n## ")[0]
+
+
+class WholeIssue(unittest.TestCase):
+    def setUp(self):
+        self.text = SKILL.read_text(encoding="utf-8")
+        self.read = section(self.text, "1. ")
+        self.triage = section(self.text, "2. ")
+
+    def fold(self):
+        self.assertIn(FOLD, self.triage)
+        return self.triage.split(FOLD)[1].split("\n### ")[0]
+
+    def test_the_old_rule_is_gone(self):
+        self.assertNotIn("A comment does not count", self.triage)
+
+    def test_the_fold_filters_are_named(self):
+        for name in ("collaborators/", "/permission", "lastEditedAt", "<!-- gogogo:", "**Needs you:**"):
+            self.assertIn(name, self.triage)
+
+    def test_the_fold_is_linted_before_it_is_posted(self):
+        lines = self.fold().splitlines()
+        lint = next((i for i, line in enumerate(lines) if "spec_lint.py" in line), None)
+        edit = next((i for i, line in enumerate(lines) if "gh issue edit" in line), None)
+        self.assertIsNotNone(lint)
+        self.assertIsNotNone(edit)
+        self.assertLess(lint, edit)
+
+    def test_read_fetches_the_comments_and_the_last_edit(self):
+        for name in ("lastEditedAt", "comments(first:100)"):
+            self.assertIn(name, self.read)
 
 
 class ExitStatus(unittest.TestCase):

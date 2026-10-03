@@ -23,6 +23,8 @@ checks that read (not the ones that need a browser or bypass mode), run §1 and
 reason, citing the Approvals row or the missing decision. A card without the
 ready label whose spec passed the lint (§1) is `take (no ready label; spec lint
 passed; the label would be added)`; one that failed is `skip` with §1's reason.
+Per issue, name each comment `/gogogo:dev` §2 would fold in or stop on, with
+its link; triage-only folds nothing.
 Create no branch, move no card, add no label, post nothing, send no message.
 
 ## Before anything: preflight
@@ -137,8 +139,13 @@ python3 "${CLAUDE_PLUGIN_ROOT}/scripts/spec_lint.py" <scratch>/issue-<n>-body.md
 
 ## 2. Triage each issue before touching it
 
-Per `/gogogo:dev` §2. An issue is workable here only if every decision it
-depends on was made by a person and is **in the body**. Skip and record, never
+Per `/gogogo:dev` §2. That includes folding in comments (§2 *Fold in comments
+the description does not hold yet*), after `/gogogo:dev` §1's two reads; an
+issue whose answer sits in such a comment is taken, not skipped. Here a fold
+that stops the issue is a skip: reason `decision`, or `lint` when the folded
+body fails the lint. An issue is workable here only if every
+decision it depends on was made by a person and is **in the body**, once
+folded in. Skip and record, never
 guess, when it has an open product decision, a Hard Stop no Approvals row
 names, or a two-licence change whose apply row is missing (that one is
 buildable: build and test it, then stop that issue before applying).
@@ -161,7 +168,7 @@ apply row is missing, which is built and then stopped (§4), not skipped:
 
    | reason | when |
    |---|---|
-   | `lint` | no ready label, and `spec_lint.py` failed or withheld it (§1) |
+   | `lint` | no ready label, and `spec_lint.py` failed or withheld it (§1); or a body §2 folded comments into failed it |
    | `nospec` | a feature with no analysis pass (`/gogogo:dev` §2) |
    | `decision` | an open product decision not answered in the body |
    | `hard-stop` | a Hard Stop no Approvals row names |
