@@ -1,7 +1,5 @@
 # Independence: which decisions Claude asks about, and which it takes
 
-Status: proposed, not yet built.
-
 `independence` is a repo setting. It says how much Claude decides on its own
 while it specs and builds your issues, and how much it brings to you. It has
 three levels, each named after the colleague Claude then behaves like:
@@ -102,7 +100,7 @@ and a misjudged kind is the mistake a less capable model makes more often. Run
 them on an Opus-class model or better, at medium effort or higher.
 `junior-dev` asks about everything, so it carries no such recommendation.
 
-`/gogogo:setup` says this when someone picks `senior-dev` or `architect`. When
+`/gogogo:setup` says this when it asks which level the repo wants. When
 `/gogogo:spec`, `/gogogo:dev` or `/gogogo:auto-dev` starts at one of those
 levels on a smaller model, it says so in one line and carries on. Effort is
 not visible to a skill, so it is a recommendation only.
