@@ -1,6 +1,6 @@
 ---
 name: spec
-description: Use when turning a tracker issue, or an idea not yet filed as one, into a specification another agent will implement (also a list of issues or a board column, such as "spec these five" or "spec everything in New", specced one at a time), when triaging whether an issue is ready to hand off, or when an agent came back blocked on an issue that looked fully specified.
+description: Use when turning a tracker issue, or an idea not yet filed as one, into a specification another agent will implement (also a list of issues or a board column, such as "spec these five" or "spec everything in New", specced one at a time; with no argument, it offers to spec everything in New), when triaging whether an issue is ready to hand off, or when an agent came back blocked on an issue that looked fully specified.
 ---
 
 # spec
@@ -49,9 +49,39 @@ you write anything, and nothing here repeats them.
 Every tracker command targets `tracker.issues_repo`. When it differs from
 `tracker.code_repo`, pass `--repo <issues_repo>` on every `gh issue` call.
 
+## Given nothing to spec
+
+When the user gives no issue, no idea and no column (`/gogogo:spec` with no
+argument, or words that name none of them):
+
+1. Without `tracker.tool`, ask for an issue number or an idea; the rest of
+   this section does not apply.
+2. Find the column with the word `New`, the way `references/several-issues.md`
+   rule 2 matches words: the column `/gogogo:setup` creates as `⚡️ New`. A
+   non-zero exit from `fields` is said as such, and this section stops. None
+   matches: say the board has no New column and ask for an issue number.
+   Several: rule 2's question names them.
+3. Read it with rule 2's `list` command and apply rule 3's skips to each
+   issue. A non-zero exit is said as such, and this section stops: a failed
+   read is not an empty column.
+4. None left (empty, or every issue skipped): say so, naming each skipped
+   issue and why, and stop.
+5. Otherwise ask one `AskUserQuestion` naming the column, the count and the
+   numbers in the list's order: **spec everything in `<column>` (<k>: #a,
+   #b, …)** or **name an issue instead**. A typed answer naming an issue, idea
+   or column is that request.
+6. *Spec everything*: a board-column run of that column. Read
+   `references/several-issues.md` and start at rule 2 with the column chosen;
+   its list is read again there. *Name an issue* with none given: ask for it
+   in plain text and wait for the reply.
+7. A decline, or no person to ask (the question tool errors, or
+   `claude -p`): stop, post nothing, and say nothing was
+   specced. The four-choice menu of *When the user declines a question* is
+   not used: no spec fork was asked.
+
 ## Several issues in one run
 
-Only when the user gives more than one issue, or a board column. **REQUIRED REFERENCE:** then read `references/several-issues.md` (in this skill's folder) in full before starting the first issue. With one issue, skip it.
+Only when the user gives more than one issue, or a board column, or accepted the offer in *Given nothing to spec*. **REQUIRED REFERENCE:** then read `references/several-issues.md` (in this skill's folder) in full before starting the first issue. With one issue, skip it.
 
 ## The issue body IS these sections, in this order
 
@@ -379,7 +409,8 @@ Listed in one place so an adapter for another agent knows what to replace.
   or wording, its option previews settle it faster than prose.
 - **A declined question**: when the user declines or interrupts it,
   `AskUserQuestion` comes back as a refusal with no answer. In an interactive
-  session that is the decline *When the user declines a question* describes.
+  session that is the decline *When the user declines a question* describes,
+  except for the offer in *Given nothing to spec*, which stops (its step 7).
   A run with no person (`claude -p`) gets the same refusal, which is why that
   subsection shows the menu once and stops when the menu is refused too.
 - **Research one issue ahead** (*Several issues in one run*, rule 5) is an

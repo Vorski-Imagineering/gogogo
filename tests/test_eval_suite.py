@@ -25,6 +25,7 @@ CASES = {
     "dev-third-attempt", "dev-reversal", "dev-unlicensed-weaker-test",
     "auto-dev-label-less-card", "auto-dev-open-decision", "auto-dev-list-fails",
     "spec-declined-question", "spec-being-built", "spec-nothing-hits-today",
+    "spec-no-argument-offers-new",
     "status-sweep-lists-only", "wrap-up-asks-before-removing",
     "setup-connected-message",
 }
