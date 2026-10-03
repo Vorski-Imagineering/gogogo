@@ -234,7 +234,11 @@ What each fix involves:
        `python3 "${CLAUDE_PLUGIN_ROOT}/scripts/notify.py" chat-id`. Show the
        chats it prints; once they say which one is theirs, run
        `python3 "${CLAUDE_PLUGIN_ROOT}/scripts/notify.py" chat-id --save <its id>`.
-    3. Run `python3 "${CLAUDE_PLUGIN_ROOT}/scripts/notify.py" send --text "<repo>: notifications on"`,
+    3. Send the person a message that names this machine, with the hostname from `uname -n`,
+       and where it applies: `<scope>` is `every repo on this machine` when the
+       credentials went in the per-user file, and `<repo>` (the name part of
+       `tracker.code_repo`) when they went in the repo's own file:
+       `python3 "${CLAUDE_PLUGIN_ROOT}/scripts/notify.py" send --text "✅ gogogo is connected on $(uname -n) for <scope>. auto-dev runs there will report here: when a run starts and ends, and when each issue starts, is skipped, merges or needs you."`,
        and re-run the check: the row must be `PASS notify: telegram (by default): bot @… -> …`
        (`PASS notify: telegram: …` when the profile names the transport).
   - `WARN notify: telegram: <reason>`: show the reason. The usual causes are a
