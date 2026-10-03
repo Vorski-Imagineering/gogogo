@@ -325,6 +325,19 @@ class EnclosingFunction(unittest.TestCase):
         self.assertEqual(self.enclosing(["class T:", "    def f():", "", "        x"], 4, 8),
                          ["def f():", "class T:"])
 
+    def test_a_failed_base_read_raises_gits_message(self):
+        import test_guard
+        r = Repo()
+        self.addCleanup(r.close)
+        fork = git(r.repo, "rev-parse", "HEAD").strip()
+        cwd = Path.cwd()
+        self.addCleanup(lambda: __import__("os").chdir(cwd))
+        __import__("os").chdir(r.repo)
+        with self.assertRaises(test_guard.GitError) as raised:
+            test_guard._base_lines(fork, "tests/gone\udcff.py")
+        self.assertIn("tests/gone", str(raised.exception))
+        self.assertIn("fatal", str(raised.exception))
+
     def test_the_walk_goes_on_to_indentation_0(self):
         self.assertEqual(self.enclosing(["a:", " b:", "  c"], 3, 2), ["b:", "a:"])
 
