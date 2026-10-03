@@ -48,3 +48,16 @@ that looks for a sentence breaks on every rewording and guards nothing.
 
 Small commits, pushed to `main` for docs and evidence. Anything under a Hard
 Stop goes through a PR.
+
+The owner may approve a small change under a Hard Stop in the session and ask
+for it on `main` directly. Then say first that it is a Hard Stop and offer the
+issue route. On their go-ahead: check that no unattended run is loading this
+tree, run the suite and commit only when it passes, push to `main`, and say in
+the commit message that it was approved in session.
+
+## Docs
+
+A file under `docs/` is documentation. Open with what the thing does and how to
+use it; put the reasons after, and the sources last, each as a link. Name modes
+and settings by what they do for the user. Do not link the issues that build
+it; a one-line status is fine.

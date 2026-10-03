@@ -35,6 +35,11 @@ class QueueSelection(unittest.TestCase):
     def test_the_lint_verdict_is_named(self):
         self.assertIn("label: apply", self.text)
 
+    def test_branching_looks_for_earlier_work(self):
+        self.assertIn("issue_work.py", section(self.text, "3. Branch from a fresh base"))
+        dev = (SKILL.parents[1] / "dev" / "SKILL.md").read_text(encoding="utf-8")
+        self.assertIn("issue_work.py", section(dev, "4. Change"))
+
     def test_the_skip_marker_matches_the_parser(self):
         triage = section(self.text, "2. Triage each issue before touching it")
         markers = re.findall(r"<!-- gogogo:skip (.*?) -->", triage)
@@ -58,6 +63,35 @@ class QueueSelection(unittest.TestCase):
 
     def test_triage_only_names_the_ready_label(self):
         self.assertIn("ready label", section(self.text, "Triage-only mode"))
+
+    def test_triage_folds_in_comments(self):
+        """gogogo#108: an answer in a comment is folded in, not skipped; a preview folds nothing."""
+        triage = section(self.text, "2. Triage each issue before touching it")
+        self.assertIn("Fold in comments", triage)
+        self.assertIn("folds nothing", section(self.text, "Triage-only mode"))
+
+
+class NeverWaits(unittest.TestCase):
+    """The loop never waits on chat or on a turn's end (gogogo#96)."""
+
+    def setUp(self):
+        self.text = SKILL.read_text(encoding="utf-8")
+
+    def test_the_chat_section_comes_before_selection(self):
+        chat = self.text.find("\n## The loop never waits on chat\n")
+        self.assertNotEqual(chat, -1)
+        self.assertLess(chat, self.text.index("\n## 1. Select the queue"))
+
+    def test_no_run_ends_a_turn_for_background_work(self):
+        step = section(self.text, "4. Change, test, review, verify")
+        self.assertIn("Never end a turn to wait for background work", step)
+        both = [ln for ln in step.splitlines() if "headless" in ln.lower() and "never end a turn" in ln.lower()]
+        self.assertFalse(both, both)
+
+    def test_claude_specific_names_the_poll_and_the_banned_tool(self):
+        claude = self.text.split("\n## Claude-specific")[1]
+        for name in ("timeout 540", "AskUserQuestion"):
+            self.assertIn(name, claude)
 
 
 if __name__ == "__main__":
