@@ -282,6 +282,14 @@ class Enclosing(unittest.TestCase):
         self.assertEqual(len(items), 1, items)
         self.assertTrue(items[0].endswith("def test_b(self):"), items)
 
+    def test_a_hunk_running_into_the_next_method_is_not_licensed_by_the_first(self):
+        self.change(TEST_CLASS.replace("        self.assertEqual(two(), 2)\n\n    def test_b(self):\n"
+                                       "        self.assertEqual(three(), 3)\n        self.assertEqual(four(), 4)\n", ""))
+        out = self.r.run("verify", body=body(cases="1. `tests/test_c.py::test_a` rewritten"),
+                         answers="H1\tweaker\ttest_b is gone\n")
+        self.assertEqual(out.returncode, 1, out.stdout + out.stderr)
+        self.assertIn("H1  NOT LICENSED", out.stdout)
+
     def test_a_hunk_of_blank_lines_has_no_enclosing_line(self):
         self.change(TEST_CLASS.replace("        self.assertEqual(two(), 2)\n\n", "        self.assertEqual(two(), 2)\n"))
         out = self.r.run("list", "--json")
