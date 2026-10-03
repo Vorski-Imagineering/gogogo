@@ -60,8 +60,9 @@ alone are not review records: zero records still exits 1.
 Since gogogo#63 a stop marker may end with `session=<id|unknown>`, and a card
 `/gogogo:auto-dev` skips at triage is handed back with
 `<!-- gogogo:skip v=1 reason=<lint|nospec|decision|hard-stop> session=<id|unknown> -->`.
-The summary counts skips by reason in a `skips:` line (a skip with an unknown
-reason, or one that does not parse, is unreadable), and a `sessions:` block
+The summary counts skips by reason in a `skips:` line (read only on its own
+line, as a stop is; one with an unknown reason, or that does not parse, is
+unreadable), and a `sessions:` block
 rebuilds each run from the review records, stops and skips sharing a session
 id: its first and last time, the distinct issues it took (records and stops),
 the distinct issues it handed to a person (stops), and its skips. `unknown`,
@@ -111,7 +112,7 @@ SPEC_CHECK_COUNTS = ("items", "met", "missing", "differs", "na", "outside", "run
 AUTO_TEST = re.compile(r"<!-- auto-test v1 (.*?) -->")
 STOP = re.compile(r"^[ \t]*<!-- gogogo:stop (.*?) -->[ \t\r]*$", re.M)
 STOPS = ("hard-stop", "decision", "spec", "review", "tests", "mutation", "verify", "gate", "ci")
-SKIP = re.compile(r"<!-- gogogo:skip (.*?) -->")
+SKIP = re.compile(r"^[ \t]*<!-- gogogo:skip (.*?) -->[ \t\r]*$", re.M)
 SKIPS = ("lint", "nospec", "decision", "hard-stop")
 TIME = re.compile(r"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}Z")
 UUID = re.compile(r"[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}")

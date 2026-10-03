@@ -547,6 +547,11 @@ class SkipsAndSessions(StatsBase):
         self.assertEqual(s["skips"], {"lint": 2, "nospec": 0, "decision": 1, "hard-stop": 0})
         self.assertEqual(s["unreadable_skips"], 2)
 
+    def test_a_skip_quoted_in_a_sentence_is_not_read(self):
+        quoted = "the run posts `<!-- gogogo:skip v=1 reason=<lint|nospec> session=<id|unknown> -->` on it"
+        s = self.json_of([(1, v2()), (2, quoted)])["summary"]
+        self.assertEqual((sum(s["skips"].values()), s["unreadable_skips"]), (0, 0))
+
     def test_a_run_counts_its_records_stops_and_skips(self):
         sessions = self.json_of(self.two_runs())["summary"]["sessions"]
         self.assertEqual([x["session"] for x in sessions], [SESSION, OTHER])
