@@ -306,6 +306,10 @@ rebased.
 | `/gogogo:roadmap` | Keeps a roadmap document's status marks in step with the board: re-derives every row's mark from the issue's state and column, fixes the notes the change made stale, and commits the document, opening a PR for it when the roadmap shares the repo. |
 | `/gogogo:auto-test` | Tests each shipped issue on the environment where a person confirms fixes, and records PASS, FAIL or NEEDS HUMAN on the issue. `--triage-only` lists what it would test or skip and changes nothing. |
 
+A session started or resumed in a repo with a profile opens with a one-line
+status from the plugin's own hook (cards in each profile column, open pull
+requests), shown only to the person and never added to Claude's context.
+
 Scripts the skills call, all in `plugins/gogogo/scripts/`:
 
 - `profile_check.py`: reads and validates the repo's profile.
@@ -322,6 +326,7 @@ Scripts the skills call, all in `plugins/gogogo/scripts/`:
 - `require_unattended.sh`: refuses to start the loop unless the session can run without prompts.
 - `setup_check.py`: the read-only check behind `/gogogo:setup`.
 - `roadmap_status.py`: compares a roadmap document's marks with the tracker, and rewrites the ones that disagree with `--write`.
+- `session_status.py`: the plugin's session-start hook; prints that one-line status, or nothing outside a repo with a profile.
 - `record_outcome.py`: renders and records an auto-test outcome: comment first, then labels, close and card, then reads the issue back.
 
 ## One process, many stacks
