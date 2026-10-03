@@ -109,6 +109,12 @@ class TakeWithFrom(unittest.TestCase):
         self.assertIn("--from", lines[moves[0]])
         self.assertLess(moves[0], branch)
 
+    def test_the_look_for_earlier_work_comes_before_the_move(self):
+        lines = self.step.splitlines()
+        look = next(i for i, ln in enumerate(lines) if "issue_work.py" in ln)
+        move = next(i for i, ln in enumerate(lines) if " move <n>" in ln and "--to in_progress" in ln)
+        self.assertLess(look, move)
+
     def test_a_failed_branch_moves_the_card_back_from_in_progress(self):
         self.assertIn("--from in_progress", self.step)
 
