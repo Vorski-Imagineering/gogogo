@@ -107,6 +107,11 @@ reporter = "none"
   3 runs each, every answer read). Then comment on the issue, remove the ready
   label, close it, and run `tracker.py tidy --apply`: the board's own
   close→Done workflow is off.
+- **docs in step**: a change to a skill's behaviour, a script, or a profile
+  setting re-reads `README.md` and `docs/git-process.md`, and corrects in the
+  same PR any sentence the change makes false. `tests/test_docs_in_step.py`
+  catches a script or setting the docs name that no longer exists; only this
+  re-read catches a wrong claim about behaviour.
 
 ## superpowers boundary
 

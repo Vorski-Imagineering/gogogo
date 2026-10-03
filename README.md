@@ -69,6 +69,9 @@ repo first ([Adopting it in a repo](#adopting-it-in-a-repo), step 1).
    The `-n` name is what `/resume` and the terminal title show for the run.
    Telegram messages when it starts, changes state and closes are optional:
    `/gogogo:setup` sets them up, and a run without them works the same.
+   Before you start it, log a browser in to the environment where the agent
+   checks fixes before merging: the run checks this first and stops at a login
+   page rather than skip verification.
    It takes each issue in `Dev Ready` that carries the ready label, or whose
    spec passes the linter (and then labels it), one at a time: branch, build, test,
    review, verify, merge, move the card, next. An issue it cannot finish alone
@@ -107,7 +110,8 @@ What we have not found in one place, and what gogogo is mostly about:
 - an owner's decisions recorded in the issue, licensing the risky changes, and
   a list of Hard Stops the agent halts on when a decision is missing;
 - "done" meaning run on a real environment, with the card moved only as far as
-  the code has really got, and a person moving it to Done;
+  the code has really got, and Done reached only when a person confirms the
+  fix, or a `/gogogo:auto-test` PASS does where the repo sends PASS to Done;
 - one process across repos on different stacks, with what differs kept in one
   profile file per repo.
 
@@ -192,7 +196,10 @@ commands, the environments, the Hard Stop rules) lives in one file per repo,
 3. **Verify.** "Done" means the path was run on real data in the pre-merge
    environment. A green test suite alone only counts as "written".
 4. **Hand back.** A comment in the reporter's words, and the card moves only as
-   far as the code has actually got. Never to Done: a human confirms that.
+   far as the code has actually got. No skill that writes code moves it to Done. A person
+   confirms the fix, or, where the repo runs `/gogogo:auto-test`, a PASS there
+   moves the card to the profile's `auto_test.pass_column` (Done, in some
+   repos) and closes the issue when `auto_test.pass_closes` is true.
 
 **What makes it safe to leave running:**
 
@@ -206,8 +213,10 @@ commands, the environments, the Hard Stop rules) lives in one file per repo,
 - **Every card move is read back**, and every merge is checked against the base
   branch before anyone is told it landed.
 - **It gives up properly.** At most three attempts per issue, each with a
-  different theory. Then the issue goes back to the queue with a note, and the
-  loop moves on.
+  different theory. Then the attempts are committed to the issue's branch,
+  pushed and left unmerged, and the card goes to the `Human!Help!` column with
+  what each attempt ruled out. No run takes it from there until a person moves
+  it on; the loop goes on to the next issue.
 
 **When is a review enough?** The review loop is where an unattended run spends
 most of its time, and it does not always stop: our last four code reviews took
@@ -263,6 +272,7 @@ Scripts the skills call, all in `plugins/gogogo/scripts/`:
 - `tracker.py`: lists and moves cards on a GitHub Project board, by column name, with read-back.
 - `verify_merged.py`: confirms a PR's merge is really on the base branch.
 - `stage_sync.py`: writes the `Ships-issue` link at merge, and moves cards to a stage when a tag ships their commits (run by a repo's CI).
+- `release.py`: numbers a production release, cuts its annotated `deploy-<build>` tag after the deploy, and prints the notes listing the issues it shipped.
 - `stranded_work.py`: finds branches holding work no open issue or open pull request points to, and says what became of each branch's pull request.
 - `notify.py`: sends a run's messages by the profile's `notify` (Telegram today); off, or no credentials on the machine, sends nothing.
 - `review_stats.py`: reads back the review record on each issue and sums them up: rounds, why findings were applied or declined, how each review ended and what became of the issue.
@@ -332,8 +342,9 @@ queue and changes nothing.
 
 **4. Start small**, as in [Start here](#start-here): one issue attended with
 `/gogogo:dev`, then the queue with `/gogogo:auto-dev`. The loop refuses to
-start in a session that would stop for permission prompts. Give it a checkout
-of its own, so it never shares a working tree with you.
+start in a session that would stop for permission prompts, or without a
+browser logged in to the pre-merge environment. Give it a checkout of its own,
+so it never shares a working tree with you.
 
 **Keeping it current.** `autoUpdate` refreshes the plugin when an interactive
 session starts. To update by hand:
