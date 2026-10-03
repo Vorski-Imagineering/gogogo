@@ -24,7 +24,7 @@ at `6dd73fc` and against a Claude Code 2.1.287 transcript.
 | **B** | board item history | when a card entered and left each column | not confirmed: the shared `tracker.py` reads current columns only; whether GitHub exposes column-change history for a Project item has to be checked before relying on it |
 | **X** | Claude Code session transcripts, `~/.claude/projects/<folder>/<session>.jsonl` on the machine that ran the session | per line: `sessionId`, `timestamp`, `gitBranch`, `isSidechain`; per model reply: `usage` (`input_tokens`, `output_tokens`, `cache_read_input_tokens`, `cache_creation_input_tokens`); `cost-state` lines with `totalCostUSD` | **30 days by default**: Claude Code deletes session data older than `cleanupPeriodDays` at startup ([costs](https://code.claude.com/docs/en/costs), read 2026-10-02) |
 | **O** | Claude Code OpenTelemetry, when enabled | `claude_code.token.usage`, `claude_code.cost.usage`, `claude_code.active_time.total`, `claude_code.commit.count`, `claude_code.pull_request.count`, each with `session.id`; custom labels through `OTEL_RESOURCE_ATTRIBUTES` ([monitoring](https://code.claude.com/docs/en/monitoring-usage), read 2026-10-02) | as long as the collector keeps it |
-| **R** | the run report and between-issues log of `/gogogo:auto-dev` (`skills/auto-dev/SKILL.md:313-356`), and notify messages | issues taken, skipped and why, stops, merges per run | **only in the session**: nothing writes them to a file or the tracker (notify messages go to a chat, when on) |
+| **R** | the run report and between-issues log of `/gogogo:auto-dev` (`skills/auto-dev/SKILL.md:313-356`), and notify messages | issues taken, skipped and why, stops, merges per run | the narrative **only in the session**; since #63 each triage skip is a `gogogo:skip` marker on its issue, and a run is the set of markers sharing a session id (C) |
 
 ## Who may see what
 
@@ -49,9 +49,9 @@ session was about. In order of preference:
    as long as they are kept.
 2. **The session name** given with `-n` at launch
    (`skills/auto-dev/SKILL.md:387-392`) ties a session to a run.
-3. **A session id in the per-issue record** (recording to add): the review
-   record names the session that produced the change, so a transcript can be
-   found from the issue without guessing.
+3. **A session id in the per-issue record** (since #62): the review record's
+   `session=` names the session that produced the change, so a transcript can
+   be found from the issue without guessing.
 
 `OTEL_RESOURCE_ATTRIBUTES` is set once per process, so it can label a run but
 not the issues inside one; the branch is the per-issue key.
@@ -65,16 +65,16 @@ not the issues inside one; the branch is the per-issue key.
 
 | Measure | Question | Definition | Unit | Source | History | Public or local | Recording that would close the gap |
 |---|---|---|---|---|---|---|---|
-| **Q1 Escaped defects** | How often does a shipped issue cause a later bug? | shipped issues later named as the cause of a new issue ÷ shipped issues, per period | ratio, with n | I, C | **no**: nothing records "caused by"; a person reading old bugs can tag some by hand | public | a `Caused by: #<n>` line in a new issue's spec `## Context`, written by `/gogogo:spec` when recon finds the commit that introduced the bug |
+| **Q1 Escaped defects** | How often does a shipped issue cause a later bug? | shipped issues later named as the cause of a new issue ÷ shipped issues, per period | ratio, with n | I, C | **partly**: since #51, the fixing issue's review record names the issue that introduced the bug; older bugs only by a person tagging them | public | `escaped_from=` and `escaped_as=` in the fixing issue's review record (`/gogogo:dev` §7, #51), reported by `scripts/review_stats.py` |
 | **Q2 First-pass confirmation** | Does the fix work when a person (or auto-test) checks it? | issues whose first auto-test verdict is PASS ÷ issues with at least one verdict | ratio, with n | C (auto-test comments), I (labels) | **yes** where auto-test ran; **no** elsewhere | public | none where auto-test runs; elsewhere, the person's confirmation (closing as completed) is the only signal |
 | **Q3 Reverts and reopens** | How often is shipped work taken back? | (`Revert` commits of a `Ships-issue` commit + issues reopened after a close) ÷ shipped issues | ratio, with n | G, I | **yes** | public | none |
-| **Q4 Needs-you rate, by reason** | How often does the loop stop for a person, and why? | issues handed to `needs_human` ÷ issues taken, split by reason: Hard Stop or decision, review stop, verification abandoned, gate or CI failure, other | ratio per reason, with n | C (`**Needs you:**` lines), I | **partly**: the line's wording dates from the shared plugin; earlier local skills wrote other forms | public | a reason key in the hand-back, e.g. `<!-- gogogo:stop reason=<hard-stop, review, verify, gate or ci> -->` |
+| **Q4 Needs-you rate, by reason** | How often does the loop stop for a person, and why? | issues handed to `needs_human` ÷ issues taken, split by reason: Hard Stop or decision, review stop, verification abandoned, gate or CI failure, other | ratio per reason, with n | C (`**Needs you:**` lines), I | **partly**: the line's wording dates from the shared plugin; earlier local skills wrote other forms | public | the `<!-- gogogo:stop v=1 reason=… -->` marker under the Needs-you line (`/gogogo:dev` §8, since #62), counted by `scripts/review_stats.py` |
 
 ### Quality: are the specs good enough?
 
 | Measure | Question | Definition | Unit | Source | History | Public or local | Recording that would close the gap |
 |---|---|---|---|---|---|---|---|
-| **Q5 Triage skips** | How often does a queued issue turn out not to be workable? | issues skipped at triage ÷ issues read from the queue, per run | ratio, with n | R | **no**: the run report is not kept | public | the run report written to a file in the repo, or as a comment on a run issue, at §9 |
+| **Q5 Triage skips** | How often does a queued issue turn out not to be workable? | issues skipped at triage ÷ issues read from the queue, per run | ratio, with n | C | **no** before #63: the run report was not kept | public | the `gogogo:skip` marker on the skipped issue, read by `review_stats.py` |
 | **Q6 Spec edits after ready** | How often does a spec change after it was called ready? | specced issues whose body was edited after the ready label was added ÷ specced issues | ratio, with n | I (`labeled` time), issue edit history | **partly**: edit history is readable through GitHub's GraphQL `userContentEdits`, not REST | public | none |
 
 ### Quality: is the review worth it?
@@ -82,7 +82,7 @@ not the issues inside one; the branch is the per-issue key.
 | Measure | Question | Definition | Unit | Source | History | Public or local | Recording that would close the gap |
 |---|---|---|---|---|---|---|---|
 | **Q7 Review rounds and yield** | How long does review take to settle, and how much does it change? | per issue: `rounds`; sum of `applied`; `applied` in rounds after the first (fixes of fixes); `stopped`. Median and spread per period | rounds, findings | C (review record) | **partly**: since the record format (#17); earlier issues have none | public | since #51, the record says why each finding was applied or declined, and `scripts/review_stats.py` reads it back |
-| **Q8 Review precision** | How many applied findings were real defects? | applied findings later judged real ÷ applied findings | ratio, with n | C | **no**: needs a person's judgement per finding, as was done once for #26 | public | `scripts/review_stats.py` (#51) tracing a later bug to the review that passed it, once Q1's `Caused by` link exists |
+| **Q8 Review precision** | How many applied findings were real defects? | applied findings later judged real ÷ applied findings | ratio, with n | C | **no**: needs a person's judgement per finding, as was done once for #26 | public | `scripts/review_stats.py` (#51) tracing a later bug to the review that passed it, from `escaped_from` (Q1) |
 
 ### Speed
 
@@ -97,15 +97,15 @@ not the issues inside one; the branch is the per-issue key.
 
 | Measure | Question | Definition | Unit | Source | History | Public or local | Recording that would close the gap |
 |---|---|---|---|---|---|---|---|
-| **P1 Time per phase** | Where does an issue's time go? | per issue, wall time between: branch created, first commit, review start, review end, verification end, merge verified | minutes | X (first and last line on the issue's branch; skill and tool calls in between), G | **partly**: start and end from X for the last 30 days; the phases inside need markers | public (times only) | times in the review record: `t_branch=`, `t_review=`, `t_verified=`, `t_merged=` |
-| **P2 Run size and length** | How much does one unattended run get through? | per run: issues taken, merged, sent to a person, skipped; wall time | count, hours | R, X | **partly**: X for the last 30 days, by session | public | the run report kept (as Q5) |
+| **P1 Time per phase** | Where does an issue's time go? | per issue, wall time between: branch created, first commit, review start, review end, verification end, merge verified | minutes | X (first and last line on the issue's branch; skill and tool calls in between), G | **partly**: start and end from X for the last 30 days; the phases inside need markers | public (times only) | `t_branch=` and `t_verified=` in the review record (since #62); the review end is the report's posted time, and the merge comes from G and P |
+| **P2 Run size and length** | How much does one unattended run get through? | per run: issues taken, merged, sent to a person, skipped; wall time | count, hours | C, X | **partly**: X for the last 30 days, by session | public | the `sessions:` section of `review_stats.py`, from markers sharing a session id |
 | **P3 Owner wait** | How long does work wait for the owner? | (a) time a card spends in `needs_human`; (b) time from entering the `verify.human` stage's column to closed as completed | hours | B, I | **partly**: (b) from the close event if the stage entry is known; (a) needs board history | public | a hand-back comment already marks entry to `needs_human`; a comment or event when the owner moves it on would close (a) |
 
 ### Token efficiency
 
 | Measure | Question | Definition | Unit | Source | History | Public or local | Recording that would close the gap |
 |---|---|---|---|---|---|---|---|
-| **K1 Tokens per merged issue** | What does a shipped issue cost? | per merged issue: sum of `usage` over transcript lines on its `fix/<n>-…` branch, main session and side chains; median per period. Report input, output, cache read, cache write separately | tokens | X | **partly**: only sessions still on disk (30 days by default) | **local** | a session id in the review record (see *Linking*); OpenTelemetry for a durable copy |
+| **K1 Tokens per merged issue** | What does a shipped issue cost? | per merged issue: sum of `usage` over transcript lines on its `fix/<n>-…` branch, main session and side chains; median per period. Report input, output, cache read, cache write separately | tokens | X | **partly**: only sessions still on disk (30 days by default) | **local** | `session=` in the review record (since #62; see *Linking*); OpenTelemetry for a durable copy |
 | **K2 Cost per merged issue** | The same, in money | `totalCostUSD` growth across the issue's lines, or K1 at list price | USD | X | **partly**, as K1 | **local** | as K1 |
 | **K3 Tokens spent on work that did not ship** | What do stops and skips cost? | K1 summed over issues sent to `needs_human` or abandoned, plus run lines on the base branch, ÷ all tokens in the run | ratio | X, C | **partly**, as K1 | **local** | as K1 |
 | **K4 Review's share** | How much of an issue's cost is review? | tokens in `/code-review` side chains and their correction turns ÷ K1, per issue | ratio | X (`isSidechain`, the skill call) | **partly**, as K1 | **local** | phase markers (P1) |
@@ -123,9 +123,9 @@ Compute in this order. Each line says what it needs from the adopting repo.
 7. **Q7 Review rounds and yield**: review records.
 8. **Q6 Spec edits after ready**: edit history, through GraphQL.
 9. **K1-K4**: transcripts on the owner's machine, for the days they cover; say which days.
-10. **P1 Time per phase** (start and end only) and **P2 Run size**: transcripts.
+10. **P1 Time per phase** (start and end only) and **P2 Run size**: transcripts, and for P2 since #63 the `sessions:` section of `review_stats.py` (C).
 
-Report as *no data*, with the reason, never as zero: Q1, Q5, Q8, the inside of
+Report as *no data*, with the reason, never as zero: Q1, Q5 (before #63), Q8, the inside of
 P1, and P3 (a) unless board history turns out to be readable.
 
 Every number is given per period with its sample size. A period with a few

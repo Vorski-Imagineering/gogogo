@@ -52,8 +52,10 @@ repo first ([Adopting it in a repo](#adopting-it-in-a-repo), step 1).
    label). It asks before writing anything.
 2. **`/gogogo:spec`**: describe your idea, or give it an existing issue. It
    asks you questions until every decision is made, writes the spec into the
-   issue (filing one if there isn't one yet), marks it ready and offers to put
-   it in the `Dev Ready` column.
+   issue (filing one if there isn't one yet), marks it ready and moves its card
+   to the `Dev Ready` column (not when someone is already working on it). Several issues, or a whole column, go in one
+   run, one issue at a time: `/gogogo:spec #12 #14` or
+   `/gogogo:spec everything in New`.
 3. **`/gogogo:dev <issue>`**: builds that one issue end to end. It finds the
    cause, changes the code, reviews it, verifies it on a real environment,
    reports on the issue and moves its card. Watch what it does.
@@ -79,6 +81,45 @@ repo first ([Adopting it in a repo](#adopting-it-in-a-repo), step 1).
    with a note saying what you need to do; one still missing a decision is
    skipped and named in the run's report. Preview the run first with
    `/gogogo:auto-dev --triage-only`, which changes nothing.
+
+### auto-dev under `/goal`
+
+[`/goal`](https://code.claude.com/docs/en/goal) keeps a session taking turns
+until a small model, reading only the transcript, judges a condition met or
+impossible. auto-dev already works the whole queue in one run, so a goal adds
+little to a run that ends with its close-run report. What it adds is
+persistence: a goal retries a turn that failed on a dropped connection, and
+after a usage limit it pauses, then carries on if the session waits for the
+reset.
+
+The risk is a goal that names an outcome instead of the process. When auto-dev
+refuses to start or stops for you, the evaluator only sees "not met yet" and
+tells the next turn to keep going, so the agent works around the skill: it
+builds issues with its own subagents, skips review, verification and merge,
+and parks cards in `Human!Help!` with no note
+([#84](https://github.com/Vorski-Imagineering/gogogo/issues/84); the shared
+`tracker.py` now refuses that move unless the issue's newest comment says why,
+but a goal can still route around the skill in other ways).
+
+Use a goal when all of these hold:
+
+- the session runs in `bypassPermissions`, as above. The `/goal` docs suggest
+  auto mode, but auto mode refuses the merge;
+- `/gogogo:auto-dev --triage-only` takes the issues you expect;
+- the condition names the skill, and makes a refusal or a stop the end:
+  ```text
+  /goal /gogogo:auto-dev has finished and printed its close-run report. Work issues only through /gogogo:auto-dev. If it refuses to start, that ends the goal: report why and change nothing to get round it.
+  ```
+
+Don't use one when:
+
+- auto-dev or dev refuses to start. Fix that first, with
+  `/gogogo:setup` and you there;
+- the condition is open-ended ("get done what we can") or a board state ("Dev
+  Ready is empty"): moving cards meets it without doing the work;
+- the queue still needs decisions. `/gogogo:spec` needs you, and a goal
+  pushes past questions;
+- you are working the same issues in another session.
 
 ## Who it is for
 
@@ -128,7 +169,8 @@ shape. The full write-up, with sources and ranked findings, is
 **What follows current practice:**
 
 - **The git and pull request mechanics.** One short-lived branch per issue,
-  cut from a fresh base, squash-merged and deleted. A new test must be seen
+  cut from a fresh base (or the issue's earlier branch, brought up to date),
+  squash-merged and deleted. A new test must be seen
   failing before it is trusted. CI is judged check by check, and "no checks
   ran" counts as a failure. Every merge is read back from the base branch
   before anyone is told it landed.
@@ -192,7 +234,8 @@ commands, the environments, the Hard Stop rules) lives in one file per repo,
    against the spec, and every gap is built, matched or declared. Then it runs `/code-review`,
    applies a finding only when there is evidence for it and gives each one
    three attempts, and watches the new test fail before trusting that it
-   passes.
+   passes. Where the repo's profile has a mutation command, it mutates the
+   changed lines and kills or accounts for every mutant the tests miss.
 3. **Verify.** "Done" means the path was run on real data in the pre-merge
    environment. A green test suite alone only counts as "written".
 4. **Hand back.** A comment in the reporter's words, and the card moves only as
@@ -234,7 +277,9 @@ the review records back.
 
 **Branches and pull requests.** Every issue gets its own branch,
 `fix/<issue-number>-<slug>`, cut from a freshly pulled base: a stale base would silently undo the
-previous merge, and the issue number ties the branch back to the tracker. The loop takes one issue at a time: branch, build, review, verify,
+previous merge, and the issue number ties the branch back to the tracker. An
+issue that already has a branch or an open pull request continues on it
+instead, merged up to date with the base (`issue_work.py` finds it). The loop takes one issue at a time: branch, build, review, verify,
 then merge by the repo's chosen strategy. That is a pull request per issue
 squashed into the base (`pr-squash`), pull requests into a dated run branch
 that reaches the main line as one final PR (`run-branch-pr`), or the repo's
@@ -261,8 +306,12 @@ rebased.
 | `/gogogo:wrap-up` | Before you close a session: finds anything uncommitted, unpushed, stranded or still running, saves what the session learned, and says plainly whether it is safe to close. |
 | `/gogogo:tech-eval` | Evaluates a library, service or tool against the repo before anyone adopts it, and records the verdict in the repo's decisions register. |
 | `/gogogo:status` | Where things stand in this repo: cards per board column, what is queued, in progress and released, open pull requests, and branches and worktrees holding work. Reads only; gives no verdicts. |
-| `/gogogo:roadmap` | Keeps a roadmap document's status marks in step with the board: re-derives every row's mark from the issue's state and column, fixes the notes the change made stale, and commits the document. |
+| `/gogogo:roadmap` | Keeps a roadmap document's status marks in step with the board: re-derives every row's mark from the issue's state and column, fixes the notes the change made stale, and commits the document, opening a PR for it when the roadmap shares the repo. |
 | `/gogogo:auto-test` | Tests each shipped issue on the environment where a person confirms fixes, and records PASS, FAIL or NEEDS HUMAN on the issue. `--triage-only` lists what it would test or skip and changes nothing. |
+
+A session started or resumed in a repo with a profile opens with a one-line
+status from the plugin's own hook (cards in each profile column, open pull
+requests), shown only to the person and never added to Claude's context.
 
 Scripts the skills call, all in `plugins/gogogo/scripts/`:
 
@@ -270,16 +319,18 @@ Scripts the skills call, all in `plugins/gogogo/scripts/`:
 - `spec_lint.py`: checks a spec's layout, approvals and hard-stop verdict.
 - `test_guard.py`: lists the test hunks a change touched and checks a reader's same, stronger or weaker verdict on each against the spec.
 - `spec_check.py`: lists a spec's items and checks that a reader answered every one against the change.
-- `tracker.py`: lists and moves cards on a GitHub Project board, by column name, with read-back.
+- `tracker.py`: lists and moves cards on a GitHub Project board, by column name, with read-back, and refuses a move to the needs-a-person column unless the issue's newest comment says why.
 - `verify_merged.py`: confirms a PR's merge is really on the base branch.
 - `stage_sync.py`: writes the `Ships-issue` link at merge, and moves cards to a stage when a tag ships their commits (run by a repo's CI).
 - `release.py`: numbers a production release, cuts its annotated `deploy-<build>` tag after the deploy, and prints the notes listing the issues it shipped.
-- `stranded_work.py`: finds branches holding work no open issue or open pull request points to, and says what became of each branch's pull request.
-- `notify.py`: sends a run's messages by the profile's `notify` (Telegram today); off, or no credentials on the machine, sends nothing.
-- `review_stats.py`: reads back the review record on each issue and sums them up: rounds, why findings were applied or declined, how each review ended and what became of the issue.
+- `stranded_work.py`: finds local and `origin` branches holding work that nothing accounts for (no open issue, or an open issue with no open pull request and no stop marker naming the branch), and says what became of each branch's pull request.
+- `issue_work.py`: finds an issue's earlier work (open pull requests that reference it, branches named for it, the branch its stop marker names), so dev and auto-dev continue on it rather than start again.
+- `notify.py`: sends a run's messages by the profile's `notify` (Telegram today). With no `notify` line, messages are on whenever the machine has bot credentials (per user, or in the repo's own git-ignored `.claude/gogogo/notify.env`); `notify = "none"` turns a repo off. Off, or no credentials on the machine, sends nothing.
+- `review_stats.py`: reads back the review record on each issue and sums them up: rounds, why findings were applied or declined, how each review ended and what became of the issue, plus phase times, session ids, stops by reason, triage skips, and each session's issues taken, handed back and skipped.
 - `require_unattended.sh`: refuses to start the loop unless the session can run without prompts.
 - `setup_check.py`: the read-only check behind `/gogogo:setup`.
 - `roadmap_status.py`: compares a roadmap document's marks with the tracker, and rewrites the ones that disagree with `--write`.
+- `session_status.py`: the plugin's session-start hook; prints that one-line status, or nothing outside a repo with a profile.
 - `record_outcome.py`: renders and records an auto-test outcome: comment first, then labels, close and card, then reads the issue back.
 
 ## One process, many stacks

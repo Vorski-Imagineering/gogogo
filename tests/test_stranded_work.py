@@ -164,6 +164,24 @@ class StrandedWorkTest(Repos):
     def test_branch_pushed_under_another_name_is_not_reported(self):
         self.branch_with("renamed", 1)
         self.git("push", "-q", "origin", "renamed:other-name")
+        code, lines = self.stranded()
+        # The local branch is a copy; the remote branch it was pushed as is reported on its own (#86).
+        self.assertEqual(code, 1)
+        self.assertEqual([line.split(":")[0] for line in lines], ["other-name"])
+
+    def test_a_remote_only_branch_is_reported(self):
+        self.branch_with("gone-local", 1)
+        self.git("push", "-q", "origin", "gone-local")
+        self.git("branch", "-q", "-D", "gone-local")
+        code, lines = self.stranded()
+        self.assertEqual(code, 1)
+        self.assertEqual(lines, ["gone-local: 1 commit(s) ahead of main, no issue number in the name"])
+
+    def test_the_base_compared_is_origins(self):
+        self.branch_with("merged", 1)
+        self.git("push", "-q", "origin", "merged:main")
+        self.git("reset", "-q", "--hard", "HEAD")  # local main stays behind origin/main
+        self.git("worktree", "add", "-q", str(self.tmp / "wt"), "merged")
         self.assertEqual(self.stranded(), (0, []))
 
     def test_only_the_unpushed_branch_is_listed(self):
@@ -190,6 +208,9 @@ elif args[:2] == ["repo", "view"]:
     answer = fixture.get("repo", {}).get(args[2], {"isArchived": False})
 elif args[:2] == ["issue", "view"]:
     answer = fixture.get("issue", {}).get(args[2], {"state": "CLOSED"})
+    if answer == "notjson":
+        print("<html>")
+        sys.exit(0)
 else:
     answer = "fail"
 if answer == "fail":
@@ -328,10 +349,95 @@ class PullRequests(Repos):
         self.run_with({"pr": {"o/code claimed": [pr(5, "OPEN", self.tip("claimed"))]}})
         self.assertEqual(self.log.read_text(), "")
 
-    def test_an_open_issue_claims_before_any_pr_lookup(self):
+    def test_a_remote_only_branch_of_a_closed_issue_is_reported(self):
         self.branch_with("fix/12-x", 1)
-        self.assertEqual(self.run_with({"issue": {"12": {"state": "OPEN"}}}), (0, []))
-        self.assertNotIn("pr list", self.log.read_text())
+        self.git("push", "-q", "origin", "fix/12-x")
+        self.git("branch", "-q", "-D", "fix/12-x")
+        code, lines = self.run_with({"issue": {"12": {"state": "CLOSED"}}})
+        self.assertEqual(code, 1)
+        self.assertEqual(len(lines), 1, lines)
+        self.assertTrue(lines[0].startswith("fix/12-x: 1 commit(s) ahead of main; issue #12 is not open"), lines[0])
+
+    def test_an_open_issue_with_no_pr_and_no_stop_marker_is_reported(self):
+        self.branch_with("fix/12-x", 1)
+        code, lines = self.run_with({"issue": {"12": {"state": "OPEN", "comments": []}}})
+        self.assertEqual(code, 1)
+        self.assertEqual(len(lines), 1, lines)
+        self.assertTrue(lines[0].startswith(
+            "fix/12-x: 1 commit(s) ahead of main; issue #12 is open, but no open PR and no stop marker"), lines[0])
+
+    def test_an_open_issue_with_an_open_pr_claims(self):
+        self.branch_with("fix/12-x", 1)
+        self.git("push", "-q", "origin", "fix/12-x")
+        self.git("worktree", "add", "-q", str(self.tmp / "wt"), "fix/12-x")  # not a mere copy
+        fixture = {"issue": {"12": {"state": "OPEN", "comments": []}},
+                   "pr": {"o/code fix/12-x": [pr(5, "OPEN", self.tip("fix/12-x"))]}}
+        self.assertEqual(self.run_with(fixture), (0, []))
+
+    def test_an_open_issue_with_an_open_pr_and_unpushed_work_does_not_say_no_pr(self):
+        self.branch_with("fix/12-x", 1)
+        self.git("push", "-q", "origin", "fix/12-x")
+        pushed = self.tip("fix/12-x")
+        self.git("checkout", "-q", "fix/12-x")
+        self.commit("local")
+        self.git("checkout", "-q", "main")
+        fixture = {"issue": {"12": {"state": "OPEN", "comments": []}},
+                   "pr": {"o/code fix/12-x": [pr(5, "OPEN", pushed)]}}
+        code, lines = self.run_with(fixture)
+        self.assertEqual(code, 1)
+        self.assertNotIn("no open PR", lines[0])
+        self.assertIn("issue #12 is open; PR #5 open, but 1 commit(s) are on no remote", lines[0])
+
+    def test_an_open_issue_whose_pr_lookup_failed_does_not_say_no_pr(self):
+        self.branch_with("fix/12-x", 1)
+        code, lines = self.run_with({"issue": {"12": {"state": "OPEN", "comments": []}},
+                                     "pr": {"o/code fix/12-x": "fail"}})
+        self.assertEqual(code, 1)
+        self.assertNotIn("no open PR", lines[0])
+        self.assertIn("pull requests in o/code not checked: boom", lines[0])
+
+    def test_an_open_issue_with_an_open_pr_in_another_remote_does_not_say_no_pr(self):
+        self.git("remote", "add", "old", "git@github.com:o/old.git")
+        self.branch_with("fix/12-x", 1)
+        fixture = {"issue": {"12": {"state": "OPEN", "comments": []}},
+                   "pr": {"o/old fix/12-x": [pr(5, "OPEN", self.tip("fix/12-x"), "o/old")]}}
+        code, lines = self.run_with(fixture)
+        self.assertEqual(code, 1)
+        self.assertNotIn("no open PR", lines[0])
+        self.assertIn("issue #12 is open; PR #5 open in o/old", lines[0])
+
+    def test_the_issue_is_read_with_its_comments(self):
+        self.branch_with("fix/12-x", 1)
+        self.run_with({"issue": {"12": {"state": "OPEN", "comments": []}}})
+        self.assertIn("issue view 12 --repo o/code --json state,comments", self.log.read_text())
+
+    def test_an_unreadable_issue_answer_is_not_open(self):
+        self.branch_with("fix/12-x", 1)
+        code, lines = self.run_with({"issue": {"12": "notjson"}})
+        self.assertEqual(code, 1)
+        self.assertIn("issue #12 is not open", lines[0])
+
+    def test_a_branch_claimed_by_a_stop_marker_does_not_end_the_list(self):
+        self.branch_with("fix/12-x", 1)
+        self.branch_with("zz-later", 1)
+        comment = "**Needs you:** https://github.com/o/code/tree/fix/12-x\n<!-- gogogo:stop v=1 reason=review -->"
+        code, lines = self.run_with({"issue": {"12": {"state": "OPEN", "comments": [{"body": comment}]}}})
+        self.assertEqual([line.split(":")[0] for line in lines], ["zz-later"])
+
+    def test_origin_head_is_not_a_branch(self):
+        self.branch_with("feature", 1)
+        self.git("push", "-q", "origin", "feature")
+        self.git("branch", "-q", "-D", "feature")
+        self.git("remote", "set-head", "origin", "feature")
+        code, lines = self.run_with({})
+        self.assertEqual([line.split(":")[0] for line in lines], ["feature"])
+
+    def test_an_open_issue_whose_stop_marker_names_the_branch_claims(self):
+        self.branch_with("fix/12-x", 1)
+        comment = ("**Needs you:** read [the branch](https://github.com/o/code/tree/fix/12-x).\n"
+                   "<!-- gogogo:stop v=1 reason=review -->")
+        fixture = {"issue": {"12": {"state": "OPEN", "comments": [{"body": "x"}, {"body": comment}]}}}
+        self.assertEqual(self.run_with(fixture), (0, []))
 
 
 def load_script():
@@ -383,6 +489,23 @@ class BranchNumbers(Repos):
     def test_fix_n_slug_still_reads_as_numbered(self):
         self.branch_with("fix/23-thing", 1)
         self.assertEqual(self.stranded(), (0, []))
+
+    def test_a_numbered_branch_with_no_tracker_does_not_end_the_list(self):
+        self.branch_with("fix/23-thing", 1)
+        self.branch_with("zz-later", 1)
+        code, lines = self.stranded()
+        self.assertEqual([line.split(":")[0] for line in lines], ["zz-later"])
+
+    def test_issue_open_keeps_its_answers(self):
+        module = load_script()
+        self.assertIsNone(module.issue_open(None, "1"))
+        for answer, want in (({"state": "OPEN"}, True), ({"state": "CLOSED"}, False), (False, False)):
+            module.issue_view = lambda repo, number, answer=answer: answer
+            self.assertIs(module.issue_open("o/r", "1"), want)
+
+    def test_a_tree_link_keeps_a_trailing_x(self):
+        branches, _, _ = load_script().stop_links("see https://github.com/o/r/tree/fix/12-AX.")
+        self.assertEqual(branches, ["fix/12-AX"])
 
 
 if __name__ == "__main__":

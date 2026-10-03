@@ -1,6 +1,8 @@
 import io
 import json
 import os
+import re
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -149,6 +151,39 @@ class ProfileSkills(unittest.TestCase):
         rows = [r for r in self.rows(settings, sections) if r["check"] == "profile for /gogogo:auto-test"]
         self.assertEqual([r["level"] for r in rows], ["FAIL"])
         self.assertIn("auto_test.fail_label", rows[0]["detail"])
+
+
+class ColumnCheck(unittest.TestCase):
+    """The board-columns row reads the profile with its defaults filled in (gogogo#87)."""
+
+    def test_a_profile_without_needs_human_needs_no_extra_column(self):
+        import tracker
+        from test_profile_check import NO_NEEDS_HUMAN
+        root = repo({".agents/dev-process.md": NO_NEEDS_HUMAN.replace('tool = "python3 tools/board.py"',
+                                                                       'tool = "shared"')})
+        import profile_check
+        settings, _ = profile_check.split_profile((root / ".agents" / "dev-process.md").read_text())
+        self.assertEqual(settings["tracker"]["tool"], "shared")
+        meta = {"title": "t", "total": 0, "options": {"Dev Priority": "a", "In progress": "b",
+                                                      "In Dev": "c", "In Production": "d"}}
+        ok = subprocess.CompletedProcess([], 0, "[]", "")
+        rep = sc.Report()
+        saved = (tracker.ORG, tracker.PROJECT_NUMBER, tracker.DEFAULT_REPO, dict(tracker.COLUMNS))
+        try:
+            with mock.patch.object(sc, "run", return_value=ok), \
+                 mock.patch.object(tracker, "board_meta", return_value=meta), \
+                 mock.patch.object(tracker, "list_cards", side_effect=tracker.BoardError("offline")), \
+                 mock.patch.object(tracker, "graphql", side_effect=tracker.BoardError("offline")), \
+                 mock.patch.object(sc, "check_board_tidiness"):
+                sc.check_tracker(root, settings, rep)
+        finally:
+            tracker.ORG, tracker.PROJECT_NUMBER, tracker.DEFAULT_REPO = saved[:3]
+            tracker.COLUMNS.clear()
+            tracker.COLUMNS.update(saved[3])
+        rows = [r for r in rep.rows if r["check"] == "tracker: columns"]
+        self.assertEqual([r["level"] for r in rows], ["PASS"], rep.rows)
+        self.assertEqual(rows[0]["detail"].split(", ").count("In progress"), 1, rows[0]["detail"])
+        self.assertNotIn("Human!Help!", rows[0]["detail"])
 
 
 def shape_rows(settings):
@@ -385,7 +420,9 @@ class Audit(unittest.TestCase):
                  self._card(3, self.OWN[0], "Dev Ready"),
                  self._card(4, self.OWN[0], "Released", "CLOSED")]
         rep = self._origin(cards)
-        self.assertEqual([r["check"] for r in rep.rows], ["tracker: closed cards in the queue"])
+        self.assertEqual([r["check"] for r in rep.rows],
+                         ["tracker: pull requests on the board", "tracker: closed cards in the queue"])
+        rep.rows.pop(0)
         self.assertIn("#1", rep.rows[0]["detail"])
         self.assertIn("#2", rep.rows[0]["detail"])
         self.assertNotIn("#3", rep.rows[0]["detail"])
@@ -405,6 +442,70 @@ class Audit(unittest.TestCase):
         rep = self._origin([self._card(1, "other/x", "Dev Ready", "CLOSED")], queue="")
         self.assertEqual([r["check"] for r in rep.rows], ["tracker: cards from another repo"])
 
+    # pull requests as cards (issue #85)
+    PR_ROW = "tracker: pull requests on the board"
+
+    def _pr_rows(self, rep):
+        return [r for r in rep.rows if r["check"] == self.PR_ROW]
+
+    def test_own_pull_request_cards_warn_once_with_columns_and_numbers(self):
+        cards = [self._card(11, self.OWN[0], "\u26a1\ufe0f New", kind="PullRequest"),
+                 self._card(12, self.OWN[0], "Dev Ready", kind="PullRequest"),
+                 self._card(13, self.OWN[0], "Backlog")]
+        rows = self._pr_rows(self._origin(cards))
+        self.assertEqual([r["level"] for r in rows], ["WARN"])
+        detail = rows[0]["detail"]
+        for text in ("2 pull request(s)", "\u26a1\ufe0f New", "Dev Ready", "#11", "#12", "is:issue is:open"):
+            self.assertIn(text, detail)
+        self.assertNotIn("#13", detail)
+
+    def test_merged_and_closed_pull_request_cards_count(self):
+        cards = [self._card(21, self.OWN[0], "Done", "MERGED", "PullRequest"),
+                 self._card(22, self.OWN[0], "Done", "CLOSED", "PullRequest")]
+        rows = self._pr_rows(self._origin(cards))
+        self.assertEqual(len(rows), 1)
+        self.assertIn("2 pull request(s)", rows[0]["detail"])
+        self.assertIn("Done", rows[0]["detail"])
+
+    def test_another_repos_pull_request_is_reported_once_as_foreign(self):
+        rep = self._origin([self._card(31, "other/x", "Backlog", kind="PullRequest")])
+        self.assertEqual([r["check"] for r in rep.rows], ["tracker: cards from another repo"])
+
+    def test_an_unreadable_pull_request_card_is_not_a_pr_row(self):
+        rep = self._origin([self._card(None, None, "Backlog", None, "PULL_REQUEST")])
+        self.assertEqual(self._pr_rows(rep), [])
+
+    def test_pr_row_reads_the_fields_flatten_writes(self):
+        import tracker
+        item = {"id": "i2", "type": "PULL_REQUEST", "fieldValueByName": {"name": "\u26a1\ufe0f New"},
+                "content": {"__typename": "PullRequest", "number": 9, "state": "OPEN",
+                            "repository": {"nameWithOwner": "Vorski-Imagineering/gogogo"}}}
+        rows = self._pr_rows(self._origin([tracker.flatten(item)]))
+        self.assertEqual(len(rows), 1)
+        self.assertIn("#9", rows[0]["detail"])
+
+    def test_a_long_pr_list_shows_ten_numbers_then_more(self):
+        cards = [self._card(100 + i, self.OWN[0], "Done", kind="PullRequest") for i in range(12)]
+        detail = self._pr_rows(self._origin(cards))[0]["detail"]
+        self.assertIn("12 pull request(s)", detail)
+        self.assertIn("#109, ...", detail)
+        self.assertNotIn("#110", detail)
+
+    def test_pr_row_separates_numbers_and_names_a_card_with_no_column(self):
+        cards = [self._card(41, self.OWN[0], None, kind="PullRequest"),
+                 self._card(42, self.OWN[0], "Done", kind="PullRequest")]
+        detail = self._pr_rows(self._origin(cards))[0]["detail"]
+        self.assertIn("no status", detail)
+        self.assertIn("#41, #42. ", detail)
+
+    def test_ten_pr_cards_are_all_listed_without_more_and_eleven_add_it(self):
+        ten = [self._card(100 + i, self.OWN[0], "Done", kind="PullRequest") for i in range(10)]
+        detail = self._pr_rows(self._origin(ten))[0]["detail"]
+        self.assertIn("#109. ", detail)
+        self.assertNotIn("...", detail)
+        eleven = ten + [self._card(110, self.OWN[0], "Done", kind="PullRequest")]
+        self.assertIn("#109, .... ", self._pr_rows(self._origin(eleven))[0]["detail"])
+
     def test_auto_add_row_names_the_repo_and_says_the_api_is_blind(self):
         rep = sc.Report()
         sc.check_board_workflows([{"name": n, "enabled": True} for n in sc.BOARD_WORKFLOWS], rep, ("a/b",))
@@ -412,13 +513,15 @@ class Audit(unittest.TestCase):
         self.assertEqual(len(info), 1)
         self.assertIn("a/b", info[0]["detail"])
         self.assertIn("does not say", info[0]["detail"])
+        self.assertIn("is:issue is:open", info[0]["detail"])
         off = sc.Report()
         sc.check_board_workflows([{"name": "Auto-add to project", "enabled": False}], off, ("a/b",))
         self.assertNotIn("tracker: Auto-add repository", [r["check"] for r in off.rows])
 
     def test_origin_checks_never_fail(self):
         rep = sc.Report()
-        worst = [self._card(1, "x/y", "Dev Ready", "CLOSED"), self._card(None, None, None, None, "Unknown")]
+        worst = [self._card(1, "x/y", "Dev Ready", "CLOSED"), self._card(None, None, None, None, "Unknown"),
+                 self._card(2, self.OWN[0], "Dev Ready", kind="PullRequest")]
         sc.check_board_origin(worst, self.OWN, "Dev Ready", rep)
         sc.check_board_workflows([{"name": "Auto-add to project", "enabled": True}], rep, self.OWN)
         self.assertTrue(rep.rows and not rep.failed())
@@ -506,6 +609,18 @@ class Audit(unittest.TestCase):
         text = (ROOT / "plugins" / "gogogo" / "skills" / "setup" / "SKILL.md").read_text(encoding="utf-8")
         self.assertIn(sc.DELETE_BRANCH_CHECK, text)
         self.assertIn("gh api -X PATCH", text)
+
+    def test_setup_skill_names_the_pull_requests_row(self):
+        text = (ROOT / "plugins" / "gogogo" / "skills" / "setup" / "SKILL.md").read_text(encoding="utf-8")
+        self.assertIn("is:issue is:open", text)
+        self.assertNotIn("is:issue,pr", text)
+        self.assertIn("pull requests on the board", text)
+
+    def test_setup_skill_archives_inside_the_pull_requests_bullet(self):
+        text = (ROOT / "plugins" / "gogogo" / "skills" / "setup" / "SKILL.md").read_text(encoding="utf-8")
+        bullet = re.search(r"(?ms)^- \*\*Pull requests on the board\*\*.*?(?=^- \*\*)", text)
+        self.assertIsNotNone(bullet)
+        self.assertIn("gh project item-archive", bullet.group(0))
 
     def test_check_tracker_reads_the_code_repo(self):
         calls = []
@@ -1134,6 +1249,78 @@ class Notify(unittest.TestCase):
         self.assertEqual(self.row(notify.NO_CREDENTIALS, "notify: telegram, but no bot credentials")["level"], "WARN")
         failed = self.row(notify.FAILED, "notify: telegram: Unauthorized")
         self.assertEqual((failed["level"], failed["detail"]), ("WARN", "telegram: Unauthorized"))
+
+    def real_row(self, repo_file_ignored):
+        """The row from notify's own status, in a temp repo with no `notify` line and full credentials."""
+        import notify
+        tmp = Path(tempfile.mkdtemp())
+        self.addCleanup(shutil.rmtree, tmp, ignore_errors=True)
+        subprocess.run(["git", "init", "-q", str(tmp)], check=True)
+        (tmp / ".gitignore").write_text(".claude/gogogo/\n" if repo_file_ignored else "")
+        creds = tmp / "home-notify.env"
+        creds.write_text(f"{notify.TOKEN_KEY}=1:abc\n{notify.CHAT_KEY}=7\n")
+        repo_file = tmp / ".claude" / "gogogo" / "notify.env"
+        repo_file.parent.mkdir(parents=True)
+        repo_file.write_text(f"{notify.CHAT_KEY}=8\n")
+        profile = tmp / ".agents" / "dev-process.md"
+        profile.parent.mkdir()
+        profile.write_text("+++\nprofile = 1\n+++\n\n## superpowers boundary\nx\n")
+        answers = [{"ok": True, "result": {"username": "b"}}, {"ok": True, "result": {"first_name": "Vic"}}]
+        rep = sc.Report()
+        with mock.patch.object(notify, "CREDENTIALS", creds), \
+                mock.patch.dict(os.environ, {}, clear=True), \
+                mock.patch.object(notify, "_call", side_effect=lambda *a, **k: answers.pop(0)["result"]):
+            sc.check_notify(profile, rep)
+        rows = [r for r in rep.rows if r["check"] == "notify"]
+        self.assertEqual(len(rows), 1)
+        self.assertFalse(rep.failed())
+        return rows[0]
+
+    def test_the_default_passes_and_a_file_that_is_not_ignored_warns(self):
+        default = self.real_row(True)
+        self.assertEqual(default["level"], "PASS")
+        self.assertIn("(by default)", default["detail"])
+        unread = self.real_row(False)
+        self.assertEqual(unread["level"], "WARN")
+        self.assertIn("not git-ignored", unread["detail"])
+
+
+class SessionHook(unittest.TestCase):
+    """The plugin's own SessionStart hook: reported, never a FAIL."""
+
+    def row(self, files):
+        rep = sc.Report()
+        sc.check_session_hook(repo(files), rep)
+        rows = [r for r in rep.rows if r["check"] == "session-status"]
+        self.assertEqual(len(rows), 1)
+        self.assertFalse(rep.failed())
+        return rows[0]
+
+    def test_main_checks_this_plugin(self):
+        self.assertEqual(sc.PLUGIN_ROOT, ROOT / "plugins" / "gogogo")
+
+    def test_the_shipped_hook_is_info(self):
+        rep = sc.Report()
+        sc.check_session_hook(ROOT / "plugins" / "gogogo", rep)
+        self.assertEqual([(r["level"], r["check"]) for r in rep.rows], [("INFO", "session-status")])
+        self.assertEqual(rep.rows[0]["detail"], "shown at session start (plugin hook)")
+
+    def test_hook_present_is_info(self):
+        hooks = {"hooks": {"SessionStart": [{"matcher": "startup", "hooks": [
+            {"type": "command", "command": 'python3 "${CLAUDE_PLUGIN_ROOT}/scripts/session_status.py"'}]}]}}
+        self.assertEqual(self.row({"hooks/hooks.json": json.dumps(hooks)})["level"], "INFO")
+
+    def test_no_hooks_file_warns(self):
+        row = self.row({})
+        self.assertEqual((row["level"], row["detail"]), ("WARN", "the plugin's session-status hook is missing"))
+
+    def test_hook_under_another_event_or_unreadable_warns(self):
+        other = {"hooks": {"Stop": [{"hooks": [{"type": "command", "command": "session_status.py"}]}]}}
+        self.assertEqual(self.row({"hooks/hooks.json": json.dumps(other)})["level"], "WARN")
+        self.assertEqual(self.row({"hooks/hooks.json": "{not json"})["level"], "WARN")
+        self.assertEqual(self.row({"hooks/hooks.json": "[]"})["level"], "WARN")
+        no_command = {"hooks": {"SessionStart": [{"hooks": [{"type": "command"}]}]}}
+        self.assertEqual(self.row({"hooks/hooks.json": json.dumps(no_command)})["level"], "WARN")
 
 
 if __name__ == "__main__":

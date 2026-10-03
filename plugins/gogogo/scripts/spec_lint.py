@@ -7,8 +7,9 @@
 It checks what can be checked mechanically: the sections and their order, the
 Approvals table, that the Hard-stop verdict agrees with its own answers, that
 the human check names real URLs, and that Design and Test cases number their
-items and Files groups its paths, which `spec_check.py` reads. It cannot judge whether the design is
-right; the skill's pre-post check does that.
+items (`1.` or `**1.**` at the start of the line) and Files groups its paths,
+which `spec_check.py` reads. It cannot judge whether the design is right; the
+skill's pre-post check does that.
 
 Output: one `error:` or `warning:` line per finding, then `label: apply` or
 `label: withhold (<reason>)`, which is whether the ready label may go on.
@@ -55,13 +56,13 @@ OPEN_QUESTIONS = re.compile(r"^#{1,6}\s*(open|outstanding|unresolved)\s+question
 # A placeholder inside a URL or path ("/holon/<slug>/"). "<the code>" in prose is
 # a value the reader gets at runtime, and is fine.
 PLACEHOLDER = re.compile(r"(?<=/)<[A-Za-z][A-Za-z0-9 _-]*>")
-NUMBERED = re.compile(r"^\s*\d+[.)]\s+\S")
+NUMBERED = re.compile(r"^\s*\*{0,2}\d+[.)]\*{0,2}\s+\S")
 VERDICT = re.compile(r"^\**\s*verdict\b", re.I)
 ROW = re.compile(r"\brows?\b", re.I)
 COVERS_ALL = re.compile(r"\b(both|either|all|each|every|two|three)\b", re.I)
 APPROVED = re.compile(r"\bapproved\b", re.I)
 AWAITS = re.compile(r"\bproposal\b|\bawaits? approval\b|\bnot approved\b", re.I)
-ITEM = re.compile(r"^(\d+)[.)]\s+\S")
+ITEM = re.compile(r"^\*{0,2}(\d+)[.)]\*{0,2}\s+\S")
 GROUP = re.compile(r"^(?:-\s+)?\*\*(create|edit|explicitly not in scope)\b[^*]*\*\*:?\s*", re.I)
 GROUP_KEYS = {"create": "create", "edit": "edit", "explicitly not in scope": "not_in_scope"}
 

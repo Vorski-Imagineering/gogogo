@@ -17,6 +17,7 @@ the repo's profile, `.agents/dev-process.md`
 | `integration.ci_before_merge` | Whether CI must pass on each issue's PR before it merges. |
 | `integration.mode_check` | A command that proves the session can run without prompts, in place of the plugin's check. |
 | `gates.always`, `gates.when` | Checks run before every merge, and extra ones by path. |
+| a lane's `mutate` | The command that mutation-tests the lines a change made; every mutant its tests miss is killed or accounted for before the merge. |
 | `stages` | Where a merged change goes next, and which board column says so. |
 
 ## The shape
@@ -44,11 +45,22 @@ A branch cut from a stale base silently reverts the previous issue's work when
 it is squashed back. `--ff-only` refuses a base that has diverged rather than
 merging into it.
 
+**Unless the issue already has work.** Before cutting a branch,
+`issue_work.py <n>` looks for an open pull request that references the issue,
+a local or `origin` branch named for it that is ahead of the base, and the
+branch its stop-marker comment names. With exactly one, the skills continue on
+it instead, updated with `git merge origin/<base>` (never a rebase or a force
+push), and reuse its pull request. `/gogogo:dev` asks first; `/gogogo:auto-dev`
+continues without asking, and skips an issue with two or more candidates or a
+pull request from a fork.
+
 **The name carries the issue number**: `fix/<n>-<slug>`, for a bug or a
 feature alike. The number is what ties the branch back to the tracker:
 
-- `stranded_work.py` reports a branch or worktree that is ahead of the base,
-  holds work on no remote or sits in a worktree, and names no open issue;
+- `stranded_work.py` reports a branch or worktree, local or on `origin`, that
+  is ahead of `origin`'s base and names no open issue, or names an open issue
+  but has no open pull request and no stop marker naming it (a local branch
+  only when it holds work on no remote or sits in a worktree);
 - `/gogogo:status` links each branch to its issue by that number;
 - `stage_sync.py trailer --branch fix/<n>-<slug>` reads the issue from it.
 
@@ -95,6 +107,8 @@ Every issue goes through the same checks, in this order, before its merge:
 
 1. **Tests.** The new regression test is seen failing first (stash the change,
    run the one test, see red, pop), then every lane in the profile passes.
+   Where a lane has a `mutate` command, its mutants on the changed lines are
+   then killed by a test or declined with a fixed reason.
 2. **Spec check.** Before the review, a reader that has not seen how the
    change was made answers every numbered item of the spec against it
    (`spec_check.py`). A missing piece is built, a difference is matched or,
@@ -274,3 +288,7 @@ gogogo runs its own process, with `pr-squash` onto `main`
   ```bash
   git fetch origin && git worktree add -b fix/<n>-<slug> <path> origin/main
   ```
+  or, for an issue that already has a branch, a worktree of that branch
+  (`git worktree add <path> <branch>`, or
+  `git worktree add --track -b <branch> <path> origin/<branch>` when it is
+  only on `origin`).

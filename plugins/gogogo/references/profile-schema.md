@@ -47,6 +47,34 @@ incomplete. Each problem is one line on stderr that starts with the field.
 With no `--for` it checks every skill, and `auto-test` only when the profile
 has an `[auto_test]` table, so a repo that never adopted it still passes.
 
+## Versions and defaults
+
+The profile format changes under repos that have already adopted it, and a
+plugin update reaches all of them at once. So a change to the format follows
+one rule:
+
+- **A new setting ships with a default.** It is optional, and
+  `profile_check.py` has a `DEFAULTS` entry for it naming the gogogo issue
+  that added it. A profile without it passes with a warning such as
+  `tracker.columns.needs_human: missing; using 'In progress' (default since
+  gogogo#32)`, and `--show` prints the default, so every skill and script
+  reads the same value. `/gogogo:setup` offers to write it into the profile.
+- **A change with no safe default** (a setting removed, renamed, or given a
+  new meaning) raises `profile`. The checker accepts the previous version,
+  warning about each change, until the version after that.
+
+Every skill puts the check's `warning:` lines at the top of its report, so a
+default in use reaches a person. A test pins what each version requires: a
+change that makes a setting required, or requires it for another skill, fails
+it unless it follows the rule.
+
+Defaults today:
+
+| Setting | Absent means | Since |
+|---|---|---|
+| `tracker.columns.needs_human` | the `tracker.columns.in_progress` column | gogogo#32 |
+| `handback.reporter` | `none` | gogogo#9 |
+
 ## Settings
 
 "Required by" lists the skills that stop without the field. "optional" means
@@ -65,7 +93,7 @@ no skill requires it; a skill that finds it uses it.
 | `tracker.project_number` | int | optional | Number of the GitHub project board. |
 | `tracker.queue` | str | `auto-dev` | Board column the loop works. |
 | `tracker.columns.in_progress` | str | `dev`, `auto-dev` | Column of an issue being worked now. |
-| `tracker.columns.needs_human` | str | `dev`, `auto-dev` | Column of an issue stopped for a person: an unreviewed fix, a decision or Hard Stop found mid-change, or verification that gave up. |
+| `tracker.columns.needs_human` | str | optional | Column of an issue stopped for a person: an unreviewed fix, a decision or Hard Stop found mid-change, or verification that gave up. Optional; absent means the `in_progress` column. |
 | `environments` | list | all | Where code runs: name, roles, and url/serves/reached_by/data/writes. |
 | `stages` | list | `dev`, `auto-dev`, `auto-test` | The path a change takes after it merges: code_is, column, environment. |
 | `hard_stops.source` | str | all | Where the repo's Hard Stop rules live (file#anchor). |
@@ -76,7 +104,7 @@ no skill requires it; a skill that finds it uses it.
 | `technology.register` | str | optional | Path of the technology decisions register, from the repo root. |
 | `roadmap.file` | str | optional | Path of the roadmap document, from the folder holding `.agents/`; it may sit in another git repo checked out inside this one. |
 | `release.major` | int | optional | Hand-set major version. A production release is tagged `deploy-<build>` and versioned `<major>.0.<build>`; see `references/versioning.md`. |
-| `lanes` | list | `spec`, `dev`, `auto-dev` | Test lanes: name, plus run/focused/tests/env/ci. |
+| `lanes` | list | `spec`, `dev`, `auto-dev` | Test lanes: name, plus run/focused/mutate/tests/env/ci. |
 | `verify.agent` | list | `dev`, `auto-dev` | Environments where the implementing agent checks its work. |
 | `verify.human` | str | `spec`, `auto-test` | Environment where a person confirms a fix. |
 | `verify.rungs` | list | `dev`, `auto-dev` | Ordered verification steps. |
@@ -92,10 +120,10 @@ no skill requires it; a skill that finds it uses it.
 | `integration.final_target` | str | optional | Branch the run's PR targets, for run-branch-pr. |
 | `integration.mode_check` | str | optional | Command that proves unattended mode is on. |
 | `integration.ci_before_merge` | bool | `auto-dev` | True if CI must pass on each issue before it merges. |
-| `handback.reporter` | str | `dev`, `auto-dev` | trailer / assign / none. trailer: each merge writes a Ships-issue trailer naming the reporter, and stage sync assigns them when the card enters a stage with a tag. |
+| `handback.reporter` | str | optional | trailer / assign / none. Optional; absent means none. trailer: each merge writes a Ships-issue trailer naming the reporter, and stage sync assigns them when the card enters a stage with a tag. |
 | `preflight.extra` | list | optional | Extra checks before a run. |
 | `stop.extra` | list | optional | Extra conditions that stop a whole run. |
-| `notify` | str | optional | none / telegram. Optional; absent means none. telegram: sent by scripts/notify.py; bot token and chat id from TELEGRAM_BOT_TOKEN and TELEGRAM_CHAT_ID in the environment or ~/.claude/gogogo/notify.env, never in the profile. |
+| `notify` | str | optional | none / telegram. Optional; absent means telegram when this machine has credentials, else off. Credentials come from TELEGRAM_BOT_TOKEN and TELEGRAM_CHAT_ID in the environment, the repo's git-ignored .claude/gogogo/notify.env, or the per-user notify.env, never the profile. |
 | `review.coverage` | str | optional | precise / broad / exhaustive. Optional; absent means broad. How wide a net the first review round casts; correction rounds are always precise. |
 | `auto_test.pass_column` | str | `auto-test` | Column a card moves to on PASS. |
 | `auto_test.fail_column` | str | `auto-test` | Column a card moves to on FAIL. |
@@ -107,8 +135,28 @@ no skill requires it; a skill that finds it uses it.
 
 `lanes` is a list of tables. Each needs a `name`, and either `run` (a command)
 or `env` (where the lane is checked). Optional: `focused` (the command for one
-test or module, used for the seen-failing step), `tests` (a list of file
-patterns naming the lane's test files) and `ci` (true if CI runs it).
+test or module, used for the seen-failing step), `mutate` (the command that
+mutation-tests the changed lines, below), `tests` (a list of file patterns
+naming the lane's test files) and `ci` (true if CI runs it).
+
+`mutate` is a command `/gogogo:dev` §6 runs last, to find changed lines the
+lane's tests do not check. Its contract:
+
+1. `<base>` is replaced with the branch the change merges into
+   (`integration.base`, or the repo's default branch when the profile has
+   none), as its remote-tracking ref after a fetch, `origin/<branch>`.
+2. It mutates only the lines changed between the point where the change left
+   that branch (`git merge-base <base> HEAD`) and the working tree,
+   uncommitted work included, and runs this lane's tests against each mutant.
+3. It prints each surviving mutant with its file, its line and what was
+   changed, and its last line is exactly
+   `mutants: <n> killed: <n> survived: <n> timeout: <n>`, where mutants is the
+   sum of the other three.
+4. It exits 0 with no survivors, 1 with survivors, and with any other status
+   when it could not finish; a run that could not finish prints no `mutants:`
+   line.
+5. It leaves the working tree exactly as it found it.
+6. It has no time limit of its own.
 
 `tests` patterns are matched against repo-relative paths, with `*` matching `/`
 as well. `/gogogo:dev` §6 compares the test files they match before and after a
@@ -120,6 +168,7 @@ passed; when no lane has it, the report says "tests not checked".
 name = "automated"
 run = "make test"
 focused = "make test TEST=<module>"
+mutate = "make mutate BASE=<base>"
 tests = ["tests/*"]
 ci = false
 

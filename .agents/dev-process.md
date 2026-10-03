@@ -25,6 +25,7 @@ placement_rule = "CLAUDE.md § What a change here does"
 name = "unit"
 run = "python3 -m unittest discover -s tests"
 focused = "python3 -m unittest tests.<module>"
+mutate = "python3 tools/mutate.py <base>"
 tests = ["tests/*"]
 ci = true
 
@@ -83,11 +84,18 @@ reporter = "none"
 | **`--plugin-dir` given the repo root** | It must name `<clone>/plugins/gogogo`. Given the repo root, a repo that installs the plugin silently loads the installed copy instead, and a trigger test measures the old text | The session's `init` lists the plugin's path under the clone, and the new skill's name |
 | **A profile setting nobody reads, or a skill reading a setting nobody defines** | The checker and the skills drift | `references/profile-schema.md` is checked against `profile_check.py` by a test; a skill naming a setting must find it there |
 | **Headless runs differ from interactive ones** | The transcript can lack `permissionMode`; skills load differently | Test both when a change touches preflight |
+| **Mutation tools edit source files in place** | In the loaded tree that hands a broken script to another repo's run | Mutation runs only through `tools/mutate.py`, which works in a copy |
 
 ## Lane constraints
 
 - **unit**: `python3 -m unittest discover -s tests`. Each test names what it
   guards; each new one is seen failing first (break the code, run, restore).
+  Its `mutate` command covers the `.py` files directly in
+  `plugins/gogogo/scripts`, each against its own `tests/test_<name>.py`, takes
+  minutes, and downloads its tool into the user's cache on first use.
+  Under load the tool marks slow kills "suspicious"; `tools/mutate.py` counts
+  them as killed (#75), so a busy machine changes how long the run takes, not
+  its counts.
 - **live**: a real run of the changed skill in an adopting repo, read-only
   unless the spec says otherwise. Triage-only (`/gogogo:auto-dev
   --triage-only`) and dry runs with posting blocked are the default. Say which
@@ -98,7 +106,10 @@ reporter = "none"
   `plugins/gogogo/` in that tree while the run is going. On this repo, in place
   of auto-dev §3's `git switch` steps, branch the worktree from a freshly
   fetched base: `git fetch origin && git worktree add -b fix/<n>-<slug> <path>
-  origin/main`. Switching branches in the loaded tree, or pulling into it,
+  origin/main`. When auto-dev §3 continues on an issue's earlier branch, the
+  worktree is `git worktree add <path> <branch>`, or
+  `git worktree add --track -b <branch> <path> origin/<branch>` for a branch
+  only on `origin`. Switching branches in the loaded tree, or pulling into it,
   changes the skills under the running loop (`CLAUDE.md` § What a change here
   does). The 2026-10-01 runs used a worktree per issue.
 - **confirming a Released card**: `/gogogo:auto-test` is browser-based and is

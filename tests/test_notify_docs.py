@@ -40,6 +40,14 @@ class NotifyDocs(unittest.TestCase):
         self.assertIn('notify.py" chat-id --save', doc)
         self.assertIn("INFO notify: off", doc)
 
+    def test_12_setup_offers_this_repo_and_no_messages(self):
+        doc = text(PLUGIN / "skills" / "setup" / "SKILL.md")
+        notifications = doc.split("- **Notifications**", 1)[1].split("\n## ", 1)[0]
+        self.assertIn('notify.py" init --repo', notifications)
+        self.assertIn(".claude/gogogo/", notifications)
+        self.assertIn('notify = "none"', notifications)
+        self.assertNotIn('notify = "telegram"', notifications)
+
     def test_15_stage_sync_uses_the_same_sender(self):
         doc = text(PLUGIN / "references" / "stage-sync.md")
         self.assertIn("notify.py", section(doc, "### Notification"))

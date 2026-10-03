@@ -1,6 +1,6 @@
 ---
 name: roadmap
-description: Use when asked to update, refresh or sync the repo's roadmap document against the tracker, when its status marks look out of date, or when /gogogo:roadmap is invoked. Re-derives every row's mark from the issue's state and board column, fixes the marks and the prose they make false, and commits the document.
+description: Use when asked to update, refresh or sync the repo's roadmap document against the tracker, when its status marks look out of date, or when /gogogo:roadmap is invoked. Re-derives every row's mark from the issue's state and board column, fixes the marks and the prose they make false, and commits the document, opening a PR for it when the document shares the repo.
 ---
 
 # Keeping a roadmap document in step with the board
@@ -15,7 +15,8 @@ close an issue or move its card. Every mark comes from `roadmap_status.py`, whic
 the issue's state and its card's column from the tracker.
 
 **This skill reads the tracker and never writes to it**: no card move, no label, no
-comment. Its one write is the roadmap document.
+comment. Its one write is the roadmap document, and, when the document shares the repo,
+the refresh branch and the PR that carries it (step 7).
 
 ## First: read this repo's profile
 
@@ -27,6 +28,8 @@ python3 "${CLAUDE_PLUGIN_ROOT}/scripts/profile_check.py" --for roadmap --show
 - Any other exit: **stop and report the line it printed.** It names the missing field.
 - `roadmap.file` unset: **stop** and say this repo has no roadmap document. Setting it is
   described in `references/profile-schema.md` § Roadmap.
+
+Any `warning:` line the check printed goes, verbatim, at the top of your report to the person; if it printed none, the report says so.
 
 The document is at `roadmap.file`, from the folder holding `.agents/`. It may sit in
 another git repo checked out inside this one.
@@ -77,7 +80,7 @@ A repo starting a legend can begin from this one:
 | 🔵 | **ready** | carries the ready label | ready label |
 | 🟡 | **in progress** | being built | In progress |
 | 🆘 | **needs you** | stopped; waiting for a person | Human!Help! |
-| 🟠 | **released** | on its last stage, not yet closed | Released |
+| 🟢 | **released** | on its last stage, not yet closed | Released |
 | ✅ | **Closed** | closed as completed | closed |
 | ⚫ | **dropped** | closed as not planned | not planned |
 ```
@@ -100,14 +103,40 @@ git rev-parse --show-toplevel
   `git -C "$D" status -sb`. Stop and report if the document has uncommitted changes
   (another session's edit), or the branch has no upstream. If it is behind,
   `git -C "$D" pull --ff-only`; stop and report if that refuses.
-- **The same repo:** `git fetch`. Stop and report if the document has uncommitted
-  changes. Then cut the refresh branch from the remote base `B`:
-  ```bash
-  git switch -c roadmap-refresh-<YYYY-MM-DD-HHMM> origin/<B>
-  ```
-  `B` is `integration.final_target` when `integration.strategy` is `run-branch-pr`,
-  otherwise `integration.base` (or the default branch when it is unset). Stop and report
-  if the switch fails. Steps 2 to 6 run on this branch.
+- **The same repo:** in order.
+  1. `git fetch`. Stop and report if the document has uncommitted changes.
+  2. **An earlier refresh still open?**
+     ```bash
+     gh pr list --state open --limit 100 --json number,headRefName,url \
+       --jq '.[] | select(.headRefName | startswith("roadmap-refresh-")) | "#\(.number) \(.headRefName) \(.url)"'
+     ```
+     Any line printed: **stop and report it** as "merge or close #N first; a new refresh
+     cut from `<B>` would conflict with it". The checkout is untouched. A non-zero exit
+     is a stop too: report its error, since a list it could not read is not an empty one.
+  3. **Record the start branch `S`**: `git branch --show-current`. When it prints nothing
+     (a detached HEAD), or a name starting with `roadmap-refresh-`, `S` is `B`.
+  4. Cut the refresh branch from the remote base `B`:
+     ```bash
+     git switch -c roadmap-refresh-<YYYY-MM-DD-HHMM> origin/<B>
+     ```
+     `B` is `integration.final_target` when `integration.strategy` is `run-branch-pr`,
+     otherwise `integration.base` (or the default branch when it is unset). Stop and
+     report if the switch fails. Steps 2 to 6 run on this branch.
+
+**Stopping early (the same repo).** Any stop between the cut and §7's push (step 2's
+"every mark agrees", its exit 2, or a stop a later step asks for) ends, when
+`git status --porcelain -- <file>` and `git log --oneline origin/<B>..HEAD` both print
+nothing, with:
+
+```bash
+git switch <S>
+git branch -D roadmap-refresh-<YYYY-MM-DD-HHMM>
+```
+
+and the report says the branch was removed; nothing was pushed, so nothing is lost. When
+the document has an uncommitted change, leave the branch and say which branch holds the
+change. When the branch holds a commit that was not pushed (a refused push in step 7),
+leave the branch too and say which branch holds the commit.
 
 ## 2. Report
 
@@ -148,6 +177,14 @@ git log origin/<integration.base> --grep "#<n>"
 The paragraphs after each table, blockquotes, and other cells that state something about
 the tracker. Fix only what the new state makes false; add no reasoning.
 
+Then link every issue the document names, not only in the `Issue` column: in `Note` and
+`Notes` cells, after a mark, in other cells and in prose. A bare `#<n>` becomes
+`[#<n>](https://github.com/<tracker.issues_repo>/issues/<n>)`, and `<owner>/<repo>#<n>`
+links to that repo's issue. Leave code spans, fenced blocks and existing links as they
+are. One exception: in a table with no `Issue` column, the script reads the first link in
+the `State` cell as the row's own issue, so in a row that has none, leave references in
+that cell unlinked.
+
 ## 5. Rows the script cannot check
 
 Rows that name no issue in `tracker.issues_repo` are counted ("rows name no issue") and
@@ -172,12 +209,28 @@ point at.
   git -C "$D" commit -m "roadmap: refresh marks from the tracker (<#n A → B>, ...)"
   git -C "$D" push
   ```
-- **The same repo:** on the refresh branch step 1 cut, commit the document, push the
-  branch (`git push -u origin roadmap-refresh-<YYYY-MM-DD-HHMM>`), and report it for the
-  repo's own integration path (`integration.strategy`). This skill never merges into the
-  base itself.
+- **The same repo:** on the refresh branch step 1 cut, in order:
+  ```bash
+  git add <file>
+  git commit -m "roadmap: refresh marks from the tracker (<#n A → B>, ...)"
+  git push -u origin roadmap-refresh-<YYYY-MM-DD-HHMM>
+  gh pr create --base <B> --head roadmap-refresh-<YYYY-MM-DD-HHMM> \
+    --title "roadmap: refresh marks from the tracker" --body-file <scratch>/roadmap-pr.md
+  git switch <S>
+  git branch -d roadmap-refresh-<YYYY-MM-DD-HHMM>
+  ```
+  Stop and report at the first command that fails, except the one case below; the
+  checkout stays on the refresh branch, and a pushed branch is a person's to open the PR
+  from. The body file holds step 8's account of what moved, which prose changed and which
+  rows were left for a person; the PR's number and the return to `S` come after it. When
+  `gh pr create` says a PR already exists for the branch, read it with
+  `gh pr list --head roadmap-refresh-<YYYY-MM-DD-HHMM> --json number,url` and carry on.
+  The PR is how the refresh lands under every `integration.strategy`; a person merges it
+  the way the repo lands PRs. This skill never merges into the base itself.
+  `git branch -d` removes only the local copy; the branch stays on origin inside the PR.
 
 ## 8. Report
 
 What moved (`#n A → B`), which prose changed, which rows were left for a person and why,
-and the commit or the branch.
+and then: in another repo, the commit; in the same repo, the PR as the thing still to
+do, "merge #N to land the refresh" with its URL, and that the checkout is back on `S`.

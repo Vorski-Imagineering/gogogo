@@ -23,6 +23,11 @@ checks that read (not the ones that need a browser or bypass mode), run §1 and
 reason, citing the Approvals row or the missing decision. A card without the
 ready label whose spec passed the lint (§1) is `take (no ready label; spec lint
 passed; the label would be added)`; one that failed is `skip` with §1's reason.
+For each issue taken, also run §3's `issue_work.py` (after `git fetch origin`)
+and report the outcome §3 would take: `continue on <branch>` (with its PR, if
+any), or §3's skip reason.
+Per issue, name each comment `/gogogo:dev` §2 would fold in or stop on, with
+its link; triage-only folds nothing.
 Create no branch, move no card, add no label, post nothing, send no message.
 
 ## Before anything: preflight
@@ -32,6 +37,8 @@ Read the profile first, as `/gogogo:dev` does:
 ```bash
 python3 "${CLAUDE_PLUGIN_ROOT}/scripts/profile_check.py" --for auto-dev --show
 ```
+
+Any `warning:` line the check printed goes, verbatim, at the top of your report to the person; if it printed none, the report says so.
 
 `<tracker.tool>` below means the profile's `tracker.tool`; when that is
 `shared`, it is `python3 "${CLAUDE_PLUGIN_ROOT}/scripts/tracker.py"`.
@@ -98,6 +105,19 @@ means finished work sits unverified while you go and ask.
 11. **The profile's `preflight.extra`**, each as it says. A check that says
    "report only" is reported and never acted on.
 
+## The loop never waits on chat
+
+- Inside the loop, never put a question about an issue to the person, with
+  `AskUserQuestion` or in chat. A fork this skill's rules settle is settled by
+  them; one they do not is a hand-back to `tracker.columns.needs_human`
+  (`/gogogo:dev` §8), and the loop goes on. Only *Stop the whole run and ask
+  when* waits on a person.
+- A message from the person mid-run is answered in a few lines from the run
+  log (issues taken, merged, handed back, skipped, the one in hand, what is
+  left), and the loop goes on in the same turn. It is not a reason to pause.
+- A side request the person makes (another skill) runs as that skill says;
+  when it ends, the loop goes on.
+
 ## 1. Select the queue
 
 ```bash
@@ -124,17 +144,57 @@ python3 "${CLAUDE_PLUGIN_ROOT}/scripts/spec_lint.py" <scratch>/issue-<n>-body.md
   passed*.
 - Exit 1, or a last line `label: withhold (<reason>)`: **skip**, with the
   reason `no ready label; spec lint: <its first error: line, or the withhold
-  reason>`.
+  reason>`. Outside triage-only mode, hand it back as §2's *Hand back a skip*
+  says, with reason `lint`.
 - Exit 2: **stop the whole run** with the line it printed. Preflight already
   read the profile, so this is the environment, not the issue.
 
 ## 2. Triage each issue before touching it
 
-Per `/gogogo:dev` §2. An issue is workable here only if every decision it
-depends on was made by a person and is **in the body**. Skip and record, never
+Per `/gogogo:dev` §2. That includes folding in comments (§2 *Fold in comments
+the description does not hold yet*), after `/gogogo:dev` §1's two reads; an
+issue whose answer sits in such a comment is taken, not skipped. Here a fold
+that stops the issue is a skip: reason `decision`, or `lint` when the folded
+body fails the lint. An issue is workable here only if every
+decision it depends on was made by a person and is **in the body**, once
+folded in. Skip and record, never
 guess, when it has an open product decision, a Hard Stop no Approvals row
 names, or a two-licence change whose apply row is missing (that one is
 buildable: build and test it, then stop that issue before applying).
+
+**Hand back a skip.** Every skip from §1's lint and from this section, outside
+triage-only mode, once per issue per run: a later pass that reads the issue
+again reports the skip and writes nothing more. Never the *could not add the
+ready label* skip below (the tracker failing, not the spec: reported, nothing
+written, the card left for the next run), and never a two-licence change whose
+apply row is missing, which is built and then stopped (§4), not skipped:
+
+1. Post one comment on the issue:
+   `gh issue comment <n> --repo <tracker.issues_repo> --body-file <scratch>/skip-<n>.md`.
+   Its first line is `**Needs you:**` and one sentence saying what is missing
+   and what the person does next (for example: re-spec with `/gogogo:spec`,
+   then put the card back in `<tracker.queue>` with the ready label).
+   Directly under it, on its own line:
+
+   `<!-- gogogo:skip v=1 reason=<lint|nospec|decision|hard-stop> session=<id|unknown> -->`
+
+   | reason | when |
+   |---|---|
+   | `lint` | no ready label, and `spec_lint.py` failed or withheld it (§1); or a body §2 folded comments into failed it |
+   | `nospec` | a feature with no analysis pass (`/gogogo:dev` §2) |
+   | `decision` | an open product decision not answered in the body |
+   | `hard-stop` | a Hard Stop no Approvals row names |
+
+   No review record and no stop marker on this comment: a skip is not a stop.
+   The comment names no hostname.
+2. Then remove `tracker.ready_marker` when the issue has it
+   (`gh issue edit <n> --repo <tracker.issues_repo> --remove-label "<tracker.ready_marker>"`).
+3. Then `<tracker.tool> move <n> --to needs_human` (the role key, so the card
+   moves to `tracker.columns.needs_human`). Moving last means a card is never
+   there without the comment that says why.
+
+A non-zero exit from any of the three: say so in the next report to the
+person, with the command's line, and go on. Do not retry blind.
 
 Autonomy is over *approved* work, never over the approval. A skipped issue is a
 reported outcome, not a failure. Record which row licensed each Hard Stop you
@@ -150,8 +210,52 @@ by the run* for §8 and §9.
 
 ## 3. Branch from a fresh base
 
+First look for the issue's earlier work, from a fresh base:
+
 ```bash
 git switch <integration.base> && git pull --ff-only
+python3 "${CLAUDE_PLUGIN_ROOT}/scripts/issue_work.py" <issue-number>
+```
+
+`issue_work.py` (after `git fetch origin`, which the pull does) says whether
+the issue already has work:
+
+- Exit 0: take the card and branch, below.
+- Exactly one `candidate:` line and no `fork PR` line: take the card, below,
+  then **continue on it**, without asking. Check it out (`git switch <branch>`,
+  or `git switch --track origin/<branch>` when it is only on `origin`), then
+  `git merge origin/<integration.base>`, never a rebase or a force push.
+  Resolve a conflict as a code change. Push to that branch, and merge its
+  open PR when it has one rather than opening another. The whole process
+  (spec check, review, tests compared, mutation, verify, gates, merge) runs
+  on the updated branch, and the run report and the issue's report name the
+  branch continued and its PR. A conflict you cannot resolve: hand the card
+  back to `tracker.columns.needs_human` as `/gogogo:dev` §8 says, stop
+  reason `gate`, the Needs-you line naming the conflicting files.
+- Two or more `candidate:` lines, or any `fork PR` line: **skip** the issue
+  with the reason `earlier work: <each line, joined by "; ">`, and leave its
+  card where it is. Never build a competing version of a contributor's PR.
+- Exit 2: **skip** with the reason `could not check for earlier work: <the reason>`.
+
+Then take the card, before any branch exists, so anyone glancing at the board
+sees which issue is live and a card another session took since §1 read the
+queue is not taken twice:
+
+```bash
+<tracker.tool> move <n> --from "<tracker.queue>" --to in_progress
+```
+
+- Exit 3: another session took the issue meanwhile. **Skip** it with
+  `taken meanwhile: the card is in <column>` (the column the refusal names),
+  create no branch, and leave the card where it is: this skip is not handed
+  back (§2), and the card in `tracker.columns.in_progress` is the other
+  session's take, never this run's. It is not taken again in this run (§4).
+- Any other non-zero exit: **skip** the issue with `could not move the
+  card: <its message>`, leave the card where it is, and go on.
+
+Then branch, unless you continue on earlier work:
+
+```bash
 git switch -c fix/<issue-number>-<short-slug>
 ```
 
@@ -159,8 +263,9 @@ Always from a fresh base: the previous iteration merged into it, and branching
 from a stale one silently reverts that work in the squash. The branch name
 carries the issue number, so the work is never stranded.
 
-Then move the card to `tracker.columns.in_progress`, before the change starts,
-so anyone glancing at the board sees which issue is live.
+When branching, or checking out the earlier work, fails, first put the card back with
+`<tracker.tool> move <n> --from in_progress --to "<tracker.queue>"`, then
+**skip** the issue with `could not branch: <its message>` and go on.
 
 Push the branch as soon as it has its first commit (`git push -u origin
 <branch>`), so the work survives a run that dies.
@@ -170,8 +275,16 @@ Push the branch as soon as it has its first commit (`git push -u origin
 `/gogogo:dev` §3–6, with these differences because nobody is watching:
 
 - **Every rung in `verify.rungs` is mandatory** for every issue.
-- The regression test must be seen failing, then the whole suite green. Record
-  how many new tests went red.
+- The regression test must be seen failing, then the whole suite green (by
+  exit status, `/gogogo:dev` §6). Record how many new tests went red.
+- **Mutation testing** as `/gogogo:dev` §6 says, for every lane with a `mutate`
+  command, to its end, in the foreground or polled. When it stops the issue (a
+  run that failed twice, or survivors left after the third run): commit
+  everything the change produced, and nothing else, to its branch and push it,
+  leave it unmerged, hand the card back to `tracker.columns.needs_human` as
+  `/gogogo:dev` §8 says with the failed run or the surviving mutants under the
+  Needs-you line, record the stop for the run report, and carry on with the
+  next.
 - **The spec check** as `/gogogo:dev` §5 says, before the review. When it
   stops the issue: commit everything the change produced, and nothing else,
   to its branch and push it, leave it unmerged, hand the card back to
@@ -216,15 +329,17 @@ Push the branch as soon as it has its first commit (`git push -u origin
 - A change that needs a two-licence apply (for example a migration on a shared
   environment) is applied only with its apply row, by the profile's procedure
   for it, never improvised.
-- **In a headless run (for example `claude -p`), never end a turn to wait for
-  background work**: ending the turn ends the process, and the work is lost.
-  Run verification in the foreground, or poll until it has finished.
+- **Never end a turn to wait for background work**, in any run, interactive
+  or headless. Ending the turn hands control back, and a job that hangs never
+  sends the notice that would resume it. Poll it in the foreground until it
+  has finished (*Claude-specific*).
 
 ## 5. Gates
 
 Run the profile's `gates.always`, and each `gates.when` entry whose pattern the
-change touches, before merging. A gate failure is a finding: fix it rather than
-raise a budget, or stop the issue and hand its card back to
+change touches, before merging. A gate passes on its exit status, read as
+`/gogogo:dev` §6 says, never on filtered output. A gate failure is a finding:
+fix it rather than raise a budget, or stop the issue and hand its card back to
 `tracker.columns.needs_human` as `/gogogo:dev` §8 says.
 
 ## 6. Merge, by the profile's integration strategy
@@ -258,7 +373,7 @@ one command.
 
 A failure stops that issue at its PR, handed back to
 `tracker.columns.needs_human` as `/gogogo:dev` §8 says for a gate you could not
-make pass. For the run's final PR, see `run-branch-pr` below.
+make pass, with stop reason `ci`. For the run's final PR, see `run-branch-pr` below.
 
 **The link, when a merge is yours.** When you merge with `gh` and the profile
 uses the `Ships-issue` link (`/gogogo:dev`'s *When you merge with `gh`*
@@ -378,11 +493,11 @@ no credentials, so call it the same way in every repo. One plain-text line
 each, `<repo>` being the name part of `tracker.code_repo`:
 
 - once preflight has passed and §1 has read the queue: `<repo> auto-dev: run started on <hostname>, <k> issues in "<tracker.queue>"`;
-- the first time an issue is skipped in this run, not on later passes: `<repo> #<n> skipped: <reason>`;
+- the first time an issue is skipped in this run, not on later passes: `<repo> #<n> skipped -> <tracker.columns.needs_human>: <reason>` when *Hand back a skip* moved the card, else `<repo> #<n> skipped: <reason>` (the label failure, or a failed move);
 - `<repo> #<n> started: <title>`;
 - after the issue's merge is verified: `<repo> #<n> merged (<short sha>) -> <column>`;
-- `<repo> #<n> needs you -> <tracker.columns.needs_human>: <the Needs-you line>`;
-- *run closed*, from §9 only: `<repo> auto-dev: run closed: <a> merged, <b> need you, <c> skipped`.
+- `<repo> #<n> needs you -> <tracker.columns.needs_human>: <the Needs-you line>`, for an issue taken and then stopped, never for a triage skip (its skip line says it);
+- *run closed*, from §9 only: `<repo> auto-dev: run closed: <a> merged, <b> need you, <c> skipped`, where `<b>` counts issues taken and stopped, and `<c>` the triage skips and §3's skips, each issue once.
 
 A `send` that exits non-zero is a `notify failed: <its line>`, and the run
 goes on. Each is given once, in the next report to the person in this session
@@ -394,8 +509,8 @@ tracker comment. Never put a token on a command line or in a report.
 In a run that tried to send *run started*, first send *run closed* (§8). Then
 one report, opening with the notify line preflight item 7 put there, if any:
 every issue taken with its outcome and merge commit (and *label added by
-the run* for each one §2 labelled), every issue skipped with the reason, anything left half-done with its branch, every card
-moved to `tracker.columns.needs_human` with its Needs-you line, the stranded
+the run* for each one §2 labelled), every issue skipped with the reason and its column, anything left half-done with its branch, every other card
+moved to `tracker.columns.needs_human` (taken, then stopped) with its Needs-you line, the stranded
 work from preflight, anything the profile's `stop.extra` checks raised, and
 the `notify failed` lines §8 says are due.
 
@@ -436,3 +551,20 @@ integration and merging follow this skill and the profile. See the profile's
   The name is what `/resume` and the terminal title show.
 - The review command and its level for each coverage, and the
   `claude-in-chrome` tools, as in `/gogogo:dev`'s `## Claude-specific`.
+- In the skip marker (§2, *Hand back a skip*), `session` is
+  `$CLAUDE_CODE_SESSION_ID`, as in `/gogogo:dev`'s record, and `unknown`
+  when it is unset.
+- **Polling background work** (§4): `rm -f <scratch>/job.pid`, then start the
+  job so it records a pid that lives as long as it does,
+  `sh -c 'echo $$ > <scratch>/job.pid.tmp && mv <scratch>/job.pid.tmp <scratch>/job.pid; <command>; echo "exit=$?"' > <output file> 2>&1`
+  (the background tool's task id is not a pid), and once `<scratch>/job.pid`
+  exists use its number as `<pid>`. The output file's last line, `exit=<n>`, is
+  the job's own exit status; no `exit=` last line means the job failed. Then one foreground command at a time, each
+  under the shell tool's 10-minute limit, for example
+  ```bash
+  timeout 540 sh -c 'while kill -0 <pid> 2>/dev/null; do sleep 15; done'; kill -0 <pid> 2>/dev/null && echo running || echo finished
+  ```
+  then read the job's output file, and repeat until it says `finished`. Where
+  there is no `timeout` command (macOS), bound the loop itself:
+  `sh -c 'n=0; while [ $n -lt 36 ] && kill -0 <pid> 2>/dev/null; do sleep 15; n=$((n+1)); done'`.
+- Never `AskUserQuestion` inside the loop (*The loop never waits on chat*).

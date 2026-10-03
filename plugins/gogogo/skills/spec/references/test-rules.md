@@ -44,3 +44,17 @@ deliberately does not run), or you are excusing a lane you did not investigate.
 Stating it that way turns a dead end into a named gap someone can close. It
 also shows when closing the gap is a Hard Stop of its own, to be raised rather
 than slipped into the current issue.
+
+## Another issue's body as test data
+
+A case that reads another issue's body (`gh issue view <n>`, `spec_check.py`
+or `spec_lint.py` on it) depends on that issue staying as it is, and the next
+re-spec of that issue can break it. On 2026-10-03 a step asserted that one
+issue's item list had "no line containing `preflight.extra`"; that issue was
+re-specced an hour later with a Design naming `preflight.extra`, and the
+finished work that depended on the step stopped unmerged.
+
+So assert the narrowest form that still proves the point ("no line starting
+`F:preflight.extra`", not "no line containing `preflight.extra`"), and name
+that issue in `## Context` as a dependency. When this issue's own body, or a
+fixture, proves the same thing, prefer it.

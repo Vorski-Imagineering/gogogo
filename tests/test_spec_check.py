@@ -151,6 +151,53 @@ class Items(unittest.TestCase):
         self.assertEqual(listed["unlisted"], ["Files"])
         self.assertEqual(listed["outside"], [])
 
+    def test_bold_numbered_design_items_are_items(self):
+        body = BODY.replace("1. **The filter** changes.", "**1. The filter** changes.").replace(
+            "2. **The list** shows rows.", "**2.** The list shows rows.")
+        listed = items(body)
+        texts = {i["id"]: i["text"] for i in listed["items"]}
+        self.assertEqual([i for i in texts if i.startswith("D")], ["D1", "D2"])
+        self.assertTrue(texts["D1"].startswith("The filter"), texts["D1"])
+        self.assertEqual(texts["D2"], "The list shows rows.")
+        self.assertNotIn("Design", listed["unlisted"])
+
+    EDIT_SLASHLESS = "**Edit:** `README.md`, `review_stats.py` and `preflight.extra`."
+
+    def test_a_slashless_edit_name_is_a_file_only_when_the_tree_has_it(self):
+        body = BODY.replace(BODY[BODY.index("**Edit:**"):BODY.index("\n", BODY.index("**Edit:**"))],
+                            self.EDIT_SLASHLESS)
+        listed = items(body, tree=lambda: ["README.md", "plugins/x/review_stats.py"])
+        self.assertEqual([i["id"] for i in listed["items"] if i["id"].startswith("F:")],
+                         ["F:tests/test_list.py", "F:README.md", "F:review_stats.py"])
+        body = body.replace(self.EDIT_SLASHLESS, "**Edit:** `preflight.extra` and `README.md`.")
+        listed = items(body, tree=lambda: ["README.md"])
+        self.assertIn("F:README.md", [i["id"] for i in listed["items"]])
+
+    def test_create_names_are_not_checked_against_the_tree(self):
+        body = BODY.replace("**Create:** `tests/test_list.py`.",
+                            "**Create:** `README.md`, `review_stats.py` and `preflight.extra`.")
+        listed = items(body, tree=lambda: [])
+        f_ids = [i["id"] for i in listed["items"] if i["id"].startswith("F:")]
+        for name in ("README.md", "review_stats.py", "preflight.extra"):
+            self.assertIn(f"F:{name}", f_ids)
+
+    def test_the_tree_is_read_only_for_a_slashless_edit_name(self):
+        listed = items(BODY, tree=lambda: (_ for _ in ()).throw(AssertionError("tree read")))
+        self.assertEqual([i["id"] for i in listed["items"]], IDS)
+
+    def test_a_failed_tree_read_exits_2_without_a_traceback(self):
+        body = BODY.replace(BODY[BODY.index("**Edit:**"):BODY.index("\n", BODY.index("**Edit:**"))],
+                            "**Edit:** `preflight.extra`.")
+
+        def fake_git(a):
+            if a[0] == "ls-files":
+                raise sc.GitError("fatal: not a git repository")
+            return ""
+
+        out, code = call("items", body=body, git=fake_git)
+        self.assertEqual(code, 2)
+        self.assertIn("fatal: not a git repository", out)
+
     def test_no_spec_in_this_body(self):
         out, code = call("items", body="## Request\n\nPlease fix it.\n")
         self.assertEqual(code, 1)
@@ -189,8 +236,95 @@ class ChangedFiles(unittest.TestCase):
         self.assertIn("outside: README.md", lines)
         self.assertFalse([ln for ln in lines if ln.startswith("outside: plugins/")], lines)
 
+    def slashless_repo(self, tmp, edit_line):
+        repo = Path(tmp)
+        git(repo, "init", "-q", "-b", "main")
+        git(repo, "config", "user.email", "t@example.org")
+        git(repo, "config", "user.name", "t")
+        for path in ("old.py", "README.md", "sub/x.py"):
+            (repo / path).parent.mkdir(parents=True, exist_ok=True)
+            (repo / path).write_text("one\n")
+        git(repo, "add", "-A")
+        git(repo, "commit", "-q", "-m", "base")
+        body = BODY.replace(BODY[BODY.index("**Edit:**"):BODY.index("\n", BODY.index("**Edit:**"))], edit_line)
+        (repo / "body.md").write_text(body)
+        (repo / ".gitignore").write_text("body.md\n.gitignore\n")
+        return repo
 
-def call(*argv, body=BODY, answers=None, changed=None, cwd=None):
+    def test_a_top_level_edit_file_the_change_deletes_is_still_listed(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            repo = self.slashless_repo(tmp, "**Edit:** `old.py`, `README.md`.")
+            git(repo, "switch", "-q", "-c", "change")
+            git(repo, "rm", "-q", "old.py")
+            git(repo, "commit", "-q", "-m", "drop old.py")
+            out = subprocess.run([sys.executable, str(SCRIPT), "items", "body.md", "--base", "main"],
+                                 cwd=repo, capture_output=True, text=True)
+        self.assertEqual(out.returncode, 0, out.stderr)
+        lines = out.stdout.splitlines()
+        self.assertIn("F:old.py\told.py\tmet", lines)
+        self.assertNotIn("outside: old.py", lines)
+
+    def test_a_top_level_edit_file_the_change_renames_is_still_listed(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            repo = self.slashless_repo(tmp, "**Edit:** `old.py`, `README.md`.")
+            git(repo, "switch", "-q", "-c", "change")
+            git(repo, "mv", "old.py", "new.py")
+            git(repo, "commit", "-q", "-m", "rename old.py")
+            out = subprocess.run([sys.executable, str(SCRIPT), "items", "body.md", "--base", "main"],
+                                 cwd=repo, capture_output=True, text=True)
+        self.assertEqual(out.returncode, 0, out.stderr)
+        self.assertIn("F:old.py", [ln.split("\t")[0] for ln in out.stdout.splitlines()])
+
+    def test_slashless_edit_names_are_read_from_the_repo_top_in_a_subfolder(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            repo = self.slashless_repo(tmp, "**Edit:** `README.md`, `x.py`.")
+            out = subprocess.run([sys.executable, str(SCRIPT), "items", "../body.md"],
+                                 cwd=repo / "sub", capture_output=True, text=True)
+        self.assertEqual(out.returncode, 0, out.stderr)
+        f_ids = [ln.split("\t")[0] for ln in out.stdout.splitlines() if ln.startswith("F:")]
+        self.assertIn("F:README.md", f_ids)
+        self.assertIn("F:x.py", f_ids)
+
+    def test_an_untracked_file_counts_and_an_ignored_one_does_not(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            repo = self.slashless_repo(tmp, "**Edit:** `notes.md`, `secret.md`.")
+            (repo / "notes.md").write_text("local\n")
+            (repo / "secret.md").write_text("local\n")
+            (repo / ".gitignore").write_text("body.md\n.gitignore\nsecret.md\n")
+            out = subprocess.run([sys.executable, str(SCRIPT), "items", "body.md"],
+                                 cwd=repo, capture_output=True, text=True)
+        self.assertEqual(out.returncode, 0, out.stderr)
+        f_ids = [ln.split("\t")[0] for ln in out.stdout.splitlines() if ln.startswith("F:")]
+        self.assertIn("F:notes.md", f_ids)
+        self.assertNotIn("F:secret.md", f_ids)
+
+    def test_slashless_edit_names_against_a_real_tree(self):
+        body = BODY.replace(BODY[BODY.index("**Edit:**"):BODY.index("\n", BODY.index("**Edit:**"))],
+                            "**Edit:** `README.md`, `views.py`, `preflight.extra`.")
+        with tempfile.TemporaryDirectory() as tmp:
+            repo = Path(tmp)
+            git(repo, "init", "-q", "-b", "main")
+            git(repo, "config", "user.email", "t@example.org")
+            git(repo, "config", "user.name", "t")
+            for path in ("app/views.py", "README.md"):
+                (repo / path).parent.mkdir(parents=True, exist_ok=True)
+                (repo / path).write_text("one\n")
+            git(repo, "add", "-A")
+            git(repo, "commit", "-q", "-m", "base")
+            (repo / "README.md").write_text("two\n")
+            (repo / "body.md").write_text(body)
+            (repo / ".gitignore").write_text("body.md\n.gitignore\n")
+            out = subprocess.run([sys.executable, str(SCRIPT), "items", "body.md", "--base", "main"],
+                                 cwd=repo, capture_output=True, text=True)
+        self.assertEqual(out.returncode, 0, out.stderr)
+        lines = out.stdout.splitlines()
+        self.assertIn("F:README.md\tREADME.md\tmet", lines)
+        self.assertIn("F:views.py\tviews.py\tmissing", lines)
+        self.assertFalse([ln for ln in lines if "preflight.extra" in ln], lines)
+        self.assertNotIn("outside: README.md", lines)
+
+
+def call(*argv, body=BODY, answers=None, changed=None, cwd=None, git=None):
     """Run main() with the body (and answers) in temp files; returns (stdout+stderr, exit)."""
     with tempfile.TemporaryDirectory() as tmp:
         base = Path(cwd or tmp)
@@ -202,6 +336,8 @@ def call(*argv, body=BODY, answers=None, changed=None, cwd=None):
         args += list(argv[1:])
 
         def fake_git(a):
+            if git is not None:
+                return git(a)
             if a[0] == "merge-base":
                 return "abc\n"
             if a[0] == "diff":

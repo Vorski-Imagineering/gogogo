@@ -363,9 +363,26 @@ class NumberedItemsAndFileGroups(unittest.TestCase):
         self.assertIn("## Design: no numbered items; number each artefact 1., 2., 3. at the start of a line",
                       errors(body))
 
+    def test_a_bold_numbered_design_is_accepted(self):
+        errs, warns, withheld = run(GOOD.replace("1. Change the filter.", "**1. Change the filter.**"))
+        self.assertEqual(errs, [])
+        self.assertEqual(warns, [])
+        self.assertIsNone(withheld)
+
+    def test_bare_lines_under_a_bold_item_are_refused_on_their_order(self):
+        body = GOOD.replace("1. Change the filter.", "**1. A.**\n\n1. nested\n2. nested")
+        self.assertIn("## Design: items are numbered 1, 1, 2; number them 1, 2, 3 in order through the section",
+                      errors(body))
+
+    def test_bold_numbered_verify_by_hand_steps_are_steps(self):
+        body = GOOD.replace("1. Log in", "**1.** Log in").replace("2. Click", "**2.** Click")
+        self.assertNotIn("## Verify by hand: no numbered steps", errors(body))
+
     def test_the_helpers(self):
         self.assertEqual(sl.numbered_items(["1. a", "  2. indented", "```", "2. fenced", "```", "3) b"]),
                          [(1, "1. a"), (3, "3) b")])
+        self.assertEqual(sl.numbered_items(["**1. a**", "**2.** b", "3. c"]),
+                         [(1, "**1. a**"), (2, "**2.** b"), (3, "3. c")])
         groups = sl.file_groups(["**Create:** `a.py`", "- **Edit** `b.py`", "more `c.py`",
                                  "**explicitly not in scope:**", "- x"])
         self.assertEqual(groups, {"create": ["`a.py`"], "edit": ["`b.py`", "more `c.py`"],

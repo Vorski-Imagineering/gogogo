@@ -9,6 +9,7 @@ is faked here.
     python3 -m unittest discover -s .claude/scripts -p 'test_*.py'
 """
 
+import io
 import json
 import re
 import subprocess
@@ -16,6 +17,7 @@ import unittest
 from pathlib import Path
 from argparse import Namespace
 from unittest import mock
+from contextlib import redirect_stderr, redirect_stdout
 
 import sys
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "plugins" / "gogogo" / "scripts"))
@@ -148,6 +150,277 @@ class MoveReadBackTests(unittest.TestCase):
             with self.assertRaises(board.BoardError):
                 board.cmd_move(args)
         wrote.assert_not_called()
+
+
+class NeedsHumanGuardTests(unittest.TestCase):
+    """A move to the needs-a-person column needs the issue's newest comment to say why (#84)."""
+    META = dict(MoveReadBackTests.META,
+                options=dict(MoveReadBackTests.META["options"], **{"Human!Help!": "hhh", "In progress": "ppp"}))
+    STOP = "**Needs you:** x\n<!-- gogogo:stop v=1 reason=spec -->"
+
+    def setUp(self):
+        board.COLUMNS["needs_human"] = board.Column("Human!Help!", "tracker.columns.needs_human")
+
+    def tearDown(self):
+        board.COLUMNS.pop("needs_human", None)
+
+    def _move(self, to, comment, status_after="Human!Help!", card=True, add_missing=False):
+        before = {"id": "ITEM_7", "isArchived": False,
+                  "project": {"number": 2}, "fieldValueByName": {"name": "Dev Priority"}}
+        after = dict(before, fieldValueByName={"name": status_after})
+        reads = [{"issue": {}, "card": before if card else None}, {"issue": {}, "card": after}]
+        newest = (mock.patch.object(board, "newest_comment", side_effect=comment) if callable(comment)
+                  or isinstance(comment, BaseException) else
+                  mock.patch.object(board, "newest_comment", return_value=comment))
+        err = io.StringIO()
+        with mock.patch.object(board, "board_meta", return_value=self.META), \
+             mock.patch.object(board, "issue_card", side_effect=reads) as read, \
+             mock.patch.object(board, "graphql", return_value={}) as wrote, \
+             newest as asked, redirect_stderr(err):
+            code = board.move_card(7, board.DEFAULT_REPO, to, add_missing=add_missing)
+        return code, wrote, read, asked, err.getvalue()
+
+    def test_a_stop_marker_is_a_reason_and_an_unknown_reason_or_version_is_not(self):
+        self.assertTrue(board.has_reason(self.STOP))
+        self.assertFalse(board.has_reason(self.STOP.replace("reason=spec", "reason=lunch")))
+        self.assertFalse(board.has_reason(self.STOP.replace("v=1", "v=2")))
+
+    def test_extra_keys_on_the_stop_marker_are_ignored(self):
+        self.assertTrue(board.has_reason(
+            "<!-- gogogo:stop v=1 reason=spec session=0d6f3c2a-8b1e-4f5d-9a7c-2e4b6d8f0a1c -->"))
+
+    def test_a_quoted_template_or_no_comment_is_not_a_reason(self):
+        self.assertFalse(board.has_reason("<!-- gogogo:stop v=1 reason=<hard-stop|decision> -->"))
+        self.assertFalse(board.has_reason("<!-- gogogo:skip v=1 reason=<why> -->"))
+        self.assertFalse(board.has_reason(""))
+
+    def test_skip_and_auto_test_markers_are_reasons(self):
+        self.assertTrue(board.has_reason("<!-- gogogo:skip v=1 reason=lint session=unknown -->"))
+        verdict = "<!-- auto-test v1 run=r issue=7 verdict=FAIL build=b skill=s -->"
+        self.assertTrue(board.has_reason(verdict))
+        self.assertFalse(board.has_reason(verdict.replace("FAIL", "PASS")))
+
+    def test_a_move_by_role_key_with_no_reason_is_refused_before_any_write(self):
+        code, wrote, read, _, err = self._move("needs_human", "just a comment")
+        self.assertEqual(code, 4)
+        self.assertTrue(err.startswith("#7: refused:"), err)
+        wrote.assert_not_called()
+        read.assert_not_called()
+
+    def test_a_move_by_column_name_with_no_reason_is_refused(self):
+        for to in ("Human!Help!", "human!help!"):
+            code, wrote, _, _, _ = self._move(to, "just a comment")
+            self.assertEqual(code, 4, to)
+            wrote.assert_not_called()
+        # A trailing space fails the column lookup before the guard (Design 4), so it is refused
+        # as an unknown column with nothing written (Approvals row 5).
+        with mock.patch.object(board, "board_meta", return_value=self.META), \
+             mock.patch.object(board, "issue_card") as read, \
+             mock.patch.object(board, "graphql") as wrote, \
+             mock.patch.object(board, "newest_comment") as asked:
+            with self.assertRaisesRegex(board.BoardError, "no column named 'human!help! '"):
+                board.move_card(7, board.DEFAULT_REPO, "human!help! ")
+        asked.assert_not_called()  # refused by resolve_option, before the guard
+        wrote.assert_not_called()
+        read.assert_not_called()
+
+    def test_a_move_with_a_stop_marker_goes_through(self):
+        code, wrote, _, _, _ = self._move("needs_human", self.STOP)
+        self.assertEqual(code, 0)
+        self.assertEqual(wrote.call_args.kwargs["option"], "hhh")
+
+    def test_a_failed_comment_read_writes_nothing(self):
+        with mock.patch.object(board, "board_meta", return_value=self.META), \
+             mock.patch.object(board, "issue_card") as read, \
+             mock.patch.object(board, "graphql") as wrote, \
+             mock.patch.object(board, "newest_comment", side_effect=board.BoardError("partial data")):
+            with self.assertRaises(board.BoardError):
+                board.move_card(7, board.DEFAULT_REPO, "needs_human")
+        wrote.assert_not_called()
+        read.assert_not_called()
+
+    def test_other_columns_never_read_the_comment(self):
+        code, _, _, asked, _ = self._move("in_progress", AssertionError("read"), status_after="In progress")
+        self.assertEqual(code, 0)
+        asked.assert_not_called()
+
+    def test_a_defaulted_needs_human_guards_only_the_role_key(self):
+        # No needs_human in the profile: it shares the in_progress column (#87). Starting work
+        # on an issue must not need a stop marker; handing it back still does.
+        saved = board.COLUMNS.get("in_progress")
+        board.COLUMNS["needs_human"] = board.Column("In progress", "tracker.columns.in_progress")
+        board.COLUMNS["in_progress"] = board.Column("In progress", "tracker.columns.in_progress")
+        try:
+            for to in ("in_progress", "In progress"):
+                code, _, _, asked, _ = self._move(to, AssertionError("read"), status_after="In progress")
+                self.assertEqual(code, 0, to)
+                asked.assert_not_called()
+            code, wrote, _, _, _ = self._move("needs_human", "just a comment", status_after="In progress")
+            self.assertEqual(code, 4)
+            wrote.assert_not_called()
+        finally:
+            board.COLUMNS["in_progress"] = saved
+
+    def test_no_needs_human_in_the_profile_means_no_guard(self):
+        board.COLUMNS.pop("needs_human")
+        code, _, _, asked, _ = self._move("Human!Help!", AssertionError("read"))
+        self.assertEqual(code, 0)
+        asked.assert_not_called()
+
+    def test_a_refused_move_adds_no_card(self):
+        code, wrote, _, _, _ = self._move("needs_human", "just a comment", card=False, add_missing=True)
+        self.assertEqual(code, 4)
+        self.assertNotIn(board.ADD_ITEM_MUTATION, [c.args[0] for c in wrote.call_args_list if c.args])
+        wrote.assert_not_called()
+
+    def test_marker_fields_are_parsed_strictly(self):
+        has = board.has_reason
+        self.assertFalse(has("<!-- gogogo:stop junk -->"))                  # a token with no `=`
+        self.assertTrue(has("<!-- auto-test v1 build=a=b verdict=FAIL -->"))  # `=` inside a value
+        self.assertFalse(has("<!-- gogogo:skip v=1 reason=<lint -->"))
+        self.assertFalse(has("<!-- gogogo:skip v=1 reason=lint> -->"))
+        self.assertFalse(has("<!-- auto-test v1 build= verdict=FAIL -->"))  # an empty value
+        self.assertTrue(has("<!-- auto-test v1 run=r verdict=NEEDS_HUMAN -->"))
+
+    def test_a_later_marker_counts_after_an_unreadable_one(self):
+        for first in ("<!-- gogogo:stop junk -->", "<!-- gogogo:stop v=1 reason=<hard-stop|decision> -->"):
+            self.assertTrue(board.has_reason(first + "\n" + self.STOP), first)
+
+    def test_newest_comment_splits_the_repo_once_and_reads_a_null_body_as_empty(self):
+        answer = {"repository": {"issue": {"comments": {"nodes": [{"body": None}]}}}}
+        with mock.patch.object(board, "graphql", return_value=answer) as asked:
+            self.assertEqual(board.newest_comment(7, "acme/issues/x"), "")
+        self.assertEqual(asked.call_args.kwargs["name"], "issues/x")
+
+    def test_the_move_command_reaches_move_card(self):
+        with mock.patch.object(sys, "argv", ["tracker.py", "move", "7", "--to", "needs_human"]), \
+             mock.patch.object(board, "configure"), \
+             mock.patch.object(board, "move_card", return_value=4) as moved:
+            self.assertEqual(board.main(), 4)
+        self.assertEqual(moved.call_args.args[:3], (7, board.DEFAULT_REPO, "needs_human"))
+
+    def test_the_stop_reasons_match_review_stats(self):
+        import review_stats
+        self.assertEqual(board.STOP_REASONS, review_stats.STOPS)
+
+    def test_newest_comment_of_a_missing_issue_is_a_board_error(self):
+        with mock.patch.object(board, "graphql", return_value={"repository": {"issue": None}}):
+            with self.assertRaisesRegex(board.BoardError, "does not exist"):
+                board.newest_comment(99999, "acme/issues")
+
+    def test_newest_comment_reads_the_last_comment_or_nothing(self):
+        def answer(nodes):
+            return {"repository": {"issue": {"comments": {"nodes": nodes}}}}
+        with mock.patch.object(board, "graphql", return_value=answer([{"body": "b"}])) as asked:
+            self.assertEqual(board.newest_comment(7, "acme/issues"), "b")
+        self.assertEqual(asked.call_args.kwargs, {"owner": "acme", "name": "issues", "number": 7})
+        with mock.patch.object(board, "graphql", return_value=answer([])):
+            self.assertEqual(board.newest_comment(7, "acme/issues"), "")
+
+    def test_the_contract_names_the_refusal(self):
+        text = (Path(__file__).resolve().parents[1] / "plugins" / "gogogo" / "references"
+                / "tracker-contract.md").read_text(encoding="utf-8")
+        section = text.split("## The shared tool", 1)[1].split("\n## ", 1)[0]
+        self.assertIn("needs_human", section)
+        self.assertRegex(section, r"refuses a move to `tracker\.columns\.needs_human`[^.]*exiting 4")
+
+
+class MoveFromTests(unittest.TestCase):
+    """`move --from`: refuse, writing nothing, when the card has gone elsewhere (#101)."""
+    META = dict(MoveReadBackTests.META,
+                options={"Dev Ready": "rrr", "In progress": "ppp", "Done": "ddd"})
+
+    def _move(self, current, frm="Dev Ready", to="In progress", card=True, add_missing=False,
+              status_after="In progress"):
+        before = {"id": "ITEM_7", "isArchived": False, "project": {"number": 2},
+                  "fieldValueByName": {"name": current} if current else None}
+        after = dict(before, fieldValueByName={"name": status_after})
+        reads = [{"issue": {}, "card": before if card else None}, {"issue": {}, "card": after}]
+        err = io.StringIO()
+        with mock.patch.object(board, "board_meta", return_value=self.META), \
+             mock.patch.object(board, "issue_card", side_effect=reads), \
+             mock.patch.object(board, "graphql", return_value={}) as wrote, \
+             redirect_stderr(err), redirect_stdout(io.StringIO()):
+            code = board.move_card(7, board.DEFAULT_REPO, to, add_missing=add_missing, expect_from=frm)
+        sent = [c.args[0] for c in wrote.call_args_list if c.args]
+        return code, sent, err.getvalue()
+
+    def test_a_card_where_it_was_expected_moves(self):
+        code, sent, _ = self._move("Dev Ready")
+        self.assertEqual(code, 0)
+        self.assertEqual(sent, [board.SET_FIELD_MUTATION])
+
+    def test_a_card_elsewhere_is_refused_with_nothing_written(self):
+        code, sent, err = self._move("In progress")
+        self.assertEqual(code, 3)
+        self.assertIn("In progress", err)
+        self.assertIn("Dev Ready", err)
+        self.assertEqual(err.strip(), "#7 is in In progress, not Dev Ready; not moved")
+        self.assertNotIn(board.SET_FIELD_MUTATION, sent)
+        self.assertNotIn(board.ADD_ITEM_MUTATION, sent)
+        self.assertEqual(sent, [])
+
+    def test_the_comparison_ignores_case(self):
+        code, sent, _ = self._move("dev ready")
+        self.assertEqual(code, 0)
+        self.assertEqual(sent, [board.SET_FIELD_MUTATION])
+
+    def test_from_takes_a_role_key(self):
+        code, sent, _ = self._move("In progress", frm="in_progress", to="Done", status_after="Done")
+        self.assertEqual(code, 0)
+        self.assertEqual(sent, [board.SET_FIELD_MUTATION])
+
+    def test_from_a_column_the_board_lacks_raises_before_any_read(self):
+        with mock.patch.object(board, "board_meta", return_value=self.META), \
+             mock.patch.object(board, "issue_card") as read, \
+             mock.patch.object(board, "graphql") as wrote:
+            with self.assertRaisesRegex(board.BoardError, "No Such Column"):
+                board.move_card(7, board.DEFAULT_REPO, "In progress", expect_from="No Such Column")
+        read.assert_not_called()
+        wrote.assert_not_called()
+
+    def test_a_card_with_no_column_is_refused(self):
+        code, sent, err = self._move(None)
+        self.assertEqual(code, 3)
+        self.assertEqual(sent, [])
+        self.assertEqual(err.strip(), "#7 is in no column, not Dev Ready; not moved")
+
+    def test_add_missing_with_from_and_no_card_adds_nothing(self):
+        code, sent, err = self._move(None, card=False, add_missing=True)
+        self.assertEqual(code, 3)
+        self.assertEqual(sent, [])
+        self.assertEqual(err.strip(), "#7 is in not on the board, not Dev Ready; not moved")
+
+    def test_the_from_option_reaches_move_card(self):
+        argv = ["tracker.py", "move", "7", "--from", "queue", "--to", "in_progress"]
+        with mock.patch.object(sys, "argv", argv), \
+             mock.patch.object(board, "configure"), \
+             mock.patch.object(board, "move_card", return_value=3) as moved:
+            self.assertEqual(board.main(), 3)
+        self.assertEqual(moved.call_args.kwargs.get("expect_from"), "queue")
+
+    def test_move_help_names_from_and_that_it_only_narrows_the_gap(self):
+        out = io.StringIO()
+        with mock.patch.object(sys, "argv", ["tracker.py", "move", "--help"]), \
+             mock.patch.object(board, "configure"), redirect_stdout(out):
+            with self.assertRaises(SystemExit):
+                board.main()
+        text = " ".join(out.getvalue().split())
+        self.assertIn("[--from COLUMN]", text)
+        self.assertRegex(text, r"--from COLUMN profile role key or column name; exit 3.* It narrows, "
+                               r"but does not close, the gap between reading a card and moving it --to ")
+
+    def test_the_help_names_from_and_its_exit_code(self):
+        doc = board.__doc__
+        self.assertRegex(doc, r'move <issue> \[--from "<column>"\] --to')
+        self.assertRegex(doc, r"3 `show --expect` or `move --from`")
+
+    def test_the_contract_move_row_names_from_and_exit_3(self):
+        text = (Path(__file__).resolve().parents[1] / "plugins" / "gogogo" / "references"
+                / "tracker-contract.md").read_text(encoding="utf-8")
+        row = next(line for line in text.splitlines() if line.startswith("| `move "))
+        self.assertIn("--from", row)
+        self.assertRegex(row.rsplit("|", 2)[1], r"\b3\b")
 
 
 def issue_page(issues, has_next=False, cursor="next"):
@@ -373,6 +646,21 @@ columns = { in_progress = "Doing", needs_human = "Human!Help!" }
         self.assertEqual(board.column("needs_human"), "Human!Help!")
         self.assertEqual(board.missing_columns({"options": ["Doing"]}), ["Human!Help!"])
         self.assertEqual(board.missing_columns({"options": ["Doing", "human!help!"]}), [])
+
+    def test_a_profile_without_needs_human_uses_the_in_progress_column(self):
+        # gogogo#87: the default profile_check.effective() fills in, so a move to
+        # needs_human has a column rather than an unknown role.
+        path = self.write("""+++
+profile = 1
+[tracker]
+project_owner = "someone"
+project_number = 7
+issues_repo = "someone/tracker"
+columns = { in_progress = "In progress" }
++++
+""")
+        board.configure(path)
+        self.assertEqual(board.COLUMNS["needs_human"].name, "In progress")
 
     def test_a_profile_without_a_board_is_refused(self):
         path = self.write('+++\nprofile = 1\n[tracker]\nissues_repo = "a/b"\n+++\n')

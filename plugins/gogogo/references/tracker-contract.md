@@ -8,7 +8,7 @@ board. A repo's tool may do more; the skills use only this.
 |---|---|---|
 | `list --status "<column>"` | Every card in the column, newest-added first. Reads the whole board and refuses to print a list it cannot reconcile against the board's own total; also prints any card only the issue side can see (GitHub's project index can drop one from both the pages and the count) | 0 ok; 2 the read can't be trusted: **a stop, never an empty column** |
 | `show <n> [--expect "<column>"]` | One issue's column, read from the issue side, so it works whatever the board's size | 0 ok; 2 not found or unreadable; 3 in a different column from `--expect` |
-| `move <n> --to "<column>"` | Sets the column. Resolves every id live, then reads the card back | 0 **only** when the read-back agrees; 2 the board disagrees or the write failed |
+| `move <n> [--from "<column>"] --to "<column>"` | Sets the column. Resolves every id live, then reads the card back; with `--from`, refuses and writes nothing when the card is not in that column | 0 **only** when the read-back agrees; 2 the board disagrees or the write failed; 3 the card is elsewhere than `--from` |
 | `fields [--check]` | The board's columns as they are now. `--check` fails if a column the tool's own registry needs is missing | 0 ok; 2 a column is missing |
 
 Column arguments are **column names**, as the profile's `stages` and
@@ -49,6 +49,8 @@ A repo may name its own tool instead, as long as it meets this contract. A repo
 whose CI also moves cards (for example on deploy) imports a pinned copy of
 `tracker.py` and runs a pinned `stage_sync.py` beside it (see
 `references/stage-sync.md`); the skills still use `tracker.py`.
+
+The shared tool also refuses a move to `tracker.columns.needs_human` unless the issue's newest comment carries a stop marker (`gogogo:stop`, `gogogo:skip`, or an `auto-test v1` FAIL or NEEDS_HUMAN verdict), exiting 4 with nothing written; a repo's own tool may do the same.
 
 The shared tool also has `views [--hide-closed]` and `tidy [--apply]`, which
 `/gogogo:setup` uses to keep views and cards current. They are not part of the

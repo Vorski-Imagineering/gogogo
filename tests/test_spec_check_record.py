@@ -1,16 +1,19 @@
 #!/usr/bin/env python3
 """Tests for the spec-check record that /gogogo:dev §7 asks for on each issue.
 
-The spec check in §5 is wording and gets no test here (CLAUDE.md § Tests): it
-is checked by scenario runs. The record is a template `review_stats.py`
+The spec check in §5 is wording and is checked by scenario runs (CLAUDE.md §
+Tests); the only tests of it here pin the reader's brief to what
+`spec_check.py verify` accepts (gogogo#81). The record is a template `review_stats.py`
 parses, so these pin its keys, its worked example, its allowed values, and
 where the skills and README name the check (gogogo#44).
 
     python3 -m unittest tests.test_spec_check_record
 """
 
+import contextlib
 import re
 import sys
+import tempfile
 import unittest
 from pathlib import Path
 
@@ -22,6 +25,7 @@ SPEC = PLUGIN / "skills" / "spec" / "SKILL.md"
 sys.path.insert(0, str(PLUGIN / "scripts"))
 
 import review_stats  # noqa: E402
+import spec_check  # noqa: E402
 
 KEYS = ["v", "items", "met", "missing", "differs", "na", "outside", "runs", "fixed", "declared", "reader", "end"]
 MARKER = re.compile(r"<!-- gogogo:spec-check (.*?) -->")
@@ -58,6 +62,30 @@ class Example(unittest.TestCase):
         record = review_stats.parse_spec_check(EXAMPLE)
         self.assertIsNotNone(record)
         self.assertEqual(record["items"], record["met"] + record["missing"] + record["differs"] + record["na"])
+
+
+class Skill(unittest.TestCase):
+    """§5's reader brief names only what `spec_check.py verify` accepts (gogogo#81)."""
+
+    def brief(self):
+        text = DEV.read_text(encoding="utf-8")
+        return text[text.index("It is told:"):text.index("It does not judge quality")]
+
+    def test_the_brief_names_only_evidence_forms_verify_accepts(self):
+        forms = sorted(set(re.findall(r"`(path[^`]*)`", self.brief())))
+        self.assertGreaterEqual(len(forms), 3, forms)
+        self.assertFalse([f for f in re.findall(r"`([^`]*)`", self.brief()) if re.search(r":[^`]*-", f)])
+        with tempfile.TemporaryDirectory() as tmp, contextlib.chdir(tmp):
+            Path("a.py").write_text("def name():\n    pass\n")
+            for form in forms:
+                evidence = form.replace("path", "a.py", 1).replace("line", "1").replace("::name", "::name")
+                self.assertIsNone(spec_check._resolves(evidence), form)
+
+    def test_the_brief_names_which_items_need_evidence(self):
+        bullets = [b for b in re.split(r"\n  - ", self.brief()) if "always have evidence" in b]
+        self.assertEqual(len(bullets), 1, bullets)
+        for letter in spec_check.NEEDS_EVIDENCE:
+            self.assertIn(f"`{letter}`", bullets[0])
 
 
 class Named(unittest.TestCase):
