@@ -122,5 +122,28 @@ class TakeWithFrom(unittest.TestCase):
         self.assertIn("--from in_progress", self.step)
 
 
+class WorktreeSweep(unittest.TestCase):
+    """dev and auto-dev remove finished worktrees; status and wrap-up only list them (gogogo#92)."""
+
+    RUN = re.compile(r'scripts/worktree_sweep\.py"( --apply)?')
+
+    def runs(self, skill):
+        folder = SKILL.parents[1] / skill
+        # A step's rules may sit in the skill's references/ (gogogo#130).
+        text = "\n".join(p.read_text(encoding="utf-8")
+                          for p in [folder / "SKILL.md", *sorted(folder.glob("references/*.md"))])
+        return [m.group(1) is not None for m in self.RUN.finditer(text)]
+
+    def test_dev_and_auto_dev_run_the_sweep_with_apply(self):
+        for skill in ("dev", "auto-dev"):
+            self.assertTrue(self.runs(skill), skill)
+            self.assertTrue(all(self.runs(skill)), skill)
+
+    def test_status_and_wrap_up_run_the_sweep_without_apply(self):
+        for skill in ("status", "wrap-up"):
+            self.assertTrue(self.runs(skill), skill)
+            self.assertFalse(any(self.runs(skill)), skill)
+
+
 if __name__ == "__main__":
     unittest.main()

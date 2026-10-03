@@ -25,6 +25,7 @@ CASES = {
     "dev-third-attempt", "dev-reversal", "dev-unlicensed-weaker-test",
     "auto-dev-label-less-card", "auto-dev-open-decision", "auto-dev-list-fails",
     "spec-declined-question", "spec-being-built", "spec-nothing-hits-today",
+    "status-sweep-lists-only", "wrap-up-asks-before-removing",
 }
 TAGS = re.compile(r"^tags:\s*\[([^\]]*)\]\s*$", re.M)
 TYPE = re.compile(r"^type:\s*(\S+)\s*$", re.M)
@@ -35,7 +36,7 @@ def cases():
 
 
 class Suite(unittest.TestCase):
-    def test_the_nine_cases_each_name_one_real_skill(self):
+    def test_the_cases_each_name_one_real_skill(self):
         self.assertEqual({c.name for c in cases()}, CASES)
         skills = {p.parent.name for p in SKILLS.glob("*/SKILL.md")}
         for c in cases():

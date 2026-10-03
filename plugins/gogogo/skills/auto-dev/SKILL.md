@@ -95,7 +95,17 @@ means finished work sits unverified while you go and ask.
    ```
    List what it prints at the top of the run report. Never delete, merge or
    rebase any of it.
-10. **The profile's `preflight.extra`**, each as it says. A check that says
+10. **Finished worktrees, removed:** from the main worktree,
+   ```bash
+   python3 "${CLAUDE_PLUGIN_ROOT}/scripts/worktree_sweep.py" --apply
+   ```
+   It removes leftover worktrees whose pull request merged or whose issue is
+   closed, and keeps any with uncommitted changes, commits on no remote, or an
+   open issue whose work has not merged. Put its lines at the top of the run
+   report. Exit 1 means it kept a worktree, which is not a failure: the run
+   goes on. Each issue's own worktree is removed after its merge, by
+   `/gogogo:dev` §8.
+11. **The profile's `preflight.extra`**, each as it says. A check that says
    "report only" is reported and never acted on.
 
 ## The loop never waits on chat

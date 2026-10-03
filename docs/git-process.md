@@ -62,6 +62,10 @@ feature alike. The number is what ties the branch back to the tracker:
   but has no open pull request and no stop marker naming it (a local branch
   only when it holds work on no remote or sits in a worktree);
 - `/gogogo:status` links each branch to its issue by that number;
+- `worktree_sweep.py` removes an issue's worktree once its pull request has
+  merged or its issue is closed, and keeps any with uncommitted changes or
+  commits on no remote; dev runs it after each verified merge, and auto-dev
+  at the start of each run;
 - `stage_sync.py trailer --branch fix/<n>-<slug>` reads the issue from it.
 
 A branch whose name has no issue number is, to the process, work nobody owns.
