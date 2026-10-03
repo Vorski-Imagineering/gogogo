@@ -76,6 +76,12 @@ def issue_view(repo, number):
         return False
 
 
+def issue_open(repo, number):
+    """True or False for an issue's state, None with no repo to ask; a failed lookup is False."""
+    issue = issue_view(repo, number)
+    return issue if issue in (None, False) else issue.get("state") == "OPEN"
+
+
 STOP_MARKER = "<!-- gogogo:stop v=1"
 STOP_REASON = re.compile(r"<!-- gogogo:stop v=1 [^>]*?\breason=([^\s<>]+)")
 TREE_LINK = re.compile(r"/tree/([^\s)\]>\"'`]+)")

@@ -208,6 +208,9 @@ elif args[:2] == ["repo", "view"]:
     answer = fixture.get("repo", {}).get(args[2], {"isArchived": False})
 elif args[:2] == ["issue", "view"]:
     answer = fixture.get("issue", {}).get(args[2], {"state": "CLOSED"})
+    if answer == "notjson":
+        print("<html>")
+        sys.exit(0)
 else:
     answer = "fail"
 if answer == "fail":
@@ -403,6 +406,32 @@ class PullRequests(Repos):
         self.assertNotIn("no open PR", lines[0])
         self.assertIn("issue #12 is open; PR #5 open in o/old", lines[0])
 
+    def test_the_issue_is_read_with_its_comments(self):
+        self.branch_with("fix/12-x", 1)
+        self.run_with({"issue": {"12": {"state": "OPEN", "comments": []}}})
+        self.assertIn("issue view 12 --repo o/code --json state,comments", self.log.read_text())
+
+    def test_an_unreadable_issue_answer_is_not_open(self):
+        self.branch_with("fix/12-x", 1)
+        code, lines = self.run_with({"issue": {"12": "notjson"}})
+        self.assertEqual(code, 1)
+        self.assertIn("issue #12 is not open", lines[0])
+
+    def test_a_branch_claimed_by_a_stop_marker_does_not_end_the_list(self):
+        self.branch_with("fix/12-x", 1)
+        self.branch_with("zz-later", 1)
+        comment = "**Needs you:** https://github.com/o/code/tree/fix/12-x\n<!-- gogogo:stop v=1 reason=review -->"
+        code, lines = self.run_with({"issue": {"12": {"state": "OPEN", "comments": [{"body": comment}]}}})
+        self.assertEqual([line.split(":")[0] for line in lines], ["zz-later"])
+
+    def test_origin_head_is_not_a_branch(self):
+        self.branch_with("feature", 1)
+        self.git("push", "-q", "origin", "feature")
+        self.git("branch", "-q", "-D", "feature")
+        self.git("remote", "set-head", "origin", "feature")
+        code, lines = self.run_with({})
+        self.assertEqual([line.split(":")[0] for line in lines], ["feature"])
+
     def test_an_open_issue_whose_stop_marker_names_the_branch_claims(self):
         self.branch_with("fix/12-x", 1)
         comment = ("**Needs you:** read [the branch](https://github.com/o/code/tree/fix/12-x).\n"
@@ -460,6 +489,23 @@ class BranchNumbers(Repos):
     def test_fix_n_slug_still_reads_as_numbered(self):
         self.branch_with("fix/23-thing", 1)
         self.assertEqual(self.stranded(), (0, []))
+
+    def test_a_numbered_branch_with_no_tracker_does_not_end_the_list(self):
+        self.branch_with("fix/23-thing", 1)
+        self.branch_with("zz-later", 1)
+        code, lines = self.stranded()
+        self.assertEqual([line.split(":")[0] for line in lines], ["zz-later"])
+
+    def test_issue_open_keeps_its_answers(self):
+        module = load_script()
+        self.assertIsNone(module.issue_open(None, "1"))
+        for answer, want in (({"state": "OPEN"}, True), ({"state": "CLOSED"}, False), (False, False)):
+            module.issue_view = lambda repo, number, answer=answer: answer
+            self.assertIs(module.issue_open("o/r", "1"), want)
+
+    def test_a_tree_link_keeps_a_trailing_x(self):
+        branches, _, _ = load_script().stop_links("see https://github.com/o/r/tree/fix/12-AX.")
+        self.assertEqual(branches, ["fix/12-AX"])
 
 
 if __name__ == "__main__":
