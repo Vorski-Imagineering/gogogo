@@ -17,7 +17,7 @@ import unittest
 from pathlib import Path
 from argparse import Namespace
 from unittest import mock
-from contextlib import redirect_stderr
+from contextlib import redirect_stderr, redirect_stdout
 
 import sys
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "plugins" / "gogogo" / "scripts"))
@@ -306,6 +306,93 @@ class NeedsHumanGuardTests(unittest.TestCase):
         section = text.split("## The shared tool", 1)[1].split("\n## ", 1)[0]
         self.assertIn("needs_human", section)
         self.assertRegex(section, r"refuses a move to `tracker\.columns\.needs_human`[^.]*exiting 4")
+
+
+class MoveFromTests(unittest.TestCase):
+    """`move --from`: refuse, writing nothing, when the card has gone elsewhere (#101)."""
+    META = dict(MoveReadBackTests.META,
+                options={"Dev Ready": "rrr", "In progress": "ppp", "Done": "ddd"})
+
+    def _move(self, current, frm="Dev Ready", to="In progress", card=True, add_missing=False,
+              status_after="In progress"):
+        before = {"id": "ITEM_7", "isArchived": False, "project": {"number": 2},
+                  "fieldValueByName": {"name": current} if current else None}
+        after = dict(before, fieldValueByName={"name": status_after})
+        reads = [{"issue": {}, "card": before if card else None}, {"issue": {}, "card": after}]
+        err = io.StringIO()
+        with mock.patch.object(board, "board_meta", return_value=self.META), \
+             mock.patch.object(board, "issue_card", side_effect=reads), \
+             mock.patch.object(board, "graphql", return_value={}) as wrote, \
+             redirect_stderr(err), redirect_stdout(io.StringIO()):
+            code = board.move_card(7, board.DEFAULT_REPO, to, add_missing=add_missing, expect_from=frm)
+        sent = [c.args[0] for c in wrote.call_args_list if c.args]
+        return code, sent, err.getvalue()
+
+    def test_a_card_where_it_was_expected_moves(self):
+        code, sent, _ = self._move("Dev Ready")
+        self.assertEqual(code, 0)
+        self.assertEqual(sent, [board.SET_FIELD_MUTATION])
+
+    def test_a_card_elsewhere_is_refused_with_nothing_written(self):
+        code, sent, err = self._move("In progress")
+        self.assertEqual(code, 3)
+        self.assertIn("In progress", err)
+        self.assertIn("Dev Ready", err)
+        self.assertEqual(err.strip(), "#7 is in In progress, not Dev Ready; not moved")
+        self.assertNotIn(board.SET_FIELD_MUTATION, sent)
+        self.assertNotIn(board.ADD_ITEM_MUTATION, sent)
+        self.assertEqual(sent, [])
+
+    def test_the_comparison_ignores_case(self):
+        code, sent, _ = self._move("dev ready")
+        self.assertEqual(code, 0)
+        self.assertEqual(sent, [board.SET_FIELD_MUTATION])
+
+    def test_from_takes_a_role_key(self):
+        code, sent, _ = self._move("In progress", frm="in_progress", to="Done", status_after="Done")
+        self.assertEqual(code, 0)
+        self.assertEqual(sent, [board.SET_FIELD_MUTATION])
+
+    def test_from_a_column_the_board_lacks_raises_before_any_read(self):
+        with mock.patch.object(board, "board_meta", return_value=self.META), \
+             mock.patch.object(board, "issue_card") as read, \
+             mock.patch.object(board, "graphql") as wrote:
+            with self.assertRaisesRegex(board.BoardError, "No Such Column"):
+                board.move_card(7, board.DEFAULT_REPO, "In progress", expect_from="No Such Column")
+        read.assert_not_called()
+        wrote.assert_not_called()
+
+    def test_a_card_with_no_column_is_refused(self):
+        code, sent, err = self._move(None)
+        self.assertEqual(code, 3)
+        self.assertEqual(sent, [])
+        self.assertIn("no column", err)
+
+    def test_add_missing_with_from_and_no_card_adds_nothing(self):
+        code, sent, err = self._move(None, card=False, add_missing=True)
+        self.assertEqual(code, 3)
+        self.assertEqual(sent, [])
+        self.assertIn("not on the board", err)
+
+    def test_the_from_option_reaches_move_card(self):
+        argv = ["tracker.py", "move", "7", "--from", "queue", "--to", "in_progress"]
+        with mock.patch.object(sys, "argv", argv), \
+             mock.patch.object(board, "configure"), \
+             mock.patch.object(board, "move_card", return_value=3) as moved:
+            self.assertEqual(board.main(), 3)
+        self.assertEqual(moved.call_args.kwargs.get("expect_from"), "queue")
+
+    def test_the_help_names_from_and_its_exit_code(self):
+        doc = board.__doc__
+        self.assertRegex(doc, r'move <issue> \[--from "<column>"\] --to')
+        self.assertRegex(doc, r"3 `show --expect` or `move --from`")
+
+    def test_the_contract_move_row_names_from_and_exit_3(self):
+        text = (Path(__file__).resolve().parents[1] / "plugins" / "gogogo" / "references"
+                / "tracker-contract.md").read_text(encoding="utf-8")
+        row = next(line for line in text.splitlines() if line.startswith("| `move "))
+        self.assertIn("--from", row)
+        self.assertRegex(row.rsplit("|", 2)[1], r"\b3\b")
 
 
 def issue_page(issues, has_next=False, cursor="next"):
