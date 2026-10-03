@@ -57,7 +57,8 @@ argument, or words that name none of them):
 1. Without `tracker.tool`, ask for an issue number or an idea; the rest of
    this section does not apply.
 2. Find the column with the word `New`, the way `references/several-issues.md`
-   rule 2 matches words: the column `/gogogo:setup` creates as `⚡️ New`. None
+   rule 2 matches words: the column `/gogogo:setup` creates as `⚡️ New`. A
+   non-zero exit from `fields` is said as such, and this section stops. None
    matches: say the board has no New column and ask for an issue number.
    Several: rule 2's question names them.
 3. Read it with rule 2's `list` command and apply rule 3's skips to each
@@ -73,7 +74,8 @@ argument, or words that name none of them):
    `references/several-issues.md` and start at rule 2 with the column chosen;
    its list is read again there. *Name an issue* with none given: ask for it
    in plain text and wait for the reply.
-7. A decline, or no person to ask: stop, post nothing, and say nothing was
+7. A decline, or no person to ask (the question tool errors, or
+   `claude -p`): stop, post nothing, and say nothing was
    specced. The four-choice menu of *When the user declines a question* is
    not used: no spec fork was asked.
 
@@ -407,7 +409,8 @@ Listed in one place so an adapter for another agent knows what to replace.
   or wording, its option previews settle it faster than prose.
 - **A declined question**: when the user declines or interrupts it,
   `AskUserQuestion` comes back as a refusal with no answer. In an interactive
-  session that is the decline *When the user declines a question* describes.
+  session that is the decline *When the user declines a question* describes,
+  except for the offer in *Given nothing to spec*, which stops (its step 7).
   A run with no person (`claude -p`) gets the same refusal, which is why that
   subsection shows the menu once and stops when the menu is refused too.
 - **Research one issue ahead** (*Several issues in one run*, rule 5) is an
