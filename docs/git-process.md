@@ -287,3 +287,7 @@ gogogo runs its own process, with `pr-squash` onto `main`
   ```bash
   git fetch origin && git worktree add -b fix/<n>-<slug> <path> origin/main
   ```
+  or, for an issue that already has a branch, a worktree of that branch
+  (`git worktree add <path> <branch>`, or
+  `git worktree add --track -b <branch> <path> origin/<branch>` when it is
+  only on `origin`).

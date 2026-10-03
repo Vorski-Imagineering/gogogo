@@ -10,6 +10,7 @@ as tests/test_stranded_work.py does.
 
 import json
 import os
+import shutil
 import subprocess
 import sys
 import unittest
@@ -144,6 +145,17 @@ class IssueWork(Repos):
                                      "prview": {"70": {"headRefName": "issue-50"}}})
         self.assertEqual(code, 1)
         self.assertEqual(lines, ["candidate: issue-50 (remote), 1 commit(s) ahead of main, stop marker reason=ci"])
+
+    def test_a_failed_ahead_count_cannot_tell(self):
+        self.branch_with("fix/8-unpushed", 1)
+        real = shutil.which("git")
+        shim = self.tmp / "gitbin"
+        shim.mkdir()
+        (shim / "git").write_text(f'#!/bin/sh\n[ "$1" = rev-list ] && exit 128\nexec "{real}" "$@"\n')
+        (shim / "git").chmod(0o755)
+        self.env["PATH"] = f"{shim}{os.pathsep}{self.env['PATH']}"
+        code, lines = self.work(8, {"graphql": timeline()})
+        self.assertEqual((code, lines), (2, []))
 
     def test_no_profile_cannot_tell(self):
         (self.clone / ".agents" / "dev-process.md").unlink()

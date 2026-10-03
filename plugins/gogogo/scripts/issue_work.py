@@ -34,7 +34,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import profile_check  # noqa: E402
-from stranded_work import ahead_of, base_ref, gh, git, issue_in_branch, newest_stop, stop_links  # noqa: E402
+from stranded_work import base_ref, gh, git, issue_in_branch, newest_stop, stop_links  # noqa: E402
 
 QUERY = """
 query($owner:String!,$name:String!,$number:Int!){repository(owner:$owner,name:$name){issue(number:$number){
@@ -57,6 +57,14 @@ def _gh_json(*args):
         return json.loads(out.stdout)
     except json.JSONDecodeError:
         raise CannotTell("gh printed something that is not JSON")
+
+
+def ahead_of(base, ref):
+    """Commits on `ref` that `base` lacks; a failed count is CannotTell, never "not ahead"."""
+    out = git("rev-list", "--count", f"{base}..{ref}")
+    if out.returncode != 0 or not out.stdout.strip():
+        raise CannotTell(f"cannot count {ref} against {base}: {out.stderr.strip() or 'git failed'}")
+    return out.stdout.strip()
 
 
 def settings():
@@ -123,7 +131,7 @@ def find(number, base_name):
     for branch, ref in refs.items():
         if branch != base_name and issue_in_branch(branch) == str(number):
             ahead = ahead_of(base, ref)
-            if ahead and ahead != "0":
+            if ahead != "0":
                 candidates.setdefault(branch, {})
 
     stop = newest_stop(issue["comments"]["nodes"])
@@ -141,7 +149,7 @@ def find(number, base_name):
         kinds = where.get(branch, set())
         place = ("local and remote" if len(kinds) == 2 else next(iter(kinds))) if kinds else "not fetched"
         ahead = ahead_of(base, refs[branch]) if branch in refs else "?"
-        line = f"candidate: {branch} ({place}), {ahead or '?'} commit(s) ahead of {base_name}"
+        line = f"candidate: {branch} ({place}), {ahead} commit(s) ahead of {base_name}"
         if "pr" in found:
             line += f", PR #{found['pr']} open"
         if "reason" in found:
