@@ -4,7 +4,7 @@
 The skill is prose, so these pin what a reader of it depends on: the
 declined-question subsection and its four choices, the Posting step that
 moves the card, that every setting it names is one the checker
-knows, that the offer adds no profile requirement, and that no project's
+knows, that the move adds no profile requirement, and that no project's
 facts leak into it. Whether it behaves is a trigger run, not a phrase match.
 
     python3 -m unittest tests.test_spec_skill

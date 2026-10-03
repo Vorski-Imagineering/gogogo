@@ -102,7 +102,9 @@ Every tracker command targets `tracker.issues_repo`. When it differs from
    case); *left open* (with the question); *skipped* (closed, a pull request,
    or already ready); or *not reached* (with why the run stopped). Each
    *specced and labelled* line ends with its card's result from Posting step
-   8: moved, already there, left in `<column>`, no card, or the move failed.
+   8: moved, already there, left in `<column>`, closed, no card, could not
+   be read, the move failed, or step 8 skipped (and which of its conditions
+   was not met).
    Then each issue filed during the run, with `/gogogo:spec <n>`.
 
 ## The issue body IS these sections, in this order
@@ -430,7 +432,9 @@ order, checking each step before starting the next:
    1. Read the card: `<tracker.tool> show <N>` (for `shared`,
       `python3 "${CLAUDE_PLUGIN_ROOT}/scripts/tracker.py" show <N>`, and the
       same for `move` below). Run it as this step's first command,
-      immediately before the move, never reusing an earlier read.
+      immediately before the move, never reusing an earlier read. When it
+      exits non-zero, do not move the card: say the card could not be read,
+      give its message, and stop this step.
    2. When the issue is closed: do not move it; say so.
    3. When the card is already in `tracker.queue`: nothing to do; say so.
    4. When the card is in `tracker.columns.in_progress`,
