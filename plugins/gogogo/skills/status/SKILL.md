@@ -22,6 +22,8 @@ report, never printed empty: an unset `tracker.queue` or
 unset setting does (`integration.base`, `tracker.tool`,
 `stages[].environment`), that rule applies instead.
 
+Any `warning:` line the check printed goes, verbatim, at the top of your report to the person; if it printed none, the report says so.
+
 ## It reads only
 
 Status writes nothing: not to the repo, the board, the tracker or a remote. It
