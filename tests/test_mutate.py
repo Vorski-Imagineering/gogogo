@@ -183,7 +183,15 @@ class Counts(unittest.TestCase):
         ids = {"killed": "1 2 3", "survived": "4", "suspicious": "5", "timeout": "6"}
         code, out, _, _ = run_main(self.r.dir, fake=tool(run_code=2, ids=ids))
         self.assertEqual(code, 1)
-        self.assertEqual(out.splitlines()[-1], "mutants: 6 killed: 3 survived: 2 timeout: 1")
+        self.assertEqual(out.splitlines()[-1], "mutants: 6 killed: 4 survived: 1 timeout: 1")
+
+    def test_a_suspicious_mutant_is_killed_and_not_shown(self):
+        ids = {"killed": "1 2", "suspicious": "3"}
+        code, out, _, calls = run_main(self.r.dir, fake=tool(run_code=8, ids=ids))
+        self.assertEqual(code, 0)
+        self.assertEqual(out.splitlines()[-1], "mutants: 3 killed: 3 survived: 0 timeout: 0")
+        self.assertFalse([ln for ln in out.splitlines() if ln.startswith("SURVIVED")])
+        self.assertFalse([args for args, _ in calls if args[:1] == [TOOL] and args[1:] == ["show", "3"]])
 
     def test_a_failed_result_read_is_no_evidence(self):
         def fake(args, cwd):
