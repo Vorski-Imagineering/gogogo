@@ -110,7 +110,7 @@ issue and is not in it yet.
    - it contradicts the description without plainly saying to replace it, or
      cannot be read as a decision about this issue: stop the issue for a
      person (§8), reason `decision`, with the `**Needs you:**` line quoting
-     the comment and linking it.
+     the comment's own words in quotation marks and linking it.
 3. **To fold in**: save the current body to `<scratch>/issue-<n>-before-fold.md`.
    Add one `## Approvals` row per comment, after the last row:
    `| <comment date> | From a comment (<url>): <the question it answers, or "added after the spec"> | "<the comment's words, quoted in full, or its first 300 characters and …>" | — |`.
@@ -118,7 +118,9 @@ issue and is not in it yet.
    `## Files` or `## Verify by hand` items it changes, and add one line to
    `## Context`: `<date>: <what changed>, from a comment (<url>).` A comment
    that asks for a change under a Hard Stop item approves it: the row names
-   that item. Write the new body to `<scratch>/issue-<n>-body.md` and lint it:
+   that item, that item's row in `## Hard-stop check` becomes `yes`, and the
+   verdict line names it with the new row (`**Verdict: approved — <item> by
+   Approvals row <N>.**`, keeping any items it already named). Write the new body to `<scratch>/issue-<n>-body.md` and lint it:
 
    ```bash
    python3 "${CLAUDE_PLUGIN_ROOT}/scripts/spec_lint.py" <scratch>/issue-<n>-body.md
