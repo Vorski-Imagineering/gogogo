@@ -532,9 +532,10 @@ and no further. Take the first case that fits:
 
 **The stop marker.** Every hand-back to `tracker.columns.needs_human` carries
 one, on its own line directly under the `**Needs you:**` line, and no other
-report does (the reopen line below is not a stop):
+report does (the reopen line below is not a stop), except a triage skip from
+`/gogogo:auto-dev`, which carries the skip marker instead:
 
-`<!-- gogogo:stop v=1 reason=<hard-stop|decision|spec|review|tests|mutation|verify|gate|ci> -->`
+`<!-- gogogo:stop v=1 reason=<hard-stop|decision|spec|review|tests|mutation|verify|gate|ci> session=<id|unknown> -->`
 
 | reason | when |
 |---|---|
@@ -678,7 +679,7 @@ and integration follow this skill and the repo's merge path. See the profile's
   poll until it has finished.
 - In the record, `impl` is the session's model id; `reviewer` is
   `$CLAUDE_CODE_SUBAGENT_MODEL` when it is set, else the same as `impl`.
-- In the record, `session` is `$CLAUDE_CODE_SESSION_ID`, the variable
+- In the record and the stop marker, `session` is `$CLAUDE_CODE_SESSION_ID`, the variable
   `require_unattended.sh` also reads, and `unknown` when it is unset.
 - Browser checks use the `claude-in-chrome` tools; load the ones you need in one
   `ToolSearch` call.

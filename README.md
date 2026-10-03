@@ -322,7 +322,7 @@ Scripts the skills call, all in `plugins/gogogo/scripts/`:
 - `stranded_work.py`: finds local and `origin` branches holding work that nothing accounts for (no open issue, or an open issue with no open pull request and no stop marker naming the branch), and says what became of each branch's pull request.
 - `issue_work.py`: finds an issue's earlier work (open pull requests that reference it, branches named for it, the branch its stop marker names), so dev and auto-dev continue on it rather than start again.
 - `notify.py`: sends a run's messages by the profile's `notify` (Telegram today); off, or no credentials on the machine, sends nothing.
-- `review_stats.py`: reads back the review record on each issue and sums them up: rounds, why findings were applied or declined, how each review ended and what became of the issue, plus phase times, session ids and stops by reason.
+- `review_stats.py`: reads back the review record on each issue and sums them up: rounds, why findings were applied or declined, how each review ended and what became of the issue, plus phase times, session ids, stops by reason, triage skips, and each session's issues taken, handed back and skipped.
 - `require_unattended.sh`: refuses to start the loop unless the session can run without prompts.
 - `setup_check.py`: the read-only check behind `/gogogo:setup`.
 - `roadmap_status.py`: compares a roadmap document's marks with the tracker, and rewrites the ones that disagree with `--write`.
