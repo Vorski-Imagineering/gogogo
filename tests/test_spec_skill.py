@@ -126,12 +126,14 @@ class SeveralIssues(unittest.TestCase):
         start = next(i for i, line in enumerate(sub) if line.startswith("4. "))
         end = next((i for i in range(start + 1, len(sub)) if not sub[i].startswith("   ")), len(sub))
         self.assertIn("Several issues in one run", " ".join(sub[start:end]))
+        self.assertIn(RUN, skill_text().splitlines(), "the section it points at is gone")
 
     def test_step_eight_deferred_in_run(self):
         lines = section(skill_text(), "## Posting")
         start = next(i for i, line in enumerate(lines) if line.startswith("8. "))
         end = next((i for i in range(start + 1, len(lines)) if re.match(r"\S", lines[i])), len(lines))
         self.assertIn("Several issues in one run", "\n".join(lines[start:end]))
+        self.assertIn(RUN, skill_text().splitlines(), "the section it points at is gone")
 
     def test_claude_specific_names_fork(self):
         sub = "\n".join(section(skill_text(), "## Claude-specific"))
