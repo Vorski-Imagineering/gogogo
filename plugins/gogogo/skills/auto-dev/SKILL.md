@@ -20,8 +20,10 @@ gates → merge → verify the merge → report → next.**
 When invoked with `--triage-only` (or asked for a preview), do the preflight
 checks that read (not the ones that need a browser or bypass mode), run §1 and
 §2, and stop. Report every issue in the queue with **take** or **skip** and the
-reason, citing the Approvals row or the missing decision. Create no branch, move
-no card, post nothing, send no message.
+reason, citing the Approvals row or the missing decision. A card without the
+ready label whose spec passed the lint (§1) is `take (no ready label; spec lint
+passed; the label would be added)`; one that failed is `skip` with §1's reason.
+Create no branch, move no card, add no label, post nothing, send no message.
 
 ## Before anything: preflight
 
@@ -92,15 +94,32 @@ means finished work sits unverified while you go and ask.
 ## 1. Select the queue
 
 ```bash
-<tracker.tool> list --status "<tracker.queue>"
+<tracker.tool> list --status "<tracker.queue>" --issues-only --open-only --json
 ```
 
 A non-zero exit is a **stop**, never an empty column: the tool refuses to print
 a list it could not reconcile. Outside triage-only mode, the first time this
 list is read successfully in a run, send the *run started* message (§8),
-counting the rows that are issues. Work only rows that are issues. Take them in the
+counting every row, labelled or not. Work only rows that are issues. Take them in the
 order the user gave; absent one, live user-facing bugs first, refactors after,
 anything large last so it cannot absorb the run.
+
+Each row's `labels` decides its path. A row carrying `tracker.ready_marker`
+(compared without regard to case) goes on to §2. A row without it was put in
+the column without passing through `/gogogo:spec`'s lint, so lint it now:
+
+```bash
+gh issue view <n> --repo <tracker.issues_repo> --json body -q .body > <scratch>/issue-<n>-body.md
+python3 "${CLAUDE_PLUGIN_ROOT}/scripts/spec_lint.py" <scratch>/issue-<n>-body.md
+```
+
+- Exit 0 and a last line `label: apply`: on to §2, marked *label-less, lint
+  passed*.
+- Exit 1, or a last line `label: withhold (<reason>)`: **skip**, with the
+  reason `no ready label; spec lint: <its first error: line, or the withhold
+  reason>`.
+- Exit 2: **stop the whole run** with the line it printed. Preflight already
+  read the profile, so this is the environment, not the issue.
 
 ## 2. Triage each issue before touching it
 
@@ -113,6 +132,14 @@ buildable: build and test it, then stop that issue before applying).
 Autonomy is over *approved* work, never over the approval. A skipped issue is a
 reported outcome, not a failure. Record which row licensed each Hard Stop you
 proceed with, so a reader can check the call.
+
+**Label what was taken.** For an issue marked *label-less, lint passed* that
+§2 takes, outside triage-only mode, before §3 branches: run
+`gh issue edit <n> --repo <tracker.issues_repo> --add-label "<tracker.ready_marker>"`,
+then read it back with `gh issue view <n> --repo <tracker.issues_repo> --json labels`.
+A non-zero exit, or a read-back without the label: **skip** that issue with
+`could not add the ready label: <the message>`. Otherwise record *label added
+by the run* for §8 and §9.
 
 ## 3. Branch from a fresh base
 
@@ -320,7 +347,7 @@ cards where they are.
 
 Report before starting the next one, a few lines: issue, what changed, how many
 new tests went red, what review found, what the real run showed, the merge
-commit, the card's new column. The user is not watching every step; this log is
+commit, the card's new column, and *label added by the run* when §2 added it. The user is not watching every step; this log is
 how they stay able to stop you. Then return to §1: the board may have moved.
 
 Send one short message per change of state, only **after** the thing is true.
@@ -355,8 +382,8 @@ tracker comment. Never put a token on a command line or in a report.
 
 In a run that tried to send *run started*, first send *run closed* (§8). Then
 one report, opening with the notify line preflight item 7 put there, if any:
-every issue taken with its outcome and merge commit, every issue
-skipped with the reason, anything left half-done with its branch, every card
+every issue taken with its outcome and merge commit (and *label added by
+the run* for each one §2 labelled), every issue skipped with the reason, anything left half-done with its branch, every card
 moved to `tracker.columns.needs_human` with its Needs-you line, the stranded
 work from preflight, anything the profile's `stop.extra` checks raised, and
 the `notify failed` lines §8 says are due.

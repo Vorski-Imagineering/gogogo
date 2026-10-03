@@ -69,7 +69,8 @@ repo first ([Adopting it in a repo](#adopting-it-in-a-repo), step 1).
    The `-n` name is what `/resume` and the terminal title show for the run.
    Telegram messages when it starts, changes state and closes are optional:
    `/gogogo:setup` sets them up, and a run without them works the same.
-   It takes every issue in `Dev Ready`, one at a time: branch, build, test,
+   It takes each issue in `Dev Ready` that carries the ready label, or whose
+   spec passes the linter (and then labels it), one at a time: branch, build, test,
    review, verify, merge, move the card, next. An issue it cannot finish alone
    (a failed check, a fix it could not prove) goes to the `Human!Help!` column
    with a note saying what you need to do; one still missing a decision is

@@ -283,6 +283,7 @@ query($org: String!, $number: Int!, $size: Int!, $after: String) {
               number title state url
               repository { nameWithOwner }
               assignees(first: 10) { nodes { login } }
+              labels(first: 20) { totalCount nodes { name } }
             }
             ... on PullRequest {
               number title state url
@@ -338,6 +339,17 @@ def fetch_items() -> list[dict]:
     return items
 
 
+def issue_labels(content: dict) -> list[str]:
+    """An issue's label names. Raises rather than return a short list: a card
+    whose ready label fell off a truncated read would look label-less."""
+    connection = content.get("labels") or {}
+    names = [n["name"] for n in connection.get("nodes") or []]
+    if connection.get("totalCount", 0) > len(names):
+        raise BoardError(f"labels truncated on #{content.get('number')}: "
+                         f"{connection['totalCount']} labels, {len(names)} read")
+    return names
+
+
 def flatten(item: dict) -> dict:
     """One card as flat fields; drafts and deleted content stay representable."""
     content = item.get("content") or {}
@@ -352,6 +364,7 @@ def flatten(item: dict) -> dict:
         "repo": (content.get("repository") or {}).get("nameWithOwner"),
         "status": status,
         "assignees": [a["login"] for a in (content.get("assignees") or {}).get("nodes", [])],
+        "labels": issue_labels(content),
     }
 
 
@@ -366,6 +379,7 @@ query($owner: String!, $name: String!, $size: Int!, $after: String) {
         number title state url
         repository { nameWithOwner }
         assignees(first: 10) { nodes { login } }
+        labels(first: 20) { totalCount nodes { name } }
         projectItems(first: 10, includeArchived: true) {
           nodes {
             id
@@ -427,6 +441,7 @@ def issue_side_cards(repo: str) -> list[dict]:
                 "assignees": [
                     a["login"] for a in (issue.get("assignees") or {}).get("nodes", [])
                 ],
+                "labels": issue_labels(issue),
             })
     return cards
 
@@ -506,7 +521,8 @@ def cmd_list(args: argparse.Namespace) -> int:
     else:
         for card in cards:
             ref = f"#{card['number']}" if card["number"] else "(draft)"
-            where = "" if args.status else f"  [{card['status'] or 'no status'}]"
+            tags = "; " + ", ".join(card["labels"]) if card["labels"] else ""
+            where = "" if args.status else f"  [{card['status'] or 'no status'}{tags}]"
             print(f"{ref:>7}{where}  {card['title']}")
 
     label = f"{column(args.status)!r} " if args.status else ""
