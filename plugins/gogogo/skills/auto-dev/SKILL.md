@@ -140,8 +140,10 @@ python3 "${CLAUDE_PLUGIN_ROOT}/scripts/spec_lint.py" <scratch>/issue-<n>-body.md
 ## 2. Triage each issue before touching it
 
 Per `/gogogo:dev` §2. That includes folding in comments (§2 *Fold in comments
-the description does not hold yet*); an issue whose answer sits in such a
-comment is taken, not skipped. An issue is workable here only if every
+the description does not hold yet*), after `/gogogo:dev` §1's two reads; an
+issue whose answer sits in such a comment is taken, not skipped. Here a fold
+that stops the issue is a skip: reason `decision`, or `lint` when the folded
+body fails the lint. An issue is workable here only if every
 decision it depends on was made by a person and is **in the body**, once
 folded in. Skip and record, never
 guess, when it has an open product decision, a Hard Stop no Approvals row
