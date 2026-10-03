@@ -161,7 +161,26 @@ The profile's `## Recon traps` lists what this codebase specifically hides.
 - **Put the work on the issue's branch, before the first edit.** The default
   branch is `integration.base` when the profile sets it, else
   `gh repo view <tracker.code_repo> --json defaultBranchRef -q .defaultBranchRef.name`.
-  When `git branch --show-current` prints that name, run
+  When `git branch --show-current` prints that name, first look for earlier
+  work on the issue:
+  ```bash
+  git fetch origin
+  python3 "${CLAUDE_PLUGIN_ROOT}/scripts/issue_work.py" <issue-number>
+  ```
+  - Exit 0: no earlier work; branch as below.
+  - Exit 1 with exactly one `candidate:` line and no `fork PR` line: show it
+    and ask whether to continue on it or start fresh. To continue, check it
+    out (`git switch <branch>`, or `git switch --track origin/<branch>` when
+    it is only on `origin`), then `git merge origin/<base>`, never a rebase
+    or a force push; resolve a conflict as a code change. The rest of this
+    skill runs unchanged on that branch: push to it, and use its open PR when
+    it has one rather than opening another.
+  - Exit 1 otherwise (two or more candidates, or a fork PR): show every line
+    and ask which to continue, or to start fresh. A fork PR is someone else's:
+    say a person reviews it, and stop.
+  - Exit 2: show the reason and ask whether to start fresh.
+
+  To start fresh, run
   `git switch -c fix/<issue-number>-<short-slug>` (the slug: two to five
   lowercase words from the issue's title, joined by `-`, letters and digits
   only). Uncommitted changes come along; never stash, reset or pull to do it.

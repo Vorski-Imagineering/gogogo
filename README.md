@@ -169,7 +169,8 @@ shape. The full write-up, with sources and ranked findings, is
 **What follows current practice:**
 
 - **The git and pull request mechanics.** One short-lived branch per issue,
-  cut from a fresh base, squash-merged and deleted. A new test must be seen
+  cut from a fresh base (or the issue's earlier branch, brought up to date),
+  squash-merged and deleted. A new test must be seen
   failing before it is trusted. CI is judged check by check, and "no checks
   ran" counts as a failure. Every merge is read back from the base branch
   before anyone is told it landed.
@@ -276,7 +277,9 @@ the review records back.
 
 **Branches and pull requests.** Every issue gets its own branch,
 `fix/<issue-number>-<slug>`, cut from a freshly pulled base: a stale base would silently undo the
-previous merge, and the issue number ties the branch back to the tracker. The loop takes one issue at a time: branch, build, review, verify,
+previous merge, and the issue number ties the branch back to the tracker. An
+issue that already has a branch or an open pull request continues on it
+instead, merged up to date with the base (`issue_work.py` finds it). The loop takes one issue at a time: branch, build, review, verify,
 then merge by the repo's chosen strategy. That is a pull request per issue
 squashed into the base (`pr-squash`), pull requests into a dated run branch
 that reaches the main line as one final PR (`run-branch-pr`), or the repo's
@@ -320,7 +323,8 @@ Scripts the skills call, all in `plugins/gogogo/scripts/`:
 - `verify_merged.py`: confirms a PR's merge is really on the base branch.
 - `stage_sync.py`: writes the `Ships-issue` link at merge, and moves cards to a stage when a tag ships their commits (run by a repo's CI).
 - `release.py`: numbers a production release, cuts its annotated `deploy-<build>` tag after the deploy, and prints the notes listing the issues it shipped.
-- `stranded_work.py`: finds branches holding work no open issue or open pull request points to, and says what became of each branch's pull request.
+- `stranded_work.py`: finds local and `origin` branches holding work that nothing accounts for (no open issue, or an open issue with no open pull request and no stop marker naming the branch), and says what became of each branch's pull request.
+- `issue_work.py`: finds an issue's earlier work (open pull requests that reference it, branches named for it, the branch its stop marker names), so dev and auto-dev continue on it rather than start again.
 - `notify.py`: sends a run's messages by the profile's `notify` (Telegram today); off, or no credentials on the machine, sends nothing.
 - `review_stats.py`: reads back the review record on each issue and sums them up: rounds, why findings were applied or declined, how each review ended and what became of the issue, plus phase times, session ids, stops by reason, triage skips, and each session's issues taken, handed back and skipped.
 - `require_unattended.sh`: refuses to start the loop unless the session can run without prompts.
