@@ -68,8 +68,9 @@ def fields_output(columns):
 class Board:
     """Stands in for subprocess.run: fields, list --json and gh pr list."""
 
-    def __init__(self, columns=COLUMNS, list_exit=0, raise_on=None, exc=None):
+    def __init__(self, columns=COLUMNS, list_exit=0, raise_on=None, exc=None, answers=None):
         self.columns, self.list_exit, self.raise_on, self.exc = columns, list_exit, raise_on, exc
+        self.answers = answers or {}  # which read -> (exit, stdout, stderr), overriding the rest
         self.calls = []
 
     def __call__(self, cmd, **kw):
@@ -77,6 +78,8 @@ class Board:
         which = "gh" if cmd[0] == "gh" else cmd[-2] if cmd[-1] == "--json" else cmd[-1]
         if which == self.raise_on:
             raise self.exc
+        if which in self.answers:
+            return subprocess.CompletedProcess(cmd, *self.answers[which])
         if which == "fields":
             return subprocess.CompletedProcess(cmd, 0, fields_output(self.columns), "")
         if which == "list":
@@ -137,9 +140,12 @@ class Line(unittest.TestCase):
         gh = [c for c, _ in board.calls if c[0] == "gh"]
         self.assertEqual(gh, [["gh", "pr", "list", "--repo", "o/r", "--state", "open",
                                "--json", "number", "-q", "length"]])
+        self.assertEqual([c[:2] for c in tracker_cmds], [[sys.executable, str(SCRIPTS / "tracker.py")]] * 2)
         for _, kw in board.calls:
             self.assertGreater(kw["timeout"], 0)
             self.assertLessEqual(kw["timeout"], 15)
+            self.assertIs(kw["capture_output"], True)
+            self.assertIs(kw["text"], True)
 
     def test_column_missing_from_board_shows_question_mark(self):
         repo = repo_with_profile()
@@ -156,6 +162,18 @@ class Line(unittest.TestCase):
         board.columns = COLUMNS + ["Testing"]
         _, out, _ = run_main(repo, board)
         self.assertIn("· Testing 0 ·", message(out))
+
+    def test_a_column_named_twice_is_counted_once(self):
+        repo = repo_with_profile()
+        text = PROFILE.format(tool="shared").replace('column = "Released"', 'column = "Dev Ready"')
+        (repo / ".agents" / "dev-process.md").write_text(text, encoding="utf-8")
+        _, out, _ = run_main(repo, Board())
+        self.assertEqual(message(out), "gogogo · myrepo: Dev Ready 3 · In progress 1 · Human!Help! 2 · "
+                         "2 PRs open — /gogogo:status for detail")
+
+    def test_board_columns_are_only_the_option_lines(self):
+        self.assertEqual(session_status.board_columns(fields_output(["New", "Dev Ready"])),
+                         {"New", "Dev Ready"})
 
     def test_other_tracker_shows_prs_only(self):
         repo = repo_with_profile(tool="./bin/board")
@@ -271,6 +289,122 @@ class HooksJson(unittest.TestCase):
     def test_names_no_project(self):
         for path in (HOOKS, SCRIPTS / "session_status.py"):
             self.assertIsNone(re.search(PROJECT_NAMES, path.read_text(encoding="utf-8"), re.I), path)
+
+
+def unavailable(board, tool="shared", clock=None, profile_edit=None):
+    repo = repo_with_profile(tool)
+    if profile_edit:
+        path = repo / ".agents" / "dev-process.md"
+        path.write_text(profile_edit(path.read_text(encoding="utf-8")), encoding="utf-8")
+    code, out, err = run_main(repo, board, clock)
+    assert code == 0
+    return message(out)
+
+
+class Reasons(unittest.TestCase):
+    """Each failed read names itself and why, on one line."""
+
+    U = "gogogo: status unavailable: "
+
+    def test_board_exit_with_and_without_a_reason(self):
+        self.assertEqual(unavailable(Board(list_exit=2)), self.U + "board unreadable: tracker.py exited 2: tracker.py: no board")
+        self.assertEqual(unavailable(Board(answers={"list": (2, "", "")})), self.U + "board unreadable: tracker.py exited 2")
+        self.assertEqual(unavailable(Board(answers={"fields": (1, "", "x\nlast line\n")})),
+                         self.U + "board unreadable: tracker.py exited 1: last line")
+
+    def test_list_that_is_not_a_card_list(self):
+        self.assertEqual(unavailable(Board(answers={"list": (0, "oops", "")})),
+                         self.U + "board unreadable: tracker.py list printed no card list")
+
+    def test_pull_request_failures(self):
+        self.assertEqual(unavailable(Board(answers={"gh": (1, "", "HTTP 401\n")})),
+                         self.U + "pull requests unreadable: gh exited 1: HTTP 401")
+        missing = FileNotFoundError(2, "No such file or directory")
+        self.assertEqual(unavailable(Board(raise_on="gh", exc=missing)),
+                         self.U + "pull requests unreadable: gh: No such file or directory")
+        self.assertEqual(unavailable(Board(raise_on="gh", exc=PermissionError("denied"))),
+                         self.U + "pull requests unreadable: gh: denied")
+        noise = "x" * 50
+        self.assertEqual(unavailable(Board(answers={"gh": (0, noise, "")})),
+                         self.U + f"pull requests unreadable: gh printed {noise[:40]!r}")
+
+    def test_no_code_repo(self):
+        self.assertEqual(unavailable(Board(), profile_edit=lambda t: t.replace('code_repo = "o/r"\n', "")),
+                         self.U + "pull requests unreadable: tracker.code_repo is not set")
+
+    def test_a_spent_budget_reads_nothing_more(self):
+        for spent, calls in ((15, 1), (14.5, 3)):
+            clock, board = Clock(), Board()
+
+            def timed(cmd, **kw):
+                clock.now += spent if not board.calls else 0
+                return board(cmd, **kw)
+
+            line = unavailable(timed, clock=clock)
+            self.assertEqual(len(board.calls), calls, spent)
+            if spent == 15:
+                self.assertEqual(line, self.U + "board timed out after 15 s")
+            else:
+                self.assertEqual(board.calls[1][1]["timeout"], 0.5)
+
+    def test_unexpected_exception_names_itself(self):
+        self.assertEqual(unavailable(Board(raise_on="list", exc=RuntimeError("boom\nmore"))),
+                         self.U + "RuntimeError: more")
+
+    def test_exception_before_a_profile_is_found_prints_nothing(self):
+        tmp = Path(tempfile.mkdtemp()).resolve()
+        (tmp / ".git").mkdir()
+        from unittest import mock
+        with mock.patch.object(session_status.profile_check, "find_profile", side_effect=RuntimeError("x")):
+            code, out, err = run_main(tmp, Board())
+        self.assertEqual((code, out), (0, ""))
+        self.assertIn("RuntimeError", err)
+
+
+class AsAProcess(unittest.TestCase):
+    def test_reads_the_project_dir_not_the_current_folder(self):
+        repo = repo_with_profile()
+        (repo / ".agents" / "dev-process.md").write_text("broken\n", encoding="utf-8")
+        elsewhere = Path(tempfile.mkdtemp()).resolve()
+        (elsewhere / ".git").mkdir()
+        env = {**os.environ, "CLAUDE_PROJECT_DIR": str(repo)}
+        done = subprocess.run([sys.executable, str(SCRIPTS / "session_status.py")],
+                              capture_output=True, text=True, env=env, cwd=elsewhere, timeout=30)
+        self.assertEqual(done.returncode, 0)
+        self.assertTrue(message(done.stdout).startswith("gogogo: status unavailable: settings:"))
+
+    def test_importing_it_runs_nothing(self):
+        repo = repo_with_profile()
+        (repo / ".agents" / "dev-process.md").write_text("broken\n", encoding="utf-8")
+        env = {**os.environ, "CLAUDE_PROJECT_DIR": str(repo), "PYTHONPATH": str(SCRIPTS)}
+        done = subprocess.run([sys.executable, "-c", "import session_status"],
+                              capture_output=True, text=True, env=env, cwd=repo, timeout=30)
+        self.assertEqual((done.returncode, done.stdout), (0, ""))
+
+    def test_closed_stdout_still_exits_0(self):
+        repo = repo_with_profile()
+        (repo / ".agents" / "dev-process.md").write_text("broken\n", encoding="utf-8")
+        env = {**os.environ, "CLAUDE_PROJECT_DIR": str(repo)}
+        done = subprocess.run([sys.executable, str(SCRIPTS / "session_status.py")],
+                              stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, text=True,
+                              env=env, cwd=repo, timeout=30, close_fds=True,
+                              preexec_fn=lambda: os.close(1))
+        self.assertEqual(done.returncode, 0, done.stderr)
+
+    def test_imports_profile_check_from_its_own_folder(self):
+        import importlib.util
+        decoy = Path(tempfile.mkdtemp())
+        (decoy / "profile_check.py").write_text("DECOY = True\n", encoding="utf-8")
+        saved_path, saved = list(sys.path), sys.modules.pop("profile_check")
+        try:
+            sys.path[:] = [str(decoy)] + [p for p in saved_path if Path(p).resolve() != SCRIPTS]
+            spec = importlib.util.spec_from_file_location("session_status_fresh", SCRIPTS / "session_status.py")
+            module = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(module)
+            self.assertFalse(hasattr(module.profile_check, "DECOY"))
+        finally:
+            sys.path[:] = saved_path
+            sys.modules["profile_check"] = saved
 
 
 if __name__ == "__main__":

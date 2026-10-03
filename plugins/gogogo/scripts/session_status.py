@@ -42,7 +42,7 @@ class ReadFailed(Exception):
 
 
 def _one_line(text):
-    lines = [line.strip() for line in (text or "").splitlines() if line.strip()]
+    lines = [line.strip() for line in text.splitlines() if line.strip()]
     return lines[-1] if lines else ""
 
 
@@ -112,11 +112,8 @@ def status_line(profile, settings, run, clock):
     return f"gogogo · {profile.parent.parent.name}: " + " · ".join(parts) + " — /gogogo:status for detail"
 
 
-def message(start, run, clock):
-    """The line to show, or None when there is no profile."""
-    profile = profile_check.find_profile(start)
-    if not profile.is_absolute() or not profile.is_file():
-        return None  # find_profile's not-found answer is the bare relative default
+def message(profile, run, clock):
+    """The line to show for the profile at `profile`."""
     try:
         settings, _ = profile_check.split_profile(profile.read_text(encoding="utf-8"))
     except (profile_check.ProfileError, OSError, UnicodeDecodeError) as exc:
@@ -129,29 +126,24 @@ def message(start, run, clock):
 
 def main(start=None, run=None, clock=None):
     """Print the systemMessage (or nothing) and return 0, whatever happens."""
-    start = start or os.environ.get("CLAUDE_PROJECT_DIR") or Path.cwd()
-    run = run or subprocess.run
-    clock = clock or time.monotonic
+    profile = line = None
     try:
-        line = message(start, run, clock)
+        found = profile_check.find_profile(start or os.environ.get("CLAUDE_PROJECT_DIR") or Path.cwd())
+        if found.is_absolute():  # not found: find_profile answers with the bare relative default
+            profile = found
+            line = message(profile, run or subprocess.run, clock or time.monotonic)
     except Exception as exc:  # never a traceback on stdout, never a non-zero exit
         traceback.print_exc()
-        try:
-            found = profile_check.find_profile(start)
-            line = UNAVAILABLE + f"{type(exc).__name__}: {_one_line(str(exc))}" \
-                if found.is_absolute() and found.is_file() else None
-        except Exception:
-            line = None
+        if profile is not None:
+            line = UNAVAILABLE + f"{type(exc).__name__}: {_one_line(str(exc))}"
     if line is not None:
         try:
-            print(json.dumps({"systemMessage": line}))
-        except Exception:
+            print(json.dumps({"systemMessage": line}), flush=True)
+        except OSError:  # stdout closed: say so on stderr, and keep shutdown from failing on it too
             traceback.print_exc()
+            os.dup2(os.open(os.devnull, os.O_WRONLY), sys.stdout.fileno())
     return 0
 
 
 if __name__ == "__main__":
-    try:
-        main()
-    finally:
-        sys.exit(0)
+    main()

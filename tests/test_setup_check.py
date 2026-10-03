@@ -972,6 +972,9 @@ class SessionHook(unittest.TestCase):
         self.assertFalse(rep.failed())
         return rows[0]
 
+    def test_main_checks_this_plugin(self):
+        self.assertEqual(sc.PLUGIN_ROOT, ROOT / "plugins" / "gogogo")
+
     def test_the_shipped_hook_is_info(self):
         rep = sc.Report()
         sc.check_session_hook(ROOT / "plugins" / "gogogo", rep)
@@ -992,6 +995,8 @@ class SessionHook(unittest.TestCase):
         self.assertEqual(self.row({"hooks/hooks.json": json.dumps(other)})["level"], "WARN")
         self.assertEqual(self.row({"hooks/hooks.json": "{not json"})["level"], "WARN")
         self.assertEqual(self.row({"hooks/hooks.json": "[]"})["level"], "WARN")
+        no_command = {"hooks": {"SessionStart": [{"hooks": [{"type": "command"}]}]}}
+        self.assertEqual(self.row({"hooks/hooks.json": json.dumps(no_command)})["level"], "WARN")
 
 
 if __name__ == "__main__":

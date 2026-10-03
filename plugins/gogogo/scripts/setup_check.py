@@ -25,6 +25,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import profile_check  # noqa: E402
 
+PLUGIN_ROOT = Path(__file__).resolve().parents[1]
 MARKETPLACE = "vorski-skills"
 PLUGIN = "gogogo@vorski-skills"
 MARKETPLACE_REPO = "Vorski-Imagineering/gogogo"
@@ -573,15 +574,13 @@ def check_session_hook(plugin_root, rep):
     """The plugin ships its own SessionStart hook (hooks/hooks.json); setup only reports it."""
     try:
         hooks = json.loads((Path(plugin_root) / "hooks" / "hooks.json").read_text(encoding="utf-8"))
-        entries = hooks["hooks"]["SessionStart"]
-        shipped = any("session_status.py" in (h.get("command") or "")
-                      for e in entries for h in e.get("hooks") or [])
+        if any("session_status.py" in str(h.get("command"))
+               for e in hooks["hooks"]["SessionStart"] for h in e.get("hooks") or []):
+            rep.info("session-status", "shown at session start (plugin hook)")
+            return
     except (OSError, ValueError, KeyError, TypeError, AttributeError):
-        shipped = False
-    if shipped:
-        rep.info("session-status", "shown at session start (plugin hook)")
-    else:
-        rep.warn("session-status", "the plugin's session-status hook is missing")
+        pass
+    rep.warn("session-status", "the plugin's session-status hook is missing")
 
 
 def check_release(settings, rep, shallow=None):
@@ -797,7 +796,7 @@ def main(argv=None):
         check_notify(path, rep)
     check_local_skills(root, rep)
     check_claude_md(root, rep)
-    check_session_hook(Path(__file__).resolve().parents[1], rep)
+    check_session_hook(PLUGIN_ROOT, rep)
 
     header = Report()
     config_header(root, settings, header, path if settings else None)
