@@ -140,11 +140,15 @@ class Sweep(unittest.TestCase):
         self.git("worktree", "add", "-q", "--detach", str(detached), "main")
         locked = self.worktree("fix/13-y")
         self.git("worktree", "lock", "--reason", "in use", str(locked))
-        code, lines = self.sweep("--apply", fixture={"issue": {"13": {"state": "CLOSED", "comments": []}}})
+        bare_lock = self.worktree("fix/15-w")
+        self.git("worktree", "lock", str(bare_lock))
+        fixture = {"issue": {"13": {"state": "CLOSED", "comments": []}, "15": {"state": "CLOSED", "comments": []}}}
+        code, lines = self.sweep("--apply", fixture=fixture)
         self.assertEqual(code, 1)
         self.assertEqual(sorted(lines), sorted([f"keep {plain} (issue-46): no issue number in issue-46",
                                                 f"keep {detached} (detached): detached HEAD",
-                                                f"keep {locked} (fix/13-y): locked"]))
+                                                f"keep {locked} (fix/13-y): locked",
+                                                f"keep {bare_lock} (fix/15-w): locked"]))
         self.assertTrue(locked.exists())
 
     def test_7_the_main_worktree_and_the_current_one_are_never_listed(self):
@@ -239,6 +243,11 @@ class Sweep(unittest.TestCase):
         self.assertEqual(code, 0)
         self.assertEqual(lines, [f"remove {path} (fix/12-x): PR #3 merged", "  branch fix/12-x kept: refused"])
         self.assertFalse(path.exists())
+
+    def test_a_failed_count_of_unpushed_commits_cannot_tell(self):
+        path = self.worktree("fix/12-x")
+        code, lines = self.in_process(("rev-list",), fixture={"pr": {"fix/12-x": [pr(3, "MERGED")]}})
+        self.assertEqual((code, lines), (1, [f"keep {path} (fix/12-x): cannot tell: refused"]))
 
     def test_an_unreadable_worktree_list_exits_2(self):
         code, _ = self.sweep(cwd=self.tmp)
