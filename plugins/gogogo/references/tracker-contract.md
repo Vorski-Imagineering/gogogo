@@ -50,6 +50,8 @@ whose CI also moves cards (for example on deploy) imports a pinned copy of
 `tracker.py` and runs a pinned `stage_sync.py` beside it (see
 `references/stage-sync.md`); the skills still use `tracker.py`.
 
+The shared tool also refuses a move to `tracker.columns.needs_human` unless the issue's newest comment carries a stop marker (`gogogo:stop`, `gogogo:skip`, or an `auto-test v1` FAIL or NEEDS_HUMAN verdict), exiting 4 with nothing written; a repo's own tool may do the same.
+
 The shared tool also has `views [--hide-closed]` and `tidy [--apply]`, which
 `/gogogo:setup` uses to keep views and cards current. They are not part of the
 contract, and a repo's own tool need not provide them.

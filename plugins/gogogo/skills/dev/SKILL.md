@@ -551,6 +551,12 @@ name. Pass the role key, not the name, for those two: a `!` in a name, as in
 A zero exit is the confirmation: the tool read the card back. Anything else is
 a failed move; say so, do not retry blind.
 
+Exit 4 from the shared tool on a move to `needs_human` means the issue's
+newest comment carries no stop marker. When the §7 report was posted and a
+later comment came after it, post the `**Needs you:**` line and its stop
+marker again as a short comment, then move once more. When the report was
+never posted, post it first. Never move the card some other way.
+
 Follow the profile's `handback.reporter`: `trailer` means each merge writes a
 `Ships-issue` trailer naming the reporter, and stage sync assigns them when the
 card enters a stage with a `tag`; `assign` means assign them now; `none` means
