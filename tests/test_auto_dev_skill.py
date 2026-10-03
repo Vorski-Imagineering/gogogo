@@ -59,6 +59,12 @@ class QueueSelection(unittest.TestCase):
     def test_triage_only_names_the_ready_label(self):
         self.assertIn("ready label", section(self.text, "Triage-only mode"))
 
+    def test_triage_folds_in_comments(self):
+        """gogogo#108: an answer in a comment is folded in, not skipped; a preview folds nothing."""
+        triage = section(self.text, "2. Triage each issue before touching it")
+        self.assertIn("Fold in comments", triage)
+        self.assertIn("folds nothing", section(self.text, "Triage-only mode"))
+
 
 class NeverWaits(unittest.TestCase):
     """The loop never waits on chat or on a turn's end (gogogo#96)."""
