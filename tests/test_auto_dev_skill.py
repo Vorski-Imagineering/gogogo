@@ -60,5 +60,28 @@ class QueueSelection(unittest.TestCase):
         self.assertIn("ready label", section(self.text, "Triage-only mode"))
 
 
+class NeverWaits(unittest.TestCase):
+    """The loop never waits on chat or on a turn's end (gogogo#96)."""
+
+    def setUp(self):
+        self.text = SKILL.read_text(encoding="utf-8")
+
+    def test_the_chat_section_comes_before_selection(self):
+        chat = self.text.find("\n## The loop never waits on chat\n")
+        self.assertNotEqual(chat, -1)
+        self.assertLess(chat, self.text.index("\n## 1. Select the queue"))
+
+    def test_no_run_ends_a_turn_for_background_work(self):
+        step = section(self.text, "4. Change, test, review, verify")
+        self.assertIn("Never end a turn to wait for background work", step)
+        both = [ln for ln in step.splitlines() if "headless" in ln.lower() and "never end a turn" in ln.lower()]
+        self.assertFalse(both, both)
+
+    def test_claude_specific_names_the_poll_and_the_banned_tool(self):
+        claude = self.text.split("\n## Claude-specific")[1]
+        for name in ("timeout 540", "AskUserQuestion"):
+            self.assertIn(name, claude)
+
+
 if __name__ == "__main__":
     unittest.main()
