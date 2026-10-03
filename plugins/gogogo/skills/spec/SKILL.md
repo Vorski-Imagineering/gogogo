@@ -387,12 +387,13 @@ order, checking each step before starting the next:
    first in `tracker.issues_repo`, with a short title and the user's own words
    as the body: `gh issue create --repo <tracker.issues_repo> --title "<title>"
    --body-file <scratch>/idea.md`. Its number is `<N>` below, and those words
-   become the original report.
+   become the original report. Then take its start snapshot
+   (*Before you write* § 0) at once: the issue starts here.
 1. **Save the current body to the scratchpad before anything else**, and
    check nobody changed the issue since it started:
    `gh issue view <N> --repo <tracker.issues_repo> --json body,labels > <scratch>/issue-<N>-now.json`,
-   and its body to `<scratch>/issue-<N>-original.md` as before
-   (`gh issue view <N> --json body -q .body > <scratch>/issue-<N>-original.md`).
+   then write its body, from that same read, to `<scratch>/issue-<N>-original.md`
+   (`jq -r .body <scratch>/issue-<N>-now.json > <scratch>/issue-<N>-original.md`).
    Confirm the file is non-empty (unless the issue body is empty). Then
    compare `body` and the set of label names with `issue-<N>-start.json`
    (*Before you write* § 0). Comments and `updatedAt` are not compared.
@@ -405,8 +406,12 @@ order, checking each step before starting the next:
        meanwhile, kept*.
      - replace: the report section follows *Which report to keep* applied to
        the current body (never quote the other spec as the report); the spec
-       below the `---` is this run's. Go on to step 2. The final-report line
-       says *replaced a version posted meanwhile*.
+       below the `---` is this run's. Go on to step 2. When step 7 then
+       withholds the label and the other version left it on, remove it
+       (`gh issue edit <N> --repo <tracker.issues_repo> --remove-label "<ready_marker>"`):
+       the label describes the spec now in the body. The final-report line
+       says *replaced a version posted meanwhile*, then the line steps 7 and 8
+       would give it.
      - A decline, or no person to ask: as keep, and the line says *skipped:
        changed by someone else meanwhile, nobody to ask*.
 2. **Write the spec to the scratchpad**, so a failed call is re-postable.
@@ -451,6 +456,10 @@ order, checking each step before starting the next:
 
    A spec that stops at a gate is still worth posting; it just is not ready
    until the gate is cleared.
+
+   Then take the start snapshot again (*Before you write* § 0): the body and
+   labels are now this run's own, so a later pass through Posting in this
+   run does not read them as someone else's change.
 8. **Move the card to the queue.** Only when step 7 applied the label, the
    profile has both `tracker.tool` and `tracker.queue`, and `tracker.queue` is
    one of the board's columns (`<tracker.tool> fields --check` lists them);
