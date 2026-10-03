@@ -206,6 +206,20 @@ class Wrapper(unittest.TestCase):
         self.assertEqual(after.count("end"), 1)
 
 
+    def test_the_wrapper_becomes_the_test_run_so_a_timeout_kill_reaches_it(self):
+        # The tool kills the process it started when a mutant's run times out; that must be
+        # the test run itself, or the run lives on after its mutant is scored.
+        proc = subprocess.Popen([sys.executable, mutate.WRAPPER, sys.executable, "-c",
+                                 "import os; print(os.getpid())"], cwd=self.dir, stdout=subprocess.PIPE)
+        out, _ = proc.communicate(timeout=60)
+        self.assertEqual(int(out.decode("utf-8").split()[0]), proc.pid)
+
+    def test_a_group_with_only_exited_members_is_not_an_error(self):
+        proc = subprocess.Popen([sys.executable, "-c", "pass"], start_new_session=True)
+        proc.wait()
+        with mock.patch.object(mutate.os, "killpg", side_effect=PermissionError(1, "not permitted")):
+            mutate._end_group(proc, 0)
+
 # A stand-in for the mutation tool: `run` starts the --runner command RUNS times,
 # PAUSE seconds apart, then sleeps STALL seconds with a child of its own; it writes
 # its pid and the child's to PIDS. Every other subcommand answers from IDS.

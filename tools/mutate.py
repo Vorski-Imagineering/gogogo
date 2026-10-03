@@ -71,8 +71,12 @@ STALL_TIMES = 10
 STALL_POLL = 15
 KILL_AFTER = 10
 
-WRAPPER_SOURCE = f'''"""Runs one test command for tools/mutate.py; written into its throwaway copy."""
-import subprocess
+WRAPPER_SOURCE = f'''"""Runs one test command for tools/mutate.py; written into its throwaway copy.
+
+It becomes the test command (exec), so the tool's own timeout kills the test run itself, and
+the exit status is the command's. A forked child passes the output on as UTF-8 and marks the end.
+"""
+import os
 import sys
 import time
 from pathlib import Path
@@ -87,13 +91,21 @@ def mark(line):
 
 start = time.time()
 mark(f"start {{start:.3f}}")
-run = subprocess.run(sys.argv[1:], capture_output=True)
-for data, stream in ((run.stdout, sys.stdout), (run.stderr, sys.stderr)):
-    stream.buffer.write(data.decode("utf-8", errors="replace").encode("utf-8"))
-    stream.flush()
-end = time.time()
-mark(f"end {{end:.3f}} {{end - start:.3f}}")
-sys.exit(run.returncode)
+read_end, write_end = os.pipe()
+if os.fork() == 0:
+    os.close(write_end)
+    with os.fdopen(read_end, "rb") as src:
+        data = src.read()
+    sys.stdout.buffer.write(data.decode("utf-8", errors="replace").encode("utf-8"))
+    sys.stdout.flush()
+    end = time.time()
+    mark(f"end {{end:.3f}} {{end - start:.3f}}")
+    os._exit(0)
+os.close(read_end)
+os.dup2(write_end, 1)
+os.dup2(write_end, 2)
+os.close(write_end)
+os.execvp(sys.argv[1], sys.argv[1:])
 '''
 
 
@@ -110,7 +122,8 @@ def _end_group(proc: subprocess.Popen, grace: float) -> None:
     for sig, wait in ((signal.SIGTERM, grace), (signal.SIGKILL, None)):
         try:
             os.killpg(proc.pid, sig)
-        except ProcessLookupError:
+        except (ProcessLookupError, PermissionError):
+            # Gone, or (macOS) only exited members left: nothing to end.
             pass
         try:
             proc.wait(timeout=wait)
