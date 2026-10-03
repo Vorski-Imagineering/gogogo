@@ -227,7 +227,8 @@ def _setting(profile_path):
     value = settings.get("notify")
     if not value:
         token, chat, _ = credentials(root)
-        return ("telegram", True, root) if token and chat else ("none", False, root)
+        by_default = bool(token and chat)
+        return ("telegram" if by_default else "none"), by_default, root
     if value != "none" and value not in TRANSPORTS:
         raise UsageError(f"notify: '{value}' has no transport (known: none, {', '.join(sorted(TRANSPORTS))})")
     return value, False, root
@@ -236,9 +237,9 @@ def _setting(profile_path):
 def status(profile_path=None):
     """(state, line, token) for the profile's transport on this machine. Sends nothing."""
     value, by_default, root = _setting(profile_path)
-    _, _, unread = credentials(root)
+    token, _, unread = credentials(root)
     if unread:
-        return FAILED, unread, ""
+        return FAILED, unread, token
     if value == "none":
         return OFF, "notify: off", ""
     transport = TRANSPORTS[value](root)
