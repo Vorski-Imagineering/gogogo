@@ -222,6 +222,8 @@ What each fix involves:
       credentials appear on this machine later. Say that `/gogogo:setup` can
       set them up later.
   - On every repo or only this repo, or on `WARN notify: telegram, but no bot credentials`:
+    when the profile says `notify = "none"`, first remove that line and commit
+    it like setup's other profile changes, or the row stays `INFO notify: off`.
     1. Run `python3 "${CLAUDE_PLUGIN_ROOT}/scripts/notify.py" init`. Tell the
        person to make a bot (in Telegram, **@BotFather**, `/newbot`; a bot
        made for the Telegram channel plugin works too) and to paste its token
@@ -238,7 +240,8 @@ What each fix involves:
   - `WARN notify: telegram: <reason>`: show the reason. The usual causes are a
     wrong token (paste it again) and a chat the bot cannot reach (send the bot
     a message, then `chat-id`, and `chat-id --save <id>` for the chat the
-    person confirms).
+    person confirms). Add `--repo` to each command when this repo keeps its
+    own `.claude/gogogo/notify.env`.
 
 ## Reviewing a repo that is already set up
 

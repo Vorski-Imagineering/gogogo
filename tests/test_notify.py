@@ -491,6 +491,25 @@ class RepoFileLines(Case):
         code, out, err = self.run_main("init", "--repo", "--profile", self.profile())
         self.assertEqual((code, out, err.strip()), (2, "", self.unread_line()))
 
+    def test_the_not_ignored_line_is_scrubbed_on_send_and_init(self):
+        root = self.tmp / TOKEN
+        subprocess.run(["git", "init", "-q", str(root)], check=True)
+        (root / ".gitignore").write_text("*.pem\n")
+        (root / ".claude" / "gogogo").mkdir(parents=True)
+        (root / ".claude" / "gogogo" / "notify.env").write_text(f"{notify.CHAT_KEY}=222\n")
+        (root / ".agents").mkdir()
+        profile = root / ".agents" / "dev-process.md"
+        profile.write_text('+++\nprofile = 1\nnotify = "telegram"\n+++\n\n## superpowers boundary\nx\n')
+        self.write_creds()
+        self.urlopen.return_value = ok({"message_id": 1})
+        _, out, err = self.run_main("send", "--profile", str(profile), "--text", "hello")
+        self.assertIn("not git-ignored", err)
+        self.assertNotIn(TOKEN, out + err)
+        code, out, err = self.run_main("init", "--repo", "--profile", str(profile))
+        self.assertEqual(code, 2)
+        self.assertIn("not git-ignored", err)
+        self.assertNotIn(TOKEN, out + err)
+
     def test_by_default_lines_name_the_default(self):
         self.git_repo()
         self.write_creds()

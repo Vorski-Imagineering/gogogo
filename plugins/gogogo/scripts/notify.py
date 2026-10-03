@@ -280,9 +280,9 @@ def cmd_send(args):
         raise UsageError("nothing to send: empty text")
     text = _fit(text)
     value, _, root = _setting(args.profile)
-    _, _, unread = credentials(root)
+    token, _, unread = credentials(root)
     if unread:
-        print(unread, file=sys.stderr)
+        _say(unread, token, sys.stderr)
     if value == "none":
         print("notify: off")
         return EXIT_OK
@@ -314,7 +314,7 @@ def _target(args):
         return CREDENTIALS
     root = _root(args.profile)
     if not _ignored(root):
-        raise UsageError(_not_ignored(root).removeprefix("notify: "))
+        raise UsageError(_scrub(_not_ignored(root).removeprefix("notify: "), credentials(root)[0]))
     return root / REPO_FILE
 
 
