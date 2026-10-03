@@ -280,5 +280,38 @@ class BeforeYouWrite(unittest.TestCase):
         self.assertIn("WebSearch", "\n".join(section(skill_text(), "## Claude-specific")))
 
 
+GIVEN_NOTHING = "## Given nothing to spec"
+
+
+class GivenNothing(unittest.TestCase):
+    """With no argument, spec offers the standard New column (gogogo#136)."""
+
+    def test_section_placed(self):
+        lines = skill_text().splitlines()
+        heads = [i for i, line in enumerate(lines) if line.startswith(GIVEN_NOTHING)]
+        self.assertEqual(len(heads), 1)
+        profile = next(i for i, line in enumerate(lines) if line.startswith("## First: read this repo's profile"))
+        run = next(i for i, line in enumerate(lines) if line.startswith(RUN))
+        self.assertLess(profile, heads[0])
+        between = [line for line in lines[heads[0] + 1:run] if line.startswith("## ")]
+        self.assertLess(heads[0], run)
+        self.assertEqual(between, [])
+
+    def test_names_the_standard_column(self):
+        import tracker
+        self.assertIn(tracker.NEW_COLUMN, "\n".join(section(skill_text(), GIVEN_NOTHING)))
+
+    def test_uses_the_run_rules(self):
+        sub = "\n".join(section(skill_text(), GIVEN_NOTHING))
+        for name in ("references/several-issues.md", "rule 2", "rule 3", "AskUserQuestion"):
+            self.assertIn(name, sub)
+        for setting in re.findall(r"`(tracker\.[a-z_.]+)`", sub):
+            self.assertIn(setting, pc.FIELDS, setting)
+
+    def test_description_names_no_argument(self):
+        description = next(line for line in skill_text().splitlines() if line.startswith("description:"))
+        self.assertIn("no argument", description)
+
+
 if __name__ == "__main__":
     unittest.main()
