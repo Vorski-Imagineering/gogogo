@@ -515,7 +515,7 @@ and no further. Take the first case that fits:
 one, on its own line directly under the `**Needs you:**` line, and no other
 report does (the reopen line below is not a stop):
 
-`<!-- gogogo:stop v=1 reason=<hard-stop|decision|spec|review|tests|mutation|verify|gate|ci> -->`
+`<!-- gogogo:stop v=1 reason=<hard-stop|decision|spec|review|tests|mutation|verify|gate|ci|reverted> -->`
 
 | reason | when |
 |---|---|
@@ -528,6 +528,7 @@ report does (the reopen line below is not a stop):
 | `verify` | verification gave up (`/gogogo:auto-dev` §4's bound) |
 | `gate` | a gate that could not be made to pass (`/gogogo:auto-dev` §5) |
 | `ci` | the PR's checks failed or could not be read (`/gogogo:auto-dev` §6, *Judge*) |
+| `reverted` | a shipped fix was reverted on the base (`stage_sync.py reverts --apply`, run by `/gogogo:auto-dev` preflight) |
 
 Nothing sweeps cards out of `tracker.columns.needs_human`, and no run takes an
 issue from there: a person moves it on once they have done what it asked, or

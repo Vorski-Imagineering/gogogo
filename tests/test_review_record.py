@@ -101,6 +101,7 @@ class Settings(unittest.TestCase):
         reasons = re.fullmatch(r"v=1 reason=<([^>]*)>", markers[0])
         self.assertIsNotNone(reasons, markers[0])
         self.assertEqual(tuple(reasons.group(1).split("|")), review_stats.STOPS)
+        self.assertIn("reverted", review_stats.STOPS)
 
     def test_dev_names_the_session_source(self):
         claude = DEV.read_text(encoding="utf-8").split("\n## Claude-specific")[1]
