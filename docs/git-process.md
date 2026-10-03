@@ -102,7 +102,7 @@ decides.
 `/gogogo:dev` creates the issue's `fix/<n>-<slug>` branch before its first edit,
 and commits, pushes or merges only when asked
 ([§4](../plugins/gogogo/skills/dev/SKILL.md#4-change),
-[§8](../plugins/gogogo/skills/dev/SKILL.md#name-the-issue-without-closing-it));
+[§8](../plugins/gogogo/skills/dev/references/hand-back.md#name-the-issue-without-closing-it));
 the other skills say in their own text what, if anything, they write.
 
 ## Before a PR merges
@@ -118,7 +118,7 @@ Every issue goes through the same checks, in this order, before its merge:
    (`spec_check.py`). A missing piece is built, a difference is matched or,
    when small, declared in the report, and anything larger goes to a person.
 3. **Review.** `/code-review`, applying a finding only on evidence, with three
-   attempts per finding and two rounds per prose file, until a round applies
+   attempts per finding and two rounds per prose file, and one more for a fix made in the second, until a round applies
    nothing (a person after 13 rounds). See
    [when-is-enough-enough.md](when-is-enough-enough.md).
 4. **Verify.** The path the issue describes is run on real data in the
@@ -229,7 +229,7 @@ The trailer is how a tag later finds the issues it ships
 can also confirm the `Ships-issue` link and that the issue is still open;
 nothing is commented and no card moves until it prints `MERGED`. What each
 exit means, and what the loop does next, is in
-[`/gogogo:auto-dev` § Verify the merge landed](../plugins/gogogo/skills/auto-dev/SKILL.md#verify-the-merge-landed-never-trust-an-exit-code-alone).
+[`/gogogo:auto-dev` § Verify the merge landed](../plugins/gogogo/skills/auto-dev/references/merge.md#verify-the-merge-landed-never-trust-an-exit-code-alone).
 
 **Move the card only as far as the code has got.** A verified merge moves the
 card to the first of the profile's `stages`: for example "In Dev" when the base
