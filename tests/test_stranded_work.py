@@ -393,6 +393,16 @@ class PullRequests(Repos):
         self.assertNotIn("no open PR", lines[0])
         self.assertIn("pull requests in o/code not checked: boom", lines[0])
 
+    def test_an_open_issue_with_an_open_pr_in_another_remote_does_not_say_no_pr(self):
+        self.git("remote", "add", "old", "git@github.com:o/old.git")
+        self.branch_with("fix/12-x", 1)
+        fixture = {"issue": {"12": {"state": "OPEN", "comments": []}},
+                   "pr": {"o/old fix/12-x": [pr(5, "OPEN", self.tip("fix/12-x"), "o/old")]}}
+        code, lines = self.run_with(fixture)
+        self.assertEqual(code, 1)
+        self.assertNotIn("no open PR", lines[0])
+        self.assertIn("issue #12 is open; PR #5 open in o/old", lines[0])
+
     def test_an_open_issue_whose_stop_marker_names_the_branch_claims(self):
         self.branch_with("fix/12-x", 1)
         comment = ("**Needs you:** read [the branch](https://github.com/o/code/tree/fix/12-x).\n"

@@ -263,6 +263,7 @@ def main(argv=None):
                 open_or_unknown = True
                 parts.append(f"PR #{pr['number']} open, but {count} commit(s) are on no remote")
                 continue
+            open_or_unknown = open_or_unknown or pr["state"] == "OPEN"
             parts.append(pr_part(pr, pr_repo, code_repo, tip, args.base))
         else:
             pr_parts = "".join(f"; {part}" for part in parts)
