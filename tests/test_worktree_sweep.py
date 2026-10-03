@@ -8,6 +8,8 @@ from the clone, with a fake `gh` on PATH that answers from a JSON fixture.
     python3 -m unittest tests.test_worktree_sweep
 """
 
+import contextlib
+import io
 import json
 import os
 import shutil
@@ -16,6 +18,7 @@ import sys
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 SCRIPT = Path(__file__).resolve().parents[1] / "plugins" / "gogogo" / "scripts" / "worktree_sweep.py"
 
@@ -97,8 +100,8 @@ class Sweep(unittest.TestCase):
         path = self.worktree("fix/12-x")
         fixture = {"pr": {"fix/12-x": [pr(3, "MERGED")]}}
         self.assertEqual(self.sweep(fixture=fixture), (0, [f"remove {path} (fix/12-x): PR #3 merged"]))
-        code, _ = self.sweep("--apply", fixture=fixture)
-        self.assertEqual(code, 0, self.stderr)
+        self.assertTrue(path.exists(), "removed without --apply")
+        self.assertEqual(self.sweep("--apply", fixture=fixture), (0, [f"remove {path} (fix/12-x): PR #3 merged"]))
         self.assertFalse(path.exists())
         self.assertNotIn("fix/12-x", self.branches())
 
@@ -132,14 +135,14 @@ class Sweep(unittest.TestCase):
         self.assertTrue(path.exists())
 
     def test_6_no_number_detached_and_locked_are_kept(self):
-        plain = self.worktree("issue-x")
+        plain = self.worktree("issue-46")
         detached = self.tmp / "detached"
         self.git("worktree", "add", "-q", "--detach", str(detached), "main")
         locked = self.worktree("fix/13-y")
-        self.git("worktree", "lock", str(locked))
+        self.git("worktree", "lock", "--reason", "in use", str(locked))
         code, lines = self.sweep("--apply", fixture={"issue": {"13": {"state": "CLOSED", "comments": []}}})
         self.assertEqual(code, 1)
-        self.assertEqual(sorted(lines), sorted([f"keep {plain} (issue-x): no issue number in issue-x",
+        self.assertEqual(sorted(lines), sorted([f"keep {plain} (issue-46): no issue number in issue-46",
                                                 f"keep {detached} (detached): detached HEAD",
                                                 f"keep {locked} (fix/13-y): locked"]))
         self.assertTrue(locked.exists())
@@ -178,9 +181,64 @@ class Sweep(unittest.TestCase):
     def test_10_a_folder_deleted_by_hand_is_pruned(self):
         path = self.worktree("fix/12-x")
         shutil.rmtree(path)
-        self.sweep("--apply", fixture={"issue": {"12": {"state": "OPEN", "comments": []}}})
+        code, lines = self.sweep("--apply", fixture={"issue": {"12": {"state": "OPEN", "comments": []}}})
+        self.assertEqual(code, 1)
+        self.assertTrue(lines[0].startswith(f"keep {path} (fix/12-x): cannot tell: fatal: "), lines)
         listed = self.git("worktree", "list", "--porcelain").stdout
         self.assertNotIn(str(path), listed)
+
+    def test_every_remove_is_listed_without_apply(self):
+        first, second = self.worktree("fix/12-x"), self.worktree("fix/14-z")
+        fixture = {"issue": {"12": {"state": "CLOSED", "comments": []}, "14": {"state": "CLOSED", "comments": []}}}
+        self.assertEqual(self.sweep(fixture=fixture), (0, [f"remove {first} (fix/12-x): issue #12 closed",
+                                                          f"remove {second} (fix/14-z): issue #14 closed"]))
+        self.assertTrue(first.exists() and second.exists())
+
+    def test_a_profile_naming_one_repo_cannot_tell(self):
+        (self.clone / ".agents" / "dev-process.md").write_text('+++\n[tracker]\ncode_repo = "o/code"\n+++\n')
+        self.git("commit", "-q", "-am", "one repo")
+        self.git("push", "-q", "origin", "main")
+        path = self.worktree("fix/12-x")
+        self.assertEqual(self.sweep(fixture={"pr": {"fix/12-x": [pr(3, "MERGED")]}}),
+                         (1, [f"keep {path} (fix/12-x): cannot tell: the profile names no tracker.code_repo "
+                              "or tracker.issues_repo"]))
+
+    def in_process(self, fail, *args, fixture):
+        """Run main() in the clone with `git <fail...>` answering exit 1 "refused"; (code, stdout)."""
+        sys.path.insert(0, str(SCRIPT.parent))
+        import worktree_sweep
+        self.fixture.write_text(json.dumps(fixture))
+        real = worktree_sweep.git
+
+        def git(*argv):
+            if argv[:len(fail)] == fail:
+                return subprocess.CompletedProcess(["git", *argv], 1, "", "refused\n")
+            return real(*argv)
+        out = io.StringIO()
+        cwd = os.getcwd()
+        os.chdir(self.clone)
+        self.addCleanup(os.chdir, cwd)
+        with mock.patch.dict(os.environ, self.env), mock.patch.object(worktree_sweep, "git", git), \
+                contextlib.redirect_stdout(out):
+            code = worktree_sweep.main(list(args))
+        return code, out.getvalue().splitlines()
+
+    def test_a_refused_remove_keeps_it_and_goes_on(self):
+        first, second = self.worktree("fix/12-x"), self.worktree("fix/14-z")
+        fixture = {"issue": {"12": {"state": "CLOSED", "comments": []}, "14": {"state": "CLOSED", "comments": []}}}
+        code, lines = self.in_process(("worktree", "remove", str(first)), "--apply", fixture=fixture)
+        self.assertEqual(code, 1)
+        self.assertEqual(lines, [f"remove {first} (fix/12-x): issue #12 closed", "  not removed: refused",
+                                 f"remove {second} (fix/14-z): issue #14 closed"])
+        self.assertTrue(first.exists())
+        self.assertFalse(second.exists())
+
+    def test_a_refused_branch_delete_is_said_and_the_worktree_counts_as_removed(self):
+        path = self.worktree("fix/12-x")
+        code, lines = self.in_process(("branch", "-D"), "--apply", fixture={"pr": {"fix/12-x": [pr(3, "MERGED")]}})
+        self.assertEqual(code, 0)
+        self.assertEqual(lines, [f"remove {path} (fix/12-x): PR #3 merged", "  branch fix/12-x kept: refused"])
+        self.assertFalse(path.exists())
 
     def test_an_unreadable_worktree_list_exits_2(self):
         code, _ = self.sweep(cwd=self.tmp)

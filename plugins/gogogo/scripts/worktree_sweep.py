@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Remove the worktrees whose issue's work is finished, and keep the rest.
 
-    worktree_sweep.py [--apply] [--only PATH] [--profile FILE]
+    worktree_sweep.py [--apply] [--only PATH]
 
 For every worktree in `git worktree list --porcelain` except the main one (the
 first entry) and the one holding the current directory, or only `--only PATH`,
@@ -37,7 +37,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import profile_check  # noqa: E402
-from stranded_work import gh, issue_in_branch, issue_view, pull_requests  # noqa: E402,F401
+from stranded_work import issue_in_branch, issue_view, pull_requests  # noqa: E402
 
 
 def git(*args):
@@ -49,31 +49,25 @@ def _first_line(out, what):
 
 
 def worktrees():
-    """[{path, branch, locked, detached}], main worktree first; None when git cannot list them."""
+    """[{path, branch, locked}], main worktree first, branch None when detached;
+    None when git cannot list them."""
     out = git("worktree", "list", "--porcelain")
     if out.returncode != 0:
         return None
-    found, entry = [], None
-    for line in out.stdout.splitlines() + [""]:
-        if line.startswith("worktree "):
-            entry = {"path": line[len("worktree "):], "branch": None, "locked": False, "detached": False}
-        elif entry is None:
+    found = []
+    for block in out.stdout.split("\n\n"):
+        lines = block.splitlines()
+        if not lines or not lines[0].startswith("worktree "):
             continue
-        elif line.startswith("branch "):
-            entry["branch"] = line[len("branch "):].removeprefix("refs/heads/")
-        elif line == "detached":
-            entry["detached"] = True
-        elif line == "locked" or line.startswith("locked "):
-            entry["locked"] = True
-        elif not line:
-            found.append(entry)
-            entry = None
+        branch = next((ln[len("branch refs/heads/"):] for ln in lines if ln.startswith("branch refs/heads/")), None)
+        locked = any(ln == "locked" or ln.startswith("locked ") for ln in lines)
+        found.append({"path": lines[0][len("worktree "):], "branch": branch, "locked": locked})
     return found
 
 
-def repos(profile):
-    """(issues_repo, code_repo) from the profile, each None when it cannot be read."""
-    path = Path(profile) if profile else profile_check.find_profile()
+def repos():
+    """(issues_repo, code_repo) from the nearest profile, each None when it cannot be read."""
+    path = profile_check.find_profile()
     try:
         settings, _ = profile_check.split_profile(path.read_text(encoding="utf-8"))
     except (OSError, profile_check.ProfileError):
@@ -82,40 +76,43 @@ def repos(profile):
     return tracker.get("issues_repo"), tracker.get("code_repo")
 
 
+KEEP, REMOVE, REMOVE_WITH_BRANCH = "keep", "remove", "remove with branch"
+
+
 def decide(tree, issues_repo, code_repo):
-    """("remove" | "keep", reason, merged) for one worktree."""
+    """(KEEP | REMOVE | REMOVE_WITH_BRANCH, reason) for one worktree."""
     branch = tree["branch"]
     if tree["locked"]:
-        return "keep", "locked", False
-    if tree["detached"] or not branch:
-        return "keep", "detached HEAD", False
+        return KEEP, "locked"
+    if branch is None:
+        return KEEP, "detached HEAD"
     number = issue_in_branch(branch)
     if number is None:
-        return "keep", f"no issue number in {branch}", False
+        return KEEP, f"no issue number in {branch}"
     status = git("-C", tree["path"], "status", "--porcelain")
     if status.returncode != 0:
-        return "keep", f"cannot tell: {_first_line(status, 'git status')}", False
+        return KEEP, f"cannot tell: {_first_line(status, 'git status')}"
     if status.stdout.strip():
-        return "keep", "uncommitted changes", False
+        return KEEP, "uncommitted changes"
     ahead = git("rev-list", "--count", branch, "--not", "--remotes")
     if ahead.returncode != 0:
-        return "keep", f"cannot tell: {_first_line(ahead, 'git rev-list')}", False
-    if int(ahead.stdout.strip() or 0) > 0:
-        return "keep", f"{ahead.stdout.strip()} commit(s) on no remote", False
+        return KEEP, f"cannot tell: {_first_line(ahead, 'git rev-list')}"
+    if int(ahead.stdout) > 0:
+        return KEEP, f"{ahead.stdout.strip()} commit(s) on no remote"
     if not code_repo or not issues_repo:
-        return "keep", "cannot tell: the profile names no tracker.code_repo or tracker.issues_repo", False
+        return KEEP, "cannot tell: the profile names no tracker.code_repo or tracker.issues_repo"
     prs, error = pull_requests(code_repo, branch)
     if error:
-        return "keep", f"cannot tell: {error}", False
+        return KEEP, f"cannot tell: {error}"
     merged = [p for p in prs if p.get("state") == "MERGED"]
     if merged:
-        return "remove", f"PR #{merged[0]['number']} merged", True
+        return REMOVE_WITH_BRANCH, f"PR #{merged[0]['number']} merged"
     issue = issue_view(issues_repo, number)
     if not issue:
-        return "keep", f"cannot tell: the lookup of issue #{number} failed", False
+        return KEEP, f"cannot tell: the lookup of issue #{number} failed"
     if issue.get("state") != "OPEN":
-        return "remove", f"issue #{number} closed", False
-    return "keep", f"issue #{number} open, work not merged", False
+        return REMOVE, f"issue #{number} closed"
+    return KEEP, f"issue #{number} open, work not merged"
 
 
 def _inside(path, folder):
@@ -126,11 +123,23 @@ def _inside(path, folder):
         return False
 
 
+def remove(tree, verdict):
+    """Remove the worktree, and its branch for REMOVE_WITH_BRANCH; False when the worktree stays."""
+    out = git("worktree", "remove", tree["path"])
+    if out.returncode != 0:
+        print(f"  not removed: {_first_line(out, 'git worktree remove')}")
+        return False
+    if verdict == REMOVE_WITH_BRANCH:
+        out = git("branch", "-D", tree["branch"])
+        if out.returncode != 0:
+            print(f"  branch {tree['branch']} kept: {_first_line(out, 'git branch -D')}")
+    return True
+
+
 def main(argv=None):
     parser = argparse.ArgumentParser(description="Remove worktrees whose issue's work is finished.")
     parser.add_argument("--apply", action="store_true", help="remove what the sweep says to remove")
     parser.add_argument("--only", metavar="PATH", help="consider only this worktree")
-    parser.add_argument("--profile", help="profile file (default: the nearest .agents/dev-process.md)")
     args = parser.parse_args(argv)
 
     trees = worktrees()
@@ -141,27 +150,17 @@ def main(argv=None):
     candidates = [t for t in trees[1:] if not _inside(here, t["path"])]
     if args.only:
         candidates = [t for t in candidates if Path(t["path"]).resolve() == Path(args.only).resolve()]
-    issues_repo, code_repo = repos(args.profile)
+    issues_repo, code_repo = repos()
 
-    kept = 0
+    kept = False
     for tree in candidates:
-        verdict, reason, merged = decide(tree, issues_repo, code_repo)
-        label = tree["branch"] or "detached"
-        print(f"{verdict} {tree['path']} ({label}): {reason}")
-        if verdict == "keep":
-            kept += 1
-            continue
-        if not args.apply:
-            continue
-        out = git("worktree", "remove", tree["path"])
-        if out.returncode != 0:
-            print(f"  not removed: {_first_line(out, 'git worktree remove')}")
-            kept += 1
-            continue
-        if merged:
-            out = git("branch", "-D", tree["branch"])
-            if out.returncode != 0:
-                print(f"  branch {tree['branch']} kept: {_first_line(out, 'git branch -D')}")
+        verdict, reason = decide(tree, issues_repo, code_repo)
+        word = KEEP if verdict == KEEP else REMOVE
+        print(f"{word} {tree['path']} ({tree['branch'] or 'detached'}): {reason}")
+        if verdict == KEEP:
+            kept = True
+        elif args.apply and not remove(tree, verdict):
+            kept = True
     if args.apply:
         git("worktree", "prune")
     return 1 if kept else 0
