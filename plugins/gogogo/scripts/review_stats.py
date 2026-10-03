@@ -47,11 +47,14 @@ session id or time is left out and the record counted as having malformed
 fields, as is a record whose `t_verified` is before its `t_branch`. Each row
 gains those three and `posted`, the comment's time, and the summary adds a
 `phase times:` line (records with both times; median minutes from branch to
-verified, and from verified to the report being posted, `-` when none) and a
+verified, and from verified to the report being posted, `-` when none, rounded
+half up to whole minutes in the text (the JSON keeps them unrounded)) and a
 `session ids:` line. A hand-back to a person carries
 `<!-- gogogo:stop v=1 reason=<reason> -->` under its Needs-you line; the
-summary counts them by reason in a `stops:` line, wherever they sit, and counts
-one that does not parse or names an unknown reason as unreadable. Stop markers
+summary counts them by reason in a `stops:` line. Only a marker alone on its
+own line is read (gogogo#82); a mention inside a sentence is ignored. An
+own-line marker that does not parse, or names an unknown reason, counts as
+unreadable. Stop markers
 alone are not review records: zero records still exits 1.
 
 The outcome of a row is the verdict of the latest `<!-- auto-test v1 … -->`
@@ -95,7 +98,7 @@ TESTS_KEYS = ("v", "checked", "hunks", "weaker", "licensed", "restored", "attemp
 TESTS_ENDS = ("clean", "restored", "stopped", "unchecked")
 SPEC_CHECK_COUNTS = ("items", "met", "missing", "differs", "na", "outside", "runs", "fixed", "declared")
 AUTO_TEST = re.compile(r"<!-- auto-test v1 (.*?) -->")
-STOP = re.compile(r"<!-- gogogo:stop (.*?) -->")
+STOP = re.compile(r"^[ \t]*<!-- gogogo:stop (.*?) -->[ \t\r]*$", re.M)
 STOPS = ("hard-stop", "decision", "spec", "review", "tests", "mutation", "verify", "gate", "ci")
 TIME = re.compile(r"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}Z")
 UUID = re.compile(r"[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}")
@@ -441,7 +444,7 @@ def render(repo: str, data: dict) -> str:
     new = s["repo_records"] - s["old_format"]
 
     def median(value):
-        return "-" if value is None else f"{value:g}"
+        return "-" if value is None else str(int(value + 0.5))
     lines += [f"phase times: {s['timed']} of {new} new records (median branch→verified "
               f"{median(s['median_branch_to_verified'])} min, verified→report "
               f"{median(s['median_verified_to_report'])} min)",
