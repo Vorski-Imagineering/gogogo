@@ -23,6 +23,7 @@ checks that read (not the ones that need a browser or bypass mode), run §1 and
 reason, citing the Approvals row or the missing decision. A card without the
 ready label whose spec passed the lint (§1) is `take (no ready label; spec lint
 passed; the label would be added)`; one that failed is `skip` with §1's reason.
+When preflight 2 would stop the run, report that stop: the run would take nothing.
 For each issue taken, also run §3's `issue_work.py` (after `git fetch origin`)
 and report the outcome §3 would take: `continue on <branch>` (with its PR, if
 any), or §3's skip reason.
@@ -48,13 +49,20 @@ means finished work sits unverified while you go and ask.
 
 1. **The tree is clean.** Uncommitted changes are not yours to commit or
    discard. Stop and ask.
-2. **Say which branch the session was on.** Running this skill **is** the
+2. **Where each issue's work goes is decided.** When the profile has no
+   `integration.workspace` and its `## Lane constraints` mention a worktree
+   (in any case), stop the whole run before any issue, moving no card: the
+   profile mentions a worktree but sets no `integration.workspace`; run
+   `/gogogo:setup` to record the choice. Otherwise `worktree` puts each issue
+   in a git worktree of its own and `checkout` (or absent) branches here, as
+   §3 says.
+3. **Say which branch the session was on.** Running this skill **is** the
    authorisation for the branch switching it describes; any `CLAUDE.md` rule
    against switching branches still holds for anything outside this loop.
-3. **The base is healthy.** Run the profile's lanes that are cheap enough, or
+4. **The base is healthy.** Run the profile's lanes that are cheap enough, or
    read the base branch's CI. A red base makes every verdict in the run
    meaningless. An empty CI result is **not** a pass: it means nothing ran.
-4. **What a merge deploys.** Read the profile's `stages`. A merge is a release
+5. **What a merge deploys.** Read the profile's `stages`. A merge is a release
    when the stage it reaches has an environment whose roles include
    `production`: the first stage for `pr-squash` and `merge-script`; for
    `run-branch-pr`, the stage `integration.final_target` reaches, so only the
@@ -63,7 +71,7 @@ means finished work sits unverified while you go and ask.
    cleared §6. Any other issue stays unmerged, on its branch or open PR, and
    the run report says which gate it failed. Say in the run report which
    merges released.
-5. **Unattended mode.** Every run that may merge runs this,
+6. **Unattended mode.** Every run that may merge runs this,
    straight-to-production repos included. If the profile sets
    `integration.mode_check`, run it and stop the whole run on a non-zero exit;
    otherwise run the plugin's check:
@@ -73,29 +81,29 @@ means finished work sits unverified while you go and ask.
    It fails closed. Do not look for a way around it. On a failure, stop before
    any issue and tell the user to restart the session with
    `claude --permission-mode bypassPermissions`.
-6. **The board has the columns this run moves cards into:**
+7. **The board has the columns this run moves cards into:**
    `<tracker.tool> fields --check` must exit 0, and every column in the
    profile's `stages` and `tracker.columns` must be in its output. A missing
    column would make every hand-back fail after its merge.
-7. **Messages.**
+8. **Messages.**
    ```bash
    python3 "${CLAUDE_PLUGIN_ROOT}/scripts/notify.py" status
    ```
    Exit 0 with `notify: off`: say nothing. Exit 0 otherwise: messages will
    send. Any other exit: put its line once at the top of the run report and
    go on. Messages are a convenience, never a reason to stop.
-8. **A logged-in browser on the pre-merge environment** (`verify.session_url`,
+9. **A logged-in browser on the pre-merge environment** (`verify.session_url`,
    or the first `verify.agent` environment's `session_url`). A redirect to a
    login page → stop the whole run and ask. Do not decide that other coverage
    stands in for it; that decision belongs to whoever answers. Note which user
    the session is.
-9. **Stranded work, reported, not acted on:**
+10. **Stranded work, reported, not acted on:**
    ```bash
    python3 "${CLAUDE_PLUGIN_ROOT}/scripts/stranded_work.py" --base <integration.base>
    ```
    List what it prints at the top of the run report. Never delete, merge or
    rebase any of it.
-10. **Finished worktrees, removed:** from the main worktree,
+11. **Finished worktrees, removed:** from the main worktree,
    ```bash
    python3 "${CLAUDE_PLUGIN_ROOT}/scripts/worktree_sweep.py" --apply
    ```
@@ -105,7 +113,7 @@ means finished work sits unverified while you go and ask.
    report. Exit 1 means it kept a worktree, which is not a failure: the run
    goes on. Each issue's own worktree is removed after its merge, by
    `/gogogo:dev` §8.
-11. **The profile's `preflight.extra`**, each as it says. A check that says
+12. **The profile's `preflight.extra`**, each as it says. A check that says
    "report only" is reported and never acted on.
 
 ## The loop never waits on chat

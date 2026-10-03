@@ -13,7 +13,7 @@ Part of `/gogogo:auto-dev`. Read it in full. Section names and § numbers here a
 Re-run the unattended-mode check immediately before every merge, chained so
 the merge is unreachable when it fails. The mode can change mid-session.
 
-**The PR's checks, when a merge is a release** (§Preflight 4). Before the `gh`
+**The PR's checks, when a merge is a release** (§Preflight 5). Before the `gh`
 merge, two steps. Every re-run in them is `sleep 30; <the same command>`, as
 one command.
 
@@ -63,7 +63,7 @@ and the merge is `gh pr merge ... --body-file` with the body built as
   `gh pr merge --squash --delete-branch`, with the link's body when it
   applies. **Zero checks is a failure**, not a pass. At the end, one PR from
   the run branch to `integration.final_target` carries the whole run. When
-  that final PR is a release (§Preflight 4), merge it too, with a merge
+  that final PR is a release (§Preflight 5), merge it too, with a merge
   commit, once its checks pass (above); on a failure there (above), the run
   is not cleared to release: stop the whole run and ask, giving
   the Judge step's reasons, and leave the
