@@ -17,6 +17,7 @@ COMPLETE = """+++
 profile = 1
 observability = "sentry"
 notify = "none"
+independence = "junior-dev"
 
 [tracker]
 kind = "github-project"
@@ -346,6 +347,20 @@ class WrongValues(unittest.TestCase):
         settings.pop("review")
         for skill in (None, *pc.SKILLS):
             self.assertEqual(pc.check(settings, sections, skill), ([], []), skill)
+
+    def test_independence_is_one_of_three(self):
+        # gogogo#90: optional; absent means junior-dev.
+        settings, sections = parse()
+        settings.pop("independence", None)
+        for skill in (None, *pc.SKILLS):
+            self.assertEqual(pc.check(settings, sections, skill), ([], []), skill)
+        settings["independence"] = "lead"
+        errors, _ = pc.check(settings, sections)
+        self.assertIn("independence: 'lead' is not one of architect, junior-dev, senior-dev", errors)
+        for level in ("junior-dev", "senior-dev", "architect"):
+            settings["independence"] = level
+            for skill in (None, *pc.SKILLS):
+                self.assertEqual(pc.check(settings, sections, skill), ([], []), (level, skill))
 
     def test_value_outside_enum_is_named(self):
         settings, sections = parse()

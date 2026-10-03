@@ -97,6 +97,7 @@ no skill requires it; a skill that finds it uses it.
 | `stop.extra` | list | optional | Extra conditions that stop a whole run. |
 | `notify` | str | optional | none / telegram. Optional; absent means none. telegram: sent by scripts/notify.py; bot token and chat id from TELEGRAM_BOT_TOKEN and TELEGRAM_CHAT_ID in the environment or ~/.claude/gogogo/notify.env, never in the profile. |
 | `review.coverage` | str | optional | precise / broad / exhaustive. Optional; absent means broad. How wide a net the first review round casts; correction rounds are always precise. |
+| `independence` | str | optional | junior-dev / senior-dev / architect. Optional; absent means junior-dev. Which decisions Claude asks about and which it takes itself; see docs/independence-mode.md. |
 | `auto_test.pass_column` | str | `auto-test` | Column a card moves to on PASS. |
 | `auto_test.fail_column` | str | `auto-test` | Column a card moves to on FAIL. |
 | `auto_test.fail_label` | str | `auto-test` | Label added on FAIL. |
@@ -342,6 +343,34 @@ serious (its own rules a review must hold the change to) belongs in its
 ```toml
 [review]
 coverage = "broad"
+```
+
+### Independence
+
+`independence` says which decisions `/gogogo:spec`, `/gogogo:dev` and
+`/gogogo:auto-dev` bring to a person and which they take themselves. There are
+three kinds of decision: an **approval** (a Hard Stop item, or applying a
+two-licence change), a **product** decision (what a person sees, gets or has
+to do) and an **engineering** decision (how it is built, where a later change
+could undo it without anyone noticing a difference).
+
+| Level | Claude asks about | Claude decides, and records under *Decided without asking* |
+|---|---|---|
+| `junior-dev` | approvals, product, engineering | nothing |
+| `senior-dev` | approvals, product | engineering |
+| `architect` | approvals | product, engineering |
+
+Approvals are asked at every level: no level lets a skill approve its own Hard
+Stop or apply row. Absent means `junior-dev`, which is how the skills worked
+before the setting existed. `/gogogo:setup` asks which level a repo wants.
+`senior-dev` and `architect` are recommended for an Opus-class model at medium
+effort or higher. The reasons are in
+[`docs/independence-mode.md`](https://github.com/Vorski-Imagineering/gogogo/blob/main/docs/independence-mode.md).
+
+It is a top-level key, so it goes above the profile's first `[table]`:
+
+```toml
+independence = "senior-dev"
 ```
 
 ## Sections

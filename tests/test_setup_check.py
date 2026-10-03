@@ -1,3 +1,5 @@
+import contextlib
+import io
 import json
 import os
 import re
@@ -959,6 +961,44 @@ class Notify(unittest.TestCase):
         self.assertEqual(self.row(notify.NO_CREDENTIALS, "notify: telegram, but no bot credentials")["level"], "WARN")
         failed = self.row(notify.FAILED, "notify: telegram: Unauthorized")
         self.assertEqual((failed["level"], failed["detail"]), ("WARN", "telegram: Unauthorized"))
+
+
+class Independence(unittest.TestCase):
+    """The independence row: the repo's level, always INFO, never a FAIL (gogogo#90)."""
+
+    def audit(self, extra=""):
+        from test_profile_check import COMPLETE
+        root = repo({".agents/dev-process.md": COMPLETE.replace('independence = "junior-dev"\n', extra, 1)})
+        quiet = ("check_git_state", "check_settings", "check_profile_skills", "check_release_shape",
+                 "check_release", "check_hard_stop_source", "check_tracker", "check_notify",
+                 "check_local_skills", "check_claude_md", "config_header")
+        out = io.StringIO()
+        cwd = os.getcwd()
+        os.chdir(root)
+        try:
+            with contextlib.ExitStack() as stack:
+                for name in quiet:
+                    stack.enter_context(mock.patch.object(sc, name))
+                stack.enter_context(contextlib.redirect_stdout(out))
+                code = sc.main(["--json"])
+        finally:
+            os.chdir(cwd)
+        rows = [r for r in json.loads(out.getvalue()) if r["check"] == "independence"]
+        self.assertEqual(code, 0)
+        self.assertEqual(len(rows), 1, rows)
+        self.assertEqual(rows[0]["level"], "INFO")
+        return rows[0]["detail"]
+
+    def test_independence_row(self):
+        self.assertTrue(self.audit().startswith("junior-dev (not set)"))
+        self.assertEqual(self.audit('independence = "architect"\n'), "architect")
+
+    def test_setup_skill_names_the_independence_row(self):
+        text = (ROOT / "plugins" / "gogogo" / "skills" / "setup" / "SKILL.md").read_text(encoding="utf-8")
+        bullet = re.search(r"(?ms)^- \*\*Independence\*\*.*?(?=^- \*\*)", text)
+        self.assertIsNotNone(bullet)
+        for name in ("`independence`", "junior-dev", "senior-dev", "architect", "AskUserQuestion"):
+            self.assertIn(name, bullet.group(0))
 
 
 if __name__ == "__main__":
