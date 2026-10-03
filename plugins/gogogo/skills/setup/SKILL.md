@@ -124,8 +124,10 @@ What each fix involves:
      place of `--plugin-dir`) and keeping the checkout. Offer
      `A worktree per issue` only as the alternative to that recommendation.
      With no live checkout, say nothing about live files.
-  2. Show this explanation, word for word, filling in `<repo>` (the name
-     part of `tracker.code_repo`). The option labels are not the explanation;
+  2. Show this explanation, word for word, filling in `<repo>` with the main
+     worktree's folder name (the folder of the first entry of
+     `git worktree list --porcelain`), which is the name dev and auto-dev put
+     in `../<repo>-wt-<n>`, not the name part of `tracker.code_repo`. The option labels are not the explanation;
      it is text shown before the question:
 
      > **Where should gogogo do each issue's work in `<repo>`?**
