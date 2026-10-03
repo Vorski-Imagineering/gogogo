@@ -268,6 +268,7 @@ Scripts the skills call, all in `plugins/gogogo/scripts/`:
 
 - `profile_check.py`: reads and validates the repo's profile.
 - `spec_lint.py`: checks a spec's layout, approvals and hard-stop verdict.
+- `test_guard.py`: lists the test hunks a change touched and checks a reader's same, stronger or weaker verdict on each against the spec.
 - `spec_check.py`: lists a spec's items and checks that a reader answered every one against the change.
 - `tracker.py`: lists and moves cards on a GitHub Project board, by column name, with read-back.
 - `verify_merged.py`: confirms a PR's merge is really on the base branch.

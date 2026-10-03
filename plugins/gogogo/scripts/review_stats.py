@@ -63,6 +63,9 @@ REVIEW = re.compile(r"<!-- gogogo:review (.*?) -->")
 SPEC_CHECK = re.compile(r"<!-- gogogo:spec-check (.*?) -->")
 SPEC_CHECK_ENDS = ("clean", "declared", "stopped", "nospec")
 SPEC_CHECK_READERS = ("fresh", "self", "none")
+TESTS = re.compile(r"<!-- gogogo:tests (.*?) -->")
+TESTS_KEYS = ("v", "checked", "hunks", "weaker", "licensed", "restored", "attempts", "end")
+TESTS_ENDS = ("clean", "restored", "stopped", "unchecked")
 SPEC_CHECK_COUNTS = ("items", "met", "missing", "differs", "na", "outside", "runs", "fixed", "declared")
 AUTO_TEST = re.compile(r"<!-- auto-test v1 (.*?) -->")
 APPLIED_AS = ("spec", "regression", "bug", "risk", "added")
@@ -71,7 +74,7 @@ ENDS = ("clean", "third-attempt", "reversal", "unfixable", "prose", "breaker")
 OLD_COVERAGE = {"high": "broad", "medium": "precise", "max": "exhaustive"}
 VERDICTS = {"PASS": "pass", "FAIL": "fail", "NEEDS_HUMAN": "needs-human"}
 COLUMNS = ("issue", "pr", "kind", "coverage", "rounds", "applied", "declined", "refix", "end", "outcome",
-           "escaped", "spec_items", "spec_unmet", "spec_declared")
+           "escaped", "spec_items", "spec_unmet", "spec_declared", "weaker")
 
 
 class GhError(Exception):
@@ -160,6 +163,21 @@ def parse_spec_check(text: str) -> dict | None:
     return record
 
 
+def parse_tests(text: str) -> dict | None:
+    """The first tests record in `text` (from test_guard.py, /gogogo:dev §6), or None."""
+    match = TESTS.search(text)
+    fields = _fields(match.group(1)) if match else None
+    if fields is None or fields.get("v") != "1" or set(fields) != set(TESTS_KEYS):
+        return None
+    try:
+        record = {k: int(fields[k]) for k in ("hunks", "weaker", "licensed", "restored", "attempts")}
+    except ValueError:
+        return None
+    if fields["checked"] not in ("yes", "no") or fields["end"] not in TESTS_ENDS:
+        return None
+    return {**record, "checked": fields["checked"], "end": fields["end"]}
+
+
 def _repo(profile: str | None) -> str:
     path = Path(profile) if profile else profile_check.find_profile()
     if not path.is_file():
@@ -196,15 +214,21 @@ def collect(repo: str, since: str | None) -> tuple[list[dict], int, dict[int, st
         spec_check = parse_spec_check(spec_marker.group(0)) if spec_marker else None
         if spec_marker and spec_check is None:
             unreadable += 1
+        tests_marker = TESTS.search(body)
+        tests = parse_tests(tests_marker.group(0)) if tests_marker else None
+        if tests_marker and tests is None:
+            unreadable += 1
         read = 0
         for match in REVIEW.finditer(body):
             record = parse_review(match.group(0))
             if record is None:
                 unreadable += 1
             else:
-                records.append({**record, "issue": issue, "spec_check": spec_check})
+                records.append({**record, "issue": issue, "spec_check": spec_check, "tests": tests})
                 read += 1
         if spec_check is not None and not read:
+            unreadable += 1
+        if tests is not None and not read:
             unreadable += 1
         for match in AUTO_TEST.finditer(body):
             fields = _fields(match.group(1)) or {}
@@ -236,7 +260,8 @@ def build(records, unreadable, verdicts, issues) -> dict:
         spec = r.get("spec_check")
         rows[-1].update(spec_items=spec["items"] if spec else None,
                         spec_unmet=spec["missing"] + spec["differs"] if spec else None,
-                        spec_declared=spec["declared"] if spec else None)
+                        spec_declared=spec["declared"] if spec else None,
+                        weaker=r["tests"]["weaker"] if r.get("tests") else None)
     escaped = Counter()
     for r in records:
         if r["escaped_from"] is not None and r["escaped_as"] in ("declined", "missed"):
@@ -248,6 +273,7 @@ def build(records, unreadable, verdicts, issues) -> dict:
     counted = [r for r in new if r["consistent"]]
     applied_total = sum(sum(r["applied"]) for r in new)
     checks = [r["spec_check"] for r in records if r.get("spec_check")]
+    guarded = [r["tests"] for r in records if r.get("tests")]
     summary = {
         "repo_records": len(records), "old_format": sum(r["v"] == 1 for r in records), "unreadable": unreadable,
         "median_rounds": statistics.median(r["rounds"] for r in records),
@@ -261,6 +287,10 @@ def build(records, unreadable, verdicts, issues) -> dict:
                        **{k: sum(c[k] for c in checks) for k in ("items", "missing", "differs", "fixed", "declared")},
                        "ends": {e: sum(c["end"] == e for c in checks) for e in SPEC_CHECK_ENDS},
                        "readers": {w: sum(c["reader"] == w for c in checks) for w in SPEC_CHECK_READERS}},
+        "tests": {"records": len(guarded), "checked": sum(t["checked"] == "yes" for t in guarded),
+                  "not_checked": sum(t["checked"] == "no" for t in guarded),
+                  **{k: sum(t[k] for t in guarded) for k in ("weaker", "licensed", "restored")},
+                  "stopped": sum(t["end"] == "stopped" for t in guarded)},
     }
     return {"rows": rows, "summary": summary}
 
@@ -297,6 +327,10 @@ def render(repo: str, data: dict) -> str:
                   "spec check ended: " + ", ".join(f"{k} {v}" for k, v in spec["ends"].items())]
     else:
         lines.append("spec check: 0 records")
+    t = s["tests"]
+    lines.append(f"tests: {t['checked']} checked, {t['not_checked']} not checked, {t['weaker']} weaker "
+                 f"({t['licensed']} licensed, {t['restored']} restored), {t['stopped']} stopped"
+                 if t["records"] else "tests: no records")
     return "\n".join(lines)
 
 

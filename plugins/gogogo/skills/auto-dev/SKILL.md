@@ -202,6 +202,10 @@ Push the branch as soon as it has its first commit (`git push -u origin
   and go on to the next issue. One stubborn issue does not end the run. **An issue abandoned or
   skipped in this run is not taken again in the same run**, even when §1 lists
   it again.
+- **A weakened test** that `/gogogo:dev` §6 cannot restore within its bound
+  stops **that issue**, as for verification that gave up: commit the attempts
+  to its branch, marked stopped in the commit message, push it, leave it
+  unmerged, hand the card back as `/gogogo:dev` §8 says, and go on.
 - A change that needs a two-licence apply (for example a migration on a shared
   environment) is applied only with its apply row, by the profile's procedure
   for it, never improvised.

@@ -65,7 +65,7 @@ FIELDS = {
     "technology.register": (str, (), "Path of the technology decisions register, from the repo root."),
     "roadmap.file": (str, (), "Path of the roadmap document, from the folder holding .agents/; it may sit in another git repo checked out inside this one."),
     "release.major": (int, (), "Hand-set major version. A production release is tagged deploy-<build> and versioned <major>.0.<build>; see references/versioning.md."),
-    "lanes": (list, (SPEC, ONE, LOOP), "Test lanes: name, plus run/focused/env/ci."),
+    "lanes": (list, (SPEC, ONE, LOOP), "Test lanes: name, plus run/focused/tests/env/ci."),
     "verify.agent": (list, (ONE, LOOP), "Environments where the implementing agent checks its work."),
     "verify.human": (str, (SPEC, TEST), "Environment where a person confirms a fix."),
     "verify.rungs": (list, (ONE, LOOP), "Ordered verification steps."),
@@ -350,6 +350,10 @@ def check(settings, sections, skill=None):
                 errors.append(f"lanes[{i}]: each lane needs a name")
             elif not (lane.get("run") or lane.get("env")):
                 errors.append(f"lanes[{i}] ({lane['name']}): needs run (a command) or env (where it is checked)")
+            elif "tests" in lane and not (isinstance(lane["tests"], list) and lane["tests"]
+                                          and all(isinstance(p, str) and p for p in lane["tests"])):
+                errors.append(f'lanes[{i}] ({lane["name"]}): tests must be a list of file patterns, '
+                              'for example ["tests/*"]')
 
     if columns_bad:
         errors.append(f"tracker.columns: expected a table of role = column name, found {type(columns).__name__}")

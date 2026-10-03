@@ -25,6 +25,7 @@ placement_rule = "CLAUDE.md § What a change here does"
 name = "unit"
 run = "python3 -m unittest discover -s tests"
 focused = "python3 -m unittest tests.<module>"
+tests = ["tests/*"]
 ci = true
 
 [[lanes]]

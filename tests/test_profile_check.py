@@ -379,6 +379,27 @@ class WrongValues(unittest.TestCase):
         self.assertIn("lanes[0]: each lane needs a name", errors)
         self.assertTrue(any(e.startswith("lanes[1] (browser): needs run") for e in errors))
 
+    def test_lane_tests_must_be_a_list_of_patterns(self):
+        for good in (["tests/*"], None):
+            settings, sections = parse()
+            if good:
+                settings["lanes"][0]["tests"] = good
+            errors, _ = pc.check(settings, sections)
+            self.assertFalse([e for e in errors if "tests must be" in e], good)
+        for bad in ("tests/*", [], [""]):
+            settings, sections = parse()
+            settings["lanes"][0]["tests"] = bad
+            errors, _ = pc.check(settings, sections)
+            name = settings["lanes"][0]["name"]
+            self.assertIn(f'lanes[0] ({name}): tests must be a list of file patterns, for example ["tests/*"]',
+                          errors, bad)
+
+    def test_this_repos_unit_lane_names_its_tests(self):
+        settings, sections = pc.split_profile((ROOT / ".agents" / "dev-process.md").read_text(encoding="utf-8"))
+        self.assertEqual(pc.check(settings, sections)[0], [])
+        unit = next(lane for lane in settings["lanes"] if lane["name"] == "unit")
+        self.assertTrue(unit.get("tests"))
+
     def test_unknown_setting_warns_but_passes(self):
         settings, sections = parse()
         settings["tracker"]["redy_marker"] = "typo"
@@ -648,6 +669,11 @@ class SchemaDoc(unittest.TestCase):
             documented = (set(pc.SKILLS) if required == "all" else set() if required == "optional"
                           else set(required.replace("`", "").replace(" ", "").split(",")))
             self.assertEqual(documented, set(pc.FIELDS[path][1]), path)
+
+    def test_doc_and_checker_describe_lanes_the_same(self):
+        doc = (PLUGIN / "references" / "profile-schema.md").read_text()
+        row = next(line for line in doc.splitlines() if line.startswith("| `lanes` |"))
+        self.assertEqual(row.split("|")[4].strip(), pc.FIELDS["lanes"][2])
 
     def test_doc_example_is_valid_toml(self):
         doc = (PLUGIN / "references" / "profile-schema.md").read_text()
