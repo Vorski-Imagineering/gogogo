@@ -403,6 +403,10 @@ class Stops(StatsBase):
         code, out, _ = self.run_stats([(40, v2())])
         self.assertIn("stops: none recorded", out)
 
+    def test_only_unreadable_stops_say_none_recorded_and_count_them(self):
+        code, out, _ = self.run_stats([(40, "quoted: <!-- gogogo:stop … -->\n" + v2())])
+        self.assertIn("stops: none recorded (1 unreadable)", out.splitlines())
+
     def test_stops_alone_are_still_no_records(self):
         code, out, _ = self.run_stats([(40, stop("gate"))])
         self.assertEqual(code, 1)

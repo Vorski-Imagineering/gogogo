@@ -441,10 +441,9 @@ def render(repo: str, data: dict) -> str:
               f"{median(s['median_branch_to_verified'])} min, verified→report "
               f"{median(s['median_verified_to_report'])} min)",
               f"session ids: {s['with_session']} of {new} new records"]
-    counted = {k: v for k, v in s["stops"].items() if v}
-    lines.append("stops: " + ", ".join(f"{k} {v}" for k, v in counted.items())
-                 + f" ({s['unreadable_stops']} unreadable)" if counted or s["unreadable_stops"]
-                 else "stops: none recorded")
+    counted = ", ".join(f"{k} {v}" for k, v in s["stops"].items() if v) or "none recorded"
+    unread = f" ({s['unreadable_stops']} unreadable)" if s["unreadable_stops"] else ""
+    lines.append(f"stops: {counted}{unread}")
     m = s["mutation"]
     if m["records"]:
         pct = f"{m['survived'] / m['mutants']:.0%}" if m["mutants"] else "-"
