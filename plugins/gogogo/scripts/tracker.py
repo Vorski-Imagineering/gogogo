@@ -27,7 +27,11 @@ fail *silently* when done by hand.
 
 So: `list` pages to the end and refuses to print a result it cannot reconcile
 against `totalCount`; every id is resolved live; `move` reads the card back and
-exits non-zero if the board does not agree with what it just wrote.
+exits non-zero if the board does not agree with what it just wrote. A move to
+`tracker.columns.needs_human` is refused, with nothing written, unless the
+issue's newest comment carries a stop marker (`gogogo:stop`, `gogogo:skip`, or
+an `auto-test v1` FAIL or NEEDS_HUMAN verdict): the skills post why before they
+hand an issue to a person.
 
 That `totalCount` guard is necessary and not sufficient. It compares the pages
 received against the count the *same* connection reported, so when GitHub's
@@ -42,12 +46,14 @@ GitHub's own board workflows do this going forward once they are on; these
 commands fix what is already there.
 
 Exit codes: 0 ok, 1 usage/not-found, 2 the read or write could not be trusted,
-3 `show --expect`: the card is in a different column.
+3 `show --expect`: the card is in a different column, 4 `move`: a move to the
+needs-a-person column refused because the newest comment says no reason.
 """
 from __future__ import annotations
 
 import argparse
 import json
+import re
 import subprocess
 import sys
 import traceback
@@ -96,6 +102,35 @@ DONE_COLUMN = "Done"
 
 #: A view whose filter has one of these hides closed issues.
 OPEN_FILTERS = ("is:open", "-is:closed")
+
+#: The reasons a `gogogo:stop` marker may give; equal to review_stats.STOPS,
+#: kept here so this tool does not import it.
+STOP_REASONS = ("hard-stop", "decision", "spec", "review", "tests", "mutation", "verify", "gate", "ci")
+
+#: The markers that say why an issue was handed to a person.
+REASON_MARKER = re.compile(r"<!-- (gogogo:stop|gogogo:skip|auto-test v1) (.*?) -->")
+
+NEWEST_COMMENT_QUERY = """
+query($owner:String!,$name:String!,$number:Int!){repository(owner:$owner,name:$name){issue(number:$number){comments(last:1){nodes{body}}}}}
+"""
+
+
+def has_reason(body: str) -> bool:
+    """True when `body` carries a readable stop, skip or failing auto-test marker."""
+    for kind, rest in REASON_MARKER.findall(body):
+        parts = rest.split()
+        if not parts or any("=" not in p for p in parts):
+            continue
+        fields = dict(p.split("=", 1) for p in parts)
+        if any(not v or "<" in v or ">" in v for v in fields.values()):
+            continue  # a quoted template, `reason=<hard-stop|decision>`
+        if kind == "gogogo:stop" and fields.get("v") == "1" and fields.get("reason") in STOP_REASONS:
+            return True
+        if kind == "gogogo:skip" and fields.get("v") == "1" and fields.get("reason"):
+            return True
+        if kind == "auto-test v1" and fields.get("verdict") in ("FAIL", "NEEDS_HUMAN"):
+            return True
+    return False
 
 
 class ProfileMissing(Exception):
@@ -627,6 +662,13 @@ mutation($project: ID!, $item: ID!, $field: ID!, $option: String!) {
 """
 
 
+def newest_comment(number: int, repo: str) -> str:
+    """The issue's newest comment body, or "" when it has none. A failed read raises BoardError."""
+    owner, name = repo.split("/", 1)
+    nodes = graphql(NEWEST_COMMENT_QUERY, owner=owner, name=name, number=number)["repository"]["issue"]["comments"]["nodes"]
+    return (nodes[-1].get("body") or "") if nodes else ""
+
+
 def cmd_show(args: argparse.Namespace) -> int:
     if args.expect:
         # Otherwise every card "is not in" a renamed column: exit 3 for all.
@@ -659,6 +701,12 @@ def move_card(number: int, repo: str, to: str, *, add_missing: bool = False,
     target = column(to)
     meta = meta or board_meta()
     option_id = resolve_option(meta, target)
+
+    needs_human = COLUMNS.get("needs_human")
+    if needs_human and _bare(target) == _bare(needs_human.name) and not has_reason(newest_comment(number, repo)):
+        print(f"#{number}: refused: a move to {needs_human.name} needs the issue's newest comment to carry "
+              "a stop marker (post the Needs-you comment first). Nothing written.", file=sys.stderr)
+        return 4
 
     found = issue_card(number, repo)
     card = found["card"]
@@ -856,7 +904,9 @@ def main() -> int:
     shower.add_argument("--expect", help="profile role key or column name; exit 3 if the card is elsewhere")
     shower.set_defaults(func=cmd_show)
 
-    mover = subparsers.add_parser("move", help="set an issue's column, verified")
+    mover = subparsers.add_parser(
+        "move", help="set an issue's column, verified; a move to needs_human exits 4 unless the "
+                     "issue's newest comment carries a stop marker")
     mover.add_argument("issue", type=int)
     mover.add_argument("--to", required=True, help='profile role key or column name')
     mover.add_argument("--repo", default=None)

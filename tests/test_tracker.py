@@ -9,6 +9,7 @@ is faked here.
     python3 -m unittest discover -s .claude/scripts -p 'test_*.py'
 """
 
+import io
 import json
 import re
 import subprocess
@@ -16,6 +17,7 @@ import unittest
 from pathlib import Path
 from argparse import Namespace
 from unittest import mock
+from contextlib import redirect_stderr
 
 import sys
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "plugins" / "gogogo" / "scripts"))
@@ -148,6 +150,117 @@ class MoveReadBackTests(unittest.TestCase):
             with self.assertRaises(board.BoardError):
                 board.cmd_move(args)
         wrote.assert_not_called()
+
+
+class NeedsHumanGuardTests(unittest.TestCase):
+    """A move to the needs-a-person column needs the issue's newest comment to say why (#84)."""
+    META = dict(MoveReadBackTests.META,
+                options=dict(MoveReadBackTests.META["options"], **{"Human!Help!": "hhh", "In progress": "ppp"}))
+    STOP = "**Needs you:** x\n<!-- gogogo:stop v=1 reason=spec -->"
+
+    def setUp(self):
+        board.COLUMNS["needs_human"] = board.Column("Human!Help!", "tracker.columns.needs_human")
+
+    def tearDown(self):
+        board.COLUMNS.pop("needs_human", None)
+
+    def _move(self, to, comment, status_after="Human!Help!", card=True, add_missing=False):
+        before = {"id": "ITEM_7", "isArchived": False,
+                  "project": {"number": 2}, "fieldValueByName": {"name": "Dev Priority"}}
+        after = dict(before, fieldValueByName={"name": status_after})
+        reads = [{"issue": {}, "card": before if card else None}, {"issue": {}, "card": after}]
+        newest = (mock.patch.object(board, "newest_comment", side_effect=comment) if callable(comment)
+                  or isinstance(comment, BaseException) else
+                  mock.patch.object(board, "newest_comment", return_value=comment))
+        err = io.StringIO()
+        with mock.patch.object(board, "board_meta", return_value=self.META), \
+             mock.patch.object(board, "issue_card", side_effect=reads) as read, \
+             mock.patch.object(board, "graphql", return_value={}) as wrote, \
+             newest as asked, redirect_stderr(err):
+            code = board.move_card(7, board.DEFAULT_REPO, to, add_missing=add_missing)
+        return code, wrote, read, asked, err.getvalue()
+
+    def test_a_stop_marker_is_a_reason_and_an_unknown_reason_or_version_is_not(self):
+        self.assertTrue(board.has_reason(self.STOP))
+        self.assertFalse(board.has_reason(self.STOP.replace("reason=spec", "reason=lunch")))
+        self.assertFalse(board.has_reason(self.STOP.replace("v=1", "v=2")))
+
+    def test_extra_keys_on_the_stop_marker_are_ignored(self):
+        self.assertTrue(board.has_reason(
+            "<!-- gogogo:stop v=1 reason=spec session=0d6f3c2a-8b1e-4f5d-9a7c-2e4b6d8f0a1c -->"))
+
+    def test_a_quoted_template_or_no_comment_is_not_a_reason(self):
+        self.assertFalse(board.has_reason("<!-- gogogo:stop v=1 reason=<hard-stop|decision> -->"))
+        self.assertFalse(board.has_reason(""))
+
+    def test_skip_and_auto_test_markers_are_reasons(self):
+        self.assertTrue(board.has_reason("<!-- gogogo:skip v=1 reason=lint session=unknown -->"))
+        verdict = "<!-- auto-test v1 run=r issue=7 verdict=FAIL build=b skill=s -->"
+        self.assertTrue(board.has_reason(verdict))
+        self.assertFalse(board.has_reason(verdict.replace("FAIL", "PASS")))
+
+    def test_a_move_by_role_key_with_no_reason_is_refused_before_any_write(self):
+        code, wrote, read, _, err = self._move("needs_human", "just a comment")
+        self.assertEqual(code, 4)
+        self.assertTrue(err.startswith("#7: refused:"), err)
+        wrote.assert_not_called()
+        read.assert_not_called()
+
+    def test_a_move_by_column_name_with_no_reason_is_refused(self):
+        for to in ("Human!Help!", "human!help!"):
+            code, wrote, _, _, _ = self._move(to, "just a comment")
+            self.assertEqual(code, 4, to)
+            wrote.assert_not_called()
+        # A trailing space fails the column lookup before the guard (Design 4's placement),
+        # so it is refused as an unknown column, not with 4. Spec case 6 expects 4: see the issue.
+        with self.assertRaises(board.BoardError):
+            self._move("human!help! ", "just a comment")
+
+    def test_a_move_with_a_stop_marker_goes_through(self):
+        code, wrote, _, _, _ = self._move("needs_human", self.STOP)
+        self.assertEqual(code, 0)
+        self.assertEqual(wrote.call_args.kwargs["option"], "hhh")
+
+    def test_a_failed_comment_read_writes_nothing(self):
+        with self.assertRaises(board.BoardError):
+            self._move("needs_human", board.BoardError("partial data"))
+
+    def test_other_columns_never_read_the_comment(self):
+        code, _, _, asked, _ = self._move("in_progress", AssertionError("read"), status_after="In progress")
+        self.assertEqual(code, 0)
+        asked.assert_not_called()
+
+    def test_no_needs_human_in_the_profile_means_no_guard(self):
+        board.COLUMNS.pop("needs_human")
+        code, _, _, asked, _ = self._move("Human!Help!", AssertionError("read"))
+        self.assertEqual(code, 0)
+        asked.assert_not_called()
+
+    def test_a_refused_move_adds_no_card(self):
+        code, wrote, _, _, _ = self._move("needs_human", "just a comment", card=False, add_missing=True)
+        self.assertEqual(code, 4)
+        self.assertNotIn(board.ADD_ITEM_MUTATION, [c.args[0] for c in wrote.call_args_list if c.args])
+        wrote.assert_not_called()
+
+    def test_the_stop_reasons_match_review_stats(self):
+        import review_stats
+        self.assertEqual(board.STOP_REASONS, review_stats.STOPS)
+
+    def test_newest_comment_reads_the_last_comment_or_nothing(self):
+        def answer(nodes):
+            return {"repository": {"issue": {"comments": {"nodes": nodes}}}}
+        with mock.patch.object(board, "graphql", return_value=answer([{"body": "b"}])) as asked:
+            self.assertEqual(board.newest_comment(7, "acme/issues"), "b")
+        self.assertEqual(asked.call_args.kwargs, {"owner": "acme", "name": "issues", "number": 7})
+        with mock.patch.object(board, "graphql", return_value=answer([])):
+            self.assertEqual(board.newest_comment(7, "acme/issues"), "")
+
+    def test_the_contract_names_the_refusal(self):
+        text = (Path(__file__).resolve().parents[1] / "plugins" / "gogogo" / "references"
+                / "tracker-contract.md").read_text(encoding="utf-8")
+        section = text.split("## The shared tool", 1)[1].split("\n## ", 1)[0]
+        self.assertIn("needs_human", section)
+        self.assertIn("4", section)
 
 
 def issue_page(issues, has_next=False, cursor="next"):

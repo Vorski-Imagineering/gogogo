@@ -310,7 +310,7 @@ Scripts the skills call, all in `plugins/gogogo/scripts/`:
 - `spec_lint.py`: checks a spec's layout, approvals and hard-stop verdict.
 - `test_guard.py`: lists the test hunks a change touched and checks a reader's same, stronger or weaker verdict on each against the spec.
 - `spec_check.py`: lists a spec's items and checks that a reader answered every one against the change.
-- `tracker.py`: lists and moves cards on a GitHub Project board, by column name, with read-back.
+- `tracker.py`: lists and moves cards on a GitHub Project board, by column name, with read-back, and refuses a move to the needs-a-person column unless the issue's newest comment says why.
 - `verify_merged.py`: confirms a PR's merge is really on the base branch.
 - `stage_sync.py`: writes the `Ships-issue` link at merge, and moves cards to a stage when a tag ships their commits (run by a repo's CI).
 - `release.py`: numbers a production release, cuts its annotated `deploy-<build>` tag after the deploy, and prints the notes listing the issues it shipped.
