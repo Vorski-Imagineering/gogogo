@@ -390,7 +390,8 @@ def check_board_workflows(workflows, rep, repos=()):
     if "Auto-add to project" in on:
         rep.info("tracker: Auto-add repository",
                  "the API does not say which repo Auto-add to project watches; open the board, "
-                 f"⋯ → Workflows → Auto-add to project, and check it is {' and '.join(repos) or 'this repo'}. "
+                 f"⋯ → Workflows → Auto-add to project, and check it is {' and '.join(repos) or 'this repo'} "
+                 "with the filter `is:issue is:open`. "
                  "Cards from another repo (above) are the sign it is wrong")
 
 
@@ -490,8 +491,9 @@ def _counted(names):
 
 
 def check_board_origin(cards, own_repos, queue, rep):
-    """Where the board's cards come from, which the workflow check cannot say. `cards`: flattened
-    cards; `own_repos`: issues_repo and code_repo; `queue`: the queue column, or empty."""
+    """Where the board's cards come from, which the workflow check cannot say, and pull requests
+    from the board's own repos, which Auto-add should not add. `cards`: flattened cards;
+    `own_repos`: issues_repo and code_repo; `queue`: the queue column, or empty."""
     own = {r.lower() for r in own_repos}
     owned = " and ".join(own_repos)
     # Content this login cannot read comes back null, so flatten takes the kind from the item's
@@ -508,6 +510,15 @@ def check_board_origin(cards, own_repos, queue, rep):
                  f"{_counted(c['repo'] for c in foreign)}; in columns "
                  f"{_counted(c.get('status') or 'no status' for c in foreign)}. Archive them on the board "
                  f"(card ⋯ → Archive; restorable), then check that Auto-add to project watches {owned}")
+    prs = [c for c in cards if c.get("kind") == "PullRequest"
+           and (c.get("repo") or "").lower() in own]
+    if prs:
+        rep.warn("tracker: pull requests on the board",
+                 f"{len(prs)} pull request(s) are cards on the board, in columns "
+                 f"{_counted(c.get('status') or 'no status' for c in prs)}: "
+                 + ", ".join(f"#{c['number']}" for c in prs[:10]) + (", ..." if len(prs) > 10 else "") + ". "
+                 "Set Auto-add to project's filter to `is:issue is:open`; /gogogo:setup offers to archive them "
+                 "(restorable)")
     if queue:
         closed = [c for c in cards if _norm(c.get("status") or "") == _norm(queue)
                   and c.get("state") not in (None, "OPEN")]

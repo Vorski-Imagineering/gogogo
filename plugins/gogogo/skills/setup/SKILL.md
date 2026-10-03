@@ -160,7 +160,9 @@ What each fix involves:
   click another way.
   - **Workflows** (`https://github.com/orgs/<owner>/projects/<n>/workflows`).
     Open **Auto-add to project** → Edit: choose this repo, set the filter to
-    `is:issue,pr is:open` (the default `label:bug` adds almost nothing), Save
+    `is:issue is:open` (issues only: an issue's PR already shows on its card
+    through *Linked pull requests*; the default `label:bug` adds almost
+    nothing), Save
     and turn on. Open **Item added to project** → Edit: set the value to
     Status = the new-issue column (`⚡️ New`), Save and turn on. The check
     reads both back.
@@ -178,6 +180,15 @@ What each fix involves:
   label's colour will change from its current value to the standard one and
   nothing else will, ask, then run the `gh label edit` command the row prints
   and re-run the check. If the user declines, leave it.
+- **Pull requests on the board**
+  (`WARN tracker: pull requests on the board`). Pull requests are cards because Auto-add includes, or included,
+  them. Set Auto-add's filter to `is:issue is:open` (the *Workflows* bullet's
+  steps). Then list every own-repo pull-request card (`<tracker.tool> list
+  --json`, `kind` `PullRequest`) by number and column, and ask whether to
+  archive them all. On yes, run
+  `gh project item-archive <tracker.project_number> --owner <tracker.project_owner> --id <item_id>`
+  for each and report each result; on no or a decline, archive nothing and
+  say they stay. Re-run the check afterwards.
 - **Delete merged branches** (`FAIL code repo: delete merged branches`).
   Say that GitHub will then delete a pull request's branch on GitHub when
   it merges (local copies stay), and that the row's undo command turns it
