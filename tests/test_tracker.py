@@ -48,7 +48,11 @@ def page(nodes, total, has_next=False, cursor="next"):
     }
 
 
-def card(number, title, status):
+def labels(*names, total=None):
+    return {"totalCount": len(names) if total is None else total, "nodes": [{"name": n} for n in names]}
+
+
+def card(number, title, status, label_names=()):
     return {
         "id": f"ITEM_{number}",
         "type": "ISSUE",
@@ -60,6 +64,7 @@ def card(number, title, status):
             "url": f"https://example.invalid/{number}",
             "repository": {"nameWithOwner": board.DEFAULT_REPO},
             "assignees": {"nodes": []},
+            "labels": labels(*label_names),
         },
         "fieldValueByName": {"name": status},
     }
@@ -157,7 +162,7 @@ def issue_page(issues, has_next=False, cursor="next"):
     }
 
 
-def issue_node(number, title, status, *, item_id=None, archived=False, project=2):
+def issue_node(number, title, status, *, item_id=None, archived=False, project=2, label_names=()):
     return {
         "number": number,
         "title": title,
@@ -165,6 +170,7 @@ def issue_node(number, title, status, *, item_id=None, archived=False, project=2
         "url": f"https://example.invalid/{number}",
         "repository": {"nameWithOwner": board.DEFAULT_REPO},
         "assignees": {"nodes": []},
+        "labels": labels(*label_names),
         "projectItems": {
             "nodes": [{
                 "id": item_id or f"ITEM_{number}",
@@ -403,6 +409,74 @@ class GraphqlErrorTests(unittest.TestCase):
         # A digit-only cursor must stay a String, so it goes through -f.
         self.assertIn("after=123", cmd)
         self.assertEqual(cmd[cmd.index("after=123") - 1], "-f")
+
+
+class LabelTests(unittest.TestCase):
+    """Every card carries its labels, from both reads, so auto-dev can tell a
+    labelled queue card from one dragged in by hand (gogogo#60)."""
+
+    META = {"options": {"Dev Priority": "a"}}
+
+    def test_flatten_carries_labels(self):
+        self.assertEqual(board.flatten(card(1, "a", "Dev Priority", ("dev ready", "bug")))["labels"],
+                         ["dev ready", "bug"])
+        pr = {"id": "PR_1", "type": "PULL_REQUEST",
+              "content": {"__typename": "PullRequest", "number": 5, "title": "p", "state": "OPEN",
+                          "url": "u", "repository": {"nameWithOwner": board.DEFAULT_REPO}},
+              "fieldValueByName": {"name": "Dev Priority"}}
+        draft = {"id": "D_1", "type": "DRAFT_ISSUE", "content": {"__typename": "DraftIssue", "title": "d"},
+                 "fieldValueByName": None}
+        self.assertEqual(board.flatten(pr)["labels"], [])
+        self.assertEqual(board.flatten(draft)["labels"], [])
+        self.assertEqual(board.flatten({"id": "X", "type": "ISSUE", "content": None})["labels"], [])
+
+    def test_issue_side_cards_carry_labels(self):
+        issue_side = issue_page([issue_node(7, "seen", "Dev Priority", label_names=("dev ready",))])
+        with mock.patch.object(board, "graphql", side_effect=[issue_side]):
+            cards = board.issue_side_cards(board.DEFAULT_REPO)
+        self.assertEqual(cards[0]["labels"], ["dev ready"])
+
+    def list_queue(self, board_nodes, issue_nodes):
+        with mock.patch.object(board, "graphql",
+                               side_effect=[page(board_nodes, total=len(board_nodes)), issue_page(issue_nodes)]), \
+             mock.patch.object(board, "board_meta", return_value=self.META):
+            cards, _, _ = board.list_cards(status="Dev Priority", repo=board.DEFAULT_REPO)
+        return {c["number"]: c["labels"] for c in cards}
+
+    def test_the_queue_read_keeps_both_halves_and_their_labels(self):
+        got = self.list_queue([card(1, "a", "Dev Priority", ("dev ready",)), card(2, "b", "Dev Priority")],
+                              [issue_node(1, "a", "Dev Priority", label_names=("dev ready",)),
+                               issue_node(2, "b", "Dev Priority")])
+        self.assertEqual(got, {1: ["dev ready"], 2: []})
+
+    def test_a_recovered_card_keeps_its_label(self):
+        got = self.list_queue([card(1, "a", "Dev Priority")],
+                              [issue_node(1, "a", "Dev Priority"),
+                               issue_node(9, "invisible", "Dev Priority", label_names=("dev ready",))])
+        self.assertEqual(got[9], ["dev ready"])
+
+    def test_truncated_labels_refuse_the_read(self):
+        content = {"number": 12, "labels": labels(*[f"l{i}" for i in range(20)], total=25)}
+        with self.assertRaises(board.BoardError) as raised:
+            board.issue_labels(content)
+        self.assertIn("#12", str(raised.exception))
+        truncated = card(12, "many", "Dev Priority")
+        truncated["content"]["labels"] = content["labels"]
+        with mock.patch.object(board, "configure"), \
+             mock.patch.object(board, "graphql", side_effect=[page([truncated], total=1)]), \
+             mock.patch.object(board.sys, "argv", ["tracker.py", "list", "--no-crosscheck"]), \
+             mock.patch("sys.stderr"), mock.patch("builtins.print"):
+            self.assertEqual(board.main(), 2)
+
+    def test_list_json_prints_labels_on_every_card(self):
+        args = Namespace(status=None, open_only=False, issues_only=False,
+                         json=True, repo=board.DEFAULT_REPO, no_crosscheck=True)
+        nodes = [card(1, "a", "Dev Priority", ("dev ready",)), card(2, "b", "Dev Priority")]
+        with mock.patch.object(board, "graphql", side_effect=[page(nodes, total=2)]), \
+             mock.patch("builtins.print") as printed:
+            board.cmd_list(args)
+        payload = json.loads(printed.call_args_list[0].args[0])
+        self.assertEqual([c["labels"] for c in payload], [["dev ready"], []])
 
 
 class ColumnGuardTests(unittest.TestCase):
