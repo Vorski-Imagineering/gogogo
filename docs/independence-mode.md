@@ -11,7 +11,7 @@ three levels, each named after the colleague Claude then behaves like:
 | `architect` | approvals | product, engineering |
 
 - A **junior dev** checks every choice with you before making it. This is the
-  default, and it is how gogogo has always worked.
+  default.
 - A **senior dev** decides how things are built, and checks with you on
   anything people will see.
 - An **architect** decides how things are built and what they do, and comes
@@ -50,17 +50,19 @@ more.
 
 ## Unattended runs
 
-`/gogogo:dev` and `/gogogo:auto-dev` read the same setting. A run stops an
-issue and hands it to a person only for a decision its level asks about that
-the issue does not already settle:
+`/gogogo:dev` and `/gogogo:auto-dev` read the same setting. A run never stops
+for a question. When an issue leaves open a decision its level asks about, the
+run hands that issue to a person, on the board's needs-human column with the
+question, and goes on with the next:
 
-| Level | A run stops for |
+| Level | A run hands an issue back for |
 |---|---|
-| `junior-dev`, `senior-dev` | an approval, or a product decision, that the issue does not settle |
-| `architect` | an approval the issue does not settle |
+| `junior-dev` | an approval, a product decision or an engineering decision that the issue does not settle |
+| `senior-dev` | an approval or a product decision that the issue does not settle |
+| `architect` | an approval that the issue does not settle |
 
-A run always takes engineering decisions within the spec itself, at every
-level, as it does today.
+A decision the level does not ask about is taken, and the issue's report lists
+it under *Decided without asking*.
 
 ## Setting it
 
