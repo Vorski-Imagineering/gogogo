@@ -256,6 +256,32 @@ class NeedsHumanGuardTests(unittest.TestCase):
         self.assertNotIn(board.ADD_ITEM_MUTATION, [c.args[0] for c in wrote.call_args_list if c.args])
         wrote.assert_not_called()
 
+    def test_marker_fields_are_parsed_strictly(self):
+        has = board.has_reason
+        self.assertFalse(has("<!-- gogogo:stop junk -->"))                  # a token with no `=`
+        self.assertTrue(has("<!-- auto-test v1 build=a=b verdict=FAIL -->"))  # `=` inside a value
+        self.assertFalse(has("<!-- gogogo:skip v=1 reason=<lint -->"))
+        self.assertFalse(has("<!-- gogogo:skip v=1 reason=lint> -->"))
+        self.assertFalse(has("<!-- auto-test v1 build= verdict=FAIL -->"))  # an empty value
+        self.assertTrue(has("<!-- auto-test v1 run=r verdict=NEEDS_HUMAN -->"))
+
+    def test_a_later_marker_counts_after_an_unreadable_one(self):
+        for first in ("<!-- gogogo:stop junk -->", "<!-- gogogo:stop v=1 reason=<hard-stop|decision> -->"):
+            self.assertTrue(board.has_reason(first + "\n" + self.STOP), first)
+
+    def test_newest_comment_splits_the_repo_once_and_reads_a_null_body_as_empty(self):
+        answer = {"repository": {"issue": {"comments": {"nodes": [{"body": None}]}}}}
+        with mock.patch.object(board, "graphql", return_value=answer) as asked:
+            self.assertEqual(board.newest_comment(7, "acme/issues/x"), "")
+        self.assertEqual(asked.call_args.kwargs["name"], "issues/x")
+
+    def test_the_move_command_reaches_move_card(self):
+        with mock.patch.object(sys, "argv", ["tracker.py", "move", "7", "--to", "needs_human"]), \
+             mock.patch.object(board, "configure"), \
+             mock.patch.object(board, "move_card", return_value=4) as moved:
+            self.assertEqual(board.main(), 4)
+        self.assertEqual(moved.call_args.args[:3], (7, board.DEFAULT_REPO, "needs_human"))
+
     def test_the_stop_reasons_match_review_stats(self):
         import review_stats
         self.assertEqual(board.STOP_REASONS, review_stats.STOPS)
