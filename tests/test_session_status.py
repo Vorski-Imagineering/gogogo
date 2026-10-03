@@ -385,11 +385,16 @@ class AsAProcess(unittest.TestCase):
         repo = repo_with_profile()
         (repo / ".agents" / "dev-process.md").write_text("broken\n", encoding="utf-8")
         env = {**os.environ, "CLAUDE_PROJECT_DIR": str(repo)}
-        done = subprocess.run([sys.executable, str(SCRIPTS / "session_status.py")],
-                              stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, text=True,
-                              env=env, cwd=repo, timeout=30, close_fds=True,
-                              preexec_fn=lambda: os.close(1))
+        read_end, write_end = os.pipe()
+        os.close(read_end)  # nobody reads: the line's write fails with a broken pipe
+        try:
+            done = subprocess.run([sys.executable, str(SCRIPTS / "session_status.py")],
+                                  stdout=write_end, stderr=subprocess.PIPE, text=True,
+                                  env=env, cwd=repo, timeout=30)
+        finally:
+            os.close(write_end)
         self.assertEqual(done.returncode, 0, done.stderr)
+        self.assertIn("BrokenPipeError", done.stderr)
 
     def test_imports_profile_check_from_its_own_folder(self):
         import importlib.util
