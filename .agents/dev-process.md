@@ -115,7 +115,7 @@ reporter = "none"
 - **confirming a Released card**: `/gogogo:auto-test` is browser-based and is
   not set up here. Confirm instead against a worktree of `origin/main`: scripts
   in read-only or dry-run modes, and skill behaviour as scenario runs
-  (`claude -p --tools "" --system-prompt "$(cat <SKILL.md>)" "<situation>"`,
+  (`claude -p --tools "" --system-prompt "$(cat <SKILL.md> <its references/*.md>)" "<situation>"`,
   3 runs each, every answer read). Then comment on the issue, remove the ready
   label, close it, and run `tracker.py tidy --apply`: the board's own
   close→Done workflow is off.

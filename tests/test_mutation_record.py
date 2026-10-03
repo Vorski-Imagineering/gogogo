@@ -21,11 +21,14 @@ ROOT = Path(__file__).resolve().parents[1]
 PLUGIN = ROOT / "plugins" / "gogogo"
 DEV = PLUGIN / "skills" / "dev" / "SKILL.md"
 AUTO_DEV = PLUGIN / "skills" / "auto-dev" / "SKILL.md"
+DEV_VERIFY = PLUGIN / "skills" / "dev" / "references" / "verify.md"
 SCHEMA = PLUGIN / "references" / "profile-schema.md"
 sys.path.insert(0, str(PLUGIN / "scripts"))
+sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 import profile_check  # noqa: E402
 import review_stats  # noqa: E402
+from test_dev_skill import moved  # noqa: E402
 
 KEYS = ["v", "lane", "mutants", "killed", "survived", "timeout", "runs", "added", "declined_as", "end"]
 MARKER = re.compile(r"<!-- gogogo:mutation (.*?) -->")
@@ -55,7 +58,7 @@ class Template(unittest.TestCase):
         reasons = tuple(part.split(":", 1)[0] for part in fields["declined_as"].split(","))
         self.assertEqual(reasons, review_stats.MUTATION_DECLINED_AS)
         self.assertEqual(tuple(fields["end"].strip("<>").split("|")), review_stats.MUTATION_ENDS)
-        six = section(DEV.read_text(encoding="utf-8"), "6.")
+        six = moved(DEV_VERIFY)
         for word in review_stats.MUTATION_DECLINED_AS:
             self.assertIn(f"`{word}`", six)
 
@@ -69,7 +72,7 @@ class Example(unittest.TestCase):
 
 class Named(unittest.TestCase):
     def test_skills_and_schema_name_the_key(self):
-        self.assertIn("`mutate`", section(DEV.read_text(encoding="utf-8"), "6."))
+        self.assertIn("`mutate`", moved(DEV_VERIFY))
         self.assertIn("`mutate`", section(AUTO_DEV.read_text(encoding="utf-8"), "4."))
         lanes = SCHEMA.read_text(encoding="utf-8").split("\n### Lanes")[1].split("\n### ")[0]
         self.assertIn("`mutate`", lanes)
