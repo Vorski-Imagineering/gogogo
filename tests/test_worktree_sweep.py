@@ -274,6 +274,15 @@ class Sweep(unittest.TestCase):
                          (1, [f"keep {path} (fix/12-x): issue #12 open, work not merged"]))
         self.assertIn("fix/12-x", self.branches())
 
+    def test_a_pr_merged_from_a_newer_remote_head_still_removes(self):
+        path = self.worktree("fix/12-x")
+        self.run_git(path, "commit", "-q", "--allow-empty", "-m", "the fix")
+        self.run_git(path, "commit", "-q", "--allow-empty", "-m", "update branch")
+        self.run_git(path, "push", "-q", "origin", "fix/12-x")
+        fixture = self.merged("fix/12-x")
+        self.run_git(path, "reset", "-q", "--hard", "HEAD~1")
+        self.assertEqual(self.sweep(fixture=fixture), (0, [f"remove {path} (fix/12-x): PR #3 merged"]))
+
     def test_a_tag_named_like_the_branch_does_not_hide_unpushed_commits(self):
         self.git("tag", "fix/12-x", "main")
         path = self.worktree("fix/12-x")

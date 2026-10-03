@@ -12,9 +12,9 @@ the first of these that applies decides:
   3. no issue number in the branch           -> keep, `no issue number in <branch>`
   4. `git status --porcelain` not empty      -> keep, `uncommitted changes`
   5. commits on no remote, unless a merged    -> keep, `<k> commit(s) on no remote`
-     pull request's head is the branch's tip
-  6. a same-repo pull request MERGED from    -> remove, `PR #<m> merged`
-     the branch's tip
+     pull request's head contains them
+  6. a same-repo pull request MERGED whose   -> remove, `PR #<m> merged`
+     head contains the branch's tip
   7. the issue is closed                     -> remove, `issue #<n> closed`
   8. otherwise                               -> keep, `issue #<n> open, work not merged`
 
@@ -107,9 +107,9 @@ def decide(tree, issues_repo, code_repo):
     if error:
         return KEEP, f"cannot tell: {error}"
     # A squash merge leaves the branch's commits off the base, and a pruned
-    # remote branch leaves them on no remote: a merged PR whose head is this tip
-    # carried them. A merged PR from an older tip does not cover newer work.
-    merged = [p for p in prs if p.get("state") == "MERGED" and p.get("headRefOid") == tip.stdout.strip()]
+    # remote branch leaves them on no remote: a merged PR whose head contains
+    # this tip carried them. A merged PR from an older tip does not cover newer work.
+    merged = [p for p in prs if p.get("state") == "MERGED" and _contains(p.get("headRefOid") or "", tip.stdout.strip())]
     if int(ahead.stdout) > 0 and not merged:
         return KEEP, f"{ahead.stdout.strip()} commit(s) on no remote"
     if merged:
@@ -120,6 +120,14 @@ def decide(tree, issues_repo, code_repo):
     if issue.get("state") != "OPEN":
         return REMOVE, f"issue #{number} closed"
     return KEEP, f"issue #{number} open, work not merged"
+
+
+def _contains(head, tip):
+    """True when `head` is `tip` or has it in its history; when git does not
+    have `head` (never fetched), only equality counts."""
+    if head == tip:
+        return True
+    return git("merge-base", "--is-ancestor", tip, head).returncode == 0
 
 
 def _inside(path, folder):
