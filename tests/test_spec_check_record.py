@@ -9,8 +9,10 @@ where the skills and README name the check (gogogo#44).
     python3 -m unittest tests.test_spec_check_record
 """
 
+import contextlib
 import re
 import sys
+import tempfile
 import unittest
 from pathlib import Path
 
@@ -22,6 +24,7 @@ SPEC = PLUGIN / "skills" / "spec" / "SKILL.md"
 sys.path.insert(0, str(PLUGIN / "scripts"))
 
 import review_stats  # noqa: E402
+import spec_check  # noqa: E402
 
 KEYS = ["v", "items", "met", "missing", "differs", "na", "outside", "runs", "fixed", "declared", "reader", "end"]
 MARKER = re.compile(r"<!-- gogogo:spec-check (.*?) -->")
@@ -63,6 +66,26 @@ class Example(unittest.TestCase):
 class Named(unittest.TestCase):
     def test_dev_names_the_script(self):
         self.assertIn("scripts/spec_check.py", DEV.read_text(encoding="utf-8"))
+
+    def brief(self):
+        text = DEV.read_text(encoding="utf-8")
+        return text[text.index("It is told:"):text.index("It does not judge quality")]
+
+    def test_the_brief_names_only_evidence_forms_verify_accepts(self):
+        forms = sorted(set(re.findall(r"`(path[^`]*)`", self.brief())))
+        self.assertGreaterEqual(len(forms), 3, forms)
+        self.assertFalse([f for f in re.findall(r"`([^`]*)`", self.brief()) if re.search(r":[^`]*-", f)])
+        with tempfile.TemporaryDirectory() as tmp, contextlib.chdir(tmp):
+            Path("a.py").write_text("def name():\n    pass\n")
+            for form in forms:
+                evidence = form.replace("path", "a.py", 1).replace("line", "1").replace("::name", "::name")
+                self.assertIsNone(spec_check._resolves(evidence), form)
+
+    def test_the_brief_names_which_items_need_evidence(self):
+        bullets = [b for b in re.split(r"\n  - ", self.brief()) if "always have evidence" in b]
+        self.assertEqual(len(bullets), 1, bullets)
+        for letter in spec_check.NEEDS_EVIDENCE:
+            self.assertIn(f"`{letter}`", bullets[0])
 
     def test_auto_dev_hands_a_stopped_check_to_needs_human(self):
         four = section(AUTO_DEV.read_text(encoding="utf-8"), "4.", "5.")

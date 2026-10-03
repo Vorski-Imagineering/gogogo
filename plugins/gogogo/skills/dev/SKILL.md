@@ -148,13 +148,19 @@ change for bugs. In order:
   from `<base>`). It writes one line per `V`, `A`, `D`, `T` and `N` item to an
   answers file, as `<id> | <status> | <evidence> | <note>`, and edits nothing.
   It is told:
-  - `met`: the change does what the item says. Evidence is where: a file and
-    line (`path:line`), or a file and the test's name (`path::name`).
+  - `met`: the change does what the item says. Evidence is where: a file
+    (`path`), a file and one line (`path:line`, a single line number, never
+    a range), or a file and the test's name (`path::name`); several are
+    separated by `, `. Paths are relative to the working tree.
   - `missing`: nothing in the change does it. `differs`: the change does it
     another way than the item says; the note gives the spec's words and what
     the change has.
   - `na`: only for what cannot be seen in the change (a run in a lane no test
     reaches, another repo), with the reason.
+  - `met` and `differs` on a `D`, `T` or `A` item always have evidence. An
+    `A` row whose Chosen is carried out on the tracker, not in the change
+    (a comment on another issue, an issue body left alone), is `na`, with
+    that as its reason.
   - An item holding several exact rules takes the worst status among them,
     and the note names each part that is not met.
   - A `V` step is `met` when the change makes what the step says you will see
