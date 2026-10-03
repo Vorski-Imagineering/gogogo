@@ -142,6 +142,41 @@ class ChangedMeanwhile(unittest.TestCase):
         self.assertTrue(any("start snapshot" in l for l in flags))
 
 
+class Dependents(unittest.TestCase):
+    """Posting step 4 checks the open specs that read this issue's body (gogogo#93)."""
+
+    def posting(self):
+        return section(skill_text(), "## Posting")
+
+    def step(self, number):
+        posting = self.posting()
+        steps = {int(m.group(1)): i for i, line in enumerate(posting) if (m := re.match(r"(\d+)\. ", line))}
+        return "\n".join(posting[steps[number]:steps[number + 1]])
+
+    def test_step_four_lists_the_open_specs(self):
+        four = self.step(4)
+        for text in ("gh issue list", "--state open", "tracker.issues_repo"):
+            self.assertIn(text, four)
+
+    def test_the_check_comes_before_the_post(self):
+        posting = self.posting()
+        listing = next(i for i, line in enumerate(posting) if "gh issue list" in line)
+        post = next(i for i, line in enumerate(posting) if "gh issue edit <N> --body-file" in line)
+        self.assertLess(listing, post)
+
+    def test_test_rules_has_five_rules(self):
+        rules = (SKILL.parent / "references" / "test-rules.md").read_text(encoding="utf-8")
+        self.assertEqual(len(re.findall(r"(?m)^## ", rules)), 5)
+
+    def test_the_pattern_matches_commands_not_mentions(self):
+        found = re.search(r'test\("([^"]+)"\)', self.step(4))
+        self.assertIsNotNone(found)
+        pattern = found.group(1).replace("\\\\", "\\").replace("<N>", "57")
+        self.assertRegex("gh issue view 57 --json body", pattern)
+        self.assertNotRegex("such as #57", pattern)
+        self.assertNotRegex("gh issue view 157", pattern)
+
+
 class SeveralIssues(unittest.TestCase):
     """A list or a column is specced one issue at a time (gogogo#70)."""
 
