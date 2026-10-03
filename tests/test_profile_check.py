@@ -802,7 +802,39 @@ class Defaults(unittest.TestCase):
     def test_no_profile_names_setup(self):
         code, _, err = run_main("--for", pc.ONE, "--path", "/nonexistent/dev-process.md")
         self.assertEqual(code, pc.EXIT_MISSING)
-        self.assertIn("/gogogo:setup", err)
+        self.assertEqual(err, "profile: no file at /nonexistent/dev-process.md. Run /gogogo:setup to adopt "
+                              "gogogo in this repo (references/profile-schema.md describes the file).\n")
+
+    def test_the_default_warning_says_setup_adds_it(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            _, _, err = run_main("--for", pc.ONE, "--path", str(write_profile(NO_HANDBACK, tmp)))
+        self.assertIn("warning: handback.reporter: missing; using 'none' (default since gogogo#9). "
+                      "/gogogo:setup adds it to the profile.\n", err)
+
+    def test_show_lists_the_sections(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            code, out, err = run_main("--for", pc.ONE, "--show", "--path", str(write_profile(COMPLETE, tmp)))
+        self.assertEqual(code, pc.EXIT_OK, err)
+        self.assertIn("Recon traps", json.loads(out)["sections"])
+
+    def test_a_merge_script_that_does_not_exist_is_an_error_for_dev_alone(self):
+        script = COMPLETE.replace('command = "make merge"', 'command = "deploy/merge.sh <pr>"')
+        self.assertNotEqual(script, COMPLETE)
+        with tempfile.TemporaryDirectory() as tmp:
+            code, _, err = run_main("--for", pc.ONE, "--path", str(write_profile(script, tmp)))
+        self.assertEqual(code, pc.EXIT_INVALID)
+        self.assertIn("error: integration.command: deploy/merge.sh does not exist", err)
+
+    def test_an_in_progress_that_is_not_a_column_name_resolves_no_needs_human(self):
+        for value in (5, "  "):
+            settings = {"tracker": {"columns": {"in_progress": value}}}
+            self.assertNotIn("needs_human", pc.effective(settings)["tracker"]["columns"], value)
+
+    def test_a_default_that_cannot_resolve_does_not_stop_the_next(self):
+        self.assertEqual(pc.effective({})["handback"]["reporter"], "none")
+
+    def test_a_default_under_a_value_that_is_not_a_table_is_left_out(self):
+        self.assertEqual(pc.effective({"handback": "x"})["handback"], "x")
 
 
 class SkillsReportWarnings(unittest.TestCase):
