@@ -222,6 +222,14 @@ class Wrapper(unittest.TestCase):
         self.assertIn("ok", run.stdout.decode("utf-8"))
         self.assertEqual(run.returncode, 0)
 
+    def test_the_output_ends_with_the_test_run_while_what_it_started_writes_on(self):
+        began = time.monotonic()
+        run = self.wrap("import subprocess, sys; subprocess.Popen([sys.executable, '-c', "
+                        "'import time\\nfor _ in range(120): print(1, flush=True); time.sleep(0.05)']); "
+                        "print('ok')")
+        self.assertLess(time.monotonic() - began, 4)
+        self.assertIn("ok", run.stdout.decode("utf-8"))
+
     def test_a_group_with_only_exited_members_is_not_an_error(self):
         proc = subprocess.Popen([sys.executable, "-c", "pass"], start_new_session=True)
         proc.wait()

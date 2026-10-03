@@ -491,7 +491,7 @@ integration and merging follow this skill and the profile. See the profile's
   when it is unset.
 - **Polling background work** (§4): `rm -f <scratch>/job.pid`, then start the
   job so it records a pid that lives as long as it does,
-  `sh -c 'echo $$ > <scratch>/job.pid; <command>' > <output file> 2>&1`
+  `sh -c 'echo $$ > <scratch>/job.pid.tmp && mv <scratch>/job.pid.tmp <scratch>/job.pid; <command>' > <output file> 2>&1`
   (the background tool's task id is not a pid), and once `<scratch>/job.pid`
   exists use its number as `<pid>`. Then one foreground command at a time, each
   under the shell tool's 10-minute limit, for example

@@ -74,10 +74,10 @@ KILL_AFTER = 10
 WRAPPER_SOURCE = f'''"""Runs one test command for tools/mutate.py; written into its throwaway copy.
 
 It becomes the test command (exec), so the tool's own timeout kills the test run itself, and
-the exit status is the command's. A forked child passes the output on as UTF-8 and marks the end.
+the exit status is the command's. A forked child waits for it to end, then passes its output
+on as UTF-8 and marks the end.
 """
 import os
-import select
 import sys
 import time
 from pathlib import Path
@@ -92,31 +92,26 @@ def mark(line):
 
 start = time.time()
 mark(f"start {{start:.3f}}")
-read_end, write_end = os.pipe()
 test_pid = os.getpid()
+out = beat.parent / f".gogogo-out-{{test_pid}}"
+fd = os.open(out, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
 if os.fork() == 0:
-    # Ends when the test run does, not when the pipe closes: a process the test started may
-    # hold the pipe open after the tool has killed the test, and the tool waits on this output.
-    os.close(write_end)
-    chunks = []
-    while True:
-        if select.select([read_end], [], [], 0.2)[0]:
-            chunk = os.read(read_end, 65536)
-            if not chunk:
-                break
-            chunks.append(chunk)
-        elif os.getppid() != test_pid:
-            break
-    data = b"".join(chunks)
+    # Waits for the test run itself to end, then passes on all it wrote. Not a pipe read to its
+    # end: a process the test started may hold a pipe open, and write to it, long after the tool
+    # has killed the test, and the tool waits on this output.
+    os.close(fd)
+    while os.getppid() == test_pid:
+        time.sleep(0.1)
+    data = out.read_bytes()
+    out.unlink()
     sys.stdout.buffer.write(data.decode("utf-8", errors="replace").encode("utf-8"))
     sys.stdout.flush()
     end = time.time()
     mark(f"end {{end:.3f}} {{end - start:.3f}}")
     os._exit(0)
-os.close(read_end)
-os.dup2(write_end, 1)
-os.dup2(write_end, 2)
-os.close(write_end)
+os.dup2(fd, 1)
+os.dup2(fd, 2)
+os.close(fd)
 os.execvp(sys.argv[1], sys.argv[1:])
 '''
 
