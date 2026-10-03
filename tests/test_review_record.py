@@ -98,7 +98,7 @@ class Settings(unittest.TestCase):
     def test_dev_names_the_stop_marker(self):
         markers = STOP.findall(section(DEV.read_text(encoding="utf-8"), "8.", "Do not"))
         self.assertEqual(len(markers), 1, markers)
-        reasons = re.fullmatch(r"v=1 reason=<([^>]*)>", markers[0])
+        reasons = re.fullmatch(r"v=1 reason=<([^>]*)> session=<id\|unknown>", markers[0])
         self.assertIsNotNone(reasons, markers[0])
         self.assertEqual(tuple(reasons.group(1).split("|")), review_stats.STOPS)
 

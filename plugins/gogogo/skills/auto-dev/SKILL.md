@@ -91,6 +91,19 @@ means finished work sits unverified while you go and ask.
 10. **The profile's `preflight.extra`**, each as it says. A check that says
    "report only" is reported and never acted on.
 
+## The loop never waits on chat
+
+- Inside the loop, never put a question about an issue to the person, with
+  `AskUserQuestion` or in chat. A fork this skill's rules settle is settled by
+  them; one they do not is a hand-back to `tracker.columns.needs_human`
+  (`/gogogo:dev` §8), and the loop goes on. Only *Stop the whole run and ask
+  when* waits on a person.
+- A message from the person mid-run is answered in a few lines from the run
+  log (issues taken, merged, handed back, skipped, the one in hand, what is
+  left), and the loop goes on in the same turn. It is not a reason to pause.
+- A side request the person makes (another skill) runs as that skill says;
+  when it ends, the loop goes on.
+
 ## 1. Select the queue
 
 ```bash
@@ -117,7 +130,8 @@ python3 "${CLAUDE_PLUGIN_ROOT}/scripts/spec_lint.py" <scratch>/issue-<n>-body.md
   passed*.
 - Exit 1, or a last line `label: withhold (<reason>)`: **skip**, with the
   reason `no ready label; spec lint: <its first error: line, or the withhold
-  reason>`.
+  reason>`. Outside triage-only mode, hand it back as §2's *Hand back a skip*
+  says, with reason `lint`.
 - Exit 2: **stop the whole run** with the line it printed. Preflight already
   read the profile, so this is the environment, not the issue.
 
@@ -128,6 +142,40 @@ depends on was made by a person and is **in the body**. Skip and record, never
 guess, when it has an open product decision, a Hard Stop no Approvals row
 names, or a two-licence change whose apply row is missing (that one is
 buildable: build and test it, then stop that issue before applying).
+
+**Hand back a skip.** Every skip from §1's lint and from this section, outside
+triage-only mode, once per issue per run: a later pass that reads the issue
+again reports the skip and writes nothing more. Never the *could not add the
+ready label* skip below (the tracker failing, not the spec: reported, nothing
+written, the card left for the next run), and never a two-licence change whose
+apply row is missing, which is built and then stopped (§4), not skipped:
+
+1. Post one comment on the issue:
+   `gh issue comment <n> --repo <tracker.issues_repo> --body-file <scratch>/skip-<n>.md`.
+   Its first line is `**Needs you:**` and one sentence saying what is missing
+   and what the person does next (for example: re-spec with `/gogogo:spec`,
+   then put the card back in `<tracker.queue>` with the ready label).
+   Directly under it, on its own line:
+
+   `<!-- gogogo:skip v=1 reason=<lint|nospec|decision|hard-stop> session=<id|unknown> -->`
+
+   | reason | when |
+   |---|---|
+   | `lint` | no ready label, and `spec_lint.py` failed or withheld it (§1) |
+   | `nospec` | a feature with no analysis pass (`/gogogo:dev` §2) |
+   | `decision` | an open product decision not answered in the body |
+   | `hard-stop` | a Hard Stop no Approvals row names |
+
+   No review record and no stop marker on this comment: a skip is not a stop.
+   The comment names no hostname.
+2. Then remove `tracker.ready_marker` when the issue has it
+   (`gh issue edit <n> --repo <tracker.issues_repo> --remove-label "<tracker.ready_marker>"`).
+3. Then `<tracker.tool> move <n> --to needs_human` (the role key, so the card
+   moves to `tracker.columns.needs_human`). Moving last means a card is never
+   there without the comment that says why.
+
+A non-zero exit from any of the three: say so in the next report to the
+person, with the command's line, and go on. Do not retry blind.
 
 Autonomy is over *approved* work, never over the approval. A skipped issue is a
 reported outcome, not a failure. Record which row licensed each Hard Stop you
@@ -217,9 +265,10 @@ Push the branch as soon as it has its first commit (`git push -u origin
 - A change that needs a two-licence apply (for example a migration on a shared
   environment) is applied only with its apply row, by the profile's procedure
   for it, never improvised.
-- **In a headless run (for example `claude -p`), never end a turn to wait for
-  background work**: ending the turn ends the process, and the work is lost.
-  Run verification in the foreground, or poll until it has finished.
+- **Never end a turn to wait for background work**, in any run, interactive
+  or headless. Ending the turn hands control back, and a job that hangs never
+  sends the notice that would resume it. Poll it in the foreground until it
+  has finished (*Claude-specific*).
 
 ## 5. Gates
 
@@ -379,11 +428,11 @@ no credentials, so call it the same way in every repo. One plain-text line
 each, `<repo>` being the name part of `tracker.code_repo`:
 
 - once preflight has passed and §1 has read the queue: `<repo> auto-dev: run started on <hostname>, <k> issues in "<tracker.queue>"`;
-- the first time an issue is skipped in this run, not on later passes: `<repo> #<n> skipped: <reason>`;
+- the first time an issue is skipped in this run, not on later passes: `<repo> #<n> skipped -> <tracker.columns.needs_human>: <reason>` when *Hand back a skip* moved the card, else `<repo> #<n> skipped: <reason>` (the label failure, or a failed move);
 - `<repo> #<n> started: <title>`;
 - after the issue's merge is verified: `<repo> #<n> merged (<short sha>) -> <column>`;
-- `<repo> #<n> needs you -> <tracker.columns.needs_human>: <the Needs-you line>`;
-- *run closed*, from §9 only: `<repo> auto-dev: run closed: <a> merged, <b> need you, <c> skipped`.
+- `<repo> #<n> needs you -> <tracker.columns.needs_human>: <the Needs-you line>`, for an issue taken and then stopped, never for a triage skip (its skip line says it);
+- *run closed*, from §9 only: `<repo> auto-dev: run closed: <a> merged, <b> need you, <c> skipped`, where `<b>` counts issues taken and stopped, and `<c>` the triage skips, each issue once.
 
 A `send` that exits non-zero is a `notify failed: <its line>`, and the run
 goes on. Each is given once, in the next report to the person in this session
@@ -395,8 +444,8 @@ tracker comment. Never put a token on a command line or in a report.
 In a run that tried to send *run started*, first send *run closed* (§8). Then
 one report, opening with the notify line preflight item 7 put there, if any:
 every issue taken with its outcome and merge commit (and *label added by
-the run* for each one §2 labelled), every issue skipped with the reason, anything left half-done with its branch, every card
-moved to `tracker.columns.needs_human` with its Needs-you line, the stranded
+the run* for each one §2 labelled), every issue skipped with the reason and its column, anything left half-done with its branch, every other card
+moved to `tracker.columns.needs_human` (taken, then stopped) with its Needs-you line, the stranded
 work from preflight, anything the profile's `stop.extra` checks raised, and
 the `notify failed` lines §8 says are due.
 
@@ -437,3 +486,19 @@ integration and merging follow this skill and the profile. See the profile's
   The name is what `/resume` and the terminal title show.
 - The review command and its level for each coverage, and the
   `claude-in-chrome` tools, as in `/gogogo:dev`'s `## Claude-specific`.
+- In the skip marker (§2, *Hand back a skip*), `session` is
+  `$CLAUDE_CODE_SESSION_ID`, as in `/gogogo:dev`'s record, and `unknown`
+  when it is unset.
+- **Polling background work** (§4): `rm -f <scratch>/job.pid`, then start the
+  job so it records a pid that lives as long as it does,
+  `sh -c 'echo $$ > <scratch>/job.pid.tmp && mv <scratch>/job.pid.tmp <scratch>/job.pid; <command>' > <output file> 2>&1`
+  (the background tool's task id is not a pid), and once `<scratch>/job.pid`
+  exists use its number as `<pid>`. Then one foreground command at a time, each
+  under the shell tool's 10-minute limit, for example
+  ```bash
+  timeout 540 sh -c 'while kill -0 <pid> 2>/dev/null; do sleep 15; done'; kill -0 <pid> 2>/dev/null && echo running || echo finished
+  ```
+  then read the job's output file, and repeat until it says `finished`. Where
+  there is no `timeout` command (macOS), bound the loop itself:
+  `sh -c 'n=0; while [ $n -lt 36 ] && kill -0 <pid> 2>/dev/null; do sleep 15; n=$((n+1)); done'`.
+- Never `AskUserQuestion` inside the loop (*The loop never waits on chat*).

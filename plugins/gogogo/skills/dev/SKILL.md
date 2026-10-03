@@ -513,9 +513,10 @@ and no further. Take the first case that fits:
 
 **The stop marker.** Every hand-back to `tracker.columns.needs_human` carries
 one, on its own line directly under the `**Needs you:**` line, and no other
-report does (the reopen line below is not a stop):
+report does (the reopen line below is not a stop), except a triage skip from
+`/gogogo:auto-dev`, which carries the skip marker instead:
 
-`<!-- gogogo:stop v=1 reason=<hard-stop|decision|spec|review|tests|mutation|verify|gate|ci> -->`
+`<!-- gogogo:stop v=1 reason=<hard-stop|decision|spec|review|tests|mutation|verify|gate|ci> session=<id|unknown> -->`
 
 | reason | when |
 |---|---|
@@ -655,11 +656,11 @@ and integration follow this skill and the repo's merge path. See the profile's
   which does not see this conversation. Its prompt is §5's brief for the
   reader and the item list, and it writes the answers file.
 - A mutation run (§6) can outlast the shell tool's foreground limit: start it
-  with `run_in_background` and wait for its notification. In a headless run,
-  poll until it has finished.
+  with `run_in_background` and poll it as `/gogogo:auto-dev`'s
+  *Claude-specific* says; in an auto-dev run never end the turn to wait for it.
 - In the record, `impl` is the session's model id; `reviewer` is
   `$CLAUDE_CODE_SUBAGENT_MODEL` when it is set, else the same as `impl`.
-- In the record, `session` is `$CLAUDE_CODE_SESSION_ID`, the variable
+- In the record and the stop marker, `session` is `$CLAUDE_CODE_SESSION_ID`, the variable
   `require_unattended.sh` also reads, and `unknown` when it is unset.
 - Browser checks use the `claude-in-chrome` tools; load the ones you need in one
   `ToolSearch` call.
