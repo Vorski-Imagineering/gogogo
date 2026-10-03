@@ -11,9 +11,10 @@ to the profile's `integration.base`, else `main`, and is compared as
      cross-reference the issue (`Closes #<n>`, `Refs #<n>`, any branch name);
   2. branches in `refs/heads` and `refs/remotes/origin` whose name carries the
      issue number (the rule /gogogo:status uses) and that are ahead of the base;
-  3. the branch (`/tree/<branch>`) or pull request (`/pull/<m>`) linked in the
-     issue's newest comment carrying a `gogogo:stop v=1` marker, when that
-     branch exists locally or on `origin`.
+  3. the branch (`/tree/<branch>`) or `tracker.code_repo` pull request
+     (`/pull/<m>`) linked in the issue's newest comment carrying a
+     `gogogo:stop v=1` marker, when that branch exists locally or on `origin`
+     and is not the base.
 
 A branch and its open pull request are one candidate. Each prints as
 
@@ -137,11 +138,12 @@ def find(number, base_name):
     stop = newest_stop(issue["comments"]["nodes"])
     if stop:
         linked, pulls, reason = stop_links(stop)
-        for pull in pulls:
-            linked.append(_gh_json("pr", "view", str(pull), "--repo", code_repo, "--json", "headRefName")
-                          ["headRefName"])
+        for repo, pull in pulls:
+            if repo.lower() == code_repo.lower():
+                linked.append(_gh_json("pr", "view", str(pull), "--repo", code_repo, "--json", "headRefName")
+                              ["headRefName"])
         for branch in linked:
-            if branch in where:
+            if branch in where and branch != base_name:
                 candidates.setdefault(branch, {})["reason"] = reason or "unknown"
 
     lines = []

@@ -157,6 +157,18 @@ class IssueWork(Repos):
         code, lines = self.work(8, {"graphql": timeline()})
         self.assertEqual((code, lines), (2, []))
 
+    def test_a_stop_link_to_the_base_is_not_a_candidate(self):
+        comment = "**Needs you:** see https://github.com/o/code/tree/main\n<!-- gogogo:stop v=1 reason=spec -->"
+        self.assertEqual(self.work(5, {"graphql": timeline(comments=[comment])}), (0, []))
+
+    def test_a_stop_link_to_another_repos_pr_is_not_looked_up(self):
+        self.remote_only("fix/5-x", 1)
+        comment = ("**Needs you:** blocked on https://github.com/other/lib/pull/70\n"
+                   "<!-- gogogo:stop v=1 reason=decision -->")
+        code, lines = self.work(5, {"graphql": timeline(comments=[comment]), "prview": {}})
+        self.assertEqual(code, 1)
+        self.assertEqual(lines, ["candidate: fix/5-x (remote), 1 commit(s) ahead of main"])
+
     def test_no_profile_cannot_tell(self):
         (self.clone / ".agents" / "dev-process.md").unlink()
         code, lines = self.work(9, {"graphql": timeline()})

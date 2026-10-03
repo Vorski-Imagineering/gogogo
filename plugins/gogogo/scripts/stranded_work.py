@@ -79,7 +79,7 @@ def issue_view(repo, number):
 STOP_MARKER = "<!-- gogogo:stop v=1"
 STOP_REASON = re.compile(r"<!-- gogogo:stop v=1 [^>]*?\breason=([^\s<>]+)")
 TREE_LINK = re.compile(r"/tree/([^\s)\]>\"'`]+)")
-PULL_LINK = re.compile(r"/pull/(\d+)")
+PULL_LINK = re.compile(r"github\.com/([^/\s]+/[^/\s]+)/pull/(\d+)")
 
 
 def newest_stop(comments):
@@ -91,10 +91,10 @@ def newest_stop(comments):
 
 
 def stop_links(body):
-    """(branches linked as /tree/<branch>, PR numbers linked as /pull/<m>, reason or None)."""
+    """(branches linked as /tree/<branch>, (owner/repo, number) of each PR linked as /pull/<m>, reason or None)."""
     branches = [b.rstrip(".,;:") for b in TREE_LINK.findall(body)]
     reason = STOP_REASON.search(body)
-    return branches, [int(n) for n in PULL_LINK.findall(body)], reason.group(1) if reason else None
+    return branches, [(repo, int(n)) for repo, n in PULL_LINK.findall(body)], reason.group(1) if reason else None
 
 
 def base_ref(base):
@@ -245,10 +245,12 @@ def main(argv=None):
                       else f"{ahead} commit(s) ahead of {args.base}")
         tip = git("rev-parse", ref).stdout.strip()
         parts = []
+        open_or_unknown = False  # an open PR or a failed lookup: "no open PR" would not be true
         for pr_repo in repos:
             prs, error = pull_requests(pr_repo, branch)
             if error:
                 parts.append(f"pull requests in {pr_repo} not checked: {error}")
+                open_or_unknown = True
                 continue
             pr = chosen(prs)
             if not pr:
@@ -258,6 +260,7 @@ def main(argv=None):
                 if local.returncode == 0 and local.stdout.strip() == "0":
                     break  # claimed
                 count = local.stdout.strip() if local.returncode == 0 else "some"
+                open_or_unknown = True
                 parts.append(f"PR #{pr['number']} open, but {count} commit(s) are on no remote")
                 continue
             parts.append(pr_part(pr, pr_repo, code_repo, tip, args.base))
@@ -265,6 +268,8 @@ def main(argv=None):
             pr_parts = "".join(f"; {part}" for part in parts)
             if not number:
                 stranded.append(f"{branch}: {ahead_part}, no issue number in the name{pr_parts}{where}")
+            elif is_open and open_or_unknown:
+                stranded.append(f"{branch}: {ahead_part}; issue #{number} is open{pr_parts}{where}")
             elif is_open:
                 stranded.append(f"{branch}: {ahead_part}; issue #{number} is open, but no open PR "
                                 f"and no stop marker{pr_parts}{where}")
