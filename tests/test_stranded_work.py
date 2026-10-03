@@ -164,6 +164,24 @@ class StrandedWorkTest(Repos):
     def test_branch_pushed_under_another_name_is_not_reported(self):
         self.branch_with("renamed", 1)
         self.git("push", "-q", "origin", "renamed:other-name")
+        code, lines = self.stranded()
+        # The local branch is a copy; the remote branch it was pushed as is reported on its own (#86).
+        self.assertEqual(code, 1)
+        self.assertEqual([line.split(":")[0] for line in lines], ["other-name"])
+
+    def test_a_remote_only_branch_is_reported(self):
+        self.branch_with("gone-local", 1)
+        self.git("push", "-q", "origin", "gone-local")
+        self.git("branch", "-q", "-D", "gone-local")
+        code, lines = self.stranded()
+        self.assertEqual(code, 1)
+        self.assertEqual(lines, ["gone-local: 1 commit(s) ahead of main, no issue number in the name"])
+
+    def test_the_base_compared_is_origins(self):
+        self.branch_with("merged", 1)
+        self.git("push", "-q", "origin", "merged:main")
+        self.git("reset", "-q", "--hard", "HEAD")  # local main stays behind origin/main
+        self.git("worktree", "add", "-q", str(self.tmp / "wt"), "merged")
         self.assertEqual(self.stranded(), (0, []))
 
     def test_only_the_unpushed_branch_is_listed(self):
@@ -328,10 +346,36 @@ class PullRequests(Repos):
         self.run_with({"pr": {"o/code claimed": [pr(5, "OPEN", self.tip("claimed"))]}})
         self.assertEqual(self.log.read_text(), "")
 
-    def test_an_open_issue_claims_before_any_pr_lookup(self):
+    def test_a_remote_only_branch_of_a_closed_issue_is_reported(self):
         self.branch_with("fix/12-x", 1)
-        self.assertEqual(self.run_with({"issue": {"12": {"state": "OPEN"}}}), (0, []))
-        self.assertNotIn("pr list", self.log.read_text())
+        self.git("push", "-q", "origin", "fix/12-x")
+        self.git("branch", "-q", "-D", "fix/12-x")
+        code, lines = self.run_with({"issue": {"12": {"state": "CLOSED"}}})
+        self.assertEqual(code, 1)
+        self.assertEqual(len(lines), 1, lines)
+        self.assertTrue(lines[0].startswith("fix/12-x: 1 commit(s) ahead of main; issue #12 is not open"), lines[0])
+
+    def test_an_open_issue_with_no_pr_and_no_stop_marker_is_reported(self):
+        self.branch_with("fix/12-x", 1)
+        code, lines = self.run_with({"issue": {"12": {"state": "OPEN", "comments": []}}})
+        self.assertEqual(code, 1)
+        self.assertEqual(len(lines), 1, lines)
+        self.assertTrue(lines[0].startswith(
+            "fix/12-x: 1 commit(s) ahead of main; issue #12 is open, but no open PR and no stop marker"), lines[0])
+
+    def test_an_open_issue_with_an_open_pr_claims(self):
+        self.branch_with("fix/12-x", 1)
+        self.git("push", "-q", "origin", "fix/12-x")
+        fixture = {"issue": {"12": {"state": "OPEN", "comments": []}},
+                   "pr": {"o/code fix/12-x": [pr(5, "OPEN", self.tip("fix/12-x"))]}}
+        self.assertEqual(self.run_with(fixture), (0, []))
+
+    def test_an_open_issue_whose_stop_marker_names_the_branch_claims(self):
+        self.branch_with("fix/12-x", 1)
+        comment = ("**Needs you:** read [the branch](https://github.com/o/code/tree/fix/12-x).\n"
+                   "<!-- gogogo:stop v=1 reason=review -->")
+        fixture = {"issue": {"12": {"state": "OPEN", "comments": [{"body": "x"}, {"body": comment}]}}}
+        self.assertEqual(self.run_with(fixture), (0, []))
 
 
 def load_script():

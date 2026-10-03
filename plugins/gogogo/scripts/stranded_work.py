@@ -1,16 +1,23 @@
 #!/usr/bin/env python3
-"""List local branches and worktrees ahead of the base, with work on no remote, that no open issue or open pull request claims.
+"""List branches and worktrees ahead of the base that no open pull request, open issue's stop marker or closed-issue rule accounts for.
 
     stranded_work.py [--base main]
 
-Work that is not in the tracker does not exist: nobody picks it up. A branch
-or worktree is reported when it has commits the base lacks, and either some of
-those commits are on no remote branch or the branch is checked out in a
-worktree (a local copy of a pushed branch is not stranded), and either its name
-carries no issue number (the same rule as /gogogo:status: a number right after
-a `/`, followed by `-` or the end, or a leading `<n>-`), or that number is not
-an open issue in the profile's tracker (checked with `gh issue view` when the
-profile names a repo).
+Work that is not in the tracker does not exist: nobody picks it up. The base
+compared is `origin/<base>` when it exists, else `<base>`. Local branches and
+`origin`'s branches are read, one entry per name (the local one when both
+exist). A branch or worktree is reported when it has commits the base lacks,
+and, for a local branch, either some of those commits are on no remote branch
+or the branch is checked out in a worktree (a local copy of a pushed branch is
+not stranded; a branch only on `origin` is never such a copy), and one of:
+
+  * its name carries no issue number (the same rule as /gogogo:status: a number
+    right after a `/`, followed by `-` or the end, or a leading `<n>-`);
+  * that number is not an open issue in the profile's tracker (checked with
+    `gh issue view` when the profile names a repo);
+  * the issue is open, but no open pull request in `tracker.code_repo` claims
+    the branch and the issue's newest stop-marker comment does not name it
+    (as `.../tree/<branch>`).
 
 An open pull request in the profile's `tracker.code_repo` claims its branch,
 unless the branch has commits on no remote. Pull requests in the checkout's
@@ -56,13 +63,49 @@ def issue_in_branch(name):
     return match.group(1) if match else None
 
 
-def issue_open(repo, number):
+def issue_view(repo, number):
+    """The issue's state and comments, None with no repo to ask, or False when the lookup failed."""
     if not repo:
         return None
-    out = gh("issue", "view", number, "--repo", repo, "--json", "state")
+    out = gh("issue", "view", number, "--repo", repo, "--json", "state,comments")
     if out.returncode != 0:
         return False
-    return json.loads(out.stdout).get("state") == "OPEN"
+    try:
+        return json.loads(out.stdout)
+    except json.JSONDecodeError:
+        return False
+
+
+STOP_MARKER = "<!-- gogogo:stop v=1"
+STOP_REASON = re.compile(r"<!-- gogogo:stop v=1 [^>]*?\breason=([^\s<>]+)")
+TREE_LINK = re.compile(r"/tree/([^\s)\]>\"'`]+)")
+PULL_LINK = re.compile(r"/pull/(\d+)")
+
+
+def newest_stop(comments):
+    """The newest comment body carrying a stop marker, or None. `comments`: oldest first."""
+    for body in reversed([c if isinstance(c, str) else (c or {}).get("body") or "" for c in comments]):
+        if STOP_MARKER in body:
+            return body
+    return None
+
+
+def stop_links(body):
+    """(branches linked as /tree/<branch>, PR numbers linked as /pull/<m>, reason or None)."""
+    branches = [b.rstrip(".,;:") for b in TREE_LINK.findall(body)]
+    reason = STOP_REASON.search(body)
+    return branches, [int(n) for n in PULL_LINK.findall(body)], reason.group(1) if reason else None
+
+
+def base_ref(base):
+    """`origin/<base>` when it exists, else `<base>`."""
+    found = git("rev-parse", "--verify", "-q", f"refs/remotes/origin/{base}")
+    return f"refs/remotes/origin/{base}" if found.returncode == 0 else base
+
+
+def ahead_of(base, ref):
+    """Commits on `ref` that `base` lacks, as a string ("" when git cannot say)."""
+    return git("rev-list", "--count", f"{base}..{ref}").stdout.strip()
 
 
 GITHUB_URL = re.compile(r"github\.com[:/]([^/]+)/(.+?)(?:\.git)?/?$")
@@ -146,10 +189,20 @@ def main(argv=None):
             pass
     repos = github_repos(code_repo) if code_repo else []
 
-    heads = git("for-each-ref", "--format=%(refname)", "refs/heads")
+    heads = git("for-each-ref", "--format=%(refname)", "refs/heads", "refs/remotes/origin")
     if heads.returncode != 0:
         print(f"cannot read branches: {heads.stderr.strip()}", file=sys.stderr)
         return 2
+    base = base_ref(args.base)
+    refs = {}
+    for ref in heads.stdout.split():
+        if ref.startswith("refs/heads/"):
+            refs[ref.removeprefix("refs/heads/")] = ref
+    for ref in heads.stdout.split():
+        if ref.startswith("refs/remotes/origin/"):
+            name = ref.removeprefix("refs/remotes/origin/")
+            if name != "HEAD" and name not in refs:
+                refs[name] = ref
     listed = git("worktree", "list", "--porcelain")
     # A pushed branch in an unseen worktree would look like a copy, so without
     # the list no copy is skipped: every branch ahead of the base is reported.
@@ -164,24 +217,30 @@ def main(argv=None):
             worktrees[lines["branch"]] = lines.get("worktree", "")
 
     stranded = []
-    for ref in heads.stdout.split():
+    for branch, ref in refs.items():
         # The full ref for git, so a tag of the same name cannot shadow it.
-        branch = ref.removeprefix("refs/heads/")
         if branch == args.base:
             continue
-        ahead = git("rev-list", "--count", f"{args.base}..{ref}").stdout.strip()
+        ahead = ahead_of(base, ref)
         if not ahead or ahead == "0":
             continue
-        if skip_copies and ref not in worktrees:
+        remote_only = ref.startswith("refs/remotes/")
+        if skip_copies and not remote_only and ref not in worktrees:
             local = git("rev-list", "--count", ref, "--not", "--remotes")
             if local.returncode == 0 and local.stdout.strip() == "0":
                 continue
         where = f" (worktree {worktrees[ref]})" if ref in worktrees else ""
         number = issue_in_branch(branch)
-        if number and issue_open(repo, number) is not False:
-            continue
+        issue = issue_view(repo, number) if number else None
+        if number and issue is None:
+            continue  # no tracker to ask
+        is_open = bool(issue) and issue.get("state") == "OPEN"
+        if is_open:
+            stop = newest_stop(issue.get("comments") or [])
+            if stop and branch in stop_links(stop)[0]:
+                continue
         # With no common commit, the count is the branch's whole history.
-        shared = git("merge-base", args.base, ref)
+        shared = git("merge-base", base, ref)
         ahead_part = (f"no history in common with {args.base}" if shared.returncode == 1
                       else f"{ahead} commit(s) ahead of {args.base}")
         tip = git("rev-parse", ref).stdout.strip()
@@ -206,6 +265,9 @@ def main(argv=None):
             pr_parts = "".join(f"; {part}" for part in parts)
             if not number:
                 stranded.append(f"{branch}: {ahead_part}, no issue number in the name{pr_parts}{where}")
+            elif is_open:
+                stranded.append(f"{branch}: {ahead_part}; issue #{number} is open, but no open PR "
+                                f"and no stop marker{pr_parts}{where}")
             else:
                 stranded.append(f"{branch}: {ahead_part}; issue #{number} is not open{pr_parts}{where}")
 

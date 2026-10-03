@@ -23,6 +23,9 @@ checks that read (not the ones that need a browser or bypass mode), run §1 and
 reason, citing the Approvals row or the missing decision. A card without the
 ready label whose spec passed the lint (§1) is `take (no ready label; spec lint
 passed; the label would be added)`; one that failed is `skip` with §1's reason.
+For each issue taken, also run §3's `issue_work.py` (after `git fetch origin`)
+and report the outcome §3 would take: `continue on <branch>` (with its PR, if
+any), or §3's skip reason.
 Create no branch, move no card, add no label, post nothing, send no message.
 
 ## Before anything: preflight
@@ -145,12 +148,33 @@ by the run* for §8 and §9.
 
 ```bash
 git switch <integration.base> && git pull --ff-only
+python3 "${CLAUDE_PLUGIN_ROOT}/scripts/issue_work.py" <issue-number>
 git switch -c fix/<issue-number>-<short-slug>
 ```
 
 Always from a fresh base: the previous iteration merged into it, and branching
 from a stale one silently reverts that work in the squash. The branch name
 carries the issue number, so the work is never stranded.
+
+Before `git switch -c`, `issue_work.py` (after `git fetch origin`, which the
+pull does) says whether the issue already has work:
+
+- Exit 0: branch as above.
+- Exactly one `candidate:` line and no `fork PR` line: **continue on it**,
+  without asking. Check it out (`git switch <branch>`, or
+  `git switch --track origin/<branch>` when it is only on `origin`), then
+  `git merge origin/<integration.base>`, never a rebase or a force push.
+  Resolve a conflict as a code change. Push to that branch, and merge its
+  open PR when it has one rather than opening another. The whole process
+  (spec check, review, tests compared, mutation, verify, gates, merge) runs
+  on the updated branch, and the run report and the issue's report name the
+  branch continued and its PR. A conflict you cannot resolve: hand the card
+  back to `tracker.columns.needs_human` as `/gogogo:dev` §8 says, stop
+  reason `gate`, the Needs-you line naming the conflicting files.
+- Two or more `candidate:` lines, or any `fork PR` line: **skip** the issue
+  with the reason `earlier work: <each line, joined by "; ">`, and leave its
+  card where it is. Never build a competing version of a contributor's PR.
+- Exit 2: **skip** with the reason `could not check for earlier work: <the reason>`.
 
 Then move the card to `tracker.columns.in_progress`, before the change starts,
 so anyone glancing at the board sees which issue is live.

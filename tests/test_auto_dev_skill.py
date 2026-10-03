@@ -30,6 +30,11 @@ class QueueSelection(unittest.TestCase):
     def test_the_lint_verdict_is_named(self):
         self.assertIn("label: apply", self.text)
 
+    def test_branching_looks_for_earlier_work(self):
+        self.assertIn("issue_work.py", section(self.text, "3. Branch from a fresh base"))
+        dev = (SKILL.parents[1] / "dev" / "SKILL.md").read_text(encoding="utf-8")
+        self.assertIn("issue_work.py", section(dev, "4. Change"))
+
     def test_triage_only_names_the_ready_label(self):
         self.assertIn("ready label", section(self.text, "Triage-only mode"))
 
