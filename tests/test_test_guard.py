@@ -341,8 +341,21 @@ class EnclosingFunction(unittest.TestCase):
         cwd = Path.cwd()
         self.addCleanup(lambda: __import__("os").chdir(cwd))
         __import__("os").chdir(r.repo)
-        with self.assertRaises(test_guard.GitError) as raised:
-            test_guard._base_lines(fork, "tests/gone\udcff.py")
+        # git's own output goes to /dev/null at the descriptor level: a mutant that
+        # stops capturing it must not write a non-UTF-8 byte into the runner's pipe.
+        os = __import__("os")
+        saved = [os.dup(1), os.dup(2)]
+        null = os.open(os.devnull, os.O_WRONLY)
+        os.dup2(null, 1)
+        os.dup2(null, 2)
+        try:
+            with self.assertRaises(test_guard.GitError) as raised:
+                test_guard._base_lines(fork, "tests/gone\udcff.py")
+        finally:
+            os.dup2(saved[0], 1)
+            os.dup2(saved[1], 2)
+            for fd in (*saved, null):
+                os.close(fd)
         self.assertIn("tests/gone", str(raised.exception))
         self.assertIn("fatal", str(raised.exception))
 
