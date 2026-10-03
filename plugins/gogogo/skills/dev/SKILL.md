@@ -656,8 +656,8 @@ and integration follow this skill and the repo's merge path. See the profile's
   which does not see this conversation. Its prompt is §5's brief for the
   reader and the item list, and it writes the answers file.
 - A mutation run (§6) can outlast the shell tool's foreground limit: start it
-  with `run_in_background` and wait for its notification. In a headless run,
-  poll until it has finished.
+  with `run_in_background` and poll it as `/gogogo:auto-dev`'s
+  *Claude-specific* says; in an auto-dev run never end the turn to wait for it.
 - In the record, `impl` is the session's model id; `reviewer` is
   `$CLAUDE_CODE_SUBAGENT_MODEL` when it is set, else the same as `impl`.
 - In the record and the stop marker, `session` is `$CLAUDE_CODE_SESSION_ID`, the variable

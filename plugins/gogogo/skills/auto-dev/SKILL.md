@@ -91,6 +91,19 @@ means finished work sits unverified while you go and ask.
 10. **The profile's `preflight.extra`**, each as it says. A check that says
    "report only" is reported and never acted on.
 
+## The loop never waits on chat
+
+- Inside the loop, never put a question about an issue to the person, with
+  `AskUserQuestion` or in chat. A fork this skill's rules settle is settled by
+  them; one they do not is a hand-back to `tracker.columns.needs_human`
+  (`/gogogo:dev` §8), and the loop goes on. Only *Stop the whole run and ask
+  when* waits on a person.
+- A message from the person mid-run is answered in a few lines from the run
+  log (issues taken, merged, handed back, skipped, the one in hand, what is
+  left), and the loop goes on in the same turn. It is not a reason to pause.
+- A side request the person makes (another skill) runs as that skill says;
+  when it ends, the loop goes on.
+
 ## 1. Select the queue
 
 ```bash
@@ -252,9 +265,10 @@ Push the branch as soon as it has its first commit (`git push -u origin
 - A change that needs a two-licence apply (for example a migration on a shared
   environment) is applied only with its apply row, by the profile's procedure
   for it, never improvised.
-- **In a headless run (for example `claude -p`), never end a turn to wait for
-  background work**: ending the turn ends the process, and the work is lost.
-  Run verification in the foreground, or poll until it has finished.
+- **Never end a turn to wait for background work**, in any run, interactive
+  or headless. Ending the turn hands control back, and a job that hangs never
+  sends the notice that would resume it. Poll it in the foreground until it
+  has finished (*Claude-specific*).
 
 ## 5. Gates
 
@@ -475,3 +489,12 @@ integration and merging follow this skill and the profile. See the profile's
 - In the skip marker (§2, *Hand back a skip*), `session` is
   `$CLAUDE_CODE_SESSION_ID`, as in `/gogogo:dev`'s record, and `unknown`
   when it is unset.
+- **Polling background work** (§4): one foreground command at a time, each
+  under the shell tool's 10-minute limit, for example
+  ```bash
+  timeout 540 sh -c 'while kill -0 <pid> 2>/dev/null; do sleep 15; done'; kill -0 <pid> 2>/dev/null && echo running || echo finished
+  ```
+  then read the job's output file, and repeat until it says `finished`. Where
+  there is no `timeout` command (macOS), bound the loop itself:
+  `sh -c 'n=0; while [ $n -lt 36 ] && kill -0 <pid> 2>/dev/null; do sleep 15; n=$((n+1)); done'`.
+- Never `AskUserQuestion` inside the loop (*The loop never waits on chat*).
