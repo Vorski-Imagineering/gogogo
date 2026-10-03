@@ -180,11 +180,10 @@ class Counts(unittest.TestCase):
         self.r.write(f"{SCRIPTS}/a.py", "def a():\n    return 2\n")
 
     def test_counts_and_survivors(self):
-        # The tool's "suspicious" means the tests failed (killed) but ran slowly.
         ids = {"killed": "1 2 3", "survived": "4", "suspicious": "5", "timeout": "6"}
         code, out, _, _ = run_main(self.r.dir, fake=tool(run_code=2, ids=ids))
         self.assertEqual(code, 1)
-        self.assertEqual(out.splitlines()[-1], "mutants: 6 killed: 4 survived: 1 timeout: 1")
+        self.assertEqual(out.splitlines()[-1], "mutants: 6 killed: 3 survived: 2 timeout: 1")
 
     def test_a_failed_result_read_is_no_evidence(self):
         def fake(args, cwd):
@@ -201,6 +200,14 @@ class Counts(unittest.TestCase):
         code, out, err, _ = run_main(self.r.dir, fake=fake)
         self.assertEqual(code, 2)
         self.assertIn("No such file", err)
+        self.assertNotIn("delete", err)
+
+    def test_a_broken_install_says_to_rebuild_it(self):
+        def fake(args, cwd):
+            raise FileNotFoundError(2, "No such file or directory", "/cache/mutmut-2.5.1/bin/mutmut")
+        code, _, err, _ = run_main(self.r.dir, fake=fake)
+        self.assertEqual(code, 2)
+        self.assertIn("delete", err)
 
     def test_untested_mutants_are_no_evidence(self):
         code, out, err, _ = run_main(self.r.dir, fake=tool(ids={"killed": "1", "untested": "2 3"}))

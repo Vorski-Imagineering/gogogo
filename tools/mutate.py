@@ -166,9 +166,8 @@ def mutate(base: str, keep: bool) -> int:
                            + ((out.stderr or out.stdout).strip().splitlines() or ["no output"])[-1])
             return out.stdout.split()
 
-        # "suspicious" is the tool's word for a mutant the tests killed, slowly.
-        killed, timeout = ids("killed") + ids("suspicious"), ids("timeout")
-        survived = ids("survived")
+        killed, timeout = ids("killed"), ids("timeout")
+        survived = ids("survived") + ids("suspicious")
         missing = ids("untested") + ids("skipped")
         if missing:
             raise Stop(f"incomplete: {len(missing)} mutants were not run")
@@ -195,9 +194,10 @@ def main(argv=None) -> int:
         print(exc, file=sys.stderr)
         return 2
     except OSError as exc:
-        print(f"could not start a command: {exc}; if the tool's cache is broken, delete "
-              f"{Path(os.environ.get('XDG_CACHE_HOME') or Path.home() / '.cache') / 'gogogo'} and run again",
-              file=sys.stderr)
+        cache = Path(os.environ.get("XDG_CACHE_HOME") or Path.home() / ".cache") / "gogogo"
+        advice = (f"; the tool's install looks broken: delete {cache} and run again"
+                  if exc.filename and "mutmut" in str(exc.filename) else "")
+        print(f"could not finish: {exc}{advice}", file=sys.stderr)
         return 2
 
 
