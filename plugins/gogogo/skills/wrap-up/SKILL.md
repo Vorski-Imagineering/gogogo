@@ -78,8 +78,8 @@ Save memories without asking; that's what memory is for. Name each one in the
 report so the user can object.
 
 **Memories saved before this session.** Also review the memories earlier
-sessions saved: delete the ones that have expired, and propose promoting new or
-changed ones. **REQUIRED REFERENCE:** `references/memory-review.md`. Its results
+sessions saved: delete the ones that have expired, delete or shorten the ones a
+skill or the profile already covers, and propose promoting new or changed ones. **REQUIRED REFERENCE:** `references/memory-review.md`. Its results
 go in the report under **Memories**.
 
 ## 3. Verdict: resist by default

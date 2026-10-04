@@ -19,6 +19,12 @@ it from a copy you read earlier.
 
 ## 1. Expiry
 
+The memory directory also holds `MEMORY.md` (the index) and the
+`.gogogo-memory-review` marker. Neither is a memory: skip both in this scan, so
+an index hook line such as "once #<n> ships" never makes the index a deletion
+candidate. An index line is edited only as the deletion of the memory it points
+at.
+
 For each memory file whose text holds `until #<n>`, `until #<n> ships` or
 `once #<n> ships` (any capitalisation), read that issue: `<tracker.tool> show <n>`
 when the profile has `tracker.tool`, else
@@ -27,6 +33,7 @@ when the profile has `tracker.tool`, else
 - Shipped (its card is in a `stages` column or `Done`, or it is closed as completed): delete the file and its `MEMORY.md` line. When the file holds more than that one note, remove only the note.
 - Still open: keep it.
 - Closed as not planned: keep it and name it in the report ("its issue was dropped; the note may now be the only record").
+- The read failed (offline, no auth, not found, no tracker tool), or the memory names an issue in another repo: keep it and name it in the report ("could not tell whether #<n> shipped"). Never delete on a failed read.
 
 Delete only when the memory says it holds **until** the issue ships. A memory
 that cites an issue as an example or as evidence is never deleted because that
@@ -35,8 +42,9 @@ issue is closed; only §2 can shorten or delete it.
 ## 2. Promotion
 
 Check each memory file newer than `.gogogo-memory-review` in the memory
-directory (every file when the marker is missing). Skip the rest: only what
-changed is read. Put each one in exactly one outcome:
+directory (every file when the marker is missing). `MEMORY.md` and the marker
+itself are not memories: exclude both, since the index is always newer than the
+marker. Skip the rest: only what changed is read. Put each one in exactly one outcome:
 
 - `covered`: a skill, the profile or `CLAUDE.md` already states it. Delete or shorten the memory.
 - `every-repo`: a rule that holds in every repo (nothing in it names a project, host, repo or command). Propose an issue for `Vorski-Imagineering/gogogo`.
@@ -45,16 +53,21 @@ changed is read. Put each one in exactly one outcome:
 
 ## 3. Proposals
 
-Show each `every-repo` or `this-repo` item with its exact text. Before showing
-it, remove every project name, host, path and person from the text when the
-target tracker is public (`tracker.public`). A yes files an `every-repo` item
+Show each `every-repo` or `this-repo` item with its exact text. An
+`every-repo` item is always shown with every project name, host, path and
+person removed, because its target, the gogogo tracker, is public. A
+`this-repo` line is shown as it is, unstripped, because it goes into a file in
+this repo; when it goes to an issue in this repo's tracker instead, strip it
+the same way if `tracker.public` is true. A yes files an `every-repo` item
 through `/gogogo:idea`, or writes the `this-repo` line. A no is done. Nothing is
 filed or written without a yes.
 
 ## 4. Marker
 
-After steps 1 to 3, `touch` the file `.gogogo-memory-review` in the memory
-directory.
+After the answers to step 3, `touch` the file `.gogogo-memory-review` in the
+memory directory, only when every proposal got a yes or a no and every expiry
+read succeeded. If the session ends with a proposal unanswered, or a read
+failed, do not touch it, so the next wrap-up looks again.
 
 ## 5. Report
 

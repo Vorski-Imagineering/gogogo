@@ -67,6 +67,40 @@ class MemoryReview(unittest.TestCase):
         named = between(sec, "**Doesn't block", "Write the verdict")
         self.assertRegex(named, r"(?i)memories")
 
+    def test_privacy_is_keyed_to_the_target(self):
+        step = heading_section(review_text(), "## 3. Proposals")
+        self.assertRegex(step, r"(?i)every-repo[^.]*always[^.]*(removed|stripped)")
+        self.assertRegex(step, r"(?i)this-repo[^.]*(as it is|unstripped)")
+        self.assertIn("tracker.public", step)
+
+    def test_the_index_and_marker_are_never_scanned(self):
+        text = review_text()
+        for heading in ("## 1. Expiry", "## 2. Promotion"):
+            with self.subTest(step=heading):
+                step = heading_section(text, heading)
+                self.assertIn("MEMORY.md", step)
+                self.assertIn(".gogogo-memory-review", step)
+                self.assertRegex(step, r"(?i)\b(skip|exclude)\b[^.]*\bboth\b")
+
+    def test_a_failed_read_keeps_the_memory(self):
+        step = heading_section(review_text(), "## 1. Expiry")
+        self.assertIn("could not tell whether #", step)
+        self.assertRegex(step, r"(?i)never delete on a failed read")
+        self.assertRegex(step, r"(?i)another repo")
+
+    def test_the_marker_waits_for_answers_and_reads(self):
+        step = heading_section(review_text(), "## 4. Marker")
+        self.assertRegex(step, r"(?i)only when every proposal[^.]*(yes|no)")
+        self.assertRegex(step, r"(?i)every\s+expiry\s+read\s+succeeded")
+        self.assertRegex(step, r"(?i)do not touch")
+
+    def test_the_pointer_says_covered_memories_are_deleted_or_shortened(self):
+        sec = heading_section(skill_text(), "## 2. Capture learnings")
+        para = sec[sec.index("**Memories saved before this session.**"):]
+        self.assertIn("**REQUIRED REFERENCE:**", para)
+        self.assertRegex(para, r"(?i)cover(ed|s)")
+        self.assertRegex(para, r"(?i)shorten")
+
     def test_the_skill_stays_within_budget_and_names_no_project(self):
         self.assertLessEqual(len(skill_text().splitlines()), 500)
         for p in (SKILL, REVIEW):
