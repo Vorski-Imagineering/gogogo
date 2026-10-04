@@ -376,6 +376,9 @@ def check_names(repo, branch):
         return []
     checks, error = _gh_json("pr", "checks", str(prs[0]["number"]), "--repo", repo, "--json", "name,bucket",
                              json_on_failure=True)
+    if error and "no checks reported" in error:
+        # gh exits 1 with this line for a PR that ran no checks: none passed, not a failed read.
+        return []
     if error:
         return error
     return [c["name"] for c in checks if c.get("bucket") == "pass"]

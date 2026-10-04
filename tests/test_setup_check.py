@@ -1781,6 +1781,20 @@ class BranchRulesExact(unittest.TestCase):
             self.assertEqual(sc.check_names("o/code", "main"), ["tests"])
         self.assertEqual(calls, [("gh", *self.PR_LIST.split()), ("gh", *self.PR_CHECKS.split())])
 
+    def test_a_merged_pr_with_no_checks_has_no_check_names(self):
+        # gh 2.96: `gh pr checks` on a PR with no checks exits 1 with this line on stderr.
+        none = (1, "", "no checks reported on the 'fix-1' branch")
+        replies = {self.PR_LIST: (0, json.dumps([{"number": 12}]), ""), self.PR_CHECKS: none,
+                   "api repos/o/code/rulesets": (0, json.dumps([{"id": 7, "name": "gogogo: main"}]), "")}
+        with mock.patch.object(sc, "run", gh_stub([], replies)):
+            self.assertEqual(sc.check_names("o/code", "main"), [])
+        settings = {"tracker": {"code_repo": "o/code"}, "integration": {"strategy": "pr-squash", "base": "main"}}
+        out = io.StringIO()
+        with mock.patch.object(sc, "run", gh_stub([], replies)), mock.patch("sys.stdout", out), \
+                mock.patch("sys.stderr"):
+            self.assertEqual(sc.print_ruleset(settings, "main", "main"), 0)
+        self.assertEqual(json.loads(out.getvalue()), sc.ruleset_body("main", [], True))
+
     def test_the_branch_plan_is_design_4s(self):
         plan = sc.branch_plan
         self.assertEqual(plan({"integration": {"strategy": "run-branch-pr", "final_target": "staging"}}, "main"),
