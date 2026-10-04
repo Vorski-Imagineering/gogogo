@@ -308,19 +308,30 @@ has no card and no pull request.
 1. Run `<tracker.tool> show <N>` (for `shared`,
    `python3 "${CLAUDE_PLUGIN_ROOT}/scripts/tracker.py" show <N>`) when the
    profile has `tracker.tool`, and
-   `gh pr list --repo <tracker.code_repo> --state open --json number,title,body,headRefName,url`.
+   `gh pr list --repo <tracker.code_repo> --state open --limit 1000 --json number,title,body,headRefName,url`.
 2. It is being built when the card's column is `tracker.columns.in_progress`,
-   or an open pull request has `#<N>` as a whole token in its title or body, or
-   `<N>` between non-digits in its branch name. A plain search for the number
-   also finds `1<N>` and line numbers; match the token. A non-zero exit from
-   either command counts as being built, with the reason "could not check". A
-   card in `tracker.columns.needs_human` does not count: it was handed back for
-   a person, usually for exactly this re-spec.
+   or an open pull request **claims** `<N>`: any one of
+   - its branch name carries `<N>` by `/gogogo:status`'s rule: the first match
+     of `/(\d+)(?:-|$)` in the name, else of `^(\d+)-`, is `<N>`;
+   - its title has `#<N>` as a whole token;
+   - a body line, after optional spaces and a `-` or `*` bullet, starts with
+     `refs`, `close`, `closes`, `closed`, `fix`, `fixes`, `fixed`, `resolve`,
+     `resolves` or `resolved` (any case, optional `:`), then references split by `,` or `and`, one being `#<N>` or
+     `<tracker.issues_repo>#<N>` as a whole token.
+
+   Match the token, not a plain number search (`1<N>`, line numbers). A
+   non-zero exit from either command counts as being built, with the reason
+   "could not check". A card in `tracker.columns.needs_human` does not count:
+   it was handed back for a person, usually for exactly this re-spec.
+   An open pull request with `#<N>` as a token in its title or body that claims
+   it by none of these is a *mention*: say one line per mention, "PR <link>
+   mentions #<N> but does not claim it", whether or not it is being built, and
+   ask nothing about it.
 3. Not being built: go on to *Before you write*.
 4. Being built: say so in one sentence, naming the column or the pull request
    link, and that the build was made against the current spec. Ask: **change
    the spec anyway** or **leave it**. On *change it anyway*, go on; after
-   Posting step 6, comment on each pull request found: "The spec in #<N>
+   Posting step 6, comment on each pull request that claims it: "The spec in #<N>
    changed after this was built: <one line per changed Design or Test case
    item>". On *leave it*, a decline, or no person to ask: post nothing, add no
    label, and end this issue (in a run of several, no person to ask stops the

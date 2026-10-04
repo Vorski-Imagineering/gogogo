@@ -294,6 +294,32 @@ class BeforeYouWrite(unittest.TestCase):
         for name in ("tracker.columns.in_progress", "tracker.columns.needs_human", "gh pr list"):
             self.assertIn(name, sub)
 
+    def test_building_check_uses_status_branch_rule(self):
+        """Guards: the branch rule drifting from /gogogo:status's (gogogo#143)."""
+        import stranded_work as sw
+        sub = "\n".join(section(skill_text(), BUILDING))
+        self.assertIn(sw.ISSUE_AFTER_SLASH, sub)
+        self.assertIn(sw.ISSUE_AT_START, sub)
+
+    def test_building_check_lists_past_thirty_prs(self):
+        """Guards: the 30-PR default cap of `gh pr list` (gogogo#143)."""
+        sub = "\n".join(section(skill_text(), BUILDING))
+        found = re.search(r"gh pr list[^\n]*--limit (\d+)", sub)
+        self.assertTrue(found, "no --limit on the pull request list")
+        self.assertGreaterEqual(int(found.group(1)), 1000)
+
+    def test_building_check_names_claim_keywords(self):
+        """Guards: a bare mention counting as a claim (gogogo#143)."""
+        sub = "\n".join(section(skill_text(), BUILDING)).lower()
+        for word in ("refs", "fixes", "closes", "resolves"):
+            self.assertIn(word, sub)
+
+    def test_posting_dependent_check_shares_the_claim_rule(self):
+        """Guards: the dependent's in-flight check matching a mention (gogogo#143)."""
+        text = POSTING.read_text(encoding="utf-8")
+        self.assertNotIn('--search "<D>"', text)
+        self.assertIn("Is someone building it already?", text)
+
     def test_before_you_write_steps_zero_to_seven(self):
         steps = self.before_steps()
         self.assertEqual([int(n) for n, _ in steps], list(range(0, 8)))
