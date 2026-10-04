@@ -292,7 +292,8 @@ squashed into the base (`pr-squash`), pull requests into a dated run branch
 that reaches the main line as one final PR (`run-branch-pr`), or the repo's
 own merge script (`merge-script`). A pull request merges only after its
 tests, review rounds, gates and CI checks have all passed (a PR on which no
-check ran merges only when the merge is a release or the repo requires it), and
+check ran merges only when the merge is not a release, not under `run-branch-pr`, and the repo
+does not require it), and
 a base that moved is merged in and re-tested first. The squash commit carries a
 `Ships-issue` trailer linking it to the issue, so a later deploy tag can tell
 which issues it shipped. Every merge is read back from the base branch before
