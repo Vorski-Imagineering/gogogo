@@ -74,11 +74,14 @@ and the merge is `gh pr merge ... --body-file` with the body built as
   the target's history, and the stage sync then finds no link. The close-run
   report (§9) repeats it.
   When the run does not merge the final PR, its description ends with a
-  section *After merging*: each card it carries by number and title, "move
-  them from <run column> to <next column>" (§7), for each the command
+  section *After merging* listing each card it carries by number and title.
+  Only when the next stage has no `tag`, the link (`Ships-issue`) applies and
+  the PR is to be merged with a merge commit, it also says "move them from
+  <run column> to <next column>" (§7), gives for each the command
   `<tracker.tool> move <n> --from "<run column>" --to "<next column>"`, and
-  "the next `/gogogo:auto-dev` run moves any left". The close-run report (§9)
-  repeats this list.
+  promises "the next `/gogogo:auto-dev` run moves any left". Otherwise it says
+  stage sync moves them (a `tag`) or a person moves them by hand, with no
+  promise. The close-run report (§9) repeats this list.
 - **`pr-squash`**: open the PR; when a merge is a release, wait for its checks
   (above); then squash-merge it, with the link's body when it applies.
 
@@ -133,7 +136,8 @@ reported and the run goes on.
 3. `git fetch origin`, then
    `gh pr list --repo <tracker.code_repo> --base <integration.final_target> --state merged --limit 30 --json number,headRefName,mergeCommit`.
    Keep the PRs whose `headRefName` starts with `integration.base`; other PRs
-   into that base are not final PRs.
+   into that base are not final PRs. `mergeCommit` is an object: use its
+   `oid` (`mergeCommit.oid`) wherever `<mergeCommit>` appears below.
 4. For each kept PR, the issues it carried.
    `git rev-list --parents -n 1 <mergeCommit>` must show two parents; else
    report `#<pr>: squash-merged, cards not moved` and skip it. Then
@@ -141,7 +145,12 @@ reported and the run goes on.
    keeping the links to `tracker.issues_repo`. None: report
    `#<pr>: no Ships-issue links, cards not moved`. Never move "everything in
    the column": it can hold cards of a run whose PR is still open.
-5. The cards to move are those in the run column whose issue a PR carried.
+5. The cards to move are those in the run column whose issue a PR carried,
+   except a card also carried by an open run PR (a later run re-landed it):
+   find open run PRs with
+   `gh pr list --repo <tracker.code_repo> --base <integration.final_target> --state open --json number,headRefName`
+   (same prefix test), read their Ships-issue links as in step 4, and leave
+   and report such a card.
    For each such PR run
    `python3 "${CLAUDE_PLUGIN_ROOT}/scripts/verify_merged.py" <pr> <integration.final_target> --repo <tracker.code_repo> --open <tracker.issues_repo>#<n> ...`
    for its cards. Exit 0: `<tracker.tool> move <n> --from "<run column>" --to "<next column>"`

@@ -229,7 +229,7 @@ class LateRunPr(unittest.TestCase):
         nums = numbered_items(preflight)
         self.assertEqual(nums, list(range(1, len(nums) + 1)))
         last = " ".join(re.split(r"^\d+\. ", preflight, flags=re.M)[-1].split())
-        for word in ("run-branch-pr", LATE):
+        for word in ("run-branch-pr", LATE, "--triage-only"):
             self.assertIn(word, last)
 
     def test_late_merge_subsection_names_its_checks(self):
@@ -237,12 +237,16 @@ class LateRunPr(unittest.TestCase):
         contents = text.split("## Contents")[1].split("\n\n")[1]
         self.assertIn(LATE, contents)
         sub = text.split(f"### {LATE}")[1].split("\n### ")[0]
-        for word in ("Ships-issue", "--parents", "verify_merged.py", "--open", "move", "--from"):
+        for word in ("Ships-issue", "--parents", "verify_merged.py", "--open", "move", "--from",
+                     "--state open", "mergeCommit.oid"):
             self.assertIn(word, sub)
 
     def test_final_pr_description_lists_after_merging(self):
         bullet = moved(MERGE).split("- **`run-branch-pr`**")[1].split("\n- **")[0]
         self.assertIn("After merging", bullet)
+        after = bullet.split("After merging")[1]
+        for word in ("no `tag`", "stage sync", "merge commit", "Ships-issue"):
+            self.assertIn(word, after)
         close = section(SKILL.read_text(encoding="utf-8"), "9. Close the run")
         self.assertIn("After merging", close)
 
