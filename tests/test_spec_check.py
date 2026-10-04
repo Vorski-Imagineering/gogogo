@@ -181,6 +181,30 @@ class Items(unittest.TestCase):
         for name in ("README.md", "review_stats.py", "preflight.extra"):
             self.assertIn(f"F:{name}", f_ids)
 
+    DOTFILE_EDIT = "**Edit:** `.gitignore`, `Makefile` and `preflight.extra`."
+
+    def dotfile_body(self):
+        return BODY.replace(BODY[BODY.index("**Edit:**"):BODY.index("\n", BODY.index("**Edit:**"))],
+                            self.DOTFILE_EDIT)
+
+    def test_a_dotfile_and_extensionless_edit_name_are_items_when_the_tree_has_them(self):
+        listed = items(self.dotfile_body(), tree=lambda: [".gitignore", "Makefile"])
+        f_ids = [i["id"] for i in listed["items"] if i["id"].startswith("F:")]
+        self.assertIn("F:.gitignore", f_ids)
+        self.assertIn("F:Makefile", f_ids)
+        self.assertNotIn("F:preflight.extra", f_ids)
+
+    def test_a_changed_dotfile_the_spec_lists_is_met_not_outside(self):
+        listed = items(self.dotfile_body(), changed=[".gitignore"], tree=lambda: [".gitignore", "Makefile"])
+        status = {i["id"]: i.get("status") for i in listed["items"]}
+        self.assertEqual(status["F:.gitignore"], "met")
+        self.assertEqual(listed["outside"], [])
+
+    def test_a_create_dotfile_counts_without_the_tree(self):
+        body = BODY.replace("**Create:** `tests/test_list.py`.", "**Create:** `.editorconfig`.")
+        listed = items(body, tree=lambda: [])
+        self.assertIn("F:.editorconfig", [i["id"] for i in listed["items"]])
+
     def test_the_tree_is_read_only_for_a_slashless_edit_name(self):
         listed = items(BODY, tree=lambda: (_ for _ in ()).throw(AssertionError("tree read")))
         self.assertEqual([i["id"] for i in listed["items"]], IDS)
