@@ -298,8 +298,10 @@ then merge by the repo's chosen strategy. That is a pull request per issue
 squashed into the base (`pr-squash`), pull requests into a dated run branch
 that reaches the main line as one final PR (`run-branch-pr`), or the repo's
 own merge script (`merge-script`). A pull request merges only after its
-tests, review rounds, gates and, when the merge is a release or the repo
-requires it, its CI checks have all passed. The squash commit carries a
+tests, review rounds, gates and CI checks have all passed (a PR on which no
+check ran merges only when the merge is not a release, not under `run-branch-pr`, and the repo
+does not require it), and
+a base that moved is merged in and re-tested first. The squash commit carries a
 `Ships-issue` trailer linking it to the issue, so a later deploy tag can tell
 which issues it shipped. Every merge is read back from the base branch before
 the card moves. An issue that stops (a missing decision, a failed review, a
@@ -334,6 +336,7 @@ Scripts the skills call, all in `plugins/gogogo/scripts/`:
 - `test_guard.py`: lists the test hunks a change touched and checks a reader's same, stronger or weaker verdict on each against the spec.
 - `spec_check.py`: lists a spec's items and checks that a reader answered every one against the change.
 - `tracker.py`: lists and moves cards on a GitHub Project board, by column name, with read-back, and refuses a move to the needs-a-person column unless the issue's newest comment says why.
+- `merge_ready.py`: reads a PR's state and prints one outcome (`ready`, `behind`, `draft`, `checks-failed` and so on), so dev and auto-dev decide a merge the same way. It only reads.
 - `verify_merged.py`: confirms a PR's merge is really on the base branch.
 - `stage_sync.py`: writes the `Ships-issue` link at merge, moves cards to a stage when a tag ships their commits (run by a repo's CI), and with `reverts` hands back a card whose shipped fix was reverted.
 - `release.py`: numbers a production release, cuts its annotated `deploy-<build>` tag after the deploy, and prints the notes listing the issues it shipped.
@@ -432,7 +435,10 @@ claude plugin update gogogo@vorski-skills --scope project
 ```
 
 **Changing the process.** Anything specific to one repo goes in that repo's
-`.agents/dev-process.md`. A change to how every repo works is a PR here.
+`.agents/dev-process.md`. A change to how every repo works is a PR here. A fault in gogogo
+itself, seen in a run, shows as a `Suspected gogogo fault` line on the issue
+and in auto-dev's close-run report. A person files it
+on gogogo from that line, with the repo's names removed by hand.
 
 ## Using gogogo, or working on it
 

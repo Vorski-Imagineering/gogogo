@@ -66,7 +66,7 @@ Put each one in exactly one place:
 |---|---|---|
 | How the user wants *me* to work, or a project fact that isn't in the repo | **Memory**: the memory directory named in the system prompt (its path differs per machine), one file per fact, plus a line in `MEMORY.md` | Check the index for an existing file first and update it rather than duplicating. Wrong or outdated memories get fixed or deleted now. Follow the memory format in the system prompt. |
 | A rule everyone working in the repo should follow, a process detail, a doc that was wrong | **The repo**: `CLAUDE.md`, `.agents/dev-process.md`, its docs, or wherever the profile's `## Wrap-up checks` says | **Propose, don't write.** These are shared; show the exact text and where it goes, and let the user say yes. If it is bigger than a few lines, it becomes an issue via `/gogogo:spec`. |
-| A gogogo skill that misled you, or a rule that should hold in every repo | **An issue in `Vorski-Imagineering/gogogo`** | Propose it the same way. A skill change there reaches every repo. |
+| A gogogo skill that misled you, a `Suspected gogogo fault` line written this session, or a rule that should hold in every repo | **An issue in `Vorski-Imagineering/gogogo`** | Propose it: show the line with the repo's names removed; a person files it on `Vorski-Imagineering/gogogo`. A skill change there reaches every repo. |
 | A problem with Claude Code itself | **`SendFeedback`** (drafts only; the user approves sending) | Only for a real product or model-behaviour issue seen this session. |
 | Only mattered to this session | **Nowhere** | Say so. Not everything is a learning. |
 
@@ -76,6 +76,11 @@ already in `CLAUDE.md`.
 
 Save memories without asking; that's what memory is for. Name each one in the
 report so the user can object.
+
+**Memories saved before this session.** Also review the memories earlier
+sessions saved: delete the ones that have expired, delete or shorten the ones a
+skill or the profile already covers, and propose promoting new or changed ones. **REQUIRED REFERENCE:** `references/memory-review.md`. Its results
+go in the report under **Memories**.
 
 ## 3. Verdict: resist by default
 
@@ -94,7 +99,8 @@ has to be earned by every check in §1 coming back clean.
 - anything the profile's `## Wrap-up checks` says blocks.
 
 **Doesn't block, but is named every time:** pre-existing uncommitted changes
-and stranded branches from before the session, with their names. Name them in
+and stranded branches from before the session, with their names, and the
+memories reviewed: what was deleted, shortened or proposed. Name them in
 one line, not as a reason to refuse. They stay the user's call, and the next
 wrap-up will name them again until they're resolved, so they can't quietly go
 stale.

@@ -49,14 +49,13 @@ A skill's behaviour is checked by its eval cases in `plugins/gogogo/evals/`, whi
 
 ## Commits
 
-Small commits, pushed to `main` for docs and evidence. Anything under a Hard
-Stop goes through a PR.
+Small commits. Docs and evidence go through a PR like everything else: `main`
+requires the `tests` check and nobody can bypass it. Anything under a Hard Stop
+needs approval first.
 
-The owner may approve a small change under a Hard Stop in the session and ask
-for it on `main` directly. Then say first that it is a Hard Stop and offer the
-issue route. On their go-ahead: check that no unattended run is loading this
-tree, run the suite and commit only when it passes, push to `main`, and say in
-the commit message that it was approved in session.
+A small change under a Hard Stop that the owner approves in the session goes
+through a PR like any other and is merged once `tests` passes; its commit
+message says it was approved in session.
 
 ## Docs
 

@@ -112,7 +112,7 @@ OPEN_FILTERS = ("is:open", "-is:closed")
 
 #: The reasons a `gogogo:stop` marker may give; equal to review_stats.STOPS,
 #: kept here so this tool does not import it.
-STOP_REASONS = ("hard-stop", "decision", "spec", "review", "tests", "mutation", "verify", "gate", "ci",
+STOP_REASONS = ("hard-stop", "decision", "spec", "review", "tests", "mutation", "verify", "gate", "ci", "merge",
                 "reverted")
 
 #: The markers that say why an issue was handed to a person.
