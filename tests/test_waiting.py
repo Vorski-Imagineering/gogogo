@@ -22,7 +22,10 @@ from unittest import mock
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "plugins" / "gogogo" / "scripts"))
 
-import waiting  # noqa: E402
+try:
+    import waiting  # noqa: E402
+except SystemExit as exc:  # importing must run nothing; a stray main() would end the whole test run
+    raise ImportError(f"importing waiting.py ran its main and exited {exc.code}") from None
 
 tracker = waiting.tracker
 
@@ -219,6 +222,12 @@ class Waiting(unittest.TestCase):
                               capture_output=True, text=True, cwd=self.dir)
         self.assertEqual((proc.returncode, proc.stdout), (2, ""))
         self.assertIn("waiting.py:", proc.stderr)
+
+    def test_importing_it_runs_nothing(self):
+        proc = subprocess.run([sys.executable, "-c", "import waiting"], capture_output=True, text=True,
+                              cwd=self.dir, env={**__import__("os").environ,
+                                                 "PYTHONPATH": str(ROOT / "plugins" / "gogogo" / "scripts")})
+        self.assertEqual((proc.returncode, proc.stdout, proc.stderr), (0, "", ""))
 
     def test_it_imports_its_own_folder_ahead_of_anything_else_on_the_path(self):
         decoy = self.dir / "decoy"
