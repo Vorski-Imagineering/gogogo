@@ -62,6 +62,11 @@ class Suite(unittest.TestCase):
                 self.assertEqual(TYPE.search(fired.read_text(encoding="utf-8")).group(1), "tool_used")
                 self.assertGreaterEqual(len(list((c / "graders").glob("*.md"))), 2)
 
+    def test_the_merge_refused_case_does_not_accept_what_an_answer_without_the_plugin_says(self):
+        text = (EVALS / "dev-merge-refused" / "graders" / "names-the-way-out.md").read_text(encoding="utf-8")
+        self.assertNotRegex(text, r"(?i)needs")
+        self.assertIn("Human!Help!", text)
+
     def test_no_grader_calls_a_judge(self):
         judged = [str(g.relative_to(EVALS)) for g in EVALS.glob("*/graders/*.md")
                   if TYPE.search(g.read_text(encoding="utf-8")).group(1) in ("llm", "baseline")]

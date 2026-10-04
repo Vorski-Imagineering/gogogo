@@ -1,5 +1,5 @@
 ---
 type: regex
-pattern: 'Human!Help!|needs[_ -]human|merge it yourself|merge the PR yourself'
+pattern: 'Human!Help!|merge (?:it|the PR) yourself|auto-dev'
 flags: i
 ---
