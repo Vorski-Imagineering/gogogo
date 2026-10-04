@@ -1622,7 +1622,7 @@ class BranchRulesExact(unittest.TestCase):
             {"type": "non_fast_forward", "ruleset_id": 7, "bypass_actors": []},
             {"type": "required_status_checks", "ruleset_id": 7, "bypass_actors": []}]
     NOT_PROTECTED = (1, "", "gh: Branch not protected (HTTP 404)")
-    PR_LIST = "pr list --repo o/code --base main --state merged --limit 1 --json number"
+    PR_LIST = "pr list --repo o/code --base main --state merged --limit 20 --json number,mergedAt"
     PR_CHECKS = "pr checks 12 --repo o/code --json name,bucket"
     RULESETS = "api repos/o/code/rulesets --paginate"
 
@@ -1817,6 +1817,17 @@ class BranchRulesExact(unittest.TestCase):
                 mock.patch("sys.stderr"):
             self.assertEqual(sc.print_ruleset(settings, "main", "main"), 0)
         self.assertEqual(json.loads(out.getvalue()), sc.ruleset_body("main", [], True))
+
+    def test_the_latest_merged_pr_is_the_latest_by_merge_date(self):
+        # gh pr list sorts by creation: a PR opened early and merged last is not first.
+        calls = []
+        prs = [{"number": 40, "mergedAt": "2026-02-01T00:00:00Z"}, {"number": 30, "mergedAt": "2026-03-01T00:00:00Z"},
+               {"number": 12, "mergedAt": "2026-01-01T00:00:00Z"}]
+        replies = {self.PR_LIST: (0, json.dumps(prs), ""),
+                   "pr checks 30 --repo o/code --json name,bucket": (0, json.dumps([{"name": "e2e", "bucket": "pass"}]), "")}
+        with mock.patch.object(sc, "run", gh_stub(calls, replies)):
+            self.assertEqual(sc.check_names("o/code", "main"), ["e2e"])
+        self.assertEqual(calls[0], ("gh", *self.PR_LIST.split()))
 
     def test_the_branch_plan_is_design_4s(self):
         plan = sc.branch_plan

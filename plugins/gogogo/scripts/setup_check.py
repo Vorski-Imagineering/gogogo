@@ -372,13 +372,15 @@ def _gh_json(*args, json_on_failure=False):
 
 def check_names(repo, branch):
     """The checks that passed on the latest PR merged into `branch`: [] when none, or an error string."""
-    prs, error = _gh_json("pr", "list", "--repo", repo, "--base", branch, "--state", "merged", "--limit", "1",
-                          "--json", "number")
+    # gh pr list sorts by creation, not merge date: read a page and take the latest merged.
+    prs, error = _gh_json("pr", "list", "--repo", repo, "--base", branch, "--state", "merged", "--limit", "20",
+                          "--json", "number,mergedAt")
     if error:
         return error
     if not prs:
         return []
-    checks, error = _gh_json("pr", "checks", str(prs[0]["number"]), "--repo", repo, "--json", "name,bucket",
+    latest = max(prs, key=lambda pr: pr.get("mergedAt") or "")
+    checks, error = _gh_json("pr", "checks", str(latest["number"]), "--repo", repo, "--json", "name,bucket",
                              json_on_failure=True)
     if error and "no checks reported" in error:
         # gh exits 1 with this line for a PR that ran no checks: none passed, not a failed read.
