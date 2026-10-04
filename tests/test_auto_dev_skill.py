@@ -117,8 +117,24 @@ class NeverWaits(unittest.TestCase):
         step = section(self.text, "4. Change, test, review, verify")
         self.assertIn("Waiting on the review (started <HH:MM>); the run resumes when it reports.", step)
         claude = self.text.split("\n## Claude-specific")[1]
-        self.assertIn("30 minutes", claude)
+        self.assertIn("30 minutes", " ".join(claude.split()))
         self.assertIn("reader=self", claude)
+
+    def test_reader_wait_uses_a_done_marker_not_a_line_count(self):
+        claude = self.text.split("\n## Claude-specific")[1]
+        wait = claude.split("**Waiting for the spec check's reader**")[1].split("\n- ")[0]
+        self.assertIn(".done", wait)
+        self.assertIn("rm -f", wait)
+        self.assertNotIn("grep -c", wait)
+        dev = (SKILL.parents[1] / "dev" / "SKILL.md").read_text(encoding="utf-8")
+        self.assertIn(".done", dev.split("\n## Claude-specific")[1])
+
+    def test_review_turn_end_needs_an_active_goal_and_a_background_review(self):
+        step = section(self.text, "4. Change, test, review, verify")
+        rule = step.split("**The review is the one place")[1].split("\n- ")[0]
+        self.assertIn("/goal", rule)
+        self.assertIn("background", rule)
+        self.assertIn("foreground", rule)
 
 
 class Independence(unittest.TestCase):

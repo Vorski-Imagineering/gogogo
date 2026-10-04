@@ -391,12 +391,13 @@ and integration follow this skill and the repo's merge path. See the profile's
   tree, or the branch against its base) and the corrections in later rounds
   (their commit range, or the files named); the brief is §5 rule 1's. In an
   auto-dev run the turn may end at the review only as `/gogogo:auto-dev` §4
-  says.
+  says (a goal active and the review started in the background).
 - The spec check's reader (§5) is a subagent started with the `Agent` tool,
   which does not see this conversation. Its prompt is §5's brief for the
   reader and the item list, and it writes the answers file. In an auto-dev
-  run it is waited on as `/gogogo:auto-dev`'s *Claude-specific* says, never by
-  ending the turn.
+  run the prompt also tells it to create `<answers file>.done` as its last
+  action, and it is waited on as `/gogogo:auto-dev`'s *Claude-specific* says,
+  never by ending the turn.
 - A mutation run (§6) can outlast the shell tool's foreground limit: start it
   with `run_in_background` and poll it as `/gogogo:auto-dev`'s
   *Claude-specific* says; in an auto-dev run never end the turn to wait for it.
