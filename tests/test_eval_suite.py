@@ -11,6 +11,7 @@ Whether a skill passes its cases is the `evals` lane, not a test here.
 import re
 import subprocess
 import sys
+import tempfile
 import unittest
 from pathlib import Path
 
@@ -41,6 +42,17 @@ TAGS = re.compile(r"^tags:\s*\[([^\]]*)\]\s*$", re.M)
 TYPE = re.compile(r"^type:\s*(\S+)\s*$", re.M)
 
 
+PATTERN = re.compile(r"^pattern:\s*(.*)$", re.M)
+# An inline flag group, `(?i)` or `(?i:…)`: JavaScript's RegExp refuses it. `(?:…)` and `(?<!…)` are fine.
+INLINE_FLAGS = re.compile(r"\(\?[a-zA-Z]+[:)]")
+
+
+def inline_flag_graders(root):
+    """The grader files under `root` whose pattern holds an inline flag group."""
+    return [str(g.relative_to(root)) for g in sorted(root.glob("*/graders/*.md"))
+            if INLINE_FLAGS.search("\n".join(PATTERN.findall(g.read_text(encoding="utf-8"))))]
+
+
 def cases():
     return sorted(p.parent for p in EVALS.glob("*/prompt.md"))
 
@@ -69,6 +81,20 @@ class Suite(unittest.TestCase):
         text = (EVALS / "dev-merge-refused" / "graders" / "names-the-way-out.md").read_text(encoding="utf-8")
         self.assertNotRegex(text, r"(?i)needs")
         self.assertIn("Human!Help!", text)
+
+    def test_no_grader_pattern_has_an_inline_flag_group(self):
+        """A flag goes in the grader's `flags:` line, as `flags: i` (the guide: docs/writing-eval-cases.md)."""
+        self.assertEqual(inline_flag_graders(EVALS), [])
+
+    def test_the_inline_flag_check_rejects_flag_groups_and_allows_the_others(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            for name, pattern in (("flag", "'(?i)abc'"), ("scoped", "'(?i:abc)'"),
+                                  ("plain", "'(?:abc)'"), ("lookbehind", "'(?<!not )abc'")):
+                grader = root / name / "graders"
+                grader.mkdir(parents=True)
+                (grader / "g.md").write_text(f"---\ntype: regex\npattern: {pattern}\n---\n", encoding="utf-8")
+            self.assertEqual(inline_flag_graders(root), ["flag/graders/g.md", "scoped/graders/g.md"])
 
     def test_no_grader_calls_a_judge(self):
         judged = [str(g.relative_to(EVALS)) for g in EVALS.glob("*/graders/*.md")

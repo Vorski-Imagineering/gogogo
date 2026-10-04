@@ -18,7 +18,10 @@ skill with no case: prints `evals: no case for <s>; ...` and exits 1, running
 nothing. Otherwise it runs `claude plugin eval` on those skills' cases, three
 runs each, with the plugin only (`--ablation none`), and a case passes at 2 of
 3 runs. It prints `evals: cases=<n> passed=<n> cost=$<x>` and exits 0 only when
-every case passed. A result it cannot read, with no case in it, or cut short
+every case passed. After that line it prints one line per case in the result,
+`evals: <name> score=<score>` (and ` without=<score>` under --baseline), and
+`evals: <name> did not run` for a case of those skills the result leaves out,
+which fails the run (docs/writing-eval-cases.md). A result it cannot read, with no case in it, or cut short
 (`partial`) is a failure, never a pass.
 
 --baseline also runs each case without the plugin (`--ablation with-without`)
@@ -52,6 +55,10 @@ def _git(args: list[str], cwd: Path) -> str:
 def _run_eval(args: list[str], cwd: Path) -> int:
     """Run `claude plugin eval` with its own output on this process's streams; return its exit code."""
     return subprocess.run(args, cwd=cwd).returncode
+
+
+def _score(value) -> str:
+    return "n/a" if value is None else f"{float(value):.2f}"
 
 
 def _tags(text: str) -> list[str]:
@@ -141,6 +148,19 @@ def main(argv=None, root: Path = ROOT) -> int:
         return 1
     print(f"evals: cases={agg['casesTotal']} passed={agg.get('casesPassed', 0)} "
           f"cost=${float(doc.get('costUsd') or 0):.2f}")
+    listed = doc.get("cases") or []
+    for c in listed:
+        aggregates = c.get("aggregates") or {}
+        line = f"evals: {c.get('name')} score={_score(aggregates.get('score'))}"
+        if aggregates.get("scoreWithout") is not None:
+            line += f" without={_score(aggregates['scoreWithout'])}"
+        print(line)
+    # The cases a run is meant to run are the tagged cases of its skills; a result that lists
+    # cases and leaves one out (a case file that failed to load, say) is a failed run.
+    ran = {c.get("name") for c in listed}
+    missing = sorted(n for n, tags in cases.items() if set(tags) & skills and n not in ran) if listed else []
+    for name in missing:
+        print(f"evals: {name} did not run")
     flat = []
     if a.baseline:
         for c in doc.get("cases") or []:
@@ -148,7 +168,7 @@ def main(argv=None, root: Path = ROOT) -> int:
             if delta is None or delta <= 0:
                 flat.append(c.get("name"))
                 print(f"evals: {c.get('name')} does as well without the plugin")
-    return 0 if code == 0 and not flat else 1
+    return 0 if code == 0 and not flat and not missing else 1
 
 
 if __name__ == "__main__":

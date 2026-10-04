@@ -45,7 +45,7 @@ its templates, the project-name grep, that its profile check runs. Whether it
 behaves is a trigger run, not a phrase match. A test
 that looks for a sentence breaks on every rewording and guards nothing.
 
-A skill's behaviour is checked by its eval cases in `plugins/gogogo/evals/`, which `tools/eval_changed.py` runs for each skill a change touches. A change to what a skill does adds or changes a case for it, seen doing worse without the plugin (`--baseline`).
+A skill's behaviour is checked by its eval cases in `plugins/gogogo/evals/`, which `tools/eval_changed.py` runs for each skill a change touches. A change to what a skill does adds or changes a case for it, seen doing worse without the plugin (`--baseline`). How to write a case that does worse without the plugin: [docs/writing-eval-cases.md](docs/writing-eval-cases.md).
 
 ## Commits
 
