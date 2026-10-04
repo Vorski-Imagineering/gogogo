@@ -243,10 +243,10 @@ commands, the environments, the Hard Stop rules) lives in one file per repo,
    confirms the fix, or, where the repo runs `/gogogo:auto-test`, a PASS there
    moves the card to the profile's `auto_test.pass_column` (Done, in some
    repos) and closes the issue when `auto_test.pass_closes` is true.
-5. **Waiting for you.** Each Claude Code session in an adopting repo opens with
-   a line such as `13 card(s) wait for you in Released, oldest 2 days: run /gogogo:status`
-   when cards wait in a stage column, and nothing when none do (the plugin's
-   SessionStart hook runs `waiting.py`). A fix later reverted on the base goes
+5. **Waiting for you.** The board line each Claude Code session in an adopting
+   repo opens with (below) gives each stage column's oldest card's age after
+   its count, such as `Released 13 (oldest 2 days)`, and no age when the
+   column is empty. A fix later reverted on the base goes
    back to `Human!Help!` with a comment naming the revert (`stage_sync.py reverts`,
    run at the start of every auto-dev run), and an issue closed as not planned
    is archived off the board rather than filed under Done.
@@ -317,8 +317,8 @@ rebased.
 | `/gogogo:auto-test` | Tests each shipped issue on the environment where a person confirms fixes, and records PASS, FAIL or NEEDS HUMAN on the issue. `--triage-only` lists what it would test or skip and changes nothing. |
 
 A session started or resumed in a repo with a profile opens with a one-line
-status from the plugin's own hook (cards in each profile column, open pull
-requests), shown only to the person and never added to Claude's context.
+status from the plugin's own hook (cards in each profile column, with the
+oldest card's age for each stage column, and open pull requests), shown only to the person and never added to Claude's context.
 
 Scripts the skills call, all in `plugins/gogogo/scripts/`:
 

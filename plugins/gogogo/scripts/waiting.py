@@ -15,10 +15,12 @@ entered it, so a card moved out and back starts again): `<d> days`,
 `<h> hours` or `under an hour`, with `1 day` and `1 hour` singular. Closed
 issues, pull requests and drafts are not counted.
 
-`--hook` is the plugin's SessionStart hook (`hooks/hooks.json`). It runs at
-every session start in every repo that installs the plugin, before the first
-answer, so it does one board read with no retries and no second index, and it
-never fails visibly: it prints `{"systemMessage": "<the lines joined by "; ">"}`
+This is a command, for `/gogogo:status` and by hand; it is not a hook. The
+line shown when a session opens is `session_status.py`'s, which gives each
+stage column's oldest age itself from its one board read, with `age` from here.
+
+`--hook` is for a caller that must never fail visibly: one board read with no
+retries and no second index, and it prints `{"systemMessage": "<the lines joined by "; ">"}`
 when something waits, and otherwise nothing at all, also on any error, with no
 profile, or when `tracker.tool` is not `shared`. It always exits 0.
 
@@ -114,7 +116,7 @@ def main(argv: list[str] | None = None, now: datetime | None = None) -> int:
     if not hook:
         parser = argparse.ArgumentParser(description=__doc__.split("\n")[0])
         parser.add_argument("--profile", help="profile file (default: the nearest .agents/dev-process.md)")
-        parser.add_argument("--hook", action="store_true", help="the SessionStart hook: JSON or nothing, exit 0")
+        parser.add_argument("--hook", action="store_true", help="JSON or nothing, always exit 0")
         args = parser.parse_args(argv)
         try:
             lines = read(args.profile, now)

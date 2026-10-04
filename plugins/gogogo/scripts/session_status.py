@@ -9,7 +9,12 @@ cards in each column the profile names (`tracker.queue`,
 `tracker.columns.in_progress`, `tracker.columns.needs_human`, each
 `stages[].column`), then the open pull requests:
 
-    gogogo · <folder>: Dev Ready 3 · In progress 1 · … · 2 PRs open — /gogogo:status for detail
+    gogogo · <folder>: Dev Ready 3 · In progress 1 · … · Released 2 (oldest 5 days) · 2 PRs open — /gogogo:status for detail
+
+A stage column's count is followed by how long its oldest card has waited
+there (the `status_since` of `tracker.py list --json`, aged as `waiting.py`
+does); no age when the column is empty or no card has that time. The board is
+read once (`fields`, then one `list --json`).
 
 With no profile at or above the folder it prints nothing. A broken profile, or
 a read that fails or outlasts the 15-second budget, gives one
@@ -27,12 +32,14 @@ import subprocess
 import sys
 import time
 import traceback
+from datetime import datetime, timezone
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
 try:
     import profile_check  # noqa: E402
+    from waiting import age  # noqa: E402  (the same ages as waiting.py and /gogogo:status)
 except ImportError:  # a Python before 3.11 has no tomllib: say nothing, never a hook error
     profile_check = None
 
@@ -90,7 +97,7 @@ def board_columns(fields_output):
     return names
 
 
-def status_line(profile, settings, run, clock):
+def status_line(profile, settings, run, clock, now=None):
     deadline = clock() + BUDGET
     tracker = settings.get("tracker") or {}
     parts = []
@@ -100,13 +107,22 @@ def status_line(profile, settings, run, clock):
         listing = _read("board", [*tool, "list", "--json"], run, clock, deadline)
         try:
             # Issues only, and any case: as /gogogo:status counts and as tracker.py matches columns.
-            statuses = [(card.get("status") or "").lower() for card in json.loads(listing)
-                        if card.get("kind") != "PullRequest"]
+            issues = [((card.get("status") or "").lower(), card.get("status_since"))
+                      for card in json.loads(listing) if card.get("kind") != "PullRequest"]
         except (json.JSONDecodeError, AttributeError, TypeError):
             raise ReadFailed("board unreadable: tracker.py list printed no card list") from None
+        stages = {s.get("column").lower() for s in settings.get("stages") or []
+                  if isinstance(s, dict) and isinstance(s.get("column"), str)}
         for name in profile_columns(settings):
-            known = name.lower() in {c.lower() for c in on_board}
-            parts.append(f"{name} {statuses.count(name.lower())}" if known else f"{name} ?")
+            if name.lower() not in {c.lower() for c in on_board}:
+                parts.append(f"{name} ?")
+                continue
+            times = [since for status, since in issues if status == name.lower()]
+            part = f"{name} {len(times)}"
+            times = sorted(t for t in times if isinstance(t, str) and t)
+            if name.lower() in stages and times:
+                part += f" (oldest {age(times[0], now)})"
+            parts.append(part)
     repo = tracker.get("code_repo")
     if not repo:
         raise ReadFailed("pull requests unreadable: tracker.code_repo is not set")
@@ -118,19 +134,19 @@ def status_line(profile, settings, run, clock):
     return f"gogogo · {profile.parent.parent.name}: " + " · ".join(parts) + " — /gogogo:status for detail"
 
 
-def message(profile, run, clock):
+def message(profile, run, clock, now=None):
     """The line to show for the profile at `profile`."""
     try:
         settings, _ = profile_check.split_profile(profile.read_text(encoding="utf-8"))
     except (profile_check.ProfileError, OSError, UnicodeDecodeError) as exc:
         return UNAVAILABLE + (str(exc).strip().splitlines() or [type(exc).__name__])[0]
     try:
-        return status_line(profile, settings, run, clock)
+        return status_line(profile, settings, run, clock, now)
     except ReadFailed as exc:
         return UNAVAILABLE + str(exc)
 
 
-def main(start=None, run=None, clock=None):
+def main(start=None, run=None, clock=None, now=None):
     """Print the systemMessage (or nothing) and return 0, whatever happens."""
     profile = line = None
     if profile_check is None:
@@ -139,7 +155,8 @@ def main(start=None, run=None, clock=None):
         found = profile_check.find_profile(start or os.environ.get("CLAUDE_PROJECT_DIR") or Path.cwd())
         if found.is_absolute():  # not found: find_profile answers with the bare relative default
             profile = found
-            line = message(profile, run or subprocess.run, clock or time.monotonic)
+            line = message(profile, run or subprocess.run, clock or time.monotonic,
+                           now or datetime.now(timezone.utc))
     except Exception as exc:  # never a traceback on stdout, never a non-zero exit
         traceback.print_exc()
         if profile is not None:
