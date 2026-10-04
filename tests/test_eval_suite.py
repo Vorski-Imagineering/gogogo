@@ -31,6 +31,8 @@ CASES = {
     "roadmap-shared-checkout",
     "status-sweep-lists-only", "status-shows-independence",
     "wrap-up-asks-before-removing",
+    "dev-suspected-fault", "auto-dev-fault-in-close-report",
+    "idea-upstream-scrubs-names", "wrap-up-fault-goes-upstream",
     "setup-connected-message", "setup-leaves-out-plugin-steps",
     "setup-machine-has-bot",
 }
