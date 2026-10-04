@@ -471,6 +471,22 @@ def check_branches(code_repo, settings, default_branch, rep):
     return plan
 
 
+def _requires_a_check(repo, branch):
+    """Why a body with no check must not replace the `gogogo: <branch>` ruleset, or None when it may."""
+    named, error = _rulesets(repo)
+    if error:
+        return f"the rulesets could not be read to see whether one requires a check ({error})"
+    if f"gogogo: {branch}" not in named:
+        return None
+    ruleset = named[f"gogogo: {branch}"]
+    body, error = _gh_json("api", f"repos/{repo}/rulesets/{ruleset}")
+    if error or not isinstance(body, dict):
+        return f"ruleset {ruleset} could not be read to see whether it requires a check ({error or 'not a JSON object'})"
+    if any(isinstance(r, dict) and r.get("type") == "required_status_checks" for r in body.get("rules") or []):
+        return f"the required check of the existing ruleset {ruleset} would be dropped"
+    return None
+
+
 def print_ruleset(settings, default_branch, branch):
     plan, _ = branch_plan(settings, default_branch)
     wanted = {b: w for b, w, _ in plan}
@@ -488,6 +504,13 @@ def print_ruleset(settings, default_branch, branch):
             print(f"could not read the checks to require on {branch}: {checks}", file=sys.stderr)
             return 2
         checks = []
+    elif wanted[branch] and not checks:
+        # The latest merged PR ran no checks (a docs-only PR, say). A new ruleset gets
+        # none; replacing one that requires a check would drop it.
+        refusal = _requires_a_check(code_repo, branch)
+        if refusal:
+            print(f"the latest PR merged into {branch} ran no checks, so {refusal}", file=sys.stderr)
+            return 2
     print(json.dumps(ruleset_body(branch, checks if isinstance(checks, list) else [], wanted[branch]), indent=2))
     return 0
 

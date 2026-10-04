@@ -1809,19 +1809,44 @@ class BranchRulesExact(unittest.TestCase):
             self.assertEqual(sc.check_names("o/code", "main"), ["tests"])
         self.assertEqual(calls, [("gh", *self.PR_LIST.split()), ("gh", *self.PR_CHECKS.split())])
 
+    NO_CHECKS = (1, "", "no checks reported on the 'fix-1' branch")
+
     def test_a_merged_pr_with_no_checks_has_no_check_names(self):
         # gh 2.96: `gh pr checks` on a PR with no checks exits 1 with this line on stderr.
-        none = (1, "", "no checks reported on the 'fix-1' branch")
-        replies = {self.PR_LIST: (0, json.dumps([{"number": 12}]), ""), self.PR_CHECKS: none,
-                   self.RULESETS: (0, json.dumps([{"id": 7, "name": "gogogo: main"}]), "")}
+        replies = {self.PR_LIST: (0, json.dumps([{"number": 12}]), ""), self.PR_CHECKS: self.NO_CHECKS}
         with mock.patch.object(sc, "run", gh_stub([], replies)):
             self.assertEqual(sc.check_names("o/code", "main"), [])
+
+    def _ruleset_after_a_pr_with_no_checks(self, rulesets, existing_rules=None):
+        """print_ruleset for main when the latest merged PR ran no checks: (exit, stdout, stderr)."""
+        replies = {self.PR_LIST: (0, json.dumps([{"number": 12}]), ""), self.PR_CHECKS: self.NO_CHECKS,
+                   self.RULESETS: rulesets}
+        if existing_rules is not None:
+            replies["api repos/o/code/rulesets/7"] = existing_rules
         settings = {"tracker": {"code_repo": "o/code"}, "integration": {"strategy": "pr-squash", "base": "main"}}
-        out = io.StringIO()
+        out, err = io.StringIO(), io.StringIO()
         with mock.patch.object(sc, "run", gh_stub([], replies)), mock.patch("sys.stdout", out), \
-                mock.patch("sys.stderr"):
-            self.assertEqual(sc.print_ruleset(settings, "main", "main"), 0)
-        self.assertEqual(json.loads(out.getvalue()), sc.ruleset_body("main", [], True))
+                mock.patch("sys.stderr", err):
+            code = sc.print_ruleset(settings, "main", "main")
+        return code, out.getvalue(), err.getvalue()
+
+    def test_no_checks_and_no_gogogo_ruleset_prints_a_body_without_a_check(self):
+        code, out, _ = self._ruleset_after_a_pr_with_no_checks((0, json.dumps([{"id": 3, "name": "other"}]), ""))
+        self.assertEqual((code, json.loads(out)), (0, sc.ruleset_body("main", [], True)))
+
+    def test_no_checks_never_replaces_a_ruleset_that_requires_one(self):
+        gogogo = (0, json.dumps([{"id": 7, "name": "gogogo: main"}]), "")
+        requires = (0, json.dumps({"id": 7, "name": "gogogo: main", "rules": [
+            {"type": "deletion"}, {"type": "required_status_checks", "parameters": {
+                "required_status_checks": [{"context": "tests"}]}}]}), "")
+        code, out, err = self._ruleset_after_a_pr_with_no_checks(gogogo, requires)
+        self.assertEqual((code, out), (2, ""))
+        self.assertIn("ran no checks", err)
+        self.assertEqual(self._ruleset_after_a_pr_with_no_checks(gogogo, (1, "", "gh: HTTP 502"))[:2], (2, ""))
+        self.assertEqual(self._ruleset_after_a_pr_with_no_checks((1, "", "gh: HTTP 403"))[:2], (2, ""))
+        no_check = (0, json.dumps({"id": 7, "name": "gogogo: main", "rules": [{"type": "deletion"}]}), "")
+        code, out, _ = self._ruleset_after_a_pr_with_no_checks(gogogo, no_check)
+        self.assertEqual((code, json.loads(out)), (0, sc.ruleset_body("main", [], True)))
 
     def test_the_latest_merged_pr_is_the_latest_by_merge_date(self):
         # gh pr list sorts by creation: a PR opened early and merged last is not first.
