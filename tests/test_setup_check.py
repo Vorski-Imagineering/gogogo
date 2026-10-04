@@ -1844,9 +1844,22 @@ class BranchRulesExact(unittest.TestCase):
         self.assertIn("ran no checks", err)
         self.assertEqual(self._ruleset_after_a_pr_with_no_checks(gogogo, (1, "", "gh: HTTP 502"))[:2], (2, ""))
         self.assertEqual(self._ruleset_after_a_pr_with_no_checks((1, "", "gh: HTTP 403"))[:2], (2, ""))
+        self.assertEqual(self._ruleset_after_a_pr_with_no_checks(gogogo, (0, "[]", ""))[:2], (2, ""))
         no_check = (0, json.dumps({"id": 7, "name": "gogogo: main", "rules": [{"type": "deletion"}]}), "")
         code, out, _ = self._ruleset_after_a_pr_with_no_checks(gogogo, no_check)
         self.assertEqual((code, json.loads(out)), (0, sc.ruleset_body("main", [], True)))
+
+    def test_a_passing_check_replaces_a_ruleset_that_requires_one(self):
+        replies = {self.PR_LIST: (0, json.dumps([{"number": 12}]), ""),
+                   self.PR_CHECKS: (0, json.dumps([{"name": "tests", "bucket": "pass"}]), ""),
+                   self.RULESETS: (0, json.dumps([{"id": 7, "name": "gogogo: main"}]), ""),
+                   "api repos/o/code/rulesets/7": (0, json.dumps({"rules": [{"type": "required_status_checks"}]}), "")}
+        settings = {"tracker": {"code_repo": "o/code"}, "integration": {"strategy": "pr-squash", "base": "main"}}
+        out = io.StringIO()
+        with mock.patch.object(sc, "run", gh_stub([], replies)), mock.patch("sys.stdout", out), \
+                mock.patch("sys.stderr"):
+            self.assertEqual(sc.print_ruleset(settings, "main", "main"), 0)
+        self.assertEqual(json.loads(out.getvalue()), sc.ruleset_body("main", ["tests"], True))
 
     def test_the_latest_merged_pr_is_the_latest_by_merge_date(self):
         # gh pr list sorts by creation: a PR opened early and merged last is not first.
