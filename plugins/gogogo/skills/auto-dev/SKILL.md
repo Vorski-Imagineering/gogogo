@@ -369,7 +369,8 @@ tracker comment. Never put a token on a command line or in a report.
 ## 9. Close the run
 
 In a run that tried to send *run started*, first send *run closed* (§8). Then
-one report, opening with the notify line preflight item 8 put there, if any:
+one report, opening with the notify line preflight item 8 put there and the
+branch-rules FAIL and WARN rows from preflight item 12, if any:
 every issue taken with its outcome and merge commit (and *label added by
 the run* for each one §2 labelled), every issue skipped with the reason and its column, anything left half-done with its branch, every other card
 moved to `tracker.columns.needs_human` (taken, then stopped) with its Needs-you line, the stranded
