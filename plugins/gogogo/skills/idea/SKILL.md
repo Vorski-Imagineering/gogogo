@@ -1,6 +1,6 @@
 ---
 name: idea
-description: Use when the user wants to keep what this session has found as a new tracker issue without speccing it ("make it an issue", "file this before I close", "an un-specced issue"), or when research is unfinished and the session is about to end. Not for writing a spec; that is spec.
+description: Use when the user wants to keep what this session has found as a new tracker issue without speccing it ("make it an issue", "file this before I close", "an un-specced issue"), or to file a finding on gogogo itself ("file this on gogogo", upstream), or when research is unfinished and the session is about to end. Not for writing a spec; that is spec.
 ---
 
 # idea: save what this session found, as an un-specced issue
@@ -59,15 +59,15 @@ findings as a comment on <target repo>#<n>**, or **file a new issue in
 the person chooses instead, sets the target for steps 2 to 5 (§ *The target*).
 An answer that chooses no target counts as declined. No likely
 match: the target is a new issue. A declined question: write the draft as for
-a new issue (steps 2 and 3), post nothing, say where it is and what step 3
-removed, and stop.
+a new issue (steps 2 and 3), post nothing, run step 3's name check when the target is the
+upstream target, say where it is and what step 3 removed, and stop.
 
 Never edit another issue's body; it may be a spec.
 
 ## 2. Draft
 
 Write the draft to a file in the scratchpad. The title, for a new issue, is
-`<area>: <what>`, in the style of the titles step 1's search returned, if it
+`<area>: <what>` (also written to a second file next to the draft, for step 3's name check), in the style of the titles step 1's search returned, if it
 returned any; a comment has none. The body has these headings and no others,
 in this order:
 
@@ -103,7 +103,10 @@ draft, and again on the whole draft after every change. Remove:
 
 - any path outside this checkout: absolute (`/Users/`, `/home/`, `/tmp/`,
   `/private/`, `C:\`), home-relative (`~/`), or into another checkout. A path
-  inside this checkout is written relative to its root, and is kept;
+  inside this checkout is written relative to its root, and is kept. A path
+  inside the plugin's folder, wherever it is installed (an installed copy sits
+  in a cache folder outside the checkout), is rewritten relative to the
+  plugin's root and kept; every other path outside the checkout is removed;
 - every repo, project, client, product or folder name from outside this
   checkout, in any form (`owner/repo`, a bare name, a folder), except
   `tracker.issues_repo`, `tracker.code_repo`, and tools and products anyone
@@ -130,16 +133,20 @@ plugin's root (`skills/dev/SKILL.md`, `scripts/verify_merged.py`). Any of these
 values equal to `Vorski-Imagineering` or `gogogo` (ignoring case) is left out
 of the removal and of the check below.
 
-Then, before step 4 shows the draft of an upstream target, check the draft file
-for those values, one `-e` per value:
+Then, wherever step 3 ends with an upstream draft on disk (before step 4 shows
+it, and on step 1's declined path), check the draft file and the title file for
+those values, one `-e` per value. Leave out an empty value, and a value that is
+only a word inside a kept plugin path (`dev`, `scripts`, `skills`): it would
+match the kept text, so step 3's removal alone covers it.
 
 ```bash
-grep -n -i -F -e <value> -e <value> <draft file>
+grep -n -i -F -e <value> -e <value> <draft file> <title file>
 ```
 
 Exit 1 (nothing found): go on. Exit 0: remove what it printed, add each item to
-the removal list by kind, and run it again. Any other exit: post nothing and say
-the check could not run. Run it again after every change at step 4.
+the removal list by kind, and run it again; after three runs that still exit 0,
+post nothing and say so. Any other exit: post nothing and say the check could
+not run. Run it again after every change at step 4.
 
 Keep a list of what you removed, in your own reply and never in the draft
 file: each item by its kind and where it was (*a hostname, in the second
@@ -155,8 +162,9 @@ target: *file it as a new issue in <target repo>* or *post it as a
 comment on <target repo>#<n>*), **change something**, or **don't post**.
 
 - Change something: edit the draft, or change the target within § *The
-  target* (a new issue then needs step 2's title), run step 3 again (the name check
-  included), and ask again.
+  target* (a new issue then needs step 2's title), run step 3 again (the name
+  check included), and ask again. When the target repo changed, run step 1's
+  search again for the new `<target repo>` first.
 - Don't post, or the question is declined: post nothing, say where the draft
   file is, and stop.
 

@@ -109,10 +109,24 @@ class Skill(unittest.TestCase):
         start = text.index("## The target")
         target = text[start:text.index("\n## ", start + 1)]
         self.assertIn("Vorski-Imagineering/gogogo", target)
-        posts = [line for line in text.splitlines() if "gh issue create" in line or "gh issue comment" in line]
-        self.assertGreaterEqual(len(posts), 2)
-        for line in posts:
-            self.assertIn("--repo <target repo>", line)
+        verbs = ("create", "comment", "list", "view")
+        for verb in verbs:
+            lines = [line for line in text.splitlines() if f"gh issue {verb}" in line]
+            self.assertTrue(lines, verb)
+            for line in lines:
+                self.assertIn("--repo <target repo>", line)
+
+    def test_description_names_gogogo_as_a_filing_target(self):
+        front = skill_text().split("---")[1]
+        self.assertRegex(front, r"(?m)^description: .*gogogo")
+
+    def test_name_check_covers_the_title_and_is_bounded(self):
+        text = skill_text()
+        at = text.index("grep -n -i -F")
+        around = text[at - 900:at + 1100]
+        line = next(l for l in text.splitlines() if "grep -n -i -F" in l)
+        self.assertIn("<title file>", line)
+        self.assertIn("three", around)
 
     def test_name_check_command(self):
         self.assertTrue(any("grep -n -i -F" in line for line in skill_text().splitlines()))
