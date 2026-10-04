@@ -66,7 +66,7 @@ Put each one in exactly one place:
 |---|---|---|
 | How the user wants *me* to work, or a project fact that isn't in the repo | **Memory**: the memory directory named in the system prompt (its path differs per machine), one file per fact, plus a line in `MEMORY.md` | Check the index for an existing file first and update it rather than duplicating. Wrong or outdated memories get fixed or deleted now. Follow the memory format in the system prompt. |
 | A rule everyone working in the repo should follow, a process detail, a doc that was wrong | **The repo**: `CLAUDE.md`, `.agents/dev-process.md`, its docs, or wherever the profile's `## Wrap-up checks` says | **Propose, don't write.** These are shared; show the exact text and where it goes, and let the user say yes. If it is bigger than a few lines, it becomes an issue via `/gogogo:spec`. |
-| A gogogo skill that misled you, or a rule that should hold in every repo | **An issue in `Vorski-Imagineering/gogogo`** | Propose it the same way. A skill change there reaches every repo. |
+| A gogogo skill that misled you, a `Suspected gogogo fault` line written this session, or a rule that should hold in every repo | **An issue in `Vorski-Imagineering/gogogo`** | Propose it: show the line with the repo's names removed; a person files it on `Vorski-Imagineering/gogogo`. A skill change there reaches every repo. |
 | A problem with Claude Code itself | **`SendFeedback`** (drafts only; the user approves sending) | Only for a real product or model-behaviour issue seen this session. |
 | Only mattered to this session | **Nowhere** | Say so. Not everything is a learning. |
 

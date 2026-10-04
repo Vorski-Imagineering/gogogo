@@ -427,7 +427,10 @@ claude plugin update gogogo@vorski-skills --scope project
 ```
 
 **Changing the process.** Anything specific to one repo goes in that repo's
-`.agents/dev-process.md`. A change to how every repo works is a PR here.
+`.agents/dev-process.md`. A change to how every repo works is a PR here. A fault in gogogo
+itself, seen in a run, shows as a `Suspected gogogo fault` line on the issue
+and in auto-dev's close-run report. A person files it
+on gogogo from that line, with the repo's names removed by hand.
 
 ## Using gogogo, or working on it
 
