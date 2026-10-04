@@ -39,6 +39,15 @@ only one. An answer or a change that chooses a target anywhere else, or more
 than one, is refused as a whole: say so, change nothing, and ask again. Merely
 mentioning another repo is not choosing it.
 
+**The one exception: gogogo's own tracker.** A suspected fault in a gogogo
+skill or script (`references/gogogo-faults.md`) may go to
+`Vorski-Imagineering/gogogo`, as a new issue or a comment on an open issue
+there, and only when all of these hold: the person names gogogo's tracker in
+words; a person is present (never in an unattended run); and step 3a's name
+check has passed on the exact title and body posted. This skill never offers
+it on its own. In the gogogo repo itself, `tracker.issues_repo` already is that
+tracker: it is the first target, and step 3a is not run.
+
 ## 1. Look for an issue that already covers it
 
 ```bash
@@ -55,6 +64,10 @@ a new issue (steps 2 and 3), post nothing, say where it is and what step 3
 removed, and stop.
 
 Never edit another issue's body; it may be a spec.
+
+For gogogo's tracker, the search runs on `Vorski-Imagineering/gogogo`
+(`--repo Vorski-Imagineering/gogogo`), and its answer sets the target the
+same way, within that repo.
 
 ## 2. Draft
 
@@ -116,12 +129,42 @@ finding*), never the removed text. Step 4 shows it with the draft, and every
 later mention of what was removed (step 1, step 7) uses the same form. Nothing
 removed is put back. A person who wants it published posts it themselves.
 
+## 3a. The name check, for gogogo's tracker only
+
+Skip this step for every other target. The text is going to a public tracker
+that is not this repo's, so the names of this repo must not be in it, and a
+person reading it twice is not a check. A script does it:
+
+```bash
+python3 "${CLAUDE_PLUGIN_ROOT}/scripts/name_check.py" --title "<scratch>/idea-title.txt" "<draft>"
+```
+
+`<scratch>/idea-title.txt` holds the title and nothing else, one line (for a
+comment, a one-line summary the script can read; it is not posted). The draft
+is the file step 2 wrote. By the exit:
+
+- **0**: it printed `name-check: clean (…)`. Go on to step 4.
+- **1**: it printed each hit as `<file>:<line>: <matched text>`. Show them,
+  remove each from the draft or the title file, and run it again.
+- **2**: stop, post nothing, and give the reason it printed. The profile or the
+  files are wrong; never post around it.
+
+Run it at most three times: after the third run that does not exit 0, stop,
+post nothing, and say where the draft is. Every later change to the title or
+the draft (step 4's *change something*) runs it again and counts. The check
+cannot see a name nobody listed (a product name, a host quoted in output,
+another repo this session touched): `publish.private_names` in the profile
+lists the ones to add.
+
 ## 4. Show and ask
 
 Show the target, the title (for a new issue), the whole body and step 3's
 list of removals. Then ask with `AskUserQuestion`: **post it** (naming the
 target: *file it as a new issue in <tracker.issues_repo>* or *post it as a
 comment on <tracker.issues_repo>#<n>*), **change something**, or **don't post**.
+For gogogo's tracker also show step 3a's last `name-check: clean` line, and say
+that the check cannot see every private name: read the title and body once more
+yourself before choosing.
 
 - Change something: edit the draft, or change the target within § *The
   target* (a new issue then needs step 2's title), run step 3 again, and ask
@@ -153,6 +196,17 @@ step 4. Then:
 gh issue comment <n> --repo <tracker.issues_repo> --body-file <file>
 ```
 
+For gogogo's tracker, post only right after an exit-0 run of step 3a on the
+files posted, and post exactly those files, with nothing edited since:
+
+```bash
+gh issue create --repo Vorski-Imagineering/gogogo --title "$(cat "<scratch>/idea-title.txt")" --body-file "<draft>"
+gh issue comment <n> --repo Vorski-Imagineering/gogogo --body-file "<draft>"
+```
+
+The comment needs the open-issue check above first, with `Vorski-Imagineering/gogogo`
+in place of `tracker.issues_repo`. No label there either.
+
 No label of any kind. Above all never `tracker.ready_marker`: it means
 "specced", and the loop would take the issue. After a comment, skip step 6.
 
@@ -181,7 +235,8 @@ gh project item-add <tracker.project_number> --owner <tracker.project_owner> --u
 ```
 
 Never move the card. Otherwise (another tracker kind or tool): say the board
-step was skipped, and why.
+step was skipped, and why. For gogogo's tracker the step is skipped: it is not
+this repo's board.
 
 ## 7. Report
 

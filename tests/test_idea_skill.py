@@ -104,6 +104,20 @@ class Skill(unittest.TestCase):
             self.assertNotIn(flag, text)
         self.assertNotRegex(text, r'tracker\.py"? move')
 
+    def test_filing_on_gogogos_tracker_runs_the_name_check_on_what_is_posted(self):
+        """The second target is named in the target section, and posting reads the checked files (gogogo#163)."""
+        text = skill_text()
+        target = text.split("\n## The target")[1].split("\n## ")[0]
+        self.assertIn("Vorski-Imagineering/gogogo", target)
+        self.assertIn("name_check.py", text)
+        self.assertIn("idea-title.txt", text)
+        upstream = [ln for ln in text.splitlines() if "gh issue create" in ln and "--repo Vorski-Imagineering/gogogo" in ln]
+        self.assertEqual(len(upstream), 1)
+        self.assertIn("--body-file", upstream[0])
+        self.assertIn("cat", upstream[0])
+        self.assertTrue(any("gh issue comment" in ln and "--repo Vorski-Imagineering/gogogo" in ln
+                            for ln in text.splitlines()))
+
     def test_no_project_names(self):
         self.assertIsNone(re.search(PROJECT_NAMES, skill_text(), re.I))
 

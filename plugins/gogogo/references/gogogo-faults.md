@@ -46,5 +46,6 @@ report it sits in.
 
 Because of one, a run never stops, moves a card, opens or comments on an issue
 anywhere, changes the plugin, or posts to `Vorski-Imagineering/gogogo`. A person
-files it on `Vorski-Imagineering/gogogo` from the line, with the repo's names
-removed by hand.
+files it from the line with `/gogogo:idea`, naming gogogo's tracker as the
+target in words; `name_check.py` checks the exact title and body for the repo's
+names before anything posts.

@@ -103,6 +103,8 @@ FIELDS = {
                         "the first review round casts; correction rounds are always precise."),
     "independence": (str, (), "junior-dev / tech-lead / product-owner. Optional; absent means junior-dev. Which "
                      "decisions Claude asks about and which it takes itself; see docs/independence-mode.md."),
+    "publish.private_names": (list, (), "Optional; absent means []. Extra names the name check removes before "
+                              "filing on gogogo's tracker."),
     "auto_test.pass_column": (str, (TEST,), "Column a card moves to on PASS."),
     "auto_test.fail_column": (str, (TEST,), "Column a card moves to on FAIL."),
     "auto_test.fail_label": (str, (TEST,), "Label added on FAIL."),
