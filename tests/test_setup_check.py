@@ -919,6 +919,15 @@ class Audit(unittest.TestCase):
         for text in ("force push", "deletion", "required check"):
             self.assertIn(text, rows[0]["detail"])
 
+    def test_t23_force_push_and_deletion_only_in_bypassable_classic_fail(self):
+        classic = {"allow_force_pushes": {"enabled": False}, "allow_deletions": {"enabled": False},
+                   "enforce_admins": {"enabled": False}}
+        rows = self._rules(rules=[{"type": "required_status_checks"}], classic=classic)
+        self.assertEqual([r["level"] for r in rows], ["FAIL"])
+        for text in ("force push", "deletion", "classic branch protection", "admins can bypass"):
+            self.assertIn(text, rows[0]["detail"])
+        self.assertIn("--ruleset main", rows[0]["fix"])
+
     def _bypassed_ruleset(self, name):
         """check_branches over FULL held by ruleset 9 named `name`, whose bypass list is not empty."""
         rules = json.dumps([dict(r, ruleset_id=9) for r in self.FULL])
@@ -944,6 +953,34 @@ class Audit(unittest.TestCase):
         rows = self._bypassed_ruleset("gogogo: main")
         self.assertEqual([r["level"] for r in rows], ["FAIL"])
         self.assertIn("--ruleset main", rows[0]["fix"])
+
+    def test_t25_a_missing_check_with_classic_unread_warns_with_the_error(self):
+        rows = self._rules(rules=self.FULL[:2], classic="HTTP 403", needs_ci=True)
+        self.assertEqual([r["level"] for r in rows], ["WARN"])
+        self.assertIn("HTTP 403", rows[0]["detail"])
+
+    def _print_ruleset_failing(self, failing, rulesets):
+        """print_ruleset for main with the `gh pr checks` read failing, and the rulesets read too when asked."""
+        def fake_run(*cmd, cwd=None):
+            if "pr checks" in " ".join(cmd):
+                return subprocess.CompletedProcess(cmd, 1, "", "gh: HTTP 502")
+            if cmd[:2] == ("gh", "api") and cmd[2].endswith("/rulesets"):
+                if failing == "rulesets":
+                    return subprocess.CompletedProcess(cmd, 1, "", "gh: HTTP 403")
+                return subprocess.CompletedProcess(cmd, 0, json.dumps(rulesets), "")
+            return self._gh([])(*cmd, cwd=cwd)
+        settings = {"tracker": {"code_repo": "o/code"}, "integration": {"strategy": "pr-squash", "base": "main"}}
+        out = io.StringIO()
+        with mock.patch.object(sc, "run", fake_run), mock.patch("sys.stdout", out), mock.patch("sys.stderr"):
+            code = sc.print_ruleset(settings, "main", "main")
+        return code, out.getvalue()
+
+    def test_t26_ruleset_refuses_rather_than_drop_the_check(self):
+        self.assertEqual(self._print_ruleset_failing("checks", [{"id": 7, "name": "gogogo: main"}]), (2, ""))
+        self.assertEqual(self._print_ruleset_failing("rulesets", []), (2, ""))
+        code, out = self._print_ruleset_failing("checks", [])
+        self.assertEqual(code, 0)
+        self.assertNotIn("required_status_checks", [r["type"] for r in json.loads(out)["rules"]])
 
     def test_ruleset_for_a_branch_the_profile_does_not_give_exits_2(self):
         calls = []
