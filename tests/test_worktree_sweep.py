@@ -46,10 +46,14 @@ if answer == "fail" or fixture.get("down"):
 print(json.dumps(answer))
 """
 
-# Runs the real git, except `git branch -D` when FAKE_GIT_REFUSE_D is set.
+# Runs the real git, except `git branch -D` when FAKE_GIT_REFUSE_D is set (silently when it is
+# "quiet") and `git rev-list` when FAKE_GIT_FAIL_REVLIST is set.
 FAKE_GIT = """#!/bin/sh
 if [ -n "$FAKE_GIT_REFUSE_D" ] && [ "$1" = branch ] && [ "$2" = -D ]; then
-    echo "fatal: refused by the test" >&2
+    [ "$FAKE_GIT_REFUSE_D" = quiet ] || echo "fatal: refused by the test" >&2
+    exit 1
+fi
+if [ -n "$FAKE_GIT_FAIL_REVLIST" ] && [ "$1" = rev-list ]; then
     exit 1
 fi
 exec {git} "$@"
@@ -323,6 +327,39 @@ class Sweep(unittest.TestCase):
         self.assertEqual(lines, ["remove branch fix/12-x: PR #3 merged at its tip",
                                  "  branch fix/12-x kept: fatal: refused by the test"])
         self.assertIn("fix/12-x", self.branches())
+
+    def test_11_a_branch_that_will_not_delete_and_says_nothing_is_still_reported(self):
+        tip = self.local_branch("fix/12-x")
+        self.env["FAKE_GIT_REFUSE_D"] = "quiet"
+        code, lines = self.sweep("--apply", fixture={"pr": {"fix/12-x": [pr(3, "MERGED", oid=tip)]}})
+        self.assertEqual(code, 1)
+        self.assertEqual(lines[1], "  branch fix/12-x kept: git branch -D exited 1")
+
+    def test_11_a_branch_git_cannot_count_is_kept(self):
+        tip = self.local_branch("fix/12-x")
+        self.env["FAKE_GIT_FAIL_REVLIST"] = "1"
+        self.assertEqual(self.sweep("--apply", fixture={"pr": {"fix/12-x": [pr(3, "MERGED", oid=tip)]}}), (0, []))
+        self.assertIn("fix/12-x", self.branches())
+
+    def test_11_a_branch_that_stays_does_not_stop_the_sweep_of_the_next(self):
+        first = self.local_branch("fix/11-a")
+        second = self.local_branch("fix/12-b")
+        fixture = {"pr": {"fix/11-a": [pr(2, "OPEN", oid=first)], "fix/12-b": [pr(3, "MERGED", oid=second)]}}
+        self.assertEqual(self.sweep("--apply", fixture=fixture), (0, ["remove branch fix/12-b: PR #3 merged at its tip"]))
+        self.assertEqual(sorted(b for b in self.branches() if b.startswith("fix/")), ["fix/11-a"])
+
+    def test_11_the_base_is_the_profiles_integration_base_else_main(self):
+        sys.path.insert(0, str(SCRIPT.parent))
+        import worktree_sweep
+        profile = self.tmp / "profile.md"
+        profile.write_text('+++\n[integration]\nbase = "develop"\n+++\n')
+        with mock.patch.object(worktree_sweep.profile_check, "find_profile", return_value=profile):
+            self.assertEqual(worktree_sweep.base_branch(), "develop")
+        profile.write_text('+++\n[tracker]\nissues_repo = "o/code"\n+++\n')
+        with mock.patch.object(worktree_sweep.profile_check, "find_profile", return_value=profile):
+            self.assertEqual(worktree_sweep.base_branch(), "main")
+        with mock.patch.object(worktree_sweep.profile_check, "find_profile", return_value=self.tmp / "missing.md"):
+            self.assertEqual(worktree_sweep.base_branch(), "main")
 
     def test_11_a_failed_lookup_keeps_the_branch(self):
         self.local_branch("fix/12-x")
