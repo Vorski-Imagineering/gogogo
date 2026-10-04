@@ -48,6 +48,12 @@ class NotifyDocs(unittest.TestCase):
         self.assertIn('notify = "none"', notifications)
         self.assertNotIn('notify = "telegram"', notifications)
 
+    def test_17_setup_and_its_check_share_the_machine_has_bot_wording(self):
+        doc = text(PLUGIN / "skills" / "setup" / "SKILL.md")
+        notifications = doc.split("- **Notifications**", 1)[1].split("\n## ", 1)[0]
+        self.assertIn("already has bot", notifications)
+        self.assertIn("already has bot", text(PLUGIN / "scripts" / "setup_check.py"))
+
     def test_15_stage_sync_uses_the_same_sender(self):
         doc = text(PLUGIN / "references" / "stage-sync.md")
         self.assertIn("notify.py", section(doc, "### Notification"))

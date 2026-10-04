@@ -280,7 +280,23 @@ What each fix involves:
   an unattended run starts, changes state and closes. They are optional. A
   profile with no `notify` line sends whenever this machine has bot
   credentials; `notify = "none"` turns a repo off.
-  - `INFO notify: off`: ask once with `AskUserQuestion`:
+  - `INFO notify: off` and the row says this machine `already has bot`: ask
+    once with `AskUserQuestion`:
+    - **turn messages on here** (recommended): remove the profile's
+      `notify = "none"` line and commit it like setup's other profile changes.
+      Do not run steps 1 and 2. Tell the person that this machine's bot is
+      already set up and that every repo on it whose profile does not say
+      `notify = "none"` uses it. Then step 3 with `<scope>` set to `<repo>`
+      (the name part of `tracker.code_repo`); the re-check must show
+      `PASS notify: telegram (by default): bot @… -> …`.
+    - **keep them off**: change nothing, and say that `/gogogo:setup` can turn
+      them on later.
+  - `INFO notify: off` and the row says the credentials `fail`: show the
+    reason, then ask the same two-answer question. **Turn messages on here**:
+    remove the line and commit it as above, re-run the check, follow the
+    `WARN notify: telegram: <reason>` bullet below, then step 3 with `<scope>`
+    set to `<repo>`. **Keep them off**: as above.
+  - Any other `INFO notify: off`: ask once with `AskUserQuestion`:
     - **every repo on this machine** (recommended): steps 1 and 2 below, which
       write the per-user file.
     - **only this repo**: first make sure `.claude/gogogo/` is in the repo's
