@@ -436,6 +436,16 @@ def _classic(repo, branch):
     return value if isinstance(value, dict) else "gh printed something that is not a JSON object"
 
 
+def _rulesets(repo):
+    """({ruleset name: id} over every page of the repo's rulesets, None), or (None, gh's error)."""
+    rulesets, error = _gh_json("api", f"repos/{repo}/rulesets", "--paginate")
+    if not error and not isinstance(rulesets, list):
+        error = "gh printed something that is not a list"
+    if error:
+        return None, error
+    return {r.get("name"): r.get("id") for r in rulesets if isinstance(r, dict)}, None
+
+
 def check_branches(code_repo, settings, default_branch, rep):
     """The branch-rules rows for every branch Design 4 of issue #57 names; returns the plan."""
     plan, note = branch_plan(settings, default_branch)
@@ -447,12 +457,13 @@ def check_branches(code_repo, settings, default_branch, rep):
                                          "could not be read")
         return plan
     needs_ci = bool((settings.get("integration") or {}).get("ci_before_merge"))
-    rulesets, _ = _gh_json("api", f"repos/{code_repo}/rulesets")
-    named = {r.get("name"): r.get("id") for r in rulesets or [] if isinstance(r, dict)}
+    named, error = _rulesets(code_repo)
     for branch, wants_check, target in plan:
-        check_branch_rules(code_repo, branch, _rules_with_bypass(code_repo, branch), _classic(code_repo, branch),
+        # Without the rulesets list there is no telling a POST from a PUT: no fix is offered.
+        rules = f"could not read the rulesets: {error}" if error else _rules_with_bypass(code_repo, branch)
+        check_branch_rules(code_repo, branch, rules, _classic(code_repo, branch),
                            check_names(code_repo, branch) if wants_check else [], wants_check, needs_ci, rep,
-                           target=target, existing=named.get(f"gogogo: {branch}"))
+                           target=target, existing=(named or {}).get(f"gogogo: {branch}"))
     return plan
 
 
@@ -468,8 +479,8 @@ def print_ruleset(settings, default_branch, branch):
     if isinstance(checks, str):
         # A new ruleset still gets no force push and no deletion; replacing an
         # existing one without its check could drop a check it already requires.
-        rulesets, error = _gh_json("api", f"repos/{code_repo}/rulesets")
-        if error or any(isinstance(r, dict) and r.get("name") == f"gogogo: {branch}" for r in rulesets or []):
+        named, error = _rulesets(code_repo)
+        if error or f"gogogo: {branch}" in named:
             print(f"could not read the checks to require on {branch}: {checks}", file=sys.stderr)
             return 2
         checks = []

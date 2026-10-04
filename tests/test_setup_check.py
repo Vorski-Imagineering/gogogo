@@ -1624,6 +1624,7 @@ class BranchRulesExact(unittest.TestCase):
     NOT_PROTECTED = (1, "", "gh: Branch not protected (HTTP 404)")
     PR_LIST = "pr list --repo o/code --base main --state merged --limit 1 --json number"
     PR_CHECKS = "pr checks 12 --repo o/code --json name,bucket"
+    RULESETS = "api repos/o/code/rulesets --paginate"
 
     def rows(self, rules, classic=None, checks=("tests",), wants_check=True, needs_ci=False, **kw):
         rep = sc.Report()
@@ -1801,7 +1802,7 @@ class BranchRulesExact(unittest.TestCase):
         # gh 2.96: `gh pr checks` on a PR with no checks exits 1 with this line on stderr.
         none = (1, "", "no checks reported on the 'fix-1' branch")
         replies = {self.PR_LIST: (0, json.dumps([{"number": 12}]), ""), self.PR_CHECKS: none,
-                   "api repos/o/code/rulesets": (0, json.dumps([{"id": 7, "name": "gogogo: main"}]), "")}
+                   self.RULESETS: (0, json.dumps([{"id": 7, "name": "gogogo: main"}]), "")}
         with mock.patch.object(sc, "run", gh_stub([], replies)):
             self.assertEqual(sc.check_names("o/code", "main"), [])
         settings = {"tracker": {"code_repo": "o/code"}, "integration": {"strategy": "pr-squash", "base": "main"}}
@@ -1825,7 +1826,7 @@ class BranchRulesExact(unittest.TestCase):
     def branches(self, replies, integration=None):
         calls, rep = [], sc.Report()
         settings = {"integration": integration or {"strategy": "pr-squash", "base": "main"}}
-        base = {"api repos/o/code/rules/branches/main": (0, "[]", ""),
+        base = {"api repos/o/code/rules/branches/main": (0, "[]", ""), self.RULESETS: (0, "[]", ""),
                 "api repos/o/code/rulesets/7": (0, json.dumps({"bypass_actors": []}), ""),
                 "api repos/o/code/branches/main/protection": self.NOT_PROTECTED,
                 self.PR_LIST: (0, json.dumps([{"number": 12}]), ""),
@@ -1853,6 +1854,14 @@ class BranchRulesExact(unittest.TestCase):
         self.assertEqual([r["level"] for r in rows], ["WARN"])
         self.assertIn("(gh: HTTP 500)", rows[0]["detail"])
 
+    def test_every_page_of_rulesets_is_read_and_a_failed_read_offers_no_fix(self):
+        calls, rows = self.branches({})
+        self.assertIn(("gh", *self.RULESETS.split()), calls)
+        calls, rows = self.branches({self.RULESETS: (1, "", "gh: HTTP 500")})
+        self.assertEqual([(r["level"], r["fix"]) for r in rows], [("WARN", "")])
+        self.assertIn("gh: HTTP 500", rows[0]["detail"])
+        self.assertIn("rulesets", rows[0]["detail"])
+
     def test_no_branch_to_check_warns_once(self):
         rep = sc.Report()
         with mock.patch.object(sc, "run", gh_stub([], {})):
@@ -1868,7 +1877,7 @@ class BranchRulesExact(unittest.TestCase):
 
     def test_ruleset_prints_for_a_new_ruleset_beside_another_one(self):
         replies = {self.PR_LIST: (1, "", "gh: HTTP 502"),
-                   "api repos/o/code/rulesets": (0, json.dumps([{"id": 3, "name": "other"}]), "")}
+                   self.RULESETS: (0, json.dumps([{"id": 3, "name": "other"}]), "")}
         settings = {"tracker": {"code_repo": "o/code"}, "integration": {"strategy": "pr-squash", "base": "main"}}
         out = io.StringIO()
         with mock.patch.object(sc, "run", gh_stub([], replies)), mock.patch("sys.stdout", out), \
@@ -1878,7 +1887,8 @@ class BranchRulesExact(unittest.TestCase):
 
     def test_check_tracker_takes_the_default_branch_from_the_repo_read(self):
         calls = []
-        replies = {"api repos/o/code": (0, json.dumps({"delete_branch_on_merge": True, "default_branch": "trunk"}), "")}
+        replies = {"api repos/o/code": (0, json.dumps({"delete_branch_on_merge": True, "default_branch": "trunk"}), ""),
+                   self.RULESETS: (0, "[]", "")}
         settings = {"tracker": {"issues_repo": "o/issues", "code_repo": "o/code"},
                     "integration": {"strategy": "pr-squash"}}
         with mock.patch.object(sc, "run", gh_stub(calls, replies)):
@@ -1897,7 +1907,7 @@ class BranchRulesExact(unittest.TestCase):
             path.write_text(profile, encoding="utf-8")
         calls, out, err = [], io.StringIO(), io.StringIO()
         replies = {"api repos/o/code": (0, json.dumps({"default_branch": "main"}), ""),
-                   "api repos/o/code/rules/branches/main": (0, json.dumps(rules), ""),
+                   "api repos/o/code/rules/branches/main": (0, json.dumps(rules), ""), self.RULESETS: (0, "[]", ""),
                    "api repos/o/code/rulesets/7": (0, json.dumps({"bypass_actors": []}), ""),
                    "api repos/o/code/branches/main/protection": self.NOT_PROTECTED,
                    self.PR_LIST: (0, json.dumps([{"number": 12}]), ""),
