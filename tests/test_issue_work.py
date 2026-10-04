@@ -281,7 +281,7 @@ class IssueWork(Repos):
                 self.assertIn("PR #63 open", lines[0])
 
     def test_body_lines_that_do_not_claim(self):
-        for body in ("see Refs #46 later", "Refs #460", "Refs other/repo#46", "Refs #12"):
+        for body in ("see Refs #46 later", "Refs #460", "Refs #46X", "Refs other/repo#46", "Refs #12"):
             with self.subTest(body=body):
                 code, lines = self.work(46, {"graphql": timeline([pr(63, "docs/notes", body=body)])})
                 self.assertEqual((code, lines), (0, []))
@@ -337,6 +337,16 @@ class IssueWork(Repos):
                 code, lines = self.work(46, {"graphql": timeline([pr(63, "docs/notes", body=body)])})
                 self.assertEqual(code, 1, self.stderr)
                 self.assertIn("PR #63 open", lines[0])
+
+    def test_the_mention_note_is_the_whole_stderr_line_and_every_mention_is_noted_in_order(self):
+        prs = [pr(61, "docs/a", body="see #46"), pr(62, "docs/b", body="also #46"),
+               pr(61, "docs/a", body="see #46")]
+        code, lines = self.work(46, {"graphql": timeline(prs)})
+        self.assertEqual((code, lines), (0, []))
+        self.assertEqual(self.stderr.splitlines(),
+                         ["PR #61 mentions #46 but does not claim it",
+                          "PR #62 mentions #46 but does not claim it",
+                          "no earlier work for #46"])
 
 
 if __name__ == "__main__":
