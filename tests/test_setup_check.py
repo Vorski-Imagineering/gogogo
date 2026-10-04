@@ -1724,6 +1724,14 @@ class BranchRulesExact(unittest.TestCase):
         self.assertTrue(detail.startswith("o/r main has "), detail)
         self.assertIn("a required check", detail)
 
+    def test_bypassable_classic_rules_are_missing_before_a_bypass_list_is_read(self):
+        actor = [{"actor_type": "RepositoryRole", "actor_id": 5}]
+        rules = [dict(self.FULL[2], ruleset_id=9, ruleset_name="other", bypass_actors=actor)]
+        rows = self.rows(rules, self.classic(False))
+        self.assertEqual([r["level"] for r in rows], ["FAIL"])
+        self.assertEqual(listed(rows[0]["detail"], " has ", " only in classic"), ["no force push", "no deletion"])
+        self.assertIn("--ruleset main", rows[0]["fix"])
+
     def test_the_merge_script_info_is_the_specs(self):
         self.assertEqual(self.rows(self.FULL[:2], wants_check=False, needs_ci=True), [
             {"level": "INFO", "check": self.CHECK, "fix": "",
