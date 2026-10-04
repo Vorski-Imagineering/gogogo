@@ -247,6 +247,23 @@ What each fix involves:
 - **`CLAUDE.md` does not point at the profile.** Add a short section saying
   the process skills come from the `gogogo` plugin and this repo's specifics
   are in `.agents/dev-process.md`.
+- **Independence** (the `independence` row). How much Claude decides on its
+  own in this repo, and how much it brings to a person. The row is `INFO`, so
+  this question is asked on every setup run, after the `FAIL` and `WARN`
+  lines, a repo that is already set up included. Ask once with
+  `AskUserQuestion`, in plain words: which level Claude should work at in
+  this repo. One option per level, each one line on what it asks and what it
+  decides, with the current level marked:
+  - `junior-dev`: asks about every choice, and decides nothing itself;
+  - `tech-lead`: asks about approvals and anything people will see, and
+    decides how things are built;
+  - `product-owner`: asks only for approvals, and decides what is built and how.
+
+  Say that `tech-lead` and `product-owner` are best run on an Opus-class model at
+  medium effort or higher. On an answer different from the current level,
+  write `independence = "<level>"` to the profile (a top-level key, above the
+  first `[table]`) and commit it as setup commits any other profile change. On
+  a decline, write nothing and say the level stays as it is.
 - **Notifications** (the `notify` row). Telegram messages tell a person when
   an unattended run starts, changes state and closes. They are optional. A
   profile with no `notify` line sends whenever this machine has bot

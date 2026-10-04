@@ -315,6 +315,15 @@ def check_notify(profile, rep):
         rep.warn("notify", detail)
 
 
+def check_independence(settings, rep):
+    """Which decisions Claude asks about in this repo. Never WARNs or FAILs: no level is wrong."""
+    level = settings.get("independence")
+    if level:
+        rep.info("independence", str(level))
+    else:
+        rep.info("independence", "junior-dev (not set); /gogogo:setup can set it")
+
+
 def numbers(items, limit=10):
     shown = ", ".join(f"#{i['number']}" for i in items[:limit])
     return shown + (f" and {len(items) - limit} more" if len(items) > limit else "")
@@ -855,6 +864,7 @@ def main(argv=None):
         check_hard_stop_source(root, (settings.get("hard_stops") or {}).get("source"), rep)
         check_tracker(root, settings, rep)
         check_notify(path, rep)
+        check_independence(settings, rep)
     check_local_skills(root, rep)
     check_claude_md(root, rep)
     check_session_hook(PLUGIN_ROOT, rep)

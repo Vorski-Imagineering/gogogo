@@ -97,6 +97,15 @@ class NeverWaits(unittest.TestCase):
             self.assertIn(name, claude)
 
 
+class Independence(unittest.TestCase):
+    """dev and auto-dev read the repo's `independence` level (gogogo#90)."""
+
+    def test_dev_and_auto_dev_read_independence(self):
+        for skill in (SKILL, SKILL.parents[1] / "dev" / "SKILL.md"):
+            text = skill.read_text(encoding="utf-8")
+            for name in ("independence", "Decided without asking"):
+                self.assertIn(name, text, f"{skill.parent.name}: {name}")
+
 
 class TakeWithFrom(unittest.TestCase):
     """§3 takes the card with `move --from` before it branches (gogogo#101)."""

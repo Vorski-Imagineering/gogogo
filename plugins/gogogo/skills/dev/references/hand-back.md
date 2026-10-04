@@ -45,7 +45,7 @@ report does (the reopen line below is not a stop), except a triage skip from
 | reason | when |
 |---|---|
 | `hard-stop` | a Hard Stop found mid-change with no Approvals row (§4) |
-| `decision` | a decision that belongs to a person and is not in the body (§4), or a comment §2 could not fold |
+| `decision` | a decision of a kind the level asks about that is not in the body (§2, §4), or a comment §2 could not fold |
 | `spec` | a fold that failed the lint (§2), or the spec check stopped (§5: two parts of the spec disagree, a difference that is not small, a piece that could not be built, or items left after the third reading) |
 | `review` | the review ended for a person (§5 rule 8; the record's `end` says which ending) |
 | `tests` | a weakened test the change could not pass without (§6, after the third restore attempt) |

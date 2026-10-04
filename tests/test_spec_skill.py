@@ -242,6 +242,37 @@ class SeveralIssues(unittest.TestCase):
         self.assertRegex((ROOT / "README.md").read_text(encoding="utf-8"), r"`/gogogo:spec #\d+ #\d+")
 
 
+WHO = "## Who decides"
+
+
+class WhoDecides(unittest.TestCase):
+    """The repo's `independence` level says which decisions are asked (gogogo#90)."""
+
+    def test_who_decides_names_the_levels(self):
+        lines = skill_text().splitlines()
+        heads = [i for i, line in enumerate(lines) if line.startswith(WHO)]
+        self.assertEqual(len(heads), 1)
+        profile = next(i for i, line in enumerate(lines) if line.startswith("## First: read this repo's profile"))
+        between = [line for line in lines[profile + 1:heads[0]] if line.startswith("## ")]
+        self.assertEqual(between, [], "## Who decides must come directly after the profile section")
+        sub = "\n".join(section(skill_text(), WHO))
+        for name in ("`independence`", "junior-dev", "tech-lead", "product-owner", "Decided without asking"):
+            self.assertIn(name, sub)
+        self.assertIn("independence", pc.FIELDS)
+        named = set(re.findall(r"`([a-z_]+(?:\.[a-z_]+)+)`", skill_text()))
+        named = {n for n in named if n.rsplit(".", 1)[1] not in ("py", "sh", "md", "json")}
+        for setting in named:
+            self.assertIn(setting, pc.FIELDS, setting)
+
+    def test_decided_without_asking_is_outside_the_table(self):
+        approvals = "\n".join(section(skill_text(), "## `## Approvals`"))
+        self.assertIn("Not approved", approvals)
+        self.assertIn("Decided without asking", approvals)
+        self.assertLess(approvals.index("Not approved"), approvals.index("Decided without asking"))
+        self.assertIn("Who decides", approvals)
+        self.assertIn(WHO, skill_text().splitlines(), "the section it points at is gone")
+
+
 BUILDING = "## Is someone building it already?"
 BEFORE = "## Before you write"
 

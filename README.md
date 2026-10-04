@@ -49,7 +49,9 @@ repo first ([Adopting it in a repo](#adopting-it-in-a-repo), step 1).
 
 1. **`/gogogo:setup`**: checks the repo and sets up what is missing (the
    profile that describes your project, the board and its columns, the ready
-   label). It asks before writing anything.
+   label). It asks before writing anything. It also asks how independent
+   Claude should be in the repo: which decisions it brings to you and which it
+   takes itself ([Independence](docs/independence-mode.md)).
 2. **`/gogogo:spec`**: describe your idea, or give it an existing issue. It
    asks you questions until every decision is made, writes the spec into the
    issue (filing one if there isn't one yet), marks it ready and moves its card

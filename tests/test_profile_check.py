@@ -18,6 +18,7 @@ COMPLETE = """+++
 profile = 1
 observability = "sentry"
 notify = "none"
+independence = "junior-dev"
 
 [tracker]
 kind = "github-project"
@@ -346,6 +347,20 @@ class WrongValues(unittest.TestCase):
         settings.pop("review")
         for skill in (None, *pc.SKILLS):
             self.assertEqual(pc.check(settings, sections, skill), ([], []), skill)
+
+    def test_independence_is_one_of_three(self):
+        # gogogo#90: optional; absent means junior-dev.
+        settings, sections = parse()
+        settings.pop("independence", None)
+        for skill in (None, *pc.SKILLS):
+            self.assertEqual(pc.check(settings, sections, skill), ([], []), skill)
+        settings["independence"] = "lead"
+        errors, _ = pc.check(settings, sections)
+        self.assertIn("independence: 'lead' is not one of junior-dev, product-owner, tech-lead", errors)
+        for level in ("junior-dev", "tech-lead", "product-owner"):
+            settings["independence"] = level
+            for skill in (None, *pc.SKILLS):
+                self.assertEqual(pc.check(settings, sections, skill), ([], []), (level, skill))
 
     def test_workspace_is_checkout_or_worktree_and_optional(self):
         # gogogo#94: optional; absent means checkout. A typo must not silently mean checkout.
@@ -705,6 +720,11 @@ class SchemaDoc(unittest.TestCase):
         doc = (PLUGIN / "references" / "profile-schema.md").read_text()
         row = next(line for line in doc.splitlines() if line.startswith("| `notify` |"))
         self.assertEqual(row.split("|")[4].strip(), pc.FIELDS["notify"][2])
+
+    def test_doc_and_checker_describe_independence_the_same(self):
+        doc = (PLUGIN / "references" / "profile-schema.md").read_text()
+        row = next(line for line in doc.splitlines() if line.startswith("| `independence` |"))
+        self.assertEqual(row.split("|")[4].strip(), pc.FIELDS["independence"][2])
         self.assertIn("absent means telegram", pc.FIELDS["notify"][2])
         self.assertIn(".claude/gogogo/notify.env", pc.FIELDS["notify"][2])
 
