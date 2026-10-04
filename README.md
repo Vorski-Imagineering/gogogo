@@ -68,9 +68,13 @@ repo first ([Adopting it in a repo](#adopting-it-in-a-repo), step 1).
    its questions now is what lets the run go on later without asking.
 2. **`/gogogo:auto-dev`** in a session started without permission prompts:
    ```bash
-   claude -n "$(basename "$(git rev-parse --show-toplevel)")-autodev" --permission-mode bypassPermissions "/gogogo:auto-dev"
+   claude -n "$(basename "$(git rev-parse --show-toplevel)")-autodev" --permission-mode bypassPermissions "/goal Run /gogogo:auto-dev on this repo. Met when /gogogo:auto-dev has printed its run report, or has stopped the whole run and said why."
    ```
    The `-n` name is what `/resume` and the terminal title show for the run.
+   `/goal` keeps the session taking turns until the run has printed its report,
+   and shows `◎ /goal active` meanwhile. In a session already open, type the
+   quoted `/goal …` text. Where `/goal` is unavailable (it says why), start
+   with `"/gogogo:auto-dev"` instead.
    Telegram messages when it starts, changes state and closes are optional:
    `/gogogo:setup` sets them up, and a run without them works the same.
    Before you start it, log a browser in to the environment where the agent
@@ -88,11 +92,11 @@ repo first ([Adopting it in a repo](#adopting-it-in-a-repo), step 1).
 
 [`/goal`](https://code.claude.com/docs/en/goal) keeps a session taking turns
 until a small model, reading only the transcript, judges a condition met or
-impossible. auto-dev already works the whole queue in one run, so a goal adds
-little to a run that ends with its close-run report. What it adds is
-persistence: a goal retries a turn that failed on a dropped connection, and
-after a usage limit it pauses, then carries on if the session waits for the
-reset.
+impossible. The launch command above starts the run under one. It keeps the
+run going when a turn would end while background work is in flight, retries a
+turn that failed on a dropped connection, and after a usage limit pauses, then
+carries on if the session waits for the reset. The one turn auto-dev itself may
+end is at the review, after one line saying it is waiting.
 
 The risk is a goal that names an outcome instead of the process. When auto-dev
 refuses to start or stops for you, the evaluator only sees "not met yet" and
@@ -103,17 +107,18 @@ and parks cards in `Human!Help!` with no note
 `tracker.py` now refuses that move unless the issue's newest comment says why,
 but a goal can still route around the skill in other ways).
 
-Use a goal when all of these hold:
+The launch's goal is safe to use when all of these hold:
 
 - the session runs in `bypassPermissions`, as above. The `/goal` docs suggest
   auto mode, but auto mode refuses the merge;
 - `/gogogo:auto-dev --triage-only` takes the issues you expect;
-- the condition names the skill, and makes a refusal or a stop the end:
+- the condition names the skill, and makes its run report or a whole-run stop
+  the end, as the launch's does. Keep it that way when you write your own:
   ```text
   /goal /gogogo:auto-dev has finished and printed its close-run report. Work issues only through /gogogo:auto-dev. If it refuses to start, that ends the goal: report why and change nothing to get round it.
   ```
 
-Don't use one when:
+Don't use a goal when:
 
 - auto-dev or dev refuses to start. Fix that first, with
   `/gogogo:setup` and you there;
