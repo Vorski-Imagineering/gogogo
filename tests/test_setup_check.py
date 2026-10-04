@@ -919,6 +919,32 @@ class Audit(unittest.TestCase):
         for text in ("force push", "deletion", "required check"):
             self.assertIn(text, rows[0]["detail"])
 
+    def _bypassed_ruleset(self, name):
+        """check_branches over FULL held by ruleset 9 named `name`, whose bypass list is not empty."""
+        rules = json.dumps([dict(r, ruleset_id=9) for r in self.FULL])
+
+        def fake_run(*cmd, cwd=None):
+            if cmd[:2] == ("gh", "api") and cmd[2].endswith("/rulesets"):
+                return subprocess.CompletedProcess(cmd, 0, json.dumps([{"id": 9, "name": name}]), "")
+            if cmd[:2] == ("gh", "api") and cmd[2].endswith("/rulesets/9"):
+                return subprocess.CompletedProcess(cmd, 0, json.dumps(
+                    {"id": 9, "name": name, "bypass_actors": [{"actor_type": "RepositoryRole", "actor_id": 5}]}), "")
+            return self._gh([], rules=rules)(*cmd, cwd=cwd)
+        rep = sc.Report()
+        with mock.patch.object(sc, "run", fake_run):
+            sc.check_branches("o/code", {"integration": {"strategy": "pr-squash", "base": "main"}}, "main", rep)
+        return rep.rows
+
+    def test_t24_a_bypass_on_another_ruleset_names_it_in_settings(self):
+        rows = self._bypassed_ruleset("other")
+        self.assertEqual([r["level"] for r in rows], ["FAIL"])
+        self.assertIn("Settings > Rules", rows[0]["fix"])
+        self.assertIn("other", rows[0]["fix"])
+        self.assertNotIn("--ruleset", rows[0]["fix"])
+        rows = self._bypassed_ruleset("gogogo: main")
+        self.assertEqual([r["level"] for r in rows], ["FAIL"])
+        self.assertIn("--ruleset main", rows[0]["fix"])
+
     def test_ruleset_for_a_branch_the_profile_does_not_give_exits_2(self):
         calls = []
         settings = {"tracker": {"code_repo": "o/code"}, "integration": {"strategy": "pr-squash", "base": "main"}}

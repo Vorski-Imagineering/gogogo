@@ -252,7 +252,8 @@ def _ruleset_fix(repo, branch, existing):
 def check_branch_rules(repo, branch, rules, classic, checks, wants_check, needs_ci, rep, *, target=True,
                        existing=None):
     """rules: list from rules/branches/<branch>, each rule carrying its ruleset's
-    `bypass_actors`, or an error string (also when a ruleset could not be read).
+    `bypass_actors` and `ruleset_name`, or an error string (also when a ruleset
+    could not be read).
     classic: dict from branches/<branch>/protection, {} when GitHub says
     'Branch not protected', or an error string.
     checks: names that passed on the latest PR merged into <branch>, [] when
@@ -292,10 +293,13 @@ def check_branch_rules(repo, branch, rules, classic, checks, wants_check, needs_
     if actors:
         named = ", ".join(sorted({f"{a.get('actor_type')} {a.get('actor_id')}" for a in actors}))
         bypassing = {r.get("ruleset_id") for r in rules if r.get("bypass_actors")}
+        # Name each ruleset as Settings > Rules lists it; its id only when the read gave no name.
+        names = sorted({repr(r.get("ruleset_name")) if r.get("ruleset_name") else f"id {r.get('ruleset_id')}"
+                        for r in rules if r.get("bypass_actors")})
         rep.fail(check, f"{repo} {branch} can be bypassed by: {named}",
                  fix if bypassing == {existing} else
-                 f"empty the bypass list of ruleset {', '.join(sorted(map(str, bypassing)))} in the repo's "
-                 "Settings > Rules")
+                 f"empty the bypass list in Settings > Rules for the ruleset{'s' if len(names) > 1 else ''} "
+                 f"{', '.join(names)}")
         return
     classic_only = [name for name in ("no force push", "no deletion") if by_classic[name] and not by_rules[name]]
     if classic_only and admins_bypass:
@@ -409,8 +413,9 @@ def _rules_with_bypass(repo, branch):
             return f"ruleset {ruleset}: {error or 'gh printed something that is not a JSON object'}"
         if "bypass_actors" not in body:
             return f"ruleset {ruleset}: its bypass list is not shown to this gh login"
-        bypass[ruleset] = body.get("bypass_actors", [])
-    return [dict(r, bypass_actors=bypass[r.get("ruleset_id")]) for r in rules]
+        bypass[ruleset] = (body.get("bypass_actors", []), body.get("name"))
+    return [dict(r, bypass_actors=bypass[r.get("ruleset_id")][0], ruleset_name=bypass[r.get("ruleset_id")][1])
+            for r in rules]
 
 
 def _classic(repo, branch):
