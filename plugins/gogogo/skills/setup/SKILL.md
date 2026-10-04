@@ -51,6 +51,11 @@ What each fix involves:
     `stages`, `verify.agent` and `verify.human` below. Then read the deploy
     scripts and CI to fill in names, URLs and `reached_by`; if what is read
     contradicts the answer, say so and ask again, do not pick.
+  - **Workspace: ask.** Ask where gogogo does each issue's work, as the
+    *Where each issue's work goes* bullet below says: its explanation first,
+    then `AskUserQuestion` with two options, `The checkout` and
+    `A worktree per issue`, the recommended one first and marked. Record the
+    answer as `integration.workspace` (`"checkout"` or `"worktree"`).
   - `hard_stops`: the repo's own Hard Stop rules, usually a `CLAUDE.md`
     section. Name its items word for word. Hard Stops are the owner's
     decision, never the skill's, so if the repo has none, do not write any.
@@ -96,12 +101,53 @@ What each fix involves:
   Show the draft to the user before writing it. It describes how their project
   works; they approve it.
 - **A profile missing a setting the skills now require.** Add it with the
-  value the board uses, shown to the user first. `tracker.columns.needs_human`
-  is `"Human!Help!"`, and the board needs that column too (below). When the
-  profile sets `roadmap.file`, that document's legend needs a row covering the
-  new column, as `/gogogo:roadmap` shows; offer to add it. When the
+  value the board uses, shown to the user first. When the setting names a new
+  column, the board needs that column too (below), and when the profile sets
+  `roadmap.file`, that document's legend needs a row covering it, as
+  `/gogogo:roadmap` shows; offer to add it. When the
   check warns that a setting is unknown (a key retired from the profile
   format, such as a column role no skill reads any more), offer to remove it.
+- **A setting the check filled with a default.** A warning
+  `<path>: missing; using <value> (default since gogogo#<n>)` means the skills
+  already run on `<value>`. Offer to write `<path>` into the profile with that
+  value, shown to the user first, and write it only on a yes.
+- **Where each issue's work goes** (`WARN workspace: not decided`, or a new
+  profile). `integration.workspace` decides where `/gogogo:dev` and
+  `/gogogo:auto-dev` put an issue's branch. Ask it outright, every time it is
+  not set; never pick for the user.
+  1. When the `workspace` row names a `live checkout`, say first, before
+     anything else, exactly what runs from this folder: each reason it gives,
+     one per line. Explain that until that thing runs from an installed copy,
+     an issue's branch checked out here changes what it runs, for every
+     session on this machine. Recommend moving it to an installed copy (a
+     deploy step that copies it outside the repo, or the installed plugin in
+     place of `--plugin-dir`) and keeping the checkout. Offer
+     `A worktree per issue` only as the alternative to that recommendation.
+     With no live checkout, say nothing about live files.
+  2. Show this explanation, word for word, filling in `<repo>` with the main
+     worktree's folder name (the folder of the first entry of
+     `git worktree list --porcelain`), which is the name dev and auto-dev put
+     in `../<repo>-wt-<n>`, not the name part of `tracker.code_repo`. The option labels are not the explanation;
+     it is text shown before the question:
+
+     > **Where should gogogo do each issue's work in `<repo>`?**
+     >
+     > **The checkout** (recommended when one person works this repo in the normal way). Each issue's branch is checked out in the folder you already use. `git status`, your editor and your file browser show the work in progress where you look. When the issue merges, the folder goes back to the main branch, and nothing new is left on disk. The cost: while an agent works an issue, this folder is on that issue's branch. Don't do other work in it at the same time, and anything that runs files straight from this folder runs the branch's version.
+     >
+     > **A worktree per issue** (only for power users, such as several sessions working this repo at once, or a deploy that runs files from this folder and can't be moved). Each issue gets its own folder beside this one, `../<repo>-wt-<n>`, on its own branch, and this folder stays on the main branch. The cost: work in progress is not in the folder you look at, so you have to know to open `../<repo>-wt-<n>`. Worktrees are complex and tend to leave folders all over the disk. gogogo removes one only after its issue's merge is verified, a stopped issue's folder stays until the issue is finished, and other tools that make worktrees leave their own. Each folder needs its own installs and build state. **gogogo's worktree support is in development and not deeply tested.**
+
+  3. Ask with `AskUserQuestion`: `The checkout` and `A worktree per issue`,
+     the recommended one first and marked. `The checkout` is recommended,
+     unless the user has turned down moving a live thing to an installed copy
+     or has said several sessions work this repo at once.
+  4. Show the one-line profile change, `workspace = "checkout"` or
+     `workspace = "worktree"` under `[integration]`, and commit it like
+     setup's other profile changes. Re-run the check: the row reads
+     `INFO workspace: <value>`.
+  5. On `The checkout` with a live checkout, offer to file an issue in
+     `tracker.issues_repo` describing the move to an installed copy (what
+     runs from this folder, and the recommendation above), asking first.
+     Setup moves nothing itself.
 - **No board, or missing columns.** Every board uses the same Status
   columns, in this order:
 
@@ -202,11 +248,24 @@ What each fix involves:
   the process skills come from the `gogogo` plugin and this repo's specifics
   are in `.agents/dev-process.md`.
 - **Notifications** (the `notify` row). Telegram messages tell a person when
-  an unattended run starts, changes state and closes. They are optional.
-  - `INFO notify: off`: ask once with `AskUserQuestion`: set up Telegram
-    messages for unattended runs, or no messages. On no, write nothing; say
-    messages stay off and that `/gogogo:setup` can set them up later.
-  - On yes, or on `WARN notify: telegram, but no bot credentials`:
+  an unattended run starts, changes state and closes. They are optional. A
+  profile with no `notify` line sends whenever this machine has bot
+  credentials; `notify = "none"` turns a repo off.
+  - `INFO notify: off`: ask once with `AskUserQuestion`:
+    - **every repo on this machine** (recommended): steps 1 and 2 below, which
+      write the per-user file.
+    - **only this repo**: first make sure `.claude/gogogo/` is in the repo's
+      `.gitignore`, adding it and committing it like setup's other changes.
+      Then steps 1 and 2 with `--repo` on each command:
+      `python3 "${CLAUDE_PLUGIN_ROOT}/scripts/notify.py" init --repo`, `chat-id --repo`
+      and `chat-id --save <its id> --repo`.
+    - **no messages**: write `notify = "none"` to `.agents/dev-process.md` and
+      commit it like setup's other profile changes, so messages stay off when
+      credentials appear on this machine later. Say that `/gogogo:setup` can
+      set them up later.
+  - On every repo or only this repo, or on `WARN notify: telegram, but no bot credentials`:
+    when the profile says `notify = "none"`, first remove that line and commit
+    it like setup's other profile changes, or the row stays `INFO notify: off`.
     1. Run `python3 "${CLAUDE_PLUGIN_ROOT}/scripts/notify.py" init`. Tell the
        person to make a bot (in Telegram, **@BotFather**, `/newbot`; a bot
        made for the Telegram channel plugin works too) and to paste its token
@@ -217,15 +276,18 @@ What each fix involves:
        `python3 "${CLAUDE_PLUGIN_ROOT}/scripts/notify.py" chat-id`. Show the
        chats it prints; once they say which one is theirs, run
        `python3 "${CLAUDE_PLUGIN_ROOT}/scripts/notify.py" chat-id --save <its id>`.
-    3. Only when the profile does not already say `notify = "telegram"`: ask,
-       then set it in `.agents/dev-process.md` and commit it like setup's
-       other profile changes.
-    4. Run `python3 "${CLAUDE_PLUGIN_ROOT}/scripts/notify.py" send --text "<repo>: notifications on"`,
-       and re-run the check: the row must be `PASS notify: telegram: bot @… -> …`.
+    3. Send the person a message that names this machine, with the hostname from `uname -n`,
+       and where it applies: `<scope>` is `every repo on this machine` when the
+       credentials went in the per-user file, and `<repo>` (the name part of
+       `tracker.code_repo`) when they went in the repo's own file:
+       `python3 "${CLAUDE_PLUGIN_ROOT}/scripts/notify.py" send --text "✅ gogogo is connected on $(uname -n) for <scope>. auto-dev runs there will report here: when a run starts and ends, and when each issue starts, is skipped, merges or needs you."`,
+       and re-run the check: the row must be `PASS notify: telegram (by default): bot @… -> …`
+       (`PASS notify: telegram: …` when the profile names the transport).
   - `WARN notify: telegram: <reason>`: show the reason. The usual causes are a
     wrong token (paste it again) and a chat the bot cannot reach (send the bot
     a message, then `chat-id`, and `chat-id --save <id>` for the chat the
-    person confirms).
+    person confirms). Add `--repo` to each command when this repo keeps its
+    own `.claude/gogogo/notify.env`.
 
 ## Reviewing a repo that is already set up
 
@@ -252,6 +314,9 @@ ones the user approves:
 - `release shape` → correct the profile's `environments`, `stages` or
   `verify.agent` to the shape the repo really has.
 - `local skills` → retire them as above.
+- `workspace` → ask where each issue's work goes, as the *Where each issue's
+  work goes* bullet above says. An `INFO workspace` row with a `live checkout`
+  is named to the user too: it is what runs from this folder.
 
 Name the `INFO` lines too (release shape, tool): they are what the check
 understood the repo to be, and the user should confirm it.

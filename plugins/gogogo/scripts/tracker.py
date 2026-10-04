@@ -3,7 +3,7 @@
 
     tracker.py [--profile FILE] list [--status "<column>"] [--open-only] [--issues-only] [--json]
     tracker.py [--profile FILE] show <issue> [--expect "<column>"]
-    tracker.py [--profile FILE] move <issue> --to "<column>" [--add-missing]
+    tracker.py [--profile FILE] move <issue> [--from "<column>"] --to "<column>" [--add-missing]
     tracker.py [--profile FILE] fields [--check]
     tracker.py [--profile FILE] views [--hide-closed]
     tracker.py [--profile FILE] tidy [--apply]
@@ -48,8 +48,9 @@ GitHub's own board workflows do this going forward once they are on; these
 commands fix what is already there.
 
 Exit codes: 0 ok, 1 usage/not-found, 2 the read or write could not be trusted,
-3 `show --expect`: the card is in a different column, 4 `move`: a move to the
-needs-a-person column refused because the newest comment says no reason.
+3 `show --expect` or `move --from`: the card is in a different column,
+4 `move`: a move to the needs-a-person column refused because the newest
+comment says no reason.
 """
 from __future__ import annotations
 
@@ -154,6 +155,9 @@ def configure(profile_path: str | None = None) -> Path:
         settings, _ = profile_check.split_profile(path.read_text(encoding="utf-8"))
     except profile_check.ProfileError as exc:
         raise ProfileMissing(str(exc)) from None
+    # With the format's defaults filled in: a profile without needs_human still
+    # has that role, in its in_progress column.
+    settings = profile_check.effective(settings)
     tracker = settings.get("tracker") or {}
     for key in ("project_owner", "project_number", "issues_repo"):
         if not tracker.get(key):
@@ -712,24 +716,47 @@ def cmd_show(args: argparse.Namespace) -> int:
 
 
 def cmd_move(args: argparse.Namespace) -> int:
-    return move_card(args.issue, args.repo, args.to, add_missing=args.add_missing)
+    # Passed only when given, so a caller without `--from` calls exactly as before.
+    expect_from = getattr(args, "expect_from", None)
+    extra = {"expect_from": expect_from} if expect_from else {}
+    return move_card(args.issue, args.repo, args.to, add_missing=args.add_missing, **extra)
 
 
 def move_card(number: int, repo: str, to: str, *, add_missing: bool = False,
-              meta: dict | None = None) -> int:
-    """Set one issue's column and read it back. Exit-code semantics of `move`."""
+              meta: dict | None = None, expect_from: str | None = None) -> int:
+    """Set one issue's column and read it back. Exit-code semantics of `move`.
+
+    With `expect_from`, refuse (exit 3, nothing written) unless the card is in
+    that column now. The read and the write are still two calls: this narrows
+    the gap in which another session's move can be undone, it does not close it.
+    """
     target = column(to)
     meta = meta or board_meta()
+    if expect_from:
+        # Otherwise every card "is not in" a renamed column: exit 3 for all.
+        resolve_option(meta, column(expect_from))
     option_id = resolve_option(meta, target)
 
     needs_human = COLUMNS.get("needs_human")
-    if needs_human and _bare(target) == _bare(needs_human.name) and not has_reason(newest_comment(number, repo)):
+    in_progress = COLUMNS.get("in_progress")
+    # A profile without needs_human hands back into the in_progress column (#87): there the
+    # column name is shared, so only the role key is a hand-back, and starting work is not.
+    shared = needs_human and in_progress and _bare(needs_human.name) == _bare(in_progress.name)
+    handing_back = to == "needs_human" if shared else needs_human and _bare(target) == _bare(needs_human.name)
+    if handing_back and not has_reason(newest_comment(number, repo)):
         print(f"#{number}: refused: a move to {needs_human.name} needs the issue's newest comment to carry "
               "a stop marker (post the Needs-you comment first). Nothing written.", file=sys.stderr)
         return 4
 
     found = issue_card(number, repo)
     card = found["card"]
+
+    if expect_from:
+        current = ((card or {}).get("fieldValueByName") or {}).get("name")
+        if not current or current.lower() != column(expect_from).lower():
+            where = current or ("no column" if card else "not on the board")
+            print(f"#{number} is in {where}, not {column(expect_from)}; not moved", file=sys.stderr)
+            return 3
 
     if not card:
         if not add_missing:
@@ -954,6 +981,10 @@ def main() -> int:
         "move", help="set an issue's column, verified; a move to needs_human exits 4 unless the "
                      "issue's newest comment carries a stop marker")
     mover.add_argument("issue", type=int)
+    mover.add_argument(
+        "--from", dest="expect_from", metavar="COLUMN",
+        help="profile role key or column name; exit 3, writing nothing, if the card is elsewhere. "
+             "It narrows, but does not close, the gap between reading a card and moving it")
     mover.add_argument("--to", required=True, help='profile role key or column name')
     mover.add_argument("--repo", default=None)
     mover.add_argument(

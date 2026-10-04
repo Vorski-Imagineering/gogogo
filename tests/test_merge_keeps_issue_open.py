@@ -11,7 +11,10 @@ SKILLS = ROOT / "plugins" / "gogogo" / "skills"
 
 
 def text(skill):
-    return (SKILLS / skill / "SKILL.md").read_text(encoding="utf-8")
+    """The skill as the agent reads it: SKILL.md, then the references it
+    points to, which hold its hand-back and merge steps (gogogo#130)."""
+    paths = [SKILLS / skill / "SKILL.md"] + sorted((SKILLS / skill / "references").glob("*.md"))
+    return "\n".join(p.read_text(encoding="utf-8") for p in paths)
 
 
 class MergeKeepsIssueOpen(unittest.TestCase):

@@ -24,6 +24,8 @@ from unittest import mock
 ROOT = Path(__file__).resolve().parents[1]
 PLUGIN = ROOT / "plugins" / "gogogo"
 SCRIPTS = PLUGIN / "scripts"
+DEV_HAND_BACK = PLUGIN / "skills" / "dev" / "references" / "hand-back.md"
+AUTO_DEV_MERGE = PLUGIN / "skills" / "auto-dev" / "references" / "merge.md"
 sys.path.insert(0, str(SCRIPTS))
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
@@ -963,13 +965,13 @@ class SharedFiles(unittest.TestCase):
     def test_the_dev_skill_carries_the_merge_recipe(self):
         """Commands, not sentences: the trailer command, the merge that takes
         its body, and the merge check that reads it back."""
-        blocks = fenced((PLUGIN / "skills" / "dev" / "SKILL.md").read_text(encoding="utf-8"))
+        blocks = fenced(DEV_HAND_BACK.read_text(encoding="utf-8"))
         self.assertTrue(any(re.search(r'stage_sync\.py" .*\btrailer\b', b) and "--co-authors-from" in b
                             for b in blocks))
         self.assertTrue(any("gh pr merge" in b and "--body-file" in b for b in blocks))
 
     def test_auto_dev_runs_the_same_commands(self):
-        text = (PLUGIN / "skills" / "auto-dev" / "SKILL.md").read_text(encoding="utf-8")
+        text = AUTO_DEV_MERGE.read_text(encoding="utf-8")
         self.assertRegex(text, r'stage_sync\.py" .*\btrailer\b')
         self.assertRegex(text, r"verify_merged\.py.*--profile <profile>.*--ships")
 

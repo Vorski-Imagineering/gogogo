@@ -1,6 +1,7 @@
 import json
 import os
 import re
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -149,6 +150,39 @@ class ProfileSkills(unittest.TestCase):
         rows = [r for r in self.rows(settings, sections) if r["check"] == "profile for /gogogo:auto-test"]
         self.assertEqual([r["level"] for r in rows], ["FAIL"])
         self.assertIn("auto_test.fail_label", rows[0]["detail"])
+
+
+class ColumnCheck(unittest.TestCase):
+    """The board-columns row reads the profile with its defaults filled in (gogogo#87)."""
+
+    def test_a_profile_without_needs_human_needs_no_extra_column(self):
+        import tracker
+        from test_profile_check import NO_NEEDS_HUMAN
+        root = repo({".agents/dev-process.md": NO_NEEDS_HUMAN.replace('tool = "python3 tools/board.py"',
+                                                                       'tool = "shared"')})
+        import profile_check
+        settings, _ = profile_check.split_profile((root / ".agents" / "dev-process.md").read_text())
+        self.assertEqual(settings["tracker"]["tool"], "shared")
+        meta = {"title": "t", "total": 0, "options": {"Dev Priority": "a", "In progress": "b",
+                                                      "In Dev": "c", "In Production": "d"}}
+        ok = subprocess.CompletedProcess([], 0, "[]", "")
+        rep = sc.Report()
+        saved = (tracker.ORG, tracker.PROJECT_NUMBER, tracker.DEFAULT_REPO, dict(tracker.COLUMNS))
+        try:
+            with mock.patch.object(sc, "run", return_value=ok), \
+                 mock.patch.object(tracker, "board_meta", return_value=meta), \
+                 mock.patch.object(tracker, "list_cards", side_effect=tracker.BoardError("offline")), \
+                 mock.patch.object(tracker, "graphql", side_effect=tracker.BoardError("offline")), \
+                 mock.patch.object(sc, "check_board_tidiness"):
+                sc.check_tracker(root, settings, rep)
+        finally:
+            tracker.ORG, tracker.PROJECT_NUMBER, tracker.DEFAULT_REPO = saved[:3]
+            tracker.COLUMNS.clear()
+            tracker.COLUMNS.update(saved[3])
+        rows = [r for r in rep.rows if r["check"] == "tracker: columns"]
+        self.assertEqual([r["level"] for r in rows], ["PASS"], rep.rows)
+        self.assertEqual(rows[0]["detail"].split(", ").count("In progress"), 1, rows[0]["detail"])
+        self.assertNotIn("Human!Help!", rows[0]["detail"])
 
 
 def shape_rows(settings):
@@ -797,6 +831,15 @@ class ConfigHeader(unittest.TestCase):
                             ("config: lanes", "always: make lint"), ("config: profile", ".agents/dev-process.md")]:
             self.assertIn(text, rows[check], check)
 
+    def test_release_row_says_where_work_happens(self):
+        s = self.settings()
+        s["integration"]["workspace"] = "worktree"
+        self.assertTrue(self.header(s)[0]["config: release"].endswith(
+            "; integration merge-script into main, work in worktree"))
+        del s["integration"]["workspace"]
+        self.assertTrue(self.header(s)[0]["config: release"].endswith(
+            "; integration merge-script into main, work in missing"))
+
     def test_no_profile_prints_missing(self):
         rows, order, calls = self.header({}, profile=None)
         self.assertEqual(order, self.NAMES)
@@ -959,6 +1002,241 @@ class Notify(unittest.TestCase):
         self.assertEqual(self.row(notify.NO_CREDENTIALS, "notify: telegram, but no bot credentials")["level"], "WARN")
         failed = self.row(notify.FAILED, "notify: telegram: Unauthorized")
         self.assertEqual((failed["level"], failed["detail"]), ("WARN", "telegram: Unauthorized"))
+
+    def real_row(self, repo_file_ignored):
+        """The row from notify's own status, in a temp repo with no `notify` line and full credentials."""
+        import notify
+        tmp = Path(tempfile.mkdtemp())
+        self.addCleanup(shutil.rmtree, tmp, ignore_errors=True)
+        subprocess.run(["git", "init", "-q", str(tmp)], check=True)
+        (tmp / ".gitignore").write_text(".claude/gogogo/\n" if repo_file_ignored else "")
+        creds = tmp / "home-notify.env"
+        creds.write_text(f"{notify.TOKEN_KEY}=1:abc\n{notify.CHAT_KEY}=7\n")
+        repo_file = tmp / ".claude" / "gogogo" / "notify.env"
+        repo_file.parent.mkdir(parents=True)
+        repo_file.write_text(f"{notify.CHAT_KEY}=8\n")
+        profile = tmp / ".agents" / "dev-process.md"
+        profile.parent.mkdir()
+        profile.write_text("+++\nprofile = 1\n+++\n\n## superpowers boundary\nx\n")
+        answers = [{"ok": True, "result": {"username": "b"}}, {"ok": True, "result": {"first_name": "Vic"}}]
+        rep = sc.Report()
+        with mock.patch.object(notify, "CREDENTIALS", creds), \
+                mock.patch.dict(os.environ, {}, clear=True), \
+                mock.patch.object(notify, "_call", side_effect=lambda *a, **k: answers.pop(0)["result"]):
+            sc.check_notify(profile, rep)
+        rows = [r for r in rep.rows if r["check"] == "notify"]
+        self.assertEqual(len(rows), 1)
+        self.assertFalse(rep.failed())
+        return rows[0]
+
+    def test_the_default_passes_and_a_file_that_is_not_ignored_warns(self):
+        default = self.real_row(True)
+        self.assertEqual(default["level"], "PASS")
+        self.assertIn("(by default)", default["detail"])
+        unread = self.real_row(False)
+        self.assertEqual(unread["level"], "WARN")
+        self.assertIn("not git-ignored", unread["detail"])
+
+
+class Workspace(unittest.TestCase):
+    """Where dev and auto-dev do an issue's work: the `workspace` row and the live-checkout
+    reasons behind it (gogogo#94). Read only; never a FAIL."""
+
+    def setUp(self):
+        self.home = Path(tempfile.mkdtemp()).resolve()
+        self.addCleanup(shutil.rmtree, self.home, ignore_errors=True)
+        self.root = self.home / "dev" / "repo"
+        self.root.mkdir(parents=True)
+
+    def hooks(self, *pairs):
+        """Write <home>/.claude/settings.json with one hook per (event, command)."""
+        hooks = {}
+        for event, command in pairs:
+            hooks.setdefault(event, []).append({"hooks": [{"type": "command", "command": command}]})
+        path = self.home / ".claude" / "settings.json"
+        path.parent.mkdir(exist_ok=True)
+        path.write_text(json.dumps({"hooks": hooks}))
+
+    def rows(self, workspace=None, lanes="The test host must be dev."):
+        settings = {"integration": {"strategy": "pr-squash", "base": "main"}}
+        if workspace is not None:
+            settings["integration"]["workspace"] = workspace
+        rep = sc.Report()
+        sc.check_workspace(self.root, settings, {"Lane constraints": lanes}, rep, self.home)
+        self.assertFalse(rep.failed())
+        return [r for r in rep.rows if r["check"] == "workspace"]
+
+    def test_absent_warns_not_decided(self):
+        rows = self.rows()
+        self.assertEqual([r["level"] for r in rows], ["WARN"])
+        self.assertTrue(rows[0]["detail"].startswith("not decided"), rows[0]["detail"])
+        self.assertNotIn("Lane constraints", rows[0]["detail"])
+
+    def test_absent_with_worktree_prose_names_lane_constraints(self):
+        rows = self.rows(lanes="Put each issue in its own git Worktree.")
+        self.assertEqual([r["level"] for r in rows], ["WARN"])
+        self.assertIn("## Lane constraints", rows[0]["detail"])
+
+    def test_set_is_info_with_its_value(self):
+        rows = self.rows("checkout")
+        self.assertEqual([(r["level"], r["detail"]) for r in rows], [("INFO", "checkout")])
+
+    def test_a_plugin_repo_is_a_live_checkout(self):
+        (self.root / ".claude-plugin").mkdir()
+        reasons = sc.live_checkout(self.root, self.home)
+        self.assertEqual(len(reasons), 1)
+        self.assertIn("Claude Code plugin", reasons[0])
+        rows = self.rows("worktree")
+        self.assertEqual(rows[0]["level"], "INFO")
+        self.assertTrue(rows[0]["detail"].startswith("worktree; live checkout: "), rows[0]["detail"])
+
+    def test_a_user_hook_inside_the_checkout_is_named_by_its_path_and_event(self):
+        self.hooks(("SessionStart", "python3 ~/dev/repo/scripts/h.py"),
+                   ("Stop", "sh $HOME/dev/repo/bin/stop.sh"),
+                   ("PreToolUse", "python3 ~/dev/repo-other/x.py"),
+                   ("PostToolUse", "python3 /usr/local/bin/x.py"))
+        self.assertEqual(sc.live_checkout(self.root, self.home),
+                         ["your Claude Code settings run scripts/h.py on SessionStart",
+                          "your Claude Code settings run bin/stop.sh on Stop"])
+
+    def test_the_exact_rows_design_3_fixes(self):
+        self.assertEqual(self.rows()[0]["detail"], "not decided: dev and auto-dev work in the checkout")
+        self.assertEqual(self.rows(lanes="Put each issue in its own git Worktree")[0]["detail"],
+                         "not decided: dev and auto-dev work in the checkout; ## Lane constraints mention a "
+                         "worktree, so dev and auto-dev stop until it is set")
+        (self.root / ".claude-plugin").mkdir()
+        self.hooks(("SessionStart", "python3 ~/dev/repo/scripts/h.py"))
+        self.assertEqual(self.rows("worktree")[0]["detail"],
+                         "worktree; live checkout: this repo is a Claude Code plugin; sessions may load it "
+                         "from here with --plugin-dir; your Claude Code settings run scripts/h.py on SessionStart")
+
+    def test_a_hook_without_a_command_does_not_hide_the_next(self):
+        path = self.home / ".claude" / "settings.json"
+        path.parent.mkdir()
+        path.write_text(json.dumps({"hooks": {"SessionStart": [{"hooks": [
+            {"type": "command", "command": 5},
+            {"type": "command", "command": "python3 ~/dev/repo/scripts/h.py"}]}]}}))
+        self.assertEqual(sc.live_checkout(self.root, self.home),
+                         ["your Claude Code settings run scripts/h.py on SessionStart"])
+
+    def test_a_hook_naming_the_checkout_itself_is_named_as_dot(self):
+        self.hooks(("Stop", "cd ~/dev/repo && make"))
+        self.assertEqual(sc.live_checkout(self.root, self.home), ["your Claude Code settings run . on Stop"])
+
+    def run_main(self, cwd):
+        """setup_check.py's rows, run in `cwd` with HOME at this test's home and gh offline."""
+        bin_dir = self.home / "bin"
+        bin_dir.mkdir(exist_ok=True)
+        (bin_dir / "gh").write_text("#!/bin/sh\necho offline >&2\nexit 1\n")
+        (bin_dir / "gh").chmod(0o755)
+        env = {**os.environ, "HOME": str(self.home), "PATH": f"{bin_dir}:{os.environ['PATH']}"}
+        script = ROOT / "plugins" / "gogogo" / "scripts" / "setup_check.py"
+        out = subprocess.run([sys.executable, str(script), "--json"], cwd=cwd, env=env,
+                             capture_output=True, text=True)
+        return [r for r in json.loads(out.stdout) if r["check"] == "workspace"]
+
+    def test_no_profile_still_names_a_live_checkout(self):
+        # Setup asks the question while drafting a profile, so the live reasons must be there then too.
+        subprocess.run(["git", "init", "-q", str(self.root)], check=True)
+        self.assertEqual(self.run_main(self.root), [])
+        (self.root / ".claude-plugin").mkdir()
+        rows = self.run_main(self.root)
+        self.assertEqual([(r["level"], r["detail"]) for r in rows],
+                         [("WARN", "not decided: dev and auto-dev work in the checkout; live checkout: this repo "
+                                   "is a Claude Code plugin; sessions may load it from here with --plugin-dir")])
+        (self.root / ".agents").mkdir()
+        (self.root / ".agents" / "dev-process.md").write_text("no front matter\n")
+        self.assertEqual([r["level"] for r in self.run_main(self.root)], ["WARN"])
+
+    def test_run_from_a_worktree_it_reads_hooks_naming_the_main_checkout(self):
+        git = ["git", "-C", str(self.root), "-c", "user.name=t", "-c", "user.email=t@t"]
+        subprocess.run(["git", "init", "-q", str(self.root)], check=True)
+        subprocess.run([*git, "commit", "-q", "--allow-empty", "-m", "x"], check=True)
+        wt = self.home / "dev" / "repo-wt-1"
+        subprocess.run([*git, "worktree", "add", "-q", "-b", "fix/1-x", str(wt)], check=True)
+        self.hooks(("SessionStart", "python3 ~/dev/repo/scripts/h.py"))
+        self.assertEqual(sc.main_worktree(wt), self.root)
+        self.assertEqual(sc.main_worktree(self.home), self.home)  # not a repo: falls back
+        rows = self.run_main(wt)
+        self.assertEqual([r["level"] for r in rows], ["WARN"])
+        self.assertTrue(rows[0]["detail"].endswith("; live checkout: your Claude Code settings run scripts/h.py "
+                                                   "on SessionStart"), rows[0]["detail"])
+
+    def test_the_printed_path_stops_where_the_command_goes_on(self):
+        self.hooks(("SessionStart", "python3 ~/dev/repo/scripts/h.py>~/log"),
+                   ("Stop", "python3 ~/dev/repo/h.py,abc"),
+                   ("PreToolUse", "python3 ~/dev/repo/a.py<in"),
+                   ("PostToolUse", "x --f=~/dev/repo/b.py=1:2"))
+        self.assertEqual(sc.live_checkout(self.root, self.home),
+                         ["your Claude Code settings run scripts/h.py on SessionStart",
+                          "your Claude Code settings run h.py on Stop",
+                          "your Claude Code settings run a.py on PreToolUse",
+                          "your Claude Code settings run b.py on PostToolUse"])
+
+    def test_a_hook_outside_the_checkout_is_no_reason(self):
+        self.hooks(("SessionStart", "python3 ~/other/h.py"))
+        self.assertEqual(sc.live_checkout(self.root, self.home), [])
+
+    def test_a_missing_or_invalid_settings_file_gives_no_reasons(self):
+        self.assertEqual(sc.live_checkout(self.root, self.home), [])
+        path = self.home / ".claude" / "settings.json"
+        path.parent.mkdir()
+        for text in ("{not json", json.dumps({"hooks": "x"}), json.dumps({"hooks": {"Stop": [1, {"hooks": 2}]}}),
+                     json.dumps([1])):
+            path.write_text(text)
+            self.assertEqual(sc.live_checkout(self.root, self.home), [], text)
+
+    def test_the_reason_never_carries_the_rest_of_the_command(self):
+        self.hooks(("SessionStart", "python3 ~/dev/repo/scripts/h.py --token abc"))
+        rows = self.rows("checkout")
+        self.assertIn("scripts/h.py on SessionStart", rows[0]["detail"])
+        self.assertNotIn("abc", rows[0]["detail"])
+        self.assertNotIn("--token", rows[0]["detail"])
+
+    def test_live_reasons_are_added_to_the_warning_too(self):
+        self.hooks(("SessionStart", "python3 ~/dev/repo/scripts/h.py"))
+        rows = self.rows()
+        self.assertEqual(rows[0]["level"], "WARN")
+        self.assertIn("; live checkout: your Claude Code settings run scripts/h.py on SessionStart",
+                      rows[0]["detail"])
+
+
+class SessionHook(unittest.TestCase):
+    """The plugin's own SessionStart hook: reported, never a FAIL."""
+
+    def row(self, files):
+        rep = sc.Report()
+        sc.check_session_hook(repo(files), rep)
+        rows = [r for r in rep.rows if r["check"] == "session-status"]
+        self.assertEqual(len(rows), 1)
+        self.assertFalse(rep.failed())
+        return rows[0]
+
+    def test_main_checks_this_plugin(self):
+        self.assertEqual(sc.PLUGIN_ROOT, ROOT / "plugins" / "gogogo")
+
+    def test_the_shipped_hook_is_info(self):
+        rep = sc.Report()
+        sc.check_session_hook(ROOT / "plugins" / "gogogo", rep)
+        self.assertEqual([(r["level"], r["check"]) for r in rep.rows], [("INFO", "session-status")])
+        self.assertEqual(rep.rows[0]["detail"], "shown at session start (plugin hook)")
+
+    def test_hook_present_is_info(self):
+        hooks = {"hooks": {"SessionStart": [{"matcher": "startup", "hooks": [
+            {"type": "command", "command": 'python3 "${CLAUDE_PLUGIN_ROOT}/scripts/session_status.py"'}]}]}}
+        self.assertEqual(self.row({"hooks/hooks.json": json.dumps(hooks)})["level"], "INFO")
+
+    def test_no_hooks_file_warns(self):
+        row = self.row({})
+        self.assertEqual((row["level"], row["detail"]), ("WARN", "the plugin's session-status hook is missing"))
+
+    def test_hook_under_another_event_or_unreadable_warns(self):
+        other = {"hooks": {"Stop": [{"hooks": [{"type": "command", "command": "session_status.py"}]}]}}
+        self.assertEqual(self.row({"hooks/hooks.json": json.dumps(other)})["level"], "WARN")
+        self.assertEqual(self.row({"hooks/hooks.json": "{not json"})["level"], "WARN")
+        self.assertEqual(self.row({"hooks/hooks.json": "[]"})["level"], "WARN")
+        no_command = {"hooks": {"SessionStart": [{"hooks": [{"type": "command"}]}]}}
+        self.assertEqual(self.row({"hooks/hooks.json": json.dumps(no_command)})["level"], "WARN")
 
 
 if __name__ == "__main__":

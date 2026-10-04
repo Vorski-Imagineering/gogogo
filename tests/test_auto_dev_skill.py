@@ -14,9 +14,12 @@ import unittest
 from pathlib import Path
 
 SKILL = Path(__file__).resolve().parents[1] / "plugins" / "gogogo" / "skills" / "auto-dev" / "SKILL.md"
+BRANCH = SKILL.parent / "references" / "branch.md"
 sys.path.insert(0, str(SKILL.parents[2] / "scripts"))
+sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 import review_stats  # noqa: E402
+from test_dev_skill import moved  # noqa: E402
 
 
 def section(text, heading):
@@ -34,6 +37,11 @@ class QueueSelection(unittest.TestCase):
 
     def test_the_lint_verdict_is_named(self):
         self.assertIn("label: apply", self.text)
+
+    def test_branching_looks_for_earlier_work(self):
+        self.assertIn("issue_work.py", moved(BRANCH))
+        dev = (SKILL.parents[1] / "dev" / "SKILL.md").read_text(encoding="utf-8")
+        self.assertIn("issue_work.py", section(dev, "4. Change"))
 
     def test_the_skip_marker_matches_the_parser(self):
         triage = section(self.text, "2. Triage each issue before touching it")
@@ -58,6 +66,102 @@ class QueueSelection(unittest.TestCase):
 
     def test_triage_only_names_the_ready_label(self):
         self.assertIn("ready label", section(self.text, "Triage-only mode"))
+
+    def test_triage_folds_in_comments(self):
+        """gogogo#108: an answer in a comment is folded in, not skipped; a preview folds nothing."""
+        triage = section(self.text, "2. Triage each issue before touching it")
+        self.assertIn("Fold in comments", triage)
+        self.assertIn("folds nothing", section(self.text, "Triage-only mode"))
+
+
+class NeverWaits(unittest.TestCase):
+    """The loop never waits on chat or on a turn's end (gogogo#96)."""
+
+    def setUp(self):
+        self.text = SKILL.read_text(encoding="utf-8")
+
+    def test_the_chat_section_comes_before_selection(self):
+        chat = self.text.find("\n## The loop never waits on chat\n")
+        self.assertNotEqual(chat, -1)
+        self.assertLess(chat, self.text.index("\n## 1. Select the queue"))
+
+    def test_no_run_ends_a_turn_for_background_work(self):
+        step = section(self.text, "4. Change, test, review, verify")
+        self.assertIn("Never end a turn to wait for background work", step)
+        both = [ln for ln in step.splitlines() if "headless" in ln.lower() and "never end a turn" in ln.lower()]
+        self.assertFalse(both, both)
+
+    def test_claude_specific_names_the_poll_and_the_banned_tool(self):
+        claude = self.text.split("\n## Claude-specific")[1]
+        for name in ("timeout 540", "AskUserQuestion"):
+            self.assertIn(name, claude)
+
+
+
+class TakeWithFrom(unittest.TestCase):
+    """§3 takes the card with `move --from` before it branches (gogogo#101)."""
+
+    def setUp(self):
+        self.step = moved(BRANCH)
+
+    def test_the_move_carries_from_and_comes_before_the_branch(self):
+        lines = self.step.splitlines()
+        moves = [i for i, ln in enumerate(lines) if " move <n>" in ln and "--to in_progress" in ln]
+        branch = next(i for i, ln in enumerate(lines) if "git switch -c" in ln)
+        self.assertEqual(len(moves), 1, moves)
+        self.assertIn("--from", lines[moves[0]])
+        self.assertLess(moves[0], branch)
+
+    def test_the_look_for_earlier_work_comes_before_the_move(self):
+        lines = self.step.splitlines()
+        look = next(i for i, ln in enumerate(lines) if "issue_work.py" in ln)
+        move = next(i for i, ln in enumerate(lines) if " move <n>" in ln and "--to in_progress" in ln)
+        self.assertLess(look, move)
+
+    def test_a_failed_branch_moves_the_card_back_from_in_progress(self):
+        self.assertIn("--from in_progress", self.step)
+
+
+class WorktreeSweep(unittest.TestCase):
+    """dev and auto-dev remove finished worktrees; status and wrap-up only list them (gogogo#92)."""
+
+    RUN = re.compile(r'scripts/worktree_sweep\.py"( --apply)?')
+
+    def runs(self, skill):
+        folder = SKILL.parents[1] / skill
+        # A step's rules may sit in the skill's references/ (gogogo#130).
+        text = "\n".join(p.read_text(encoding="utf-8")
+                          for p in [folder / "SKILL.md", *sorted(folder.glob("references/*.md"))])
+        return [m.group(1) is not None for m in self.RUN.finditer(text)]
+
+    def test_dev_and_auto_dev_run_the_sweep_with_apply(self):
+        for skill in ("dev", "auto-dev"):
+            self.assertTrue(self.runs(skill), skill)
+            self.assertTrue(all(self.runs(skill)), skill)
+
+    def test_status_and_wrap_up_run_the_sweep_without_apply(self):
+        for skill in ("status", "wrap-up"):
+            self.assertTrue(self.runs(skill), skill)
+            self.assertFalse(any(self.runs(skill)), skill)
+
+
+class Workspace(unittest.TestCase):
+    """Where an issue's work goes is the profile's `integration.workspace`, asked by setup (gogogo#94)."""
+
+    def test_dev_and_auto_dev_branch_by_the_setting(self):
+        dev = (SKILL.parents[1] / "dev" / "SKILL.md").read_text(encoding="utf-8")
+        for name, text in (("dev §4", section(dev, "4. Change")), ("auto-dev §3", moved(BRANCH))):
+            for word in ("integration.workspace", "git worktree add"):
+                self.assertIn(word, text, name)
+
+    def test_auto_dev_preflight_reads_the_setting(self):
+        preflight = section(SKILL.read_text(encoding="utf-8"), "Before anything: preflight")
+        self.assertIn("integration.workspace", preflight)
+
+    def test_setup_asks_with_both_options(self):
+        setup = (SKILL.parents[1] / "setup" / "SKILL.md").read_text(encoding="utf-8")
+        for word in ("integration.workspace", "The checkout", "A worktree per issue"):
+            self.assertIn(word, setup)
 
 
 if __name__ == "__main__":

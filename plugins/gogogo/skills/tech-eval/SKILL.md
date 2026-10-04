@@ -28,6 +28,8 @@ python3 "${CLAUDE_PLUGIN_ROOT}/scripts/profile_check.py" --for tech-eval --show
 - Any other exit: **stop and report the line it printed.** It names the missing
   field.
 
+Any `warning:` line the check printed goes, verbatim, at the top of your report to the person; if it printed none, the report says so.
+
 Then read the profile's `## Technology evaluation` section **if it has one** (it is
 optional). It holds this repo's stack facts, commands and worked examples, and the steps
 below say where they apply.

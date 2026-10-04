@@ -17,10 +17,14 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 PLUGIN = ROOT / "plugins" / "gogogo"
 DEV = PLUGIN / "skills" / "dev" / "SKILL.md"
+DEV_REVIEW = PLUGIN / "skills" / "dev" / "references" / "review.md"
+DEV_HAND_BACK = PLUGIN / "skills" / "dev" / "references" / "hand-back.md"
 sys.path.insert(0, str(PLUGIN / "scripts"))
+sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 import profile_check  # noqa: E402
 import review_stats  # noqa: E402
+from test_dev_skill import moved  # noqa: E402
 
 KEYS = ["v", "pr", "kind", "coverage", "rounds", "applied", "declined", "refix", "applied_as",
         "declined_as", "followups", "end", "escaped_from", "escaped_as", "impl", "reviewer",
@@ -86,17 +90,17 @@ class Example(unittest.TestCase):
 class Settings(unittest.TestCase):
     def test_dev_names_the_coverage_setting_and_maps_it_in_claude_specific(self):
         text = DEV.read_text(encoding="utf-8")
-        self.assertIn("`review.coverage`", text)
+        review = moved(DEV_REVIEW)
+        self.assertIn("`review.coverage`", review)
         self.assertIn("review.coverage", profile_check.FIELDS)
         claude = text.split("\n## Claude-specific")[1]
         for value in ("precise", "broad", "exhaustive"):
             self.assertIn(value, claude)
-        review = section(text, "5.", "6.")
         self.assertIsNone(re.search(r"/code-review (medium|high|max)\b", review))
         self.assertIsNone(re.search(r"`(medium|high|max)`", review))
 
     def test_dev_names_the_stop_marker(self):
-        markers = STOP.findall(section(DEV.read_text(encoding="utf-8"), "8.", "Do not"))
+        markers = STOP.findall(moved(DEV_HAND_BACK))
         self.assertEqual(len(markers), 1, markers)
         reasons = re.fullmatch(r"v=1 reason=<([^>]*)> session=<id\|unknown>", markers[0])
         self.assertIsNotNone(reasons, markers[0])

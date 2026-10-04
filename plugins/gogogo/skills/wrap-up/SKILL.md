@@ -28,6 +28,8 @@ one: the repo's own checks, run alongside the ones below, and anything it says
 blocks closing. A repo with no profile (exit 2) gets the checks below and nothing else;
 say so in the report.
 
+Any `warning:` line the check printed goes, verbatim, at the top of your report to the person; if it printed none, the report says so.
+
 ## 1. Find what's hanging
 
 Run every check. Report each one, even when it is clean; a silent check
@@ -42,8 +44,8 @@ part of wrapping up.
 |---|---|
 | Working trees | In each repo: `git status --short` and `git log @{u}.. --oneline 2>/dev/null` (unpushed commits). Checkouts live in different places on different machines, so never hard-code a path. Name the branch: work left on a feature branch is fine if the user knows it's there. |
 | Stashes, and other sessions | `git stash list` in each repo. Another session, or a merge script that switches branches, can move a file you wrote onto another branch mid-session. Confirm this session's files are where you left them (`ls` them) and name the branch they are on now. |
-| Worktrees | `git worktree list`. More than one line means each extra one needs an owner or removal. Check the repo's `CLAUDE.md`: many forbid worktrees unless asked. |
-| Stranded work | `python3 "${CLAUDE_PLUGIN_ROOT}/scripts/stranded_work.py"` in each repo with a profile. It lists branches and worktrees ahead of the base that no open issue or open pull request claims, and says when a branch shares no history with the base and what became of its pull request. One this session created blocks; older ones are named. |
+| Worktrees | `git worktree list`, and `python3 "${CLAUDE_PLUGIN_ROOT}/scripts/worktree_sweep.py"` without `--apply` (it leaves out the worktree this session is in, which `git worktree list` still shows). Name each `remove` line and offer to remove it, asking first (`worktree_sweep.py --apply --only <path>`, from the main worktree). A `keep` line for a worktree this session created needs an owner or removal. Check the repo's `CLAUDE.md`: many forbid worktrees unless asked. |
+| Stranded work | `python3 "${CLAUDE_PLUGIN_ROOT}/scripts/stranded_work.py"` in each repo with a profile. It lists local and `origin` branches, and worktrees, ahead of `origin`'s base that nothing accounts for: no issue number, an issue that is not open, or an open issue with no open pull request and no stop marker naming the branch. It says when a branch shares no history with the base and what became of its pull request. One this session created blocks; older ones are named. |
 | Background work | Background shell tasks, `Monitor`s, subagents, workflows and scheduled wakeups this session started. `ListAgents` for agents. Say which are still running and whether it matters: a read-only search dying is harmless; a half-finished write is not. |
 | Tracker | Every issue created or edited this session: the substance is in the body, not only in a comment; a specced issue carries `tracker.ready_marker`, or its absence is explained (`/gogogo:spec` § Posting); comments that now contradict a later edit are fixed, not left as two stories; the card sits in the column of the stage its code has actually reached (`<tracker.tool> show <n>`). |
 | Promises | Scan your own replies for "I'll", "next", "later", "follow-up", "want me to". Each one is done, handed to an issue, or listed as open. Offers the user didn't take up are not open items; list them only if the user might have missed the question. |

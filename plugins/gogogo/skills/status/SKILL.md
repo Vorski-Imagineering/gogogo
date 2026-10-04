@@ -22,6 +22,8 @@ report, never printed empty: an unset `tracker.queue` or
 unset setting does (`integration.base`, `tracker.tool`,
 `stages[].environment`), that rule applies instead.
 
+Any `warning:` line the check printed goes, verbatim, at the top of your report to the person; if it printed none, the report says so.
+
 ## It reads only
 
 Status writes nothing: not to the repo, the board, the tracker or a remote. It
@@ -102,8 +104,12 @@ in its place in the report, and the others still run.
    git for-each-ref refs/heads --format='%(refname:short)|%(upstream:short)|%(upstream:track)'
    git rev-list --count <base>..<branch>      # each branch other than the base
    git worktree list --porcelain
+   python3 "${CLAUDE_PLUGIN_ROOT}/scripts/worktree_sweep.py"
    ```
-   Keep a branch only when its count is above 0.
+   Keep a branch only when its count is above 0. `worktree_sweep.py` runs
+   without `--apply`, so it removes nothing; show its lines under
+   `Worktrees, sweep:`. Its exit 1 means it kept a worktree, not that it
+   failed; only exit 2 is an `unreadable` line.
 
 ## Shape
 
@@ -166,7 +172,7 @@ The report follows this layout line for line. It shows the full case, and
 every rule above wins over it where the two differ: for example the first
 line's ending (Gather step 1), BOARD as its one line (step 2) and `+N more`.
 A section or listed column with nothing to show prints `none`.
-`Worktrees, detached:` is left out when there are none.
+`Worktrees, detached:` and `Worktrees, sweep:` are left out when there are none.
 
 ```
 <repo> · <branch> @ <short sha> · <n> uncommitted · <a> ahead / <b> behind <upstream>, as last fetched
@@ -188,6 +194,8 @@ CODE
     <branch line>
   Worktrees, detached:
     <path> @ <short sha>
+  Worktrees, sweep:
+    <keep | remove> <path> (<branch>): <reason>
 ```
 
 Print the report once, in one fenced block, with nothing before it. After

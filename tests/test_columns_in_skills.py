@@ -7,18 +7,20 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 PLUGIN = ROOT / "plugins" / "gogogo"
+DEV_HAND_BACK = PLUGIN / "skills" / "dev" / "references" / "hand-back.md"
+AUTO_DEV_BRANCH = PLUGIN / "skills" / "auto-dev" / "references" / "branch.md"
 
 
 class ColumnSettingsInSkills(unittest.TestCase):
     def test_dev_and_auto_dev_name_the_needs_human_column(self):
-        for skill in ("dev", "auto-dev"):
-            text = (PLUGIN / "skills" / skill / "SKILL.md").read_text(encoding="utf-8")
+        for skill, path in (("dev", DEV_HAND_BACK), ("auto-dev", PLUGIN / "skills" / "auto-dev" / "SKILL.md")):
+            text = path.read_text(encoding="utf-8")
             self.assertIn("tracker.columns.needs_human", text, skill)
 
     def test_dev_removes_the_ready_label_on_needs_human(self):
         # The Dev Ready view filters on the label, so a stopped card that
         # keeps it still shows there (gogogo#26 Approvals row 9).
-        text = (PLUGIN / "skills" / "dev" / "SKILL.md").read_text(encoding="utf-8")
+        text = DEV_HAND_BACK.read_text(encoding="utf-8")
         self.assertIn("tracker.ready_marker", text)
         self.assertIn("--remove-label", text)
 
@@ -30,7 +32,7 @@ class ColumnSettingsInSkills(unittest.TestCase):
         for needle in ("git switch -c fix/<issue-number>-<short-slug>", "integration.base",
                        "tracker.code_repo", "defaultBranchRef"):
             self.assertIn(needle, change)
-        auto_dev = (PLUGIN / "skills" / "auto-dev" / "SKILL.md").read_text(encoding="utf-8")
+        auto_dev = AUTO_DEV_BRANCH.read_text(encoding="utf-8")
         self.assertIn("git switch -c fix/<issue-number>-<short-slug>", auto_dev)
 
     def test_dev_does_not_read_origin_head(self):

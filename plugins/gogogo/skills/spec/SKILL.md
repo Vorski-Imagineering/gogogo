@@ -1,6 +1,6 @@
 ---
 name: spec
-description: Use when turning a tracker issue, or an idea not yet filed as one, into a specification another agent will implement (also a list of issues or a board column, such as "spec these five" or "spec everything in New", specced one at a time), when triaging whether an issue is ready to hand off, or when an agent came back blocked on an issue that looked fully specified.
+description: Use when turning a tracker issue, or an idea not yet filed as one, into a specification another agent will implement (also a list of issues or a board column, such as "spec these five" or "spec everything in New", specced one at a time; with no argument, it offers to spec everything in New), when triaging whether an issue is ready to hand off, or when an agent came back blocked on an issue that looked fully specified.
 ---
 
 # spec
@@ -40,6 +40,8 @@ python3 "${CLAUDE_PLUGIN_ROOT}/scripts/profile_check.py" --for spec --show
 - Any other exit: **stop and report the line it printed.** It names the missing
   field. Do not guess a tracker, a label, a test command or a URL.
 
+Any `warning:` line the check printed goes, verbatim, at the top of your report to the person; if it printed none, the report says so.
+
 Then read the profile's `## Recon traps` and `## Lane constraints` sections, and
 the Hard Stop rules at `hard_stops.source`. They are required reading before
 you write anything, and nothing here repeats them.
@@ -47,65 +49,39 @@ you write anything, and nothing here repeats them.
 Every tracker command targets `tracker.issues_repo`. When it differs from
 `tracker.code_repo`, pass `--repo <issues_repo>` on every `gh issue` call.
 
+## Given nothing to spec
+
+When the user gives no issue, no idea and no column (`/gogogo:spec` with no
+argument, or words that name none of them):
+
+1. Without `tracker.tool`, ask for an issue number or an idea; the rest of
+   this section does not apply.
+2. Find the column with the word `New`, the way `references/several-issues.md`
+   rule 2 matches words: the column `/gogogo:setup` creates as `⚡️ New`. A
+   non-zero exit from `fields` is said as such, and this section stops. None
+   matches: say the board has no New column and ask for an issue number.
+   Several: rule 2's question names them.
+3. Read it with rule 2's `list` command and apply rule 3's skips to each
+   issue. A non-zero exit is said as such, and this section stops: a failed
+   read is not an empty column.
+4. None left (empty, or every issue skipped): say so, naming each skipped
+   issue and why, and stop.
+5. Otherwise ask one `AskUserQuestion` naming the column, the count and the
+   numbers in the list's order: **spec everything in `<column>` (<k>: #a,
+   #b, …)** or **name an issue instead**. A typed answer naming an issue, idea
+   or column is that request.
+6. *Spec everything*: a board-column run of that column. Read
+   `references/several-issues.md` and start at rule 2 with the column chosen;
+   its list is read again there. *Name an issue* with none given: ask for it
+   in plain text and wait for the reply.
+7. A decline, or no person to ask (the question tool errors, or
+   `claude -p`): stop, post nothing, and say nothing was
+   specced. The four-choice menu of *When the user declines a question* is
+   not used: no spec fork was asked.
+
 ## Several issues in one run
 
-1. **When it applies.** The user gives more than one issue (numbers, `#n`,
-   issue URLs, in any mix) or a board column ("everything in New"). One issue
-   works exactly as before, and none of this section applies.
-2. **The list is fixed at the start.** Keep issue numbers in the order given.
-   For a column, match the user's words against the board's columns from
-   `<tracker.tool> fields`: use the single column whose name contains them,
-   ignoring case and any emoji. When none or several match, ask which column,
-   naming the matches. Then read it once:
-   ```bash
-   <tracker.tool> list --status "<column>" --issues-only --open-only --json
-   ```
-   and keep the order it prints. A column needs `tracker.tool`; without it,
-   say the tracker has no columns to read, and ask for issue numbers. Say the
-   list and its order in one line before starting. An issue filed during the
-   run, such as a split-off, is never added; it goes in the final report
-   (rule 7).
-3. **Skip before starting an issue**, and record why: it is closed (its
-   `state` is anything but `OPEN`); it is a pull request (`gh issue view <n>
-   --json state,url` answers for one too, and its `url` contains `/pull/`);
-   or it is ready already, which means it carries
-   `tracker.ready_marker` (compared ignoring case) **and** its current body
-   passes the lint:
-   ```bash
-   gh issue view <n> --repo <tracker.issues_repo> --json body -q .body > <scratch>/issue-<n>-body.md
-   python3 "${CLAUDE_PLUGIN_ROOT}/scripts/spec_lint.py" <scratch>/issue-<n>-body.md
-   ```
-   exits 0 with a last line `label: apply`. Any other result means it is
-   specced like any other issue.
-4. **One issue at a time.** Each issue goes through this whole skill: *Before
-   you write*, the question rounds, and Posting steps 0 to 8. Only then does
-   the next issue start. Ask about one issue only in each question call, and
-   name it in every question (`#<n>: …`).
-5. **Research one issue ahead.** When an issue starts, run rule 3 on the
-   issues after it until one is not skipped, and start background research
-   of that one, and only that one (see
-   *Claude-specific*). It is read-only: it reads the issue, its comments and
-   the code, then returns its findings with `file:line` and the forks it sees.
-   It posts nothing, labels nothing, moves no card and asks no question. Its
-   result is neither shown nor used until the current issue is posted, left
-   open or skipped. When the next issue starts, take its research. Before its
-   first question, re-read any file that the just-posted spec lists under
-   `## Files` and that the research relied on, and state any order between
-   the two issues as the chain rule in *Hard-stop verdict* says.
-6. **Leave it open ends that issue only.** Choice 4 of *When the user declines
-   a question*, or a declined menu, posts nothing and adds no label on that
-   issue. Record the question left open, and go on to the next issue. When the
-   question tool errors (no person to ask), stop the whole run and report
-   every issue not reached.
-7. **The final report** has one line per issue in the list: *specced and
-   labelled*; *posted without the label* (naming Posting step 7's withholding
-   case); *left open* (with the question); *skipped* (closed, a pull request,
-   or already ready); or *not reached* (with why the run stopped). Each
-   *specced and labelled* line ends with its card's result from Posting step
-   8: moved, already there, left in `<column>`, closed, no card, could not
-   be read, the move failed, or step 8 skipped (and which of its conditions
-   was not met).
-   Then each issue filed during the run, with `/gogogo:spec <n>`.
+Only when the user gives more than one issue, or a board column, or accepted the offer in *Given nothing to spec*. **REQUIRED REFERENCE:** then read `references/several-issues.md` (in this skill's folder) in full before starting the first issue. With one issue, skip it.
 
 ## The issue body IS these sections, in this order
 
@@ -125,45 +101,7 @@ Every tracker command targets `tracker.issues_repo`. When it differs from
 
 ## `## Verify by hand`
 
-Goes directly under `## Original report`, above everything else including
-`## Approvals`. The issue's first reader is usually the person who reported it
-or whoever closes it out, not the implementing agent. They open the issue to
-answer one question: *how do I check this is actually fixed?* Make that the
-first thing they reach after their own words.
-
-Write it for someone who has not read the rest of the spec and never will:
-
-- **Open with what happened before**, in one or two plain sentences, in the
-  reporter's terms and not the code's. "The Pages section showed no rows, so
-  there was no way to create the first page", not "the queryset filtered on a
-  flag".
-- **Numbered steps, plain English, no `file:line` and no code.**
-- **Name where to do it, and when.** The profile's `verify.human` names the
-  environment where a person confirms a fix in this repo. Call it by the
-  profile's name for it and give full clickable URLs under that environment's
-  `url`. The profile's `stages` say how a change gets there; if that is later
-  than the merge, say so in the first line ("Check this on production, after
-  the next deploy"), so nobody looks for a fix that has not arrived.
-- **Use a real record.** The real id or slug of a record that actually
-  reproduces the problem. Find one. A placeholder such as `<slug>` in a URL
-  hands the recon back to the reporter.
-- **Say which login is needed** in step 1, not halfway down, so a permission
-  refusal is not mistaken for the bug. If it needs a second browser or a second
-  person, say that in step 1 too.
-- **Every step says what you should see.** A step with no observable result is
-  not a verification step.
-- **Say what "still broken" looks like**, not only what "fixed" looks like.
-  The failure is often the thing that looked almost right.
-- **Cover what a human can catch that a test cannot**: does it look right, read
-  right, feel fast enough. Skip anything the automated lanes already prove.
-- **Say plainly which parts of the report this does not cover**, if any.
-- **Keep it short.** Five to ten steps. If it needs thirty, the scope is too big
-  for one issue.
-
-This is not a duplicate of `## Verification`. That section is the agent's gate:
-commands, the prove-it-fails step, exit criteria. This one is a person with a
-browser. An agent confirming its own fix is not the reporter confirming their
-problem is gone, so a browser test lane never substitutes for this block.
+**REQUIRED REFERENCE:** read `references/verify-by-hand.md` (in this skill's folder) in full before anything else in this step. It holds the whole of this step.
 
 ## `## Approvals`
 
@@ -303,7 +241,7 @@ The profile's `lanes` are the lanes that exist here. Name real cases in every
 applicable lane, and give a reason for any lane you skip. Do not invent a lane
 the profile does not list.
 
-Four rules hold in all of them:
+Five rules hold in all of them:
 
 1. **"No evidence" must fail, not pass.**
 2. **Include a step that proves the test fails**: pin a value, name which tests
@@ -312,10 +250,40 @@ Four rules hold in all of them:
    only re-reads what the actor itself just wrote passes against the broken
    code.
 4. **A lane you call impossible costs the same proof as a lane you write.**
+5. **Another issue's body as test data is asserted in its narrowest form**,
+   and that issue is named in `## Context` as a dependency.
 
 **REQUIRED REFERENCE:** read `references/test-rules.md` for what each rule
 means in practice, and the profile's `## Lane constraints` for what each lane
 must specify in this codebase.
+
+## Is someone building it already?
+
+When an issue starts (one issue, or each issue of a run as rule 4 starts it),
+check this before *Before you write* § 0. Never for an idea not yet filed: it
+has no card and no pull request.
+
+1. Run `<tracker.tool> show <N>` (for `shared`,
+   `python3 "${CLAUDE_PLUGIN_ROOT}/scripts/tracker.py" show <N>`) when the
+   profile has `tracker.tool`, and
+   `gh pr list --repo <tracker.code_repo> --state open --json number,title,body,headRefName,url`.
+2. It is being built when the card's column is `tracker.columns.in_progress`,
+   or an open pull request has `#<N>` as a whole token in its title or body, or
+   `<N>` between non-digits in its branch name. A plain search for the number
+   also finds `1<N>` and line numbers; match the token. A non-zero exit from
+   either command counts as being built, with the reason "could not check". A
+   card in `tracker.columns.needs_human` does not count: it was handed back for
+   a person, usually for exactly this re-spec.
+3. Not being built: go on to *Before you write*.
+4. Being built: say so in one sentence, naming the column or the pull request
+   link, and that the build was made against the current spec. Ask: **change
+   the spec anyway** or **leave it**. On *change it anyway*, go on; after
+   Posting step 6, comment on each pull request found: "The spec in #<N>
+   changed after this was built: <one line per changed Design or Test case
+   item>". On *leave it*, a decline, or no person to ask: post nothing, add no
+   label, and end this issue (in a run of several, no person to ask stops the
+   run, as rule 6 says). The four-choice menu for a declined question is
+   not used here.
 
 ## Before you write
 
@@ -323,6 +291,13 @@ must specify in this codebase.
    in a comment, move it into the body before doing anything else. That alone
    is what unblocks it. Do this even when the user asked for something else on
    the issue; a spec an agent will not act on is not a spec.
+
+   **Then take the start snapshot**, in every run, one issue or several, when
+   the issue actually starts (after this step's own edit, which is this run's
+   change):
+   `gh issue view <N> --repo <tracker.issues_repo> --json body,labels > <scratch>/issue-<N>-start.json`.
+   Posting step 1 compares the issue with it. In a run of several, rule 3's
+   read before starting stays as it is; it only decides skipping.
 1. **Read the code before believing the ticket.** It describes a symptom.
 2. **Hunt for data already on the wire before proposing new state.** Highest
    leverage, most skipped. Grep for the field, not the feature.
@@ -331,6 +306,28 @@ must specify in this codebase.
    visible transient and a flaky test.
 5. **Correct the ticket where it is wrong**, in the spec and in your reply to
    the user.
+6. **Does anything hit it today?** After steps 1 to 3, name the case that hits
+   it today, with a link or `file:line`: a person asked for it, or a record (an
+   issue report, a run report, an error) or a real path in a repo shows it. A
+   person's request always hits today; this check is for follow-ups an agent
+   filed (a review finding, a "what if"). When recon finds none:
+   1. For an issue: ask **close it as not planned** or **spec it anyway**. On
+      close: `gh issue close <N> --repo <tracker.issues_repo> --reason "not planned" --comment "Not specced: nothing hits this today. Reopen when <the case that would make it real>."`,
+      and end this issue.
+   2. For an idea not yet filed: ask **don't file it** or **file and spec
+      it**. On don't: file nothing, and end.
+   3. A decline, or no person to ask: post nothing, file nothing, close
+      nothing, and end this issue, saying what recon found (in a run of
+      several, no person to ask stops the run, as rule 6 says). The
+      four-choice menu for a declined question is not used here.
+7. **A new mechanism: look for prior work first.** When the design would add
+   something the repo does not have (a setting, a script, a kind of check, a
+   state, a process step), search the web before the first question: how
+   others solve it, and what went wrong for them. Put a `**Prior work.**`
+   paragraph in `## Context` with each source as a link and one line on what
+   it adds, or the searches run and "none found". Prior work is evidence, not
+   authority: the Design still answers to this repo's code and the person's
+   choices. It is not a question to the person.
 
 **REQUIRED REFERENCE:** read `references/recon.md` for how to do 2-5, and the
 profile's `## Recon traps` for what this codebase specifically hides.
@@ -354,6 +351,8 @@ profile's `## Recon traps` for what this codebase specifically hides.
 | The spec itself lists open questions | Go ask them. A spec is not a questionnaire. |
 | "Blocked on user answers" as a status | Only valid for an external unknown, never a decision. |
 | A lane in the profile with no case and no reason given | Lane silently skipped. |
+| Posting over a body that changed since the issue started | Someone else's work quoted as the report or overwritten. Compare with the start snapshot first. |
+| A step that reads another issue's body, asserted broadly ("no line containing …") | The next re-spec of that issue breaks it. Use the narrowest form and name the dependency in Context. |
 | "cannot be automated / not testable" | Name the missing capability, or you are excusing a lane you did not investigate. |
 | No `## Verify by hand` | The reporter cannot check their own issue. Required in every spec. |
 | A placeholder URL in Verify by hand | Find a real record that reproduces it; do not hand the recon back. |
@@ -361,121 +360,13 @@ profile's `## Recon traps` for what this codebase specifically hides.
 | `## Context` with no traps | Nobody looked. |
 | "Done" anywhere in the spec | The spec proposes work; only the implementing agent's report can claim "done". |
 | Spec posted, no ready label, no reason given | Either label it or say which condition withheld it. Silence reads as "forgot". |
+| A changed spec on an issue whose card is In progress or that has an open PR, not raised | The build was reviewed against the old spec and is now short of the new one. Ask first (§ Is someone building it already?). |
+| A follow-up specced with no case that hits it today | A question round spent on something nobody meets. Offer closing first (Before you write § 6). |
+| A new mechanism with no Prior work in Context | Options invented without looking at how others solved it (Before you write § 7). |
 
 ## Posting
 
-Posting is outward-facing; do it when the user asked for it. When
-`tracker.public` is true, everything you post is published: no credentials,
-internal hostnames, personal data or infrastructure detail beyond what the
-reporter already wrote.
-
-`gh issue edit --body` replaces the whole body; there is no append. So compose
-the full body locally and never let the report exist only in memory. In this
-order, checking each step before starting the next:
-
-0. **No issue yet?** When the user gave an idea rather than an issue, file one
-   first in `tracker.issues_repo`, with a short title and the user's own words
-   as the body: `gh issue create --repo <tracker.issues_repo> --title "<title>"
-   --body-file <scratch>/idea.md`. Its number is `<N>` below, and those words
-   become the original report.
-1. **Save the current body to the scratchpad before anything else**:
-   `gh issue view <N> --json body -q .body > <scratch>/issue-<N>-original.md`.
-   Confirm the file is non-empty (unless the issue body is empty).
-2. **Write the spec to the scratchpad**, so a failed call is re-postable.
-   Inline `--body` mangles markdown; always use a file.
-3. **Compose the body file**: the report section, a `---` rule, then the spec.
-   ```
-   ## Original report
-
-   > <every line of the original body, each prefixed with "> ">
-
-   ---
-
-   ## Verify by hand
-   ...
-   ```
-   `sed 's/^/> /'` over the saved file does the blockquote. It keeps the
-   reporter's own `#` headings from splitting the spec's section structure.
-   Do not edit, summarise, or correct the report; corrections go in
-   `## Context`.
-4. **Lint it before it leaves the machine**:
-   ```bash
-   python3 "${CLAUDE_PLUGIN_ROOT}/scripts/spec_lint.py" <composed file>
-   ```
-   Fix every error it reports. A lint error is a rewrite, not a judgement call.
-5. `gh issue edit <N> --body-file <composed file>`.
-6. **Re-read the description** and confirm both the report and the spec are
-   there.
-7. **Apply the ready label**, the profile's `tracker.ready_marker`:
-   `gh issue edit <N> --add-label "<ready_marker>"`. It is how a person scanning
-   the tracker sees which issues an agent can pick up, so it means exactly one
-   thing: *the spec is in this issue's body and needs nothing further from
-   anyone*. It goes on only after step 6.
-
-   **Not every posted spec earns it.** Withhold it, and say why in your reply,
-   when:
-
-   - the Hard-stop verdict has a **yes** that no Approvals row approves. The
-     spec is a proposal waiting at a gate; label it once the user approves and
-     you have added the row;
-   - `## Approvals` carries an unresolved **external unknown**;
-   - any pre-post check answered "no".
-
-   A spec that stops at a gate is still worth posting; it just is not ready
-   until the gate is cleared.
-8. **Move the card to the queue.** Only when step 7 applied the label, the
-   profile has both `tracker.tool` and `tracker.queue`, and `tracker.queue` is
-   one of the board's columns (`<tracker.tool> fields --check` lists them);
-   otherwise skip this step without a word. In a run of several issues
-   (§ *Several issues in one run*) it runs per issue, right after that
-   issue's step 7. In order:
-   1. Read the card: `<tracker.tool> show <N>` (for `shared`,
-      `python3 "${CLAUDE_PLUGIN_ROOT}/scripts/tracker.py" show <N>`, and the
-      same for `move` below). Run it as this step's first command,
-      immediately before the move, never reusing an earlier read. When it
-      exits non-zero, do not move the card: say the card could not be read,
-      give its message, and stop this step.
-   2. When the issue is closed: do not move it; say so.
-   3. When the card is already in `tracker.queue`: nothing to do; say so.
-   4. When the card is in `tracker.columns.in_progress`,
-      `tracker.columns.needs_human`, or any `stages` entry's `column`: do not
-      move it. Say which column it is in and that it was left there, because
-      someone may be working on it or it has shipped. A setting the profile
-      lacks names no column.
-   5. When the issue has no card: for `tracker.tool` `shared`, run
-      `move <N> --to "<tracker.queue>" --add-missing`. For any other tool, say
-      the issue has no card on the board and leave it.
-   6. Otherwise: `move <N> --to "<tracker.queue>"`.
-   7. Report the result. Only a zero exit counts as moved. On any other exit,
-      say the move failed, give its message, and leave the card. The label
-      stays: it describes the spec, not the card.
-
-   Nothing in this step asks the user anything.
-
-Which report to keep:
-
-- **Body is a plain report** → it is the report.
-- **Body is already a spec with `## Original report` at the top** → carry that
-  section over unchanged; replace only the spec below the `---`.
-- **Body is a spec with no report section** (an older layout) → if the report
-  sits above a `---` rule, that part is the report. Otherwise find it in an
-  earlier comment or in the issue's edit history (`gh api graphql` →
-  `userContentEdits`) and put it back at the top. If no copy can be found, say
-  so in your reply; do not invent one.
-- **Body is empty** → no report section; the spec starts at `## Verify by hand`.
-
-**Correcting a spec you already posted:** edit the scratchpad file and re-run
-`gh issue edit --body-file`, so the issue carries one accurate spec rather than
-a spec plus errata.
-
-**Never leave a second copy** of the spec or of the report. If an earlier
-version is sitting in a comment (including a spec you just rescued into the
-body under *Before you write* §0), delete it once the description is confirmed
-correct: `gh api -X DELETE /repos/{owner}/{repo}/issues/comments/{id}`. Get the
-id from the comment's URL (the digits after `issuecomment-`).
-
-Comments are for **conversation about** the spec: a question, a correction
-someone raised, a follow-up cross-link. Never for the spec itself.
+**REQUIRED REFERENCE:** read `references/posting.md` (in this skill's folder) in full before anything else in this step. It holds the whole of this step.
 
 ## Pre-post check
 
@@ -500,6 +391,12 @@ Then as the tracker:
 9. Is the spec in the issue **body**?
 10. Does the issue carry the ready label, and did Posting step 8 move the
     card or say why it did not? Or did I say which withholding case applies?
+11. Were the open specs that read this issue checked (Posting step 4), and
+    does each failing step have its narrower form and its outcome decided
+    (fixed or commented on after step 6, or reported)?
+12. Was the issue checked for work in flight before anything was written (or
+    did it start as an idea not yet filed), and
+    does `## Context` name the case that hits it today?
 
 Any "no" is a rewrite.
 
@@ -512,7 +409,8 @@ Listed in one place so an adapter for another agent knows what to replace.
   or wording, its option previews settle it faster than prose.
 - **A declined question**: when the user declines or interrupts it,
   `AskUserQuestion` comes back as a refusal with no answer. In an interactive
-  session that is the decline *When the user declines a question* describes.
+  session that is the decline *When the user declines a question* describes,
+  except for the offer in *Given nothing to spec*, which stops (its step 7).
   A run with no person (`claude -p`) gets the same refusal, which is why that
   subsection shows the menu once and stops when the menu is refused too.
 - **Research one issue ahead** (*Several issues in one run*, rule 5) is an
@@ -521,6 +419,8 @@ Listed in one place so an adapter for another agent knows what to replace.
   forbids `AskUserQuestion`, any `gh issue edit`, `comment` or `create`, any
   label and any card move. Start a new one only when the issue it researched
   has started.
+- **Prior work** (*Before you write* § 7) uses `WebSearch`, and `WebFetch` to
+  read a page it finds. Without them, say so in the `Prior work` paragraph.
 
 ## Working alongside superpowers
 

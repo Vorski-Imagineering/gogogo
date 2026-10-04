@@ -9,6 +9,7 @@ The structure cases pin the names the skills depend on, never sentences
     python3 -m unittest tests.test_test_guard
 """
 
+import json
 import re
 import subprocess
 import sys
@@ -19,10 +20,13 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 PLUGIN = ROOT / "plugins" / "gogogo"
 SCRIPT = PLUGIN / "scripts" / "test_guard.py"
+DEV_VERIFY = PLUGIN / "skills" / "dev" / "references" / "verify.md"
+DEV_HAND_BACK = PLUGIN / "skills" / "dev" / "references" / "hand-back.md"
 sys.path.insert(0, str(PLUGIN / "scripts"))
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 import review_stats  # noqa: E402
+from test_dev_skill import moved  # noqa: E402
 from test_tech_eval import PROJECT_NAMES  # noqa: E402
 
 PROFILE = """+++
@@ -43,6 +47,19 @@ TEST_A = """def test_a():
 def test_b():
     assert three() == 3
     assert four() == 4
+"""
+
+TEST_CLASS = """import unittest
+
+
+class T(unittest.TestCase):
+    def test_a(self):
+        self.assertEqual(one(), 1)
+        self.assertEqual(two(), 2)
+
+    def test_b(self):
+        self.assertEqual(three(), 3)
+        self.assertEqual(four(), 4)
 """
 
 BODY = """## Design
@@ -99,6 +116,13 @@ class Repo:
     def branch(self):
         git(self.repo, "switch", "-q", "-c", "change")
 
+    def at_base(self, path, text):
+        """Add a file to the base (main) and start the change branch again from it."""
+        git(self.repo, "switch", "-q", "main")
+        self.write(path, text)
+        self.commit(f"base {path}")
+        git(self.repo, "switch", "-q", "-C", "change")
+
     def close(self):
         self._tmp.cleanup()
 
@@ -136,6 +160,7 @@ class Listing(unittest.TestCase):
         self.assertEqual(len(items), 1, items)
         self.assertIn("changed  tests/test_moved.py:3", items[0])
         self.assertIn("(renamed from tests/test_a.py)", items[0])
+        self.assertEqual(items[0], "H1  changed  tests/test_moved.py:3  def test_a():  (renamed from tests/test_a.py)")
 
     def test_a_removed_line_is_listed_with_its_minus_line(self):
         self.r.write("tests/test_a.py", TEST_A.replace("    assert four() == 4\n", ""))
@@ -198,6 +223,147 @@ class Listing(unittest.TestCase):
         items, _ = self.items()
         self.assertEqual(len(items), 1, items)
         self.assertIn("tests/test_keep.py", items[0])
+
+
+class Enclosing(unittest.TestCase):
+    """The line printed for a hunk is the innermost enclosing line at the base (gogogo#76)."""
+
+    def setUp(self):
+        self.r = Repo()
+        self.addCleanup(self.r.close)
+        self.r.branch()
+        self.r.at_base("tests/test_c.py", TEST_CLASS)
+
+    def items(self):
+        out = self.r.run("list")
+        self.assertEqual(out.returncode, 0, out.stderr)
+        return [ln for ln in out.stdout.splitlines() if re.match(r"H\d+  ", ln)]
+
+    def change(self, text):
+        self.r.write("tests/test_c.py", text)
+        self.r.commit("change")
+
+    def test_a_method_hunk_shows_its_def_not_the_class(self):
+        self.change(TEST_CLASS.replace("        self.assertEqual(two(), 2)\n", ""))
+        self.assertEqual(self.items(), ["H1  changed  tests/test_c.py:7  def test_a(self):"])
+
+    def test_json_keeps_the_chain_and_gits_header(self):
+        self.change(TEST_CLASS.replace("        self.assertEqual(two(), 2)\n", ""))
+        out = self.r.run("list", "--json")
+        self.assertEqual(out.returncode, 0, out.stderr)
+        item = json.loads(out.stdout)["items"][0]
+        self.assertEqual(item["enclosing"], ["def test_a(self):", "class T(unittest.TestCase):"])
+        self.assertEqual(item["context"], "class T(unittest.TestCase):")
+
+    def test_a_line_added_after_the_def_is_inside_it(self):
+        self.change(TEST_CLASS.replace("    def test_b(self):\n",
+                                       "    def test_b(self):\n        self.skipTest(\"x\")\n"))
+        items = self.items()
+        self.assertEqual(len(items), 1, items)
+        self.assertTrue(items[0].endswith("def test_b(self):"), items)
+        out = self.r.run("verify", body=body(cases="1. `tests/test_c.py::test_b` rewritten"),
+                         answers="H1\tweaker\ta skip\n")
+        self.assertEqual(out.returncode, 0, out.stdout + out.stderr)
+        self.assertIn("H1  licensed", out.stdout)
+
+    def test_a_removed_method_shows_the_class_and_is_licensed_by_its_name(self):
+        self.change(TEST_CLASS.replace("\n    def test_b(self):\n        self.assertEqual(three(), 3)\n"
+                                       "        self.assertEqual(four(), 4)\n", ""))
+        items = self.items()
+        self.assertEqual(len(items), 1, items)
+        self.assertTrue(items[0].endswith("class T(unittest.TestCase):"), items)
+        out = self.r.run("verify", body=body(cases="1. `tests/test_c.py::test_b` removed"),
+                         answers="H1\tweaker\tthe test is gone\n")
+        self.assertEqual(out.returncode, 0, out.stdout + out.stderr)
+        self.assertIn("H1  licensed", out.stdout)
+
+    def test_lines_are_counted_as_git_counts_them(self):
+        base = TEST_CLASS.replace("import unittest\n", "import unittest\n\x0c\n")
+        self.r.at_base("tests/test_c.py", base)
+        self.change(base.replace("    def test_b(self):\n", "    def test_b(self):\n        self.skipTest(\"x\")\n"))
+        items = self.items()
+        self.assertEqual(len(items), 1, items)
+        self.assertTrue(items[0].endswith("def test_b(self):"), items)
+
+    def test_a_hunk_running_into_the_next_method_is_not_licensed_by_the_first(self):
+        self.change(TEST_CLASS.replace("        self.assertEqual(two(), 2)\n\n    def test_b(self):\n"
+                                       "        self.assertEqual(three(), 3)\n        self.assertEqual(four(), 4)\n", ""))
+        out = self.r.run("verify", body=body(cases="1. `tests/test_c.py::test_a` rewritten"),
+                         answers="H1\tweaker\ttest_b is gone\n")
+        self.assertEqual(out.returncode, 1, out.stdout + out.stderr)
+        self.assertIn("H1  NOT LICENSED", out.stdout)
+
+    def test_a_hunk_of_blank_lines_has_no_enclosing_line(self):
+        self.change(TEST_CLASS.replace("        self.assertEqual(two(), 2)\n\n", "        self.assertEqual(two(), 2)\n"))
+        out = self.r.run("list", "--json")
+        self.assertEqual(out.returncode, 0, out.stderr)
+        self.assertEqual(json.loads(out.stdout)["items"][0]["enclosing"], [])
+
+    def test_no_context_and_no_enclosing_line_print_a_dash(self):
+        self.r.write("tests/test_keep.py", "def test_kept():\n    assert True\n")
+        self.r.commit("rename the test")
+        self.assertEqual(self.items(), ["H1  changed  tests/test_keep.py:1  -"])
+
+    def test_a_deleted_file_has_the_same_keys_as_a_hunk(self):
+        (self.r.repo / "tests/test_a.py").unlink()
+        self.r.commit("drop")
+        out = self.r.run("list", "--json")
+        item = json.loads(out.stdout)["items"][0]
+        self.assertEqual((item["kind"], item["line"], item["context"], item["enclosing"]), ("deleted", None, "", []))
+
+    def test_no_enclosing_line_falls_back_to_gits_header(self):
+        self.r.at_base("tests/test_a.py", TEST_A + "\n\nX = 1\n")
+        self.r.write("tests/test_a.py", TEST_A + "\n\nX = 2\n")
+        self.r.commit("change X")
+        items = self.items()
+        self.assertEqual(len(items), 1, items)
+        self.assertTrue(items[0].endswith("def test_b():"), items)
+        out = self.r.run("list", "--json")
+        self.assertEqual(json.loads(out.stdout)["items"][0]["enclosing"], [])
+
+
+class EnclosingFunction(unittest.TestCase):
+    """`enclosing()` on its own, for the edges the repository cases do not reach."""
+
+    def setUp(self):
+        import test_guard
+        self.enclosing = test_guard.enclosing
+
+    def test_an_addition_at_the_top_has_no_enclosing_line(self):
+        self.assertEqual(self.enclosing(["def f():", "    x"], 0, 4), [])
+
+    def test_blank_lines_are_passed_over(self):
+        self.assertEqual(self.enclosing(["class T:", "    def f():", "", "        x"], 4, 8),
+                         ["def f():", "class T:"])
+
+    def test_a_failed_base_read_raises_gits_message(self):
+        import test_guard
+        r = Repo()
+        self.addCleanup(r.close)
+        fork = git(r.repo, "rev-parse", "HEAD").strip()
+        cwd = Path.cwd()
+        self.addCleanup(lambda: __import__("os").chdir(cwd))
+        __import__("os").chdir(r.repo)
+        # git's own output goes to /dev/null at the descriptor level: a mutant that
+        # stops capturing it must not write a non-UTF-8 byte into the runner's pipe.
+        os = __import__("os")
+        saved = [os.dup(1), os.dup(2)]
+        null = os.open(os.devnull, os.O_WRONLY)
+        os.dup2(null, 1)
+        os.dup2(null, 2)
+        try:
+            with self.assertRaises(test_guard.GitError) as raised:
+                test_guard._base_lines(fork, "tests/gone\udcff.py")
+        finally:
+            os.dup2(saved[0], 1)
+            os.dup2(saved[1], 2)
+            for fd in (*saved, null):
+                os.close(fd)
+        self.assertIn("tests/gone", str(raised.exception))
+        self.assertIn("fatal", str(raised.exception))
+
+    def test_the_walk_goes_on_to_indentation_0(self):
+        self.assertEqual(self.enclosing(["a:", " b:", "  c"], 3, 2), ["b:", "a:"])
 
 
 class NotChecked(unittest.TestCase):
@@ -266,6 +432,34 @@ class Verify(unittest.TestCase):
         self.assertIn("H2  NOT LICENSED", out.stdout)
         self.assertIn("unlicensed=1", out.stdout)
 
+    def method_hunks(self):
+        self.r.at_base("tests/test_c.py", TEST_CLASS)
+        self.r.write("tests/test_c.py", TEST_CLASS.replace("        self.assertEqual(two(), 2)\n", "")
+                     .replace("        self.assertEqual(four(), 4)\n", ""))
+        self.r.commit("loosen both methods")
+
+    def test_a_method_licence_covers_only_its_method(self):
+        self.method_hunks()
+        for licence in ("tests/test_c.py::test_a", "tests/test_c.py::T::test_a"):
+            with self.subTest(licence=licence):
+                out = self.verify("H1\tweaker\tdropped\nH2\tweaker\tdropped\n", cases=f"1. `{licence}` removed")
+                self.assertEqual(out.returncode, 1, out.stdout + out.stderr)
+                self.assertIn("H1  licensed", out.stdout)
+                self.assertIn("H2  NOT LICENSED", out.stdout)
+                self.assertIn("unlicensed=1", out.stdout)
+
+    def test_a_name_matches_as_a_whole_word(self):
+        text = ("def test_parse():\n    assert a() == 1\n    assert b() == 2\n\n\n"
+                "def test_parse_v2():\n    assert c() == 3\n    assert d() == 4\n")
+        self.r.at_base("tests/test_p.py", text)
+        self.r.write("tests/test_p.py", text.replace("    assert b() == 2\n", "").replace("    assert d() == 4\n", ""))
+        self.r.commit("loosen both")
+        out = self.verify("H1\tweaker\tdropped\nH2\tweaker\tdropped\n",
+                          cases="1. `tests/test_p.py::test_parse` rewritten")
+        self.assertEqual(out.returncode, 1, out.stdout + out.stderr)
+        self.assertIn("H1  licensed", out.stdout)
+        self.assertIn("H2  NOT LICENSED", out.stdout)
+
     def test_a_licence_in_files_or_without_the_word_licenses_nothing(self):
         self.two_hunks()
         answers = "H1\tweaker\tdropped\nH2\tsame\tok\n"
@@ -288,11 +482,10 @@ def section(text, start):
 
 class Structure(unittest.TestCase):
     def test_the_skills_name_the_guard(self):
-        dev = (PLUGIN / "skills" / "dev" / "SKILL.md").read_text(encoding="utf-8")
-        six = section(dev, "6.")
+        six = moved(DEV_VERIFY)
         for name in ("test_guard.py", " list ", " verify "):
             self.assertIn(name, six)
-        first_bullet = section(dev, "8.").split("\n- **")[1]
+        first_bullet = moved(DEV_HAND_BACK).split("\n- **")[1]
         self.assertIn("weakened test", first_bullet)
         four = section((PLUGIN / "skills" / "auto-dev" / "SKILL.md").read_text(encoding="utf-8"), "4.")
         self.assertIn("weakened test", four)

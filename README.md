@@ -169,7 +169,8 @@ shape. The full write-up, with sources and ranked findings, is
 **What follows current practice:**
 
 - **The git and pull request mechanics.** One short-lived branch per issue,
-  cut from a fresh base, squash-merged and deleted. A new test must be seen
+  cut from a fresh base (or the issue's earlier branch, brought up to date),
+  squash-merged and deleted. A new test must be seen
   failing before it is trusted. CI is judged check by check, and "no checks
   ran" counts as a failure. Every merge is read back from the base branch
   before anyone is told it landed.
@@ -283,7 +284,9 @@ the review records back.
 
 **Branches and pull requests.** Every issue gets its own branch,
 `fix/<issue-number>-<slug>`, cut from a freshly pulled base: a stale base would silently undo the
-previous merge, and the issue number ties the branch back to the tracker. The loop takes one issue at a time: branch, build, review, verify,
+previous merge, and the issue number ties the branch back to the tracker. An
+issue that already has a branch or an open pull request continues on it
+instead, merged up to date with the base (`issue_work.py` finds it). The loop takes one issue at a time: branch, build, review, verify,
 then merge by the repo's chosen strategy. That is a pull request per issue
 squashed into the base (`pr-squash`), pull requests into a dated run branch
 that reaches the main line as one final PR (`run-branch-pr`), or the repo's
@@ -313,6 +316,10 @@ rebased.
 | `/gogogo:roadmap` | Keeps a roadmap document's status marks in step with the board: re-derives every row's mark from the issue's state and column, fixes the notes the change made stale, and commits the document, opening a PR for it when the roadmap shares the repo. |
 | `/gogogo:auto-test` | Tests each shipped issue on the environment where a person confirms fixes, and records PASS, FAIL or NEEDS HUMAN on the issue. `--triage-only` lists what it would test or skip and changes nothing. |
 
+A session started or resumed in a repo with a profile opens with a one-line
+status from the plugin's own hook (cards in each profile column, open pull
+requests), shown only to the person and never added to Claude's context.
+
 Scripts the skills call, all in `plugins/gogogo/scripts/`:
 
 - `profile_check.py`: reads and validates the repo's profile.
@@ -323,13 +330,16 @@ Scripts the skills call, all in `plugins/gogogo/scripts/`:
 - `verify_merged.py`: confirms a PR's merge is really on the base branch.
 - `stage_sync.py`: writes the `Ships-issue` link at merge, moves cards to a stage when a tag ships their commits (run by a repo's CI), and with `reverts` hands back a card whose shipped fix was reverted.
 - `release.py`: numbers a production release, cuts its annotated `deploy-<build>` tag after the deploy, and prints the notes listing the issues it shipped.
-- `waiting.py`: the session-start line: how many cards wait in each stage column and how old the oldest is. Silent on any error.
-- `stranded_work.py`: finds branches holding work no open issue or open pull request points to, and says what became of each branch's pull request.
-- `notify.py`: sends a run's messages by the profile's `notify` (Telegram today); off, or no credentials on the machine, sends nothing.
+- `waiting.py`: how many cards wait in each stage column and how old the oldest is, for `/gogogo:status` and by hand. Read-only.
+- `stranded_work.py`: finds local and `origin` branches holding work that nothing accounts for (no open issue, or an open issue with no open pull request and no stop marker naming the branch), and says what became of each branch's pull request.
+- `worktree_sweep.py`: removes the worktrees whose pull request merged or whose issue is closed, and keeps any with uncommitted changes, commits on no remote, or an open issue whose work has not merged. Without `--apply` it only lists.
+- `issue_work.py`: finds an issue's earlier work (open pull requests that reference it, branches named for it, the branch its stop marker names), so dev and auto-dev continue on it rather than start again.
+- `notify.py`: sends a run's messages by the profile's `notify` (Telegram today). With no `notify` line, messages are on whenever the machine has bot credentials (per user, or in the repo's own git-ignored `.claude/gogogo/notify.env`); `notify = "none"` turns a repo off. Off, or no credentials on the machine, sends nothing.
 - `review_stats.py`: reads back the review record on each issue and sums them up: rounds, why findings were applied or declined, how each review ended and what became of the issue, plus phase times, session ids, stops by reason, triage skips, and each session's issues taken, handed back and skipped.
 - `require_unattended.sh`: refuses to start the loop unless the session can run without prompts.
 - `setup_check.py`: the read-only check behind `/gogogo:setup`.
 - `roadmap_status.py`: compares a roadmap document's marks with the tracker, and rewrites the ones that disagree with `--write`.
+- `session_status.py`: the plugin's session-start hook; prints that one-line status, or nothing outside a repo with a profile.
 - `record_outcome.py`: renders and records an auto-test outcome: comment first, then labels, close and card, then reads the issue back.
 
 ## One process, many stacks
@@ -380,6 +390,13 @@ one step at a time, asking before anything is written:
   issues land in ⚡️ New for you to triage; the loop works Dev Ready, and moves
   an issue that stopped and needs you to Human!Help!. It can create the board,
   or check the one you have.
+- **Where each issue's work goes.** It asks you outright, explaining what
+  each choice changes day to day: the checkout you already work in
+  (recommended for one person working normally), or a worktree per issue
+  beside it (for several sessions at once, or a checkout something live runs
+  from; this support is in development). The answer is the profile's
+  `integration.workspace`, and `/gogogo:dev` and `/gogogo:auto-dev` do what it
+  says.
 - **The ready label** (`dev ready` by default).
 - **Local skills this replaces.** Their project-specific text moves into the
   profile word for word, and the old copies go to `.claude/skills-retired/`.

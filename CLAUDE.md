@@ -10,7 +10,8 @@ marketplace (`.claude-plugin/marketplace.json`). How it came about is in `docs/h
 
 - **Skills hold only what is the same in every repo.** Anything that names a
   project, host, repo or command belongs in that repo's
-  `.agents/dev-process.md`. `grep -rniE 'manage\.py|npm |firebase|django|htmx|sentry' plugins/gogogo/skills plugins/gogogo/scripts` must print nothing. CI runs the same check on every PR.
+  `.agents/dev-process.md`. `grep -rniE 'manage\.py|npm |firebase|django|htmx|sentry' plugins/gogogo/skills plugins/gogogo/scripts plugins/gogogo/evals` must print nothing. CI runs the same check on every PR.
+- **A `SKILL.md` has 500 lines or fewer.** A step's full rules go in that skill's `references/`, named from its `SKILL.md` and from no other reference. `tests/test_skill_budget.py` checks it.
 - **Don't edit `plugins/gogogo/` while a run is using it** (an unattended
   `/gogogo:auto-dev` in an adopting repo may be reading this tree).
 
@@ -23,7 +24,9 @@ No approval = do not proceed.
   merge or card move). Wording that changes no behaviour is not a Hard Stop.
 - **Profile format**: adding, renaming or removing a setting or a required
   section, or changing what a setting means. Every adopting profile has to
-  follow it.
+  follow it. A new setting ships with a default and a `DEFAULTS` entry; a
+  change with no safe default bumps `profile`, and the checker accepts the
+  previous version with warnings until the next bump.
 - **Executable scripts**: any change to `plugins/gogogo/scripts/` that changes
   what a script does to a repo, a board or the tracker (reading is fine;
   writing, merging and moving are not).
@@ -42,7 +45,22 @@ its templates, the project-name grep, that its profile check runs. Whether it
 behaves is a trigger run, not a phrase match. A test
 that looks for a sentence breaks on every rewording and guards nothing.
 
+A skill's behaviour is checked by its eval cases in `plugins/gogogo/evals/`, which `tools/eval_changed.py` runs for each skill a change touches. A change to what a skill does adds or changes a case for it, seen doing worse without the plugin (`--baseline`).
+
 ## Commits
 
 Small commits, pushed to `main` for docs and evidence. Anything under a Hard
 Stop goes through a PR.
+
+The owner may approve a small change under a Hard Stop in the session and ask
+for it on `main` directly. Then say first that it is a Hard Stop and offer the
+issue route. On their go-ahead: check that no unattended run is loading this
+tree, run the suite and commit only when it passes, push to `main`, and say in
+the commit message that it was approved in session.
+
+## Docs
+
+A file under `docs/` is documentation. Open with what the thing does and how to
+use it; put the reasons after, and the sources last, each as a link. Name modes
+and settings by what they do for the user. Do not link the issues that build
+it; a one-line status is fine.
