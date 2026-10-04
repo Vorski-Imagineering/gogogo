@@ -188,6 +188,44 @@ class Sweep(unittest.TestCase):
         self.assertEqual(self.sweep("--only", str(first), fixture=fixture),
                          (0, [f"remove {first} (fix/12-x): issue #12 closed"]))
 
+    def test_9_only_from_inside_that_worktree_says_why_nothing_is_removed(self):
+        here = self.worktree("fix/12-x")
+        fixture = {"issue": {"12": {"state": "CLOSED", "comments": []}}}
+        line = f"keep {here} (fix/12-x): the current directory is inside it; run this from {self.clone}"
+        self.assertEqual(self.sweep("--only", str(here), fixture=fixture, cwd=here), (1, [line]))
+
+    def test_9_only_from_inside_with_apply_removes_nothing(self):
+        here = self.worktree("fix/12-x")
+        fixture = {"issue": {"12": {"state": "CLOSED", "comments": []}}}
+        line = f"keep {here} (fix/12-x): the current directory is inside it; run this from {self.clone}"
+        self.assertEqual(self.sweep("--apply", "--only", str(here), fixture=fixture, cwd=here), (1, [line]))
+        self.assertTrue(here.exists())
+        self.assertIn("fix/12-x", self.branches())
+
+    def test_9_only_from_a_subfolder_of_that_worktree_says_the_same(self):
+        here = self.worktree("fix/12-x")
+        sub = here / ".agents"
+        sub.mkdir(exist_ok=True)
+        line = f"keep {here} (fix/12-x): the current directory is inside it; run this from {self.clone}"
+        self.assertEqual(self.sweep("--only", str(here), cwd=sub), (1, [line]))
+
+    def test_9_only_from_inside_a_detached_worktree_names_it_detached(self):
+        here = self.tmp / "detached-here"
+        self.git("worktree", "add", "-q", "--detach", str(here), "main")
+        line = f"keep {here} (detached): the current directory is inside it; run this from {self.clone}"
+        self.assertEqual(self.sweep("--only", str(here), cwd=here), (1, [line]))
+
+    def test_9_only_a_path_that_is_no_worktree_is_a_usage_error(self):
+        folder = self.tmp / "plain"
+        folder.mkdir()
+        code, lines = self.sweep("--only", str(folder))
+        self.assertEqual((code, lines), (2, []))
+        self.assertEqual(self.stderr.strip(), f"worktree_sweep: {folder} is not a worktree of this repo")
+
+    def test_9_only_the_main_worktree_is_kept_with_a_reason(self):
+        self.assertEqual(self.sweep("--only", str(self.clone)),
+                         (1, [f"keep {self.clone} (main): the main worktree is never removed"]))
+
     def test_10_a_folder_deleted_by_hand_is_pruned(self):
         path = self.worktree("fix/12-x")
         shutil.rmtree(path)
