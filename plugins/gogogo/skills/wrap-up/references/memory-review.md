@@ -69,15 +69,17 @@ filed or written without a yes.
 
 ## 4. Marker
 
-After the answers to step 3, `touch` the file `.gogogo-memory-review` in the
-memory directory, so what was answered never comes back. Then keep the pending
-list, `.gogogo-memory-review-pending`, in the same directory: one file name per
-line, only the name of the memory file and never its text. Put on it each memory
-whose proposal was left unanswered and each memory whose yes failed to land
-(the issue was not filed or the line not written). Take off it each memory that
-is now answered and landed. Write the list again from what is still pending, and
-delete the file when the list is empty. A failed expiry read needs no entry:
-§1 reads every memory each time.
+After the answers to step 3, write the pending list,
+`.gogogo-memory-review-pending`, in the memory directory: one file name per
+line, only the name of the memory file and never its text. Put on it each
+memory whose proposal was left unanswered, each memory whose yes failed to land
+(the issue was not filed or the line not written) and each memory that could
+not be read in §2. Take off it each memory that is now answered and landed.
+Write the list again from what is still pending, and delete the file when the
+list is empty. A failed expiry read needs no entry: §1 reads every memory each
+time. Only then `touch` the file `.gogogo-memory-review`, last, so a failure
+before it leaves the old marker and nothing is lost; what was answered never
+comes back.
 
 ## 5. Report
 

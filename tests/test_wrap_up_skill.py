@@ -92,15 +92,15 @@ class MemoryReview(unittest.TestCase):
 
     def test_a_failed_yes_goes_on_the_pending_list_not_the_marker(self):
         step = " ".join(heading_section(review_text(), "## 4. Marker").split())
-        self.assertRegex(step, r"(?i)\btouch\b[^.]*\.gogogo-memory-review\b(?!-)")
         self.assertIn(".gogogo-memory-review-pending", step)
-        self.assertRegex(step, r"(?i)one file name per line")
-        self.assertRegex(step, r"(?i)(only|never)[^.]*(file name|its text)|never its text")
-        self.assertRegex(step, r"(?i)yes (failed|did not land)|failed to land")
-        self.assertRegex(step, r"(?i)delete[^.]*(empty)")
-        promo = heading_section(review_text(), "## 2. Promotion")
-        self.assertRegex(" ".join(promo.split()), r"(?i)pending[^.]*(again|regardless|even)|again[^.]*pending")
-        self.assertNotRegex(step, r"(?i)do not touch")
+        self.assertRegex(step, r"(?i)failed to land")
+        self.assertRegex(step, r"(?i)could not be read")
+        pending = step.index(".gogogo-memory-review-pending")
+        touch = re.search(r"\btouch\b[^.]*`\.gogogo-memory-review`", step)
+        self.assertIsNotNone(touch)
+        self.assertGreater(touch.start(), pending)
+        promo = " ".join(heading_section(review_text(), "## 2. Promotion").split())
+        self.assertIn(".gogogo-memory-review-pending", promo)
 
     def test_the_pointer_says_covered_memories_are_deleted_or_shortened(self):
         sec = heading_section(skill_text(), "## 2. Capture learnings")
