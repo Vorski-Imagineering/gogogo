@@ -299,8 +299,13 @@ def check_branch_rules(repo, branch, rules, classic, checks, wants_check, needs_
         return
     classic_only = [name for name in ("no force push", "no deletion") if by_classic[name] and not by_rules[name]]
     if classic_only and admins_bypass:
-        rep.fail(check, f"{repo} {branch} has {', '.join(classic_only)} only in classic branch protection, which "
-                        "admins can bypass (enforce admins is off), and agents use an admin's login", fix)
+        if wants_check and by_classic["a required check"] and not by_rules["a required check"]:
+            classic_only.append("a required check")
+        detail = (f"{repo} {branch} has {', '.join(classic_only)} only in classic branch protection, which "
+                  "admins can bypass (enforce admins is off), and agents use an admin's login")
+        if wants_check and not present["a required check"] and "a required check" not in classic_only:
+            detail += "; it is also missing: a required check"
+        rep.fail(check, detail, fix)
         return
     if present["a required check"]:
         rep.ok(check, f"{repo} {branch}")

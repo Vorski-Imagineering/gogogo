@@ -908,6 +908,17 @@ class Audit(unittest.TestCase):
         self.assertIn("admins", rows[0]["detail"])
         self.assertIn("--ruleset main", rows[0]["fix"])
 
+    # Test cases 7 and 23-26 of issue #57, each as the spec words it.
+    def test_t7_classic_protection_counts_only_with_enforce_admins(self):
+        classic = {"allow_force_pushes": {"enabled": False}, "allow_deletions": {"enabled": False},
+                   "required_status_checks": {"contexts": ["tests"], "checks": []},
+                   "enforce_admins": {"enabled": True}}
+        self.assertEqual([r["level"] for r in self._rules(rules=[], classic=classic)], ["PASS"])
+        rows = self._rules(rules=[], classic=dict(classic, enforce_admins={"enabled": False}))
+        self.assertEqual([r["level"] for r in rows], ["FAIL"])
+        for text in ("force push", "deletion", "required check"):
+            self.assertIn(text, rows[0]["detail"])
+
     def test_ruleset_for_a_branch_the_profile_does_not_give_exits_2(self):
         calls = []
         settings = {"tracker": {"code_repo": "o/code"}, "integration": {"strategy": "pr-squash", "base": "main"}}
