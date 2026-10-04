@@ -381,7 +381,12 @@ every issue taken with its outcome and merge commit (and *label added by
 the run* for each one §2 labelled), every issue skipped with the reason and its column, anything left half-done with its branch, every other card
 moved to `tracker.columns.needs_human` (taken, then stopped) with its Needs-you line, the stranded
 work from preflight, anything the profile's `stop.extra` checks raised, and
-the `notify failed` lines §8 says are due.
+the `notify failed` lines §8 says are due. It also lists every
+`**Suspected gogogo fault:**` line written in this run (form and rules in
+`references/gogogo-faults.md` in this plugin), each with its issue's link; a
+fault seen outside any issue gets the same line with where it was seen
+(`preflight item <n>`, `triage of #<n>`) in place of the link. With none, the
+report says "Suspected gogogo faults: none". No notify message and no stop.
 
 ## Stop the whole run and ask when
 

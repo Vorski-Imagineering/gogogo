@@ -104,6 +104,19 @@ class Skill(unittest.TestCase):
             self.assertNotIn(flag, text)
         self.assertNotRegex(text, r'tracker\.py"? move')
 
+    def test_upstream_target(self):
+        text = skill_text()
+        start = text.index("## The target")
+        target = text[start:text.index("\n## ", start + 1)]
+        self.assertIn("Vorski-Imagineering/gogogo", target)
+        posts = [line for line in text.splitlines() if "gh issue create" in line or "gh issue comment" in line]
+        self.assertGreaterEqual(len(posts), 2)
+        for line in posts:
+            self.assertIn("--repo <target repo>", line)
+
+    def test_name_check_command(self):
+        self.assertTrue(any("grep -n -i -F" in line for line in skill_text().splitlines()))
+
     def test_no_project_names(self):
         self.assertIsNone(re.search(PROJECT_NAMES, skill_text(), re.I))
 

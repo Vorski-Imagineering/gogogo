@@ -353,6 +353,10 @@ Comment in the reporter's language, not the codebase's:
   took that the body did not settle, with its reason, so the person can
   overturn it.
 - **Anything they still own**: data, configuration, a decision left open.
+- **Suspected gogogo faults**, when there are any: one line per fault, in the
+  form `references/gogogo-faults.md` in this plugin gives, which also says
+  what counts. Left out when there are none. Never place it between
+  `**Needs you:**` and the stop marker.
 - **Where it is now, and only what is true when you post**: in the working
   tree, on a branch, or merged. Name the stage in the repo's words (the
   profile's `stages`), and say when the person who confirms fixes
