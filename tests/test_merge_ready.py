@@ -281,7 +281,7 @@ class Plumbing(unittest.TestCase):
         self.assertIn("7", errs.getvalue())
 
     def test_run_as_a_script_it_runs_main(self):
-        done_ = subprocess.run([sys.executable, str(ROOT / "plugins" / "gogogo" / "scripts" / "merge_ready.py"),
+        done_ = subprocess.run([sys.executable, mr.__file__,
                                 "--help"], capture_output=True, text=True)
         self.assertEqual(done_.returncode, 0)
         self.assertIn("usage:", done_.stdout)
