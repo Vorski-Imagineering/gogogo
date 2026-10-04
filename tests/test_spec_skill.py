@@ -320,11 +320,36 @@ class BeforeYouWrite(unittest.TestCase):
         self.assertNotIn('--search "<D>"', text)
         self.assertIn("Is someone building it already?", text)
 
-    def test_before_you_write_steps_zero_to_seven(self):
+    def test_before_you_write_steps_zero_to_eight(self):
         steps = self.before_steps()
-        self.assertEqual([int(n) for n, _ in steps], list(range(0, 8)))
+        self.assertEqual([int(n) for n, _ in steps], list(range(0, 9)))
         self.assertIn("today", steps[6][1])
         self.assertIn("Prior work", steps[7][1])
+        self.assertIn("Rewrite licensed", steps[8][1])
+
+    def test_step_eight_names_the_licence_form_and_the_lanes(self):
+        """Guards step 8 losing the form test_guard.py reads (gogogo#118)."""
+        eight = self.before_steps()[8][1]
+        for part in ("**Rewrite licensed**", "::", "tests"):
+            self.assertIn(part, eight)
+
+    def test_the_skill_example_licenses_under_the_real_parser(self):
+        """Guards an example line that test_guard.py would not read (gogogo#118)."""
+        import test_guard
+        eight = self.before_steps()[8][1]
+        example = next((ln.strip() for ln in eight.splitlines()
+                        if ln.strip().startswith("**Rewrite licensed**")), None)
+        self.assertIsNotNone(example, "no example line in step 8")
+        for placeholder, value in (("<path>", "tests/test_x.py"), ("<name>", "test_y"),
+                                   ("<N>", "1"), ("<k>", "1")):
+            example = example.replace(placeholder, value)
+        body = "## Test cases\n\n1. " + example + "\n\n## Files\n"
+        self.assertIn("tests/test_x.py::test_y", test_guard.licences(body))
+
+    def test_red_flags_name_the_rewrite_licence(self):
+        """Guards the red-flag row for a Design that reverses a test (gogogo#118)."""
+        flags = "\n".join(section(skill_text(), "## Red flags in your draft"))
+        self.assertIn("Rewrite licensed", flags)
 
     def test_close_command_has_reopen_comment(self):
         six = self.before_steps()[6][1]

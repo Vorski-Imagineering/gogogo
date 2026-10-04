@@ -381,8 +381,16 @@ has no card and no pull request.
    it adds, or the searches run and "none found". Prior work is evidence, not
    authority: the Design still answers to this repo's code and the person's
    choices. It is not a question to the person.
+8. **A Design that changes tested behaviour licenses the rewrite.** For each
+   Design item that changes what existing code does, find the tests (the
+   lanes' `tests` patterns) that assert the old behaviour. Write one line per
+   test in `## Test cases`, and name each in the Hard Stop question:
+   ```
+   **Rewrite licensed** (Approvals row <N>): rewrite `<path>::<name>`: <what it asserts after> (Design <k>).
+   ```
+   Always `path::name`, never a bare path. With no Hard Stop, `<N>` is row 1.
 
-**REQUIRED REFERENCE:** read `references/recon.md` for how to do 2-5, and the
+**REQUIRED REFERENCE:** read `references/recon.md` for how to do 2-5 and 8, and the
 profile's `## Recon traps` for what this codebase specifically hides.
 
 ## Red flags in your draft
@@ -416,6 +424,7 @@ profile's `## Recon traps` for what this codebase specifically hides.
 | A changed spec on an issue whose card is In progress or that has an open PR, not raised | The build was reviewed against the old spec and is now short of the new one. Ask first (§ Is someone building it already?). |
 | A follow-up specced with no case that hits it today | A question round spent on something nobody meets. Offer closing first (Before you write § 6). |
 | A new mechanism with no Prior work in Context | Options invented without looking at how others solved it (Before you write § 7). |
+| A Design that changes what a test asserts, with no `**Rewrite licensed**` line naming it | The build is restored three times and handed back (Before you write § 8). |
 
 ## Posting
 
@@ -435,7 +444,8 @@ Read it as the implementing agent: no memory, no access to you.
 3. Do I know whether to stop for approval, including whether I may **apply** a
    two-licence change and not just write it?
 4. Can I tell when I am done?
-5. Is there a test that fails if I build the wrong thing?
+5. Is there a test that fails if I build the wrong thing, and is every test
+   the Design reverses licensed by name?
 6. Do I know what not to touch?
 
 Then read `## Verify by hand` as the reporter, who has no technical context:
