@@ -28,6 +28,7 @@ CASES = {
     "spec-no-argument-offers-new", "spec-pr-mentions-only",
     "status-sweep-lists-only", "wrap-up-asks-before-removing",
     "setup-connected-message", "setup-leaves-out-plugin-steps",
+    "setup-machine-has-bot",
 }
 TAGS = re.compile(r"^tags:\s*\[([^\]]*)\]\s*$", re.M)
 TYPE = re.compile(r"^type:\s*(\S+)\s*$", re.M)
