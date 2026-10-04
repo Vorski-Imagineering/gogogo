@@ -122,11 +122,17 @@ class Skill(unittest.TestCase):
 
     def test_name_check_covers_the_title_and_is_bounded(self):
         text = skill_text()
-        at = text.index("grep -n -i -F")
-        around = text[at - 900:at + 1100]
-        line = next(l for l in text.splitlines() if "grep -n -i -F" in l)
-        self.assertIn("<title file>", line)
-        self.assertIn("three", around)
+        start = text.index("Then, wherever step 3 ends")
+        para = text[start:text.index("Keep a list of what you removed", start)]
+        grep = next(l for l in para.splitlines() if "grep -n -i -F" in l)
+        self.assertIn("<draft check file>", grep)
+        self.assertIn("<title check file>", grep)
+        sed = [l for l in para.splitlines() if "sed -E" in l]
+        self.assertEqual(len(sed), 2, "one sed per file, so the plugin paths are blanked first")
+        self.assertIn("empty", para)
+        self.assertRegex(para, r"after three runs")
+        step2 = text[text.index("## 2. Draft"):text.index("## 3. Public trackers")]
+        self.assertRegex(step2, r"(?s)title file.*empty file for a comment")
 
     def test_name_check_command(self):
         self.assertTrue(any("grep -n -i -F" in line for line in skill_text().splitlines()))

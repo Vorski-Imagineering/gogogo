@@ -67,7 +67,7 @@ Never edit another issue's body; it may be a spec.
 ## 2. Draft
 
 Write the draft to a file in the scratchpad. The title, for a new issue, is
-`<area>: <what>` (also written to a second file next to the draft, for step 3's name check), in the style of the titles step 1's search returned, if it
+`<area>: <what>` (always also written to a title file next to the draft, an empty file for a comment, for step 3's name check), in the style of the titles step 1's search returned, if it
 returned any; a comment has none. The body has these headings and no others,
 in this order:
 
@@ -134,19 +134,22 @@ values equal to `Vorski-Imagineering` or `gogogo` (ignoring case) is left out
 of the removal and of the check below.
 
 Then, wherever step 3 ends with an upstream draft on disk (before step 4 shows
-it, and on step 1's declined path), check the draft file and the title file for
-those values, one `-e` per value. Leave out an empty value, and a value that is
-only a word inside a kept plugin path (`dev`, `scripts`, `skills`): it would
-match the kept text, so step 3's removal alone covers it.
+it, and on step 1's declined path), check the draft and the title file for
+those values, one `-e` per value, leaving out any empty value. Check copies
+from which the kept plugin paths are blanked, so only bare occurrences count
+(a folder named `skills` is caught, `skills/dev/SKILL.md` is not):
 
 ```bash
-grep -n -i -F -e <value> -e <value> <draft file> <title file>
+sed -E 's#(skills|scripts|references|evals)/[A-Za-z0-9_./-]+##g' <draft file> > <draft check file>
+sed -E 's#(skills|scripts|references|evals)/[A-Za-z0-9_./-]+##g' <title file> > <title check file>
+grep -n -i -F -e <value> -e <value> <draft check file> <title check file>
 ```
 
-Exit 1 (nothing found): go on. Exit 0: remove what it printed, add each item to
-the removal list by kind, and run it again; after three runs that still exit 0,
-post nothing and say so. Any other exit: post nothing and say the check could
-not run. Run it again after every change at step 4.
+The check files go in the same scratch folder. Exit 1 (nothing found): go on.
+Exit 0: remove what it printed from the draft or title, add each item to the
+removal list by kind, and run all three again; after three runs that still
+exit 0, post nothing and say so. Any other exit: post nothing and say the check
+could not run. Run it again after every change at step 4.
 
 Keep a list of what you removed, in your own reply and never in the draft
 file: each item by its kind and where it was (*a hostname, in the second
