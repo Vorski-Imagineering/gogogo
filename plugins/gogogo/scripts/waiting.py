@@ -97,6 +97,7 @@ def read(profile: str | None, now: datetime) -> list[str]:
         raise Unreadable(f"no profile at {path}")
     try:
         settings, _ = profile_check.split_profile(path.read_text(encoding="utf-8"))
+        settings = profile_check.effective(settings)
     except (OSError, profile_check.ProfileError) as exc:
         raise Unreadable(f"{path}: {exc}") from None
     if (settings.get("tracker") or {}).get("tool") != "shared":
