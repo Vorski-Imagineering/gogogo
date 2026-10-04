@@ -4,42 +4,22 @@ Part of `/gogogo:auto-dev`. Read it in full. Section names and § numbers here a
 
 ## Contents
 
-- The PR's checks, when a merge is a release
-- Wait
-- Judge
+- The PR's checks and the merge procedure
 - The link, when a merge is yours
 - Verify the merge landed: never trust an exit code alone
 
-Re-run the unattended-mode check immediately before every merge, chained so
-the merge is unreachable when it fails. The mode can change mid-session.
+**Merging a PR.** For `pr-squash`, and for each issue's PR under
+`run-branch-pr`, follow *Merging a PR* in `/gogogo:dev`'s
+`references/hand-back.md`: gates, the wait for the PR's checks on **every**
+merge, `merge_ready.py`'s verdict, a base that moved, and the merge pinned to
+the commit you verified (`--match-head-commit`). Read it in full. In this loop, re-run the unattended-mode check
+immediately before its step 7, chained so that merge is unreachable when the
+check fails. The mode can change mid-session.
 
-**The PR's checks, when a merge is a release** (§Preflight 5). Before the `gh`
-merge, two steps. Every re-run in them is `sleep 30; <the same command>`, as
-one command.
-
-1. **Wait**, in the foreground (§4): `gh pr checks <pr> --watch --fail-fast`,
-   with the longest timeout your tool allows. Then, by what it printed:
-   - cut off by the tool's time limit while checks still run: re-run it;
-   - `no checks reported` (CI may not have registered yet): re-run it until
-     checks appear, for up to three minutes;
-   - any other error from `gh` (an HTTP, network or auth message): re-run it,
-     at most three times;
-   - otherwise (the checks finished, or one failed and `--fail-fast` ended the
-     watch), or once a budget above is spent: go on to Judge.
-2. **Judge** by each check's state, never by the watch's exit code:
-   `gh pr checks <pr> --json name,bucket`. When it exits non-zero with any
-   message other than `no checks reported`, re-run it, at most three times.
-   - Every check `pass` or `skipping`, and at least one `pass`: passed.
-   - `no checks reported`, or every check `skipping`: no CI ran. A failure
-     under `run-branch-pr` or when `integration.ci_before_merge` is true;
-     otherwise the PR merges on the suite §4 ran.
-   - A check in `fail` (a check failed), in `cancel` (a check was
-     cancelled), in `pending` (CI still running), or `gh` still erroring (the
-     checks cannot be read): a failure. Name every reason that applies.
-
-A failure stops that issue at its PR, handed back to
-`tracker.columns.needs_human` as `/gogogo:dev` §8 says for a gate you could not
-make pass, with stop reason `ci`. For the run's final PR, see `run-branch-pr` below.
+A `ci` or `merge` stop ends that issue only. It is handed back to
+`tracker.columns.needs_human` as `/gogogo:dev` §8 says, with the stop reason,
+and the run goes on to the next issue. For the run's final PR, see
+`run-branch-pr` below.
 
 **The link, when a merge is yours.** When you merge with `gh` and the profile
 uses the `Ships-issue` link (`/gogogo:dev`'s *When you merge with `gh`*
@@ -59,24 +39,26 @@ and the merge is `gh pr merge ... --body-file` with the body built as
   suite, §4 was the only thing standing between a broken suite and the base.
 - **`run-branch-pr`**: the first issue creates the run branch
   (`integration.base`, dated) from the main line. Each issue merges into it by
-  a PR: `gh pr create --base <run branch>`, `gh pr checks --watch`, then
-  `gh pr merge --squash --delete-branch`, with the link's body when it
-  applies. **Zero checks is a failure**, not a pass. At the end, one PR from
+  a PR: `gh pr create --base <run branch>`, then the merge procedure above
+  (with `--require-checks`: **zero checks is a failure**, not a pass), with
+  the link's body when it applies. At the end, one PR from
   the run branch to `integration.final_target` carries the whole run. When
   that final PR is a release (§Preflight 5), merge it too, with a merge
-  commit, once its checks pass (above); on a failure there (above), the run
+  commit, once its checks pass (the procedure's steps 4 and 5, with
+  `--require-checks`); on a `ci` or `merge` outcome there, the run
   is not cleared to release: stop the whole run and ask, giving
-  the Judge step's reasons, and leave the
+  the outcome's reason, and leave the
   cards where they are. When it is not a release, it waits for a person.
   When the link applies, the final PR's description says it must be merged
   with a merge commit, not squashed: a squash leaves the issue commits out of
   the target's history, and the stage sync then finds no link. The close-run
   report (§9) repeats it.
-- **`pr-squash`**: open the PR; when a merge is a release, wait for its checks
-  (above); then squash-merge it, with the link's body when it applies.
+- **`pr-squash`**: open the PR; then the merge procedure above, with the
+  link's body when it applies.
 
 Never hand-roll a merge around a failed integration step, and never use a
-script the profile marks forbidden.
+script the profile marks forbidden. A refused merge is a `merge` stop for the
+issue, never a reason to try `--admin`, `--auto` or another route.
 
 Every PR body, commit message and squash body in the run names its issue as
 `/gogogo:dev` §8 says (`Refs #<n>`, never a closing keyword), the run's final
@@ -92,7 +74,8 @@ Confirm **MERGED** before commenting on the issue or moving any card. A run
 that reports six merges and delivered five is worse than one that stops at the
 first failure: the board says done, the branch says otherwise, and nobody looks
 again. Whatever the exit, first reopen every issue a `CLOSED` line names, as
-`/gogogo:dev` §8 says; then NOT-MERGED, or "cannot tell", stops the whole run.
+`/gogogo:dev` §8 says; then "cannot tell" stops the whole run, and NOT-MERGED after a merge command
+that exited 0 is a `merge` stop for that issue (a merge queue holds it).
 
 When the link was written, add it to the check:
 

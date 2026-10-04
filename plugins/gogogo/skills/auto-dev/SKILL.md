@@ -388,8 +388,9 @@ the `notify failed` lines §8 says are due.
 - the unattended-mode check fails, at the start or before any merge;
 - the base is red before you start, or the run branch goes red mid-run, or
   a `run-branch-pr` final PR that is a release fails §6's checks step;
-- a merge conflicts, or the merge check says NOT-MERGED or cannot tell (after
-  the reopen *Verify the merge landed* asks for);
+- the merge check cannot tell (after the reopen *Verify the merge landed* asks
+  for). A refused or conflicting merge, and one that did not land, are not
+  here: they stop that issue (stop reason `merge`) and the run goes on;
 - a two-licence apply fails or half-applies;
 - the same change fails verification after the bound on two issues in a row
   (the environment, not the issues, is the likely cause);
