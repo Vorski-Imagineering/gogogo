@@ -56,9 +56,10 @@ marker. Skip the rest: only what changed is read. Put each one in exactly one ou
 Show each `every-repo` or `this-repo` item with its exact text. An
 `every-repo` item is always shown with every project name, host, path and
 person removed, because its target, the gogogo tracker, is public. A
-`this-repo` line is shown as it is, unstripped, because it goes into a file in
-this repo; when it goes to an issue in this repo's tracker instead, strip it
-the same way if `tracker.public` is true. A yes files an `every-repo` item
+`this-repo` item, whether it is a line for a file or an issue in this repo's
+tracker, has every project name, host, path and person removed whenever
+`tracker.public` is true, because a tracked file of a public repo is public too.
+It is shown as it is only when `tracker.public` is false. A yes files an `every-repo` item
 through `/gogogo:idea`, or writes the `this-repo` line. A no is done. Nothing is
 filed or written without a yes.
 

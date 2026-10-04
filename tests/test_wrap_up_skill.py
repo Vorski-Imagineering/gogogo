@@ -70,8 +70,9 @@ class MemoryReview(unittest.TestCase):
     def test_privacy_is_keyed_to_the_target(self):
         step = heading_section(review_text(), "## 3. Proposals")
         self.assertRegex(step, r"(?i)every-repo[^.]*always[^.]*(removed|stripped)")
-        self.assertRegex(step, r"(?i)this-repo[^.]*(as it is|unstripped)")
-        self.assertIn("tracker.public", step)
+        self.assertNotRegex(step, r"(?i)this-repo[^.]*(unstripped|always shown as it is)")
+        self.assertRegex(step, r"(?i)this-repo[^.]*(stripped|removed)\s+whenever\s+`tracker\.public` is true")
+        self.assertRegex(step, r"(?i)(as it is|unstripped)[^.]*only when[^.]*tracker\.public[^.]*false")
 
     def test_the_index_and_marker_are_never_scanned(self):
         text = review_text()
