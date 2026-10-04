@@ -241,6 +241,16 @@ class Pieces(unittest.TestCase):
                       "scripts/jdoe/../notify.py", "../gogogo/scripts/notify.py"):
             self.assertEqual(len(self.exempt(f"see {token} here", "jdoe" if "jdoe" in token else "gogogo")), 1, token)
 
+    def test_an_absolute_path_to_a_real_plugin_file_is_not_exempt(self):
+        real = name_check.PLUGIN_ROOT / "scripts" / "notify.py"
+        self.assertTrue(real.exists())
+        private = name_check.PLUGIN_ROOT.parents[1].name
+        self.assertTrue(self.exempt(f"see {real} here", private))
+
+    def test_a_word_with_no_slash_is_never_a_path(self):
+        self.assertTrue((name_check.PLUGIN_ROOT / "scripts").exists())
+        self.assertEqual([h[3] for h in self.exempt("see scripts here", "scripts")], ["scripts"])
+
     def test_a_shorter_name_inside_a_longer_one_is_one_hit(self):
         found = name_check.hits("f", "in acme-ledger now\n", [name_check.pattern("acme-ledger"),
                                                               name_check.pattern("ledger"),
