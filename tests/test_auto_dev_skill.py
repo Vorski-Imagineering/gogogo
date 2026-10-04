@@ -145,5 +145,24 @@ class WorktreeSweep(unittest.TestCase):
             self.assertFalse(any(self.runs(skill)), skill)
 
 
+class Workspace(unittest.TestCase):
+    """Where an issue's work goes is the profile's `integration.workspace`, asked by setup (gogogo#94)."""
+
+    def test_dev_and_auto_dev_branch_by_the_setting(self):
+        dev = (SKILL.parents[1] / "dev" / "SKILL.md").read_text(encoding="utf-8")
+        for name, text in (("dev §4", section(dev, "4. Change")), ("auto-dev §3", moved(BRANCH))):
+            for word in ("integration.workspace", "git worktree add"):
+                self.assertIn(word, text, name)
+
+    def test_auto_dev_preflight_reads_the_setting(self):
+        preflight = section(SKILL.read_text(encoding="utf-8"), "Before anything: preflight")
+        self.assertIn("integration.workspace", preflight)
+
+    def test_setup_asks_with_both_options(self):
+        setup = (SKILL.parents[1] / "setup" / "SKILL.md").read_text(encoding="utf-8")
+        for word in ("integration.workspace", "The checkout", "A worktree per issue"):
+            self.assertIn(word, setup)
+
+
 if __name__ == "__main__":
     unittest.main()

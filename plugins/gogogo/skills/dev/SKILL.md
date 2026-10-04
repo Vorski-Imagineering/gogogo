@@ -163,8 +163,25 @@ The profile's `## Recon traps` lists what this codebase specifically hides.
 - **Put the work on the issue's branch, before the first edit.** The default
   branch is `integration.base` when the profile sets it, else
   `gh repo view <tracker.code_repo> --json defaultBranchRef -q .defaultBranchRef.name`.
-  When `git branch --show-current` prints that name, first look for earlier
-  work on the issue:
+  Where the branch goes is the profile's `integration.workspace`, in this
+  order:
+  1. Absent, and the profile's `## Lane constraints` mention a worktree (in
+     any case): create nothing. Stop and say that the profile mentions a
+     worktree but sets no `integration.workspace`, and to run
+     `/gogogo:setup` to record the choice.
+  2. `checkout`, or absent: in this folder, with the `git switch` commands
+     below.
+  3. `worktree`: in a git worktree of its own. The main worktree is the
+     first `worktree` entry of `git worktree list --porcelain`, and `<path>`
+     is `<its parent>/<its folder name>-wt-<issue-number>`, never relative to
+     this session's folder. The worktree forms below replace the `git switch`
+     ones. Then do every edit, command and test in `<path>`, and name the path
+     in the report. After a verified merge, §8 removes it from the main
+     worktree.
+
+  When `git branch --show-current` prints the default branch's name, or
+  always for `worktree`, whatever branch this session is on, first look for
+  earlier work on the issue:
   ```bash
   git fetch origin
   python3 "${CLAUDE_PLUGIN_ROOT}/scripts/issue_work.py" <issue-number>
@@ -173,7 +190,9 @@ The profile's `## Recon traps` lists what this codebase specifically hides.
   - Exit 1 with exactly one `candidate:` line and no `fork PR` line: show it
     and ask whether to continue on it or start fresh. To continue, check it
     out (`git switch <branch>`, or `git switch --track origin/<branch>` when
-    it is only on `origin`), then `git merge origin/<base>`, never a rebase
+    it is only on `origin`; for `worktree`, `git worktree add <path> <branch>`,
+    or `git worktree add --track -b <branch> <path> origin/<branch>`), then
+    `git merge origin/<base>` (in `<path>` for `worktree`), never a rebase
     or a force push; resolve a conflict as a code change. The rest of this
     skill runs unchanged on that branch: push to it, and use its open PR when
     it has one rather than opening another.
@@ -185,12 +204,18 @@ The profile's `## Recon traps` lists what this codebase specifically hides.
   To start fresh, run
   `git switch -c fix/<issue-number>-<short-slug>` (the slug: two to five
   lowercase words from the issue's title, joined by `-`, letters and digits
-  only). Uncommitted changes come along; never stash, reset or pull to do it.
-  On any other branch, or a detached HEAD, stay where you are and say so.
+  only). In the checkout, uncommitted changes come along; never stash, reset
+  or pull to do it.
+  In the checkout, on any other branch or a detached HEAD, stay where you
+  are and say so. For `worktree` that never applies: a session already in
+  another issue's worktree still makes this issue's `<path>` from the main
+  worktree.
   When that name already exists, stop and ask which branch to use; never
-  reuse or reset it. When the profile's `## Lane constraints` say where to
-  branch (a worktree, say), do that instead. When the default branch can't be
-  read, create nothing and say why.
+  reuse or reset it. For `worktree`, when `<path>` already exists (an earlier
+  stopped run, say), stop and ask the same way, and never reuse or delete it;
+  otherwise start fresh with
+  `git fetch origin && git worktree add -b fix/<issue-number>-<short-slug> <path> origin/<base>`.
+  When the default branch can't be read, create nothing and say why.
 - `CLAUDE.md` is not relaxed because a change is small. Reuse first; follow
   existing patterns.
 - **Thread a change through every consumer.** If you change a value, a flag or
