@@ -373,6 +373,33 @@ class ByDefault(Case):
         self.assertEqual((code, out.strip()), (0, "notify: telegram: bot @gobot -> Vic"))
 
 
+class MachineBot(Case):
+    """`machine_bot`: does this machine already have a working bot? Reads only (getMe, getChat)."""
+
+    def no_call(self, *a, **k):
+        self.fail("Telegram was called")
+
+    def test_1_no_credentials_is_none_and_calls_nothing(self):
+        with mock.patch.object(notify, "_call", side_effect=self.no_call):
+            self.assertIsNone(notify.machine_bot(self.profile("none")))
+
+    def test_2_half_the_credentials_is_none(self):
+        self.creds.parent.mkdir(parents=True, exist_ok=True)
+        self.creds.write_text(f"{notify.TOKEN_KEY}={TOKEN}\n")
+        with mock.patch.object(notify, "_call", side_effect=self.no_call):
+            self.assertIsNone(notify.machine_bot(self.profile("none")))
+
+    def test_3_working_credentials_name_the_bot_and_chat(self):
+        self.write_creds()
+        with mock.patch.object(notify, "_call", side_effect=[{"username": "b"}, {"first_name": "Vic"}]):
+            self.assertEqual(notify.machine_bot(self.profile("none")), (True, "bot @b -> Vic"))
+
+    def test_4_failing_credentials_give_the_reason_and_raise_nothing(self):
+        self.write_creds()
+        with mock.patch.object(notify, "_call", side_effect=notify.SendError("Unauthorized")):
+            self.assertEqual(notify.machine_bot(self.profile("none")), (False, "Unauthorized"))
+
+
 class RepoFile(Case):
     """<root>/.claude/gogogo/notify.env: read key by key, only when git-ignored."""
 

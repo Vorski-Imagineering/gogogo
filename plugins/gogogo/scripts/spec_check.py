@@ -9,10 +9,11 @@
 Approvals row and `A0` the Not approved line, `D<k>` each numbered Design item
 and `T<k>` each numbered test case (both count items numbered `1.` or `**1.**`
 at the start of a line), `N<k>` each bullet under Explicitly not in scope, and
-`F:<path>` each backticked path under Create and Edit.
+`F:<path>` each backticked name with no spaces under Create and Edit; a path holding
+`{a,b}` groups is expanded to one item per combination.
 Under Edit, a backticked name with no `/` counts only when a tracked or
 unignored file in the working tree equals it or ends with `/` + it (a setting
-such as `preflight.extra` is not a file); under Create every backticked path
+such as `preflight.extra` is not a file); under Create every backticked name
 counts. So a name with no / under Edit counts only when a file by that name
 exists in the working tree. Ids are by position. A
 Design or Test cases section with no numbered item is one item, `D0` or `T0`,
@@ -24,7 +25,9 @@ no list to be outside of).
 
 `verify` reads a reader's answers, one line per `V`, `A`, `D`, `T` and `N`
 item: `<id> | <met|missing|differs|na> | <evidence> | <note>`. Evidence is
-`path`, `path:line` or `path::name`, several separated by `, `, or `-`; every
+`path`, `path:line`, `path::name`, or for a test inside a class
+`path::Class.name` or `path::Class::name` (each part found in the file after
+the one before), several separated by `, `, or `-`; every
 one must resolve to a file in the working tree, by a path relative to it. It refuses an answer list that skips an
 item, answers one twice, names an unknown id, gives `met` or `differs` on a
 `D`, `T` or `A` item with no evidence, or leaves a note empty where one is
@@ -54,7 +57,7 @@ from spec_lint import file_groups, numbered_items, split_sections, table_rows  #
 
 STATUSES = ("met", "missing", "differs", "na")
 NEEDS_EVIDENCE = ("D", "T", "A")
-PATH = re.compile(r"`([^`\s]*(?:/[^`\s]*|\.[A-Za-z0-9]{1,5}))`")
+PATH = re.compile(r"`([^`\s]+)`")
 PARENS = re.compile(r"\([^()]*\)")
 BULLET = re.compile(r"^[-*]\s+(\S.*)")
 NOT_APPROVED = re.compile(r"^\**\s*not approved\s*:\**\s*(.*)", re.I)
@@ -81,6 +84,23 @@ def _tree() -> list[str]:
     return [p for p in out.split("\0") if p]
 
 
+BRACES = re.compile(r"\{([^{}]*,[^{}]*)\}")
+
+
+def _expand(path: str) -> list[str]:
+    """Every combination of the `{a,b}` groups in path, the first group varying
+    slowest. A path with no group, an unmatched or nested brace, or a group
+    with no comma comes back as it is."""
+    rest = BRACES.sub("", path)
+    if "{" in rest or "}" in rest or not BRACES.search(path):
+        return [path]
+    out, last = [""], 0
+    for m in BRACES.finditer(path):
+        out = [o + path[last:m.start()] + alt for o in out for alt in m.group(1).split(",")]
+        last = m.end()
+    return [o + path[last:] for o in out]
+
+
 def _paths(lines: list[str], tree=None) -> list[str]:
     """Backticked paths in lines. With tree (a callable listing the working tree's
     files, called at most once), a name with no `/` is kept only when a file
@@ -89,7 +109,7 @@ def _paths(lines: list[str], tree=None) -> list[str]:
     for line in lines:
         while PARENS.search(line):
             line = PARENS.sub("", line)
-        for path in PATH.findall(line):
+        for path in (p for found_path in PATH.findall(line) for p in _expand(found_path)):
             if tree is not None and "/" not in path:
                 if files is None:
                     files = tree()
@@ -168,6 +188,21 @@ def changed_files(base: str) -> list[str]:
     return list(dict.fromkeys(n for n in names if n))
 
 
+def _in_order(name: str, text: str) -> bool:
+    """A `Class.name` or `Class::name` form: two or more non-empty parts, each
+    found in text after the end of the one before."""
+    parts = re.split(r"::|\.", name)
+    if len(parts) < 2 or not all(parts):
+        return False
+    end = 0
+    for part in parts:
+        at = text.find(part, end)
+        if at < 0:
+            return False
+        end = at + len(part)
+    return True
+
+
 def _resolves(evidence: str) -> str | None:
     """None when every part of the evidence resolves, else what does not."""
     for part in (p.strip() for p in evidence.split(", ")):
@@ -184,7 +219,7 @@ def _resolves(evidence: str) -> str | None:
         text = file.read_text(encoding="utf-8", errors="replace")
         if line is not None and not 1 <= int(line) <= len(text.splitlines()):
             return f"{part}: past the end of the file"
-        if name is not None and (not name or name not in text):
+        if name is not None and (not name or name not in text) and not _in_order(name, text):
             return f"{part}: not in the file"
     return None
 

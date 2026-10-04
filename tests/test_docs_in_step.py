@@ -72,6 +72,22 @@ class DocsInStep(unittest.TestCase):
         self.assertGreaterEqual(len(seen), 8, seen)
         self.assertIn("handback.reporter", seen)
 
+    def test_the_settings_table_names_only_known_settings(self):
+        # A top-level setting has no dot, so the span rule above cannot see it; the
+        # table's first cells are settings by its header.
+        lines = (ROOT / "docs" / "git-process.md").read_text(encoding="utf-8").splitlines()
+        start = lines.index("| Setting | What it decides |")
+        names = []
+        for line in lines[start + 2:]:
+            if not line.startswith("|"):
+                break
+            cell = line.split("|")[1].strip()
+            if cell.startswith("`"):  # "a lane's `mutate`" names a part of a setting, not one
+                names += [n for n in SPAN.findall(cell) if "." not in n]
+        self.assertIn("stages", names)
+        for name in names:
+            self.assertTrue(name in pc.FIELDS, f"git-process.md's settings table names {name}, which profile_check does not know")
+
     def test_file_names_are_not_settings(self):
         text = ("`profile-schema.md` `.claude/settings.json` `stage-sync.md` `tests.yml` `spec_lint.py` "
                 "`handback.reporter = \"trailer\"`")

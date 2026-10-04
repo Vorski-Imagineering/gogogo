@@ -65,3 +65,29 @@ Implemented literally, a wrong sentence puts the change on the wrong element.
 State the correction in the spec, design the correct behaviour, and say so in
 your reply to the user. Do not spec a sentence you know to be wrong, and do not
 silently drop it either.
+
+## Tests a Design reverses
+
+A Design that changes what existing code does can leave a test asserting the
+old behaviour. The build cannot pass that test and cannot weaken it unlicensed,
+so it is handed back after the whole build. Find these tests while you write
+the spec and name them.
+
+1. For each Design item that changes behaviour, grep the files the profile's
+   lanes' `tests` patterns name for the setting, function, message or column
+   it changes.
+2. Read each hit's assertion. Keep the test only when it asserts the old
+   behaviour.
+3. Write one `**Rewrite licensed**` line per kept test in `## Test cases`,
+   naming it `path::name` (`path::Class::name` for a method). Never a bare
+   path: that licenses every hunk in the file. Put each test in the Hard Stop
+   approval question for that Design; the line cites that Approvals row, or row
+   1 when no Hard Stop is triggered.
+   Put no other backticked text on that line: the guard reads every backticked
+   token, and a bare path licenses every change to that file. Describe what the
+   test asserts in plain words.
+4. `test_guard.py` reads licences only from `## Design` and `## Test cases`,
+   so a licence in Approvals alone is never read. The build cannot license its
+   own rewrite.
+5. Say in `## Context` which patterns were searched. List none when none are
+   found. A test the search misses still stops the run.

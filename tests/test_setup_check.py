@@ -1,3 +1,5 @@
+import contextlib
+import io
 import json
 import os
 import re
@@ -303,6 +305,18 @@ class ReleaseShape(unittest.TestCase):
         for key in ("environments", "stages", "verify.agent", "verify.human"):
             self.assertIn(key, section)
             self.assertIn(key, profile_check.FIELDS)
+
+    def test_setup_skill_leaves_out_recipes_for_steps_the_plugin_runs(self):
+        import profile_check
+        text = (ROOT / "plugins" / "gogogo" / "skills" / "setup" / "SKILL.md").read_text(encoding="utf-8")
+        start = text.index("`## Recon traps`")
+        bullet = text[start:text.index("Show the draft", start)]
+        for key in ("notify", "integration.strategy", "handback"):
+            self.assertIn(key, bullet)
+            self.assertTrue(any(f == key or f.startswith(key + ".") for f in profile_check.FIELDS), key)
+        draft = text[text.index("Show the draft"):]
+        draft = draft[:draft.index("\n- ")]
+        self.assertIn("Left out", draft)
 
 
 class Audit(unittest.TestCase):
@@ -983,9 +997,10 @@ class BoardTidiness(unittest.TestCase):
 class Notify(unittest.TestCase):
     """The notify row: one per state, never a FAIL, so it never changes the exit code."""
 
-    def row(self, state, line):
+    def row(self, state, line, bot=None):
         rep = sc.Report()
-        with mock.patch("notify.status", return_value=(state, line, "")):
+        with mock.patch("notify.status", return_value=(state, line, "")), \
+                mock.patch("notify.machine_bot", return_value=bot):
             sc.check_notify("profile.md", rep)
         rows = [r for r in rep.rows if r["check"] == "notify"]
         self.assertEqual(len(rows), 1)
@@ -1003,8 +1018,25 @@ class Notify(unittest.TestCase):
         failed = self.row(notify.FAILED, "notify: telegram: Unauthorized")
         self.assertEqual((failed["level"], failed["detail"]), ("WARN", "telegram: Unauthorized"))
 
-    def real_row(self, repo_file_ignored):
-        """The row from notify's own status, in a temp repo with no `notify` line and full credentials."""
+    def test_off_rows_say_whether_this_machine_already_has_a_bot(self):
+        import notify
+        on = self.row(notify.OFF, "notify: off", bot=(True, "bot @b -> Vic"))
+        self.assertEqual(on["level"], "INFO")
+        self.assertTrue(on["detail"].startswith('off: the profile says notify = "none"'))
+        self.assertIn("already has bot @b -> Vic", on["detail"])
+        bad = self.row(notify.OFF, "notify: off", bot=(False, "Unauthorized"))
+        self.assertEqual(bad["level"], "INFO")
+        self.assertIn("fail: Unauthorized", bad["detail"])
+        none = self.row(notify.OFF, "notify: off", bot=None)
+        self.assertEqual(none["detail"], "off (no messages); /gogogo:setup can set up Telegram")
+
+    def test_a_profile_saying_none_is_told_about_the_machines_bot(self):
+        row = self.real_row(True, notify_line='notify = "none"\n')
+        self.assertEqual(row["level"], "INFO")
+        self.assertIn("already has bot @b -> Vic", row["detail"])
+
+    def real_row(self, repo_file_ignored, notify_line=""):
+        """The row from notify's own status, in a temp repo with the given `notify` line (none by default) and full credentials."""
         import notify
         tmp = Path(tempfile.mkdtemp())
         self.addCleanup(shutil.rmtree, tmp, ignore_errors=True)
@@ -1017,7 +1049,7 @@ class Notify(unittest.TestCase):
         repo_file.write_text(f"{notify.CHAT_KEY}=8\n")
         profile = tmp / ".agents" / "dev-process.md"
         profile.parent.mkdir()
-        profile.write_text("+++\nprofile = 1\n+++\n\n## superpowers boundary\nx\n")
+        profile.write_text(f"+++\nprofile = 1\n{notify_line}+++\n\n## superpowers boundary\nx\n")
         answers = [{"ok": True, "result": {"username": "b"}}, {"ok": True, "result": {"first_name": "Vic"}}]
         rep = sc.Report()
         with mock.patch.object(notify, "CREDENTIALS", creds), \
@@ -1237,6 +1269,44 @@ class SessionHook(unittest.TestCase):
         self.assertEqual(self.row({"hooks/hooks.json": "[]"})["level"], "WARN")
         no_command = {"hooks": {"SessionStart": [{"hooks": [{"type": "command"}]}]}}
         self.assertEqual(self.row({"hooks/hooks.json": json.dumps(no_command)})["level"], "WARN")
+
+
+class Independence(unittest.TestCase):
+    """The independence row: the repo's level, always INFO, never a FAIL (gogogo#90)."""
+
+    def audit(self, extra=""):
+        from test_profile_check import COMPLETE
+        root = repo({".agents/dev-process.md": COMPLETE.replace('independence = "junior-dev"\n', extra, 1)})
+        quiet = ("check_git_state", "check_settings", "check_profile_skills", "check_release_shape",
+                 "check_release", "check_hard_stop_source", "check_tracker", "check_notify",
+                 "check_local_skills", "check_claude_md", "config_header")
+        out = io.StringIO()
+        cwd = os.getcwd()
+        os.chdir(root)
+        try:
+            with contextlib.ExitStack() as stack:
+                for name in quiet:
+                    stack.enter_context(mock.patch.object(sc, name))
+                stack.enter_context(contextlib.redirect_stdout(out))
+                code = sc.main(["--json"])
+        finally:
+            os.chdir(cwd)
+        rows = [r for r in json.loads(out.getvalue()) if r["check"] == "independence"]
+        self.assertEqual(code, 0)
+        self.assertEqual(len(rows), 1, rows)
+        self.assertEqual(rows[0]["level"], "INFO")
+        return rows[0]["detail"]
+
+    def test_independence_row(self):
+        self.assertTrue(self.audit().startswith("junior-dev (not set)"))
+        self.assertEqual(self.audit('independence = "product-owner"\n'), "product-owner")
+
+    def test_setup_skill_names_the_independence_row(self):
+        text = (ROOT / "plugins" / "gogogo" / "skills" / "setup" / "SKILL.md").read_text(encoding="utf-8")
+        bullet = re.search(r"(?ms)^- \*\*Independence\*\*.*?(?=^- \*\*)", text)
+        self.assertIsNotNone(bullet)
+        for name in ("`independence`", "junior-dev", "tech-lead", "product-owner", "AskUserQuestion"):
+            self.assertIn(name, bullet.group(0))
 
 
 if __name__ == "__main__":

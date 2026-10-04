@@ -24,10 +24,15 @@ import profile_check as pc  # noqa: E402
 CASES = {
     "dev-third-attempt", "dev-reversal", "dev-unlicensed-weaker-test",
     "auto-dev-label-less-card", "auto-dev-open-decision", "auto-dev-list-fails",
+    "auto-dev-review-wait",
     "spec-declined-question", "spec-being-built", "spec-nothing-hits-today",
-    "spec-no-argument-offers-new",
-    "status-sweep-lists-only", "wrap-up-asks-before-removing",
-    "setup-connected-message",
+    "spec-no-argument-offers-new", "spec-pr-mentions-only",
+    "spec-reverses-tested-behaviour",
+    "roadmap-shared-checkout",
+    "status-sweep-lists-only", "status-shows-independence",
+    "wrap-up-asks-before-removing",
+    "setup-connected-message", "setup-leaves-out-plugin-steps",
+    "setup-machine-has-bot",
 }
 TAGS = re.compile(r"^tags:\s*\[([^\]]*)\]\s*$", re.M)
 TYPE = re.compile(r"^type:\s*(\S+)\s*$", re.M)

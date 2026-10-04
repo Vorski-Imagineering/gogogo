@@ -9,7 +9,12 @@ cards in each column the profile names (`tracker.queue`,
 `tracker.columns.in_progress`, `tracker.columns.needs_human`, each
 `stages[].column`), then the open pull requests:
 
-    gogogo · <folder>: Dev Ready 3 · In progress 1 · … · Released 2 (oldest 5 days) · 2 PRs open — /gogogo:status for detail
+    gogogo · <folder> · independence: <level> · Dev Ready 3 · In progress 1 · … · Released 2 (oldest 5 days) · 2 PRs open — /gogogo:status for detail
+
+The level is the profile's `independence` (`junior-dev (not set)` when it sets
+none). It is bold and coloured by level only in an interactive terminal session
+(`CLAUDE_CODE_ENTRYPOINT=cli`, `NO_COLOR` unset or empty), plain otherwise. An
+unavailable line ends with it.
 
 A stage column's count is followed by how long its oldest card has waited
 there (the `status_since` of `tracker.py list --json`, aged as `waiting.py`
@@ -45,6 +50,7 @@ except ImportError:  # a Python before 3.11 has no tomllib: say nothing, never a
 
 BUDGET = 15  # seconds for every read together; hooks.json's timeout (20) is the outer bound
 UNAVAILABLE = "gogogo: status unavailable: "
+LEVEL_COLOURS = {"junior-dev": "32", "tech-lead": "33", "product-owner": "31"}  # green, yellow, red
 
 
 class ReadFailed(Exception):
@@ -97,6 +103,21 @@ def board_columns(fields_output):
     return names
 
 
+def independence(settings, environ=None):
+    """`independence: <level>`, the level bold and coloured only in an interactive terminal."""
+    environ = os.environ if environ is None else environ
+    level = settings.get("independence")
+    if isinstance(level, str):  # a profile is untrusted text: no control character reaches the terminal
+        level = "".join(c for c in level if ord(c) >= 32 and ord(c) != 127)
+    is_set = isinstance(level, str) and bool(level)
+    shown = level if is_set else "junior-dev"
+    unset = "" if is_set else " (not set)"
+    if (environ.get("CLAUDE_CODE_ENTRYPOINT") == "cli" and environ.get("NO_COLOR", "") == ""
+            and shown in LEVEL_COLOURS):
+        shown = f"\x1b[1;{LEVEL_COLOURS[shown]}m{shown}\x1b[0m"
+    return f"independence: {shown}{unset}"
+
+
 def status_line(profile, settings, run, clock, now=None):
     deadline = clock() + BUDGET
     tracker = settings.get("tracker") or {}
@@ -131,7 +152,7 @@ def status_line(profile, settings, run, clock, now=None):
     if not prs.isdigit():
         raise ReadFailed(f"pull requests unreadable: gh printed {prs[:40]!r}")
     parts.append(f"{prs} PRs open")
-    return f"gogogo · {profile.parent.parent.name}: " + " · ".join(parts) + " — /gogogo:status for detail"
+    return f"gogogo · {profile.parent.parent.name} · {independence(settings)} · " + " · ".join(parts) + " — /gogogo:status for detail"
 
 
 def message(profile, run, clock, now=None):
@@ -143,7 +164,7 @@ def message(profile, run, clock, now=None):
     try:
         return status_line(profile, settings, run, clock, now)
     except ReadFailed as exc:
-        return UNAVAILABLE + str(exc)
+        return UNAVAILABLE + str(exc) + " · " + independence(settings)
 
 
 def main(start=None, run=None, clock=None, now=None):

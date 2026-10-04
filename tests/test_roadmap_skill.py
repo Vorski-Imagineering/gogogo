@@ -67,10 +67,24 @@ class Skill(unittest.TestCase):
     def test_same_repo_path_opens_the_pr(self):
         self.assertIn("gh pr create --base <B>", skill_text())
 
-    def test_same_repo_path_returns_the_checkout(self):
+    def test_same_repo_path_cuts_a_worktree(self):
         text = skill_text()
-        for command in ("git switch <S>", "git branch -d roadmap-refresh-", "git branch -D roadmap-refresh-"):
+        for command in ("git worktree add -b roadmap-refresh-", "git worktree remove",
+                        "git branch -d roadmap-refresh-", "git branch -D roadmap-refresh-"):
             self.assertIn(command, text, command)
+
+    def test_never_switches_the_checkout(self):
+        text = skill_text()
+        for heading in ("## 1.", "## 7."):
+            section = text.split(heading, 1)[1].split("\n## ", 1)[0]
+            self.assertNotIn("git switch", section, heading)
+            self.assertNotIn("git checkout", section, heading)
+
+    def test_stopping_early_keeps_unpushed_work(self):
+        text = skill_text()
+        para = text.split("**Stopping early", 1)[1].split("\n## ", 1)[0]
+        for part in ("origin/<B>..HEAD", "git worktree remove", "git worktree prune"):
+            self.assertIn(part, para, part)
 
     def test_checks_for_an_open_refresh_pr(self):
         text = skill_text()

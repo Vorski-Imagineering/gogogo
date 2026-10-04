@@ -20,7 +20,7 @@ A setting this skill names that the profile does not set is left out of the
 report, never printed empty: an unset `tracker.queue` or
 `tracker.columns.in_progress` has no line. Where a rule below says what an
 unset setting does (`integration.base`, `tracker.tool`,
-`stages[].environment`), that rule applies instead.
+`stages[].environment`, `independence`), that rule applies instead.
 
 Any `warning:` line the check printed goes, verbatim, at the top of your report to the person; if it printed none, the report says so.
 
@@ -115,6 +115,10 @@ in its place in the report, and the others still run.
 
 These rules apply, in order.
 
+- **Independence.** `<level>` is the profile's `independence`; when the
+  profile does not set it, `junior-dev (not set)`. It is printed in both
+  places, in exactly that form. This overrides the unset-setting rule in
+  *First*: an unset `independence` is never left out.
 - **Columns.** Order and names come from `fields`. Every column is shown, with
   0 where it is empty. Cards with no column are counted as `no status`, after
   the rest. Columns and their lists count only cards whose `kind` is not
@@ -177,6 +181,7 @@ A section or listed column with nothing to show prints `none`.
 ```
 <repo> · <branch> @ <short sha> · <n> uncommitted · <a> ahead / <b> behind <upstream>, as last fetched
 profile: <profile path, relative to the repo root>
+independence: <level>
 
 BOARD  <n> cards
   <column> <count> · <column> <count> · … · no status <count>
@@ -198,6 +203,8 @@ CODE
     <keep | remove> <path> (<branch>): <reason>
 ```
 
-Print the report once, in one fenced block, with nothing before it. After
+Print, in this order: the check's `warning:` lines (or the sentence saying
+there were none), then one line `**Independence: <level>**`, then the report
+once, in one fenced block, with nothing else before it. After
 it comes at most one line: the pointer of *Positions only*, naming only the
 skill, when the user asked what to do.

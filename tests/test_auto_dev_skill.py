@@ -96,6 +96,55 @@ class NeverWaits(unittest.TestCase):
         for name in ("timeout 540", "AskUserQuestion"):
             self.assertIn(name, claude)
 
+    def test_launch_command_starts_a_goal(self):
+        claude = self.text.split("\n## Claude-specific")[1]
+        lines = self.launch_line_in(claude)
+        self.assertEqual(len(lines), 1, lines)
+        for name in ('"/goal ', "/gogogo:auto-dev", "--permission-mode bypassPermissions"):
+            self.assertIn(name, lines[0])
+
+    def launch_line_in(self, text):
+        return [ln.strip() for ln in text.splitlines() if ln.strip().startswith("claude -n")]
+
+    def test_readme_launch_matches_skill(self):
+        claude = self.text.split("\n## Claude-specific")[1]
+        skill = self.launch_line_in(claude)
+        readme = self.launch_line_in((SKILL.parents[4] / "README.md").read_text(encoding="utf-8"))
+        self.assertEqual(len(skill), 1, skill)
+        self.assertEqual(readme[:1], skill)
+
+    def test_review_wait_notice_is_the_only_turn_end(self):
+        step = section(self.text, "4. Change, test, review, verify")
+        self.assertIn("Waiting on the review (started <HH:MM>); the run resumes when it reports.", step)
+        claude = self.text.split("\n## Claude-specific")[1]
+        self.assertIn("30 minutes", " ".join(claude.split()))
+        self.assertIn("reader=self", claude)
+
+    def test_reader_wait_uses_a_done_marker_not_a_line_count(self):
+        claude = self.text.split("\n## Claude-specific")[1]
+        wait = claude.split("**Waiting for the spec check's reader**")[1].split("\n- ")[0]
+        self.assertIn(".done", wait)
+        self.assertIn("rm -f", wait)
+        self.assertNotIn("grep -c", wait)
+        dev = (SKILL.parents[1] / "dev" / "SKILL.md").read_text(encoding="utf-8")
+        self.assertIn(".done", dev.split("\n## Claude-specific")[1])
+
+    def test_review_turn_end_needs_an_active_goal_and_a_background_review(self):
+        step = section(self.text, "4. Change, test, review, verify")
+        rule = step.split("**The review is the one place")[1].split("\n- ")[0]
+        self.assertIn("/goal", rule)
+        self.assertIn("background", rule)
+        self.assertIn("foreground", rule)
+
+
+class Independence(unittest.TestCase):
+    """dev and auto-dev read the repo's `independence` level (gogogo#90)."""
+
+    def test_dev_and_auto_dev_read_independence(self):
+        for skill in (SKILL, SKILL.parents[1] / "dev" / "SKILL.md"):
+            text = skill.read_text(encoding="utf-8")
+            for name in ("independence", "Decided without asking"):
+                self.assertIn(name, text, f"{skill.parent.name}: {name}")
 
 
 class TakeWithFrom(unittest.TestCase):
