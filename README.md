@@ -393,7 +393,9 @@ one step at a time, asking before anything is written:
   says.
 - **The ready label** (`dev ready` by default).
 - **Local skills this replaces.** Their project-specific text moves into the
-  profile word for word, and the old copies go to `.claude/skills-retired/`.
+  profile word for word, except recipes for steps the plugin runs itself,
+  which setup lists and leaves out, and the old copies go to
+  `.claude/skills-retired/`.
 - **A pointer in `CLAUDE.md`**, so every session knows where the process lives.
 
 Run it again at any time to check that a repo is still set up right.
