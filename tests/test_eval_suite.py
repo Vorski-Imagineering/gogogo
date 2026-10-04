@@ -30,7 +30,7 @@ CASES = {
     "spec-reverses-tested-behaviour",
     "roadmap-shared-checkout",
     "status-sweep-lists-only", "status-shows-independence",
-    "wrap-up-asks-before-removing",
+    "wrap-up-asks-before-removing", "wrap-up-reviews-memories",
     "setup-connected-message", "setup-leaves-out-plugin-steps",
     "setup-machine-has-bot",
 }
