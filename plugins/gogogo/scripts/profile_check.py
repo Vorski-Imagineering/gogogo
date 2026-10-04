@@ -87,6 +87,9 @@ FIELDS = {
     "integration.final_target": (str, (), "Branch the run's PR targets, for run-branch-pr."),
     "integration.mode_check": (str, (), "Command that proves unattended mode is on."),
     "integration.ci_before_merge": (bool, (LOOP,), "True if CI must pass on each issue before it merges."),
+    "integration.workspace": (str, (), "checkout | worktree. Optional; absent means checkout. Where dev and "
+                              "auto-dev do an issue's work: in the checkout, or in a git worktree "
+                              "../<repo>-wt-<n> beside it. Worktree support is in development."),
     "handback.reporter": (str, (), "trailer | assign | none. Optional; absent means none. trailer: each merge "
                           "writes a Ships-issue trailer naming the reporter, and stage sync assigns them when "
                           "the card enters a stage with a tag."),
@@ -136,6 +139,8 @@ def _in_progress(settings):
 # A resolver returns the value used when the profile lacks the path, or None
 # when it cannot tell (the path then stays absent). Each use warns, naming the
 # issue, and effective() applies them, so every reader sees the same value.
+# A setting whose absence a skill acts on has no entry, since filling it would
+# hide that: integration.workspace (absent plus worktree prose stops dev).
 DEFAULTS = {
     "tracker.columns.needs_human": (_in_progress, "gogogo#32"),
     "handback.reporter": (lambda settings: "none", "gogogo#9"),
@@ -185,6 +190,7 @@ ENUMS = {
     "tracker.kind": {"github-project", "todo-file"},
     "hard_stops.form": {"categories", "questions"},
     "integration.strategy": {"merge-script", "run-branch-pr", "pr-squash"},
+    "integration.workspace": {"checkout", "worktree"},
     "handback.reporter": {"trailer", "assign", "none"},
     "notify": {"none", "telegram"},
     "review.coverage": {"precise", "broad", "exhaustive"},

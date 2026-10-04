@@ -120,6 +120,7 @@ no skill requires it; a skill that finds it uses it.
 | `integration.final_target` | str | optional | Branch the run's PR targets, for run-branch-pr. |
 | `integration.mode_check` | str | optional | Command that proves unattended mode is on. |
 | `integration.ci_before_merge` | bool | `auto-dev` | True if CI must pass on each issue before it merges. |
+| `integration.workspace` | str | optional | checkout / worktree; absent means checkout. Worktree support is in development. |
 | `handback.reporter` | str | optional | trailer / assign / none. Optional; absent means none. trailer: each merge writes a Ships-issue trailer naming the reporter, and stage sync assigns them when the card enters a stage with a tag. |
 | `preflight.extra` | list | optional | Extra checks before a run. |
 | `stop.extra` | list | optional | Extra conditions that stop a whole run. |

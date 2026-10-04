@@ -108,6 +108,7 @@ base = "main"
 command = "make merge"
 mode_check = "./require_bypass.sh"
 ci_before_merge = false
+workspace = "checkout"
 
 [handback]
 reporter = "trailer"
@@ -360,6 +361,19 @@ class WrongValues(unittest.TestCase):
             settings["independence"] = level
             for skill in (None, *pc.SKILLS):
                 self.assertEqual(pc.check(settings, sections, skill), ([], []), (level, skill))
+
+    def test_workspace_is_checkout_or_worktree_and_optional(self):
+        # gogogo#94: optional; absent means checkout. A typo must not silently mean checkout.
+        settings, sections = parse()
+        for value in ("worktree", "checkout"):
+            settings["integration"]["workspace"] = value
+            self.assertEqual(pc.check(settings, sections, pc.LOOP), ([], []), value)
+        settings["integration"].pop("workspace")
+        for skill in (None, *pc.SKILLS):
+            self.assertEqual(pc.check(settings, sections, skill), ([], []), skill)
+        settings["integration"]["workspace"] = "wt"
+        errors, _ = pc.check(settings, sections, pc.LOOP)
+        self.assertIn("integration.workspace: 'wt' is not one of checkout, worktree", errors)
 
     def test_value_outside_enum_is_named(self):
         settings, sections = parse()
@@ -713,6 +727,13 @@ class SchemaDoc(unittest.TestCase):
         self.assertEqual(row.split("|")[4].strip(), pc.FIELDS["independence"][2])
         self.assertIn("absent means telegram", pc.FIELDS["notify"][2])
         self.assertIn(".claude/gogogo/notify.env", pc.FIELDS["notify"][2])
+
+    def test_workspace_meaning_is_the_one_the_spec_fixes(self):
+        # gogogo#94 Design 1.
+        self.assertEqual(pc.FIELDS["integration.workspace"][2],
+                         "checkout | worktree. Optional; absent means checkout. Where dev and auto-dev do an "
+                         "issue's work: in the checkout, or in a git worktree ../<repo>-wt-<n> beside it. "
+                         "Worktree support is in development.")
 
     def test_doc_example_is_valid_toml(self):
         doc = (PLUGIN / "references" / "profile-schema.md").read_text()

@@ -20,10 +20,13 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 PLUGIN = ROOT / "plugins" / "gogogo"
 SCRIPT = PLUGIN / "scripts" / "test_guard.py"
+DEV_VERIFY = PLUGIN / "skills" / "dev" / "references" / "verify.md"
+DEV_HAND_BACK = PLUGIN / "skills" / "dev" / "references" / "hand-back.md"
 sys.path.insert(0, str(PLUGIN / "scripts"))
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 import review_stats  # noqa: E402
+from test_dev_skill import moved  # noqa: E402
 from test_tech_eval import PROJECT_NAMES  # noqa: E402
 
 PROFILE = """+++
@@ -479,11 +482,10 @@ def section(text, start):
 
 class Structure(unittest.TestCase):
     def test_the_skills_name_the_guard(self):
-        dev = (PLUGIN / "skills" / "dev" / "SKILL.md").read_text(encoding="utf-8")
-        six = section(dev, "6.")
+        six = moved(DEV_VERIFY)
         for name in ("test_guard.py", " list ", " verify "):
             self.assertIn(name, six)
-        first_bullet = section(dev, "8.").split("\n- **")[1]
+        first_bullet = moved(DEV_HAND_BACK).split("\n- **")[1]
         self.assertIn("weakened test", first_bullet)
         four = section((PLUGIN / "skills" / "auto-dev" / "SKILL.md").read_text(encoding="utf-8"), "4.")
         self.assertIn("weakened test", four)
