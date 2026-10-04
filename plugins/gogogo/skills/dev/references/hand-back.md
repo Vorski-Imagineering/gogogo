@@ -177,9 +177,12 @@ repo's own command merges instead, and its own checks stand. In order:
 
 1. **Gates.** `gates.always` and each `gates.when` that matches the change
    pass, in dev too.
-2. **Record what was verified.** After a fresh `git fetch origin`, with the
-   verification and gates passed: `<verified sha>` = `git rev-parse HEAD`,
-   `<verified base>` = `git rev-parse origin/<base>`.
+2. **Record what was verified.** After a fresh `git fetch origin`, the branch
+   must contain the base as it is now, which this command checks:
+   `git merge-base --is-ancestor origin/<base> HEAD`. When it fails, the base
+   moved while the issue was built: do *The base moved*, below, before recording anything. Once it
+   holds, with the verification and gates passed: `<verified sha>` =
+   `git rev-parse HEAD`, `<verified base>` = `git rev-parse origin/<base>`.
 3. **Closing references.** The check under *Name the issue without closing it*.
 4. **Wait for the checks, on every PR merge**, in the foreground:
    `gh pr checks <pr> --watch --fail-fast`, with the longest timeout your tool
@@ -203,26 +206,51 @@ repo's own command merges instead, and its own checks stand. In order:
    not merge. Otherwise it merges on the suite you ran. Judge by this line,
    never by the watch's exit code or by `gh`'s wording.
 6. **By the outcome** (the word before the colon):
-   - `ready`: go on to 7;
+   - exit 2 (the PR could not be read; nothing on stdout, and empty output is
+     never `ready`): run it again, up to three times, 10 seconds apart; still 2:
+     stop reason `ci`, detail "could not be read";
+   - `ready`: the sha after it must be `<verified sha>`. When it is not, someone
+     pushed after verification: those commits are unverified. Re-verify as
+     *The base moved* does (every lane, the gates, and review, mutation and
+     verification), record the new `<verified sha>` and go back to step 2; when
+     you cannot, stop reason `merge`, detail "the head changed after
+     verification". When it matches, go on to 7;
    - `behind` or `conflict`: *The base moved*, below;
    - `checks-failed`, `checks-pending` (once the wait's budget is spent) or
      `no-checks`: stop reason `ci`;
    - `draft`, `review-required`, `blocked`, `not-open` or `unknown`: stop reason
      `merge`.
-7. **Merge only what was checked.** Build the squash body from a fresh
-   `origin/<base>` (the link subsection above, when it applies), then, in
-   `/gogogo:auto-dev` chained to the unattended-mode check:
+7. **Merge only what was checked.** In `/gogogo:auto-dev`, chain the merge to
+   the unattended-mode check. When the `Ships-issue` link applies (the
+   subsection above), build the squash body from a fresh `origin/<base>` and
+   merge with it:
    ```bash
    gh pr merge <pr> --squash --delete-branch --match-head-commit <verified sha> --body-file <scratch>/squash-body.txt
    ```
+   When it does not apply, no body file:
+   ```bash
+   gh pr merge <pr> --squash --delete-branch --match-head-commit <verified sha>
+   ```
    Never `--admin`, never `--auto`, never `--disable-auto`, whatever a refusal
    says: they bypass or defer the rules the repo set.
-8. **After the command.** A non-zero exit, or a tool call the session refused
-   (a permission check such as "Merge Without Review" is a tool result, not an
-   exit code): stop reason `merge`; do not try the merge another way. Exit 0:
-   `verify_merged.py` as above. NOT-MERGED after exit 0 means the merge sits
-   in a queue: stop reason `merge`, detail `in the merge queue`. "Cannot tell"
-   is not a `merge` stop: it stops the whole run in `/gogogo:auto-dev`.
+8. **After the command.** A tool call the session refused (a permission check
+   such as "Merge Without Review" is a tool result, not an exit code): stop
+   reason `merge`; do not try the merge another way. A non-zero exit can still
+   follow a merge GitHub made (a local branch that could not be deleted or
+   switched), so run `verify_merged.py` as above on any exit. MERGED: carry on
+   as merged, and mention the exit in the report. NOT-MERGED: after a non-zero
+   exit, stop reason `merge` with `gh`'s message; after exit 0 the merge sits in
+   a queue, stop reason `merge`, detail `in the merge queue`. "Cannot tell" is
+   not a `merge` stop: it stops the whole run in `/gogogo:auto-dev`.
+
+**The final PR of a `run-branch-pr` run** goes through steps 4 and 5 with
+`--require-checks`, `<verified sha>` being its head recorded after its checks
+passed, and merges with a merge commit, with no body file:
+```bash
+gh pr merge <pr> --merge --match-head-commit <verified sha>
+```
+A refusal, a refused tool call or a queue is read as step 8 reads it, but here
+it stops the whole run, not one issue.
 
 **The base moved** (`behind`, `conflict`, or `origin/<base>` is not
 `<verified base>`). Merge `origin/<base>` into the branch (`git merge
