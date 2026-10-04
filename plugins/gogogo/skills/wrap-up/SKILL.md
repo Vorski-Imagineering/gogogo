@@ -77,6 +77,11 @@ already in `CLAUDE.md`.
 Save memories without asking; that's what memory is for. Name each one in the
 report so the user can object.
 
+**Memories saved before this session.** Also review the memories earlier
+sessions saved: delete the ones that have expired, and propose promoting new or
+changed ones. **REQUIRED REFERENCE:** `references/memory-review.md`. Its results
+go in the report under **Memories**.
+
 ## 3. Verdict: resist by default
 
 The user asked for this skill to **push back hard** when things aren't clean.
@@ -94,7 +99,8 @@ has to be earned by every check in §1 coming back clean.
 - anything the profile's `## Wrap-up checks` says blocks.
 
 **Doesn't block, but is named every time:** pre-existing uncommitted changes
-and stranded branches from before the session, with their names. Name them in
+and stranded branches from before the session, with their names, and the
+memories reviewed: what was deleted, shortened or proposed. Name them in
 one line, not as a reason to refuse. They stay the user's call, and the next
 wrap-up will name them again until they're resolved, so they can't quietly go
 stale.
