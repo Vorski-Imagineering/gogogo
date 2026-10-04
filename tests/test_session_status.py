@@ -257,6 +257,17 @@ class Line(unittest.TestCase):
             _, out, _ = run_main(repo_with_profile(), Board())
         self.assertIn("\x1b", message(out))
 
+    def test_an_empty_or_non_string_level_counts_as_not_set(self):
+        for raw in ('""', "3", "true", "[]"):
+            repo = repo_with_profile()
+            path = repo / ".agents" / "dev-process.md"
+            path.write_text(path.read_text(encoding="utf-8").replace(
+                "profile = 1\n", f"profile = 1\nindependence = {raw}\n", 1), encoding="utf-8")
+            code, out, _ = run_main(repo, Board())
+            self.assertEqual(code, 0, raw)
+            self.assertEqual(message(out), LINE.format(name="myrepo"), raw)
+            self.assertNotIn("\x1b", message(out), raw)
+
     def test_unknown_level_is_shown_plain(self):
         repo = repo_with_profile()
         set_level(repo, "lead")

@@ -100,8 +100,9 @@ def independence(settings, environ=None):
     """`independence: <level>`, the level bold and coloured only in an interactive terminal."""
     environ = os.environ if environ is None else environ
     level = settings.get("independence")
-    shown = level if isinstance(level, str) and level else "junior-dev"
-    unset = "" if shown is level else " (not set)"
+    is_set = isinstance(level, str) and bool(level)
+    shown = level if is_set else "junior-dev"
+    unset = "" if is_set else " (not set)"
     if (environ.get("CLAUDE_CODE_ENTRYPOINT") == "cli" and environ.get("NO_COLOR", "") == ""
             and shown in LEVEL_COLOURS):
         shown = f"\x1b[1;{LEVEL_COLOURS[shown]}m{shown}\x1b[0m"
