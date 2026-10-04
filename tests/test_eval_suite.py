@@ -24,6 +24,7 @@ import profile_check as pc  # noqa: E402
 CASES = {
     "dev-third-attempt", "dev-reversal", "dev-unlicensed-weaker-test",
     "auto-dev-label-less-card", "auto-dev-open-decision", "auto-dev-list-fails",
+    "auto-dev-review-wait",
     "spec-declined-question", "spec-being-built", "spec-nothing-hits-today",
     "spec-no-argument-offers-new", "spec-pr-mentions-only",
     "status-sweep-lists-only", "status-shows-independence",

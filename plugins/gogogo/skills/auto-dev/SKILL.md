@@ -285,10 +285,21 @@ by the run* for §8 and §9.
 - A change that needs a two-licence apply (for example a migration on a shared
   environment) is applied only with its apply row, by the profile's procedure
   for it, never improvised.
-- **Never end a turn to wait for background work**, in any run, interactive
-  or headless. Ending the turn hands control back, and a job that hangs never
-  sends the notice that would resume it. Poll it in the foreground until it
-  has finished (*Claude-specific*).
+- **Never end a turn to wait for background work**: a shell job or the spec
+  check's reader, in any run, interactive or headless. Ending the turn hands
+  control back, and a job that hangs never sends the notice that would resume
+  it. Wait for it in the foreground until it has finished
+  (*Claude-specific*).
+- **The review is the one place a turn may end**, and only when a `/goal` is
+  active in this run (the launch's condition, *Claude-specific*) and the
+  review was started in the background, so there is nothing to wait on. Print
+  exactly one line,
+  `Waiting on the review (started <HH:MM>); the run resumes when it reports.`,
+  and end the turn there and nowhere else. Take the issue up again at the
+  review's result when it arrives. When the review returns its findings in the
+  same turn, go on with them. With no goal active (the plain
+  `"/gogogo:auto-dev"` launch), wait for the review in the foreground as for
+  any other job.
 
 ## 5. Gates
 
@@ -404,9 +415,13 @@ integration and merging follow this skill and the profile. See the profile's
 - **Launching.** A skill cannot name the session it runs in; only `-n` at
   launch does. Start an unattended run with:
   ```bash
-  claude -n "$(basename "$(git rev-parse --show-toplevel)")-autodev" --permission-mode bypassPermissions "/gogogo:auto-dev"
+  claude -n "$(basename "$(git rev-parse --show-toplevel)")-autodev" --permission-mode bypassPermissions "/goal Run /gogogo:auto-dev on this repo. Met when /gogogo:auto-dev has printed its run report, or has stopped the whole run and said why."
   ```
-  The name is what `/resume` and the terminal title show.
+  The name is what `/resume` and the terminal title show. `/goal` keeps the
+  session taking turns until that condition holds, and shows `◎ /goal active`.
+  An interactive session starts a run the same way by typing the quoted
+  `/goal …` text. Where `/goal` is unavailable (it says why, for example hooks
+  are disabled), start with `"/gogogo:auto-dev"` as before.
 - The review command and its level for each coverage, and the
   `claude-in-chrome` tools, as in `/gogogo:dev`'s `## Claude-specific`.
 - In the skip marker (§2, *Hand back a skip*), `session` is
@@ -425,6 +440,15 @@ integration and merging follow this skill and the profile. See the profile's
   then read the job's output file, and repeat until it says `finished`. Where
   there is no `timeout` command (macOS), bound the loop itself:
   `sh -c 'n=0; while [ $n -lt 36 ] && kill -0 <pid> 2>/dev/null; do sleep 15; n=$((n+1)); done'`.
+- **Waiting for the spec check's reader** (§4): note the start time, run
+  `rm -f <answers file>.done` before every start of the reader (the first run
+  and each re-run), and tell the reader to create `<answers file>.done` as its
+  very last action, after writing every line. Then wait in foreground steps of
+  at most 540 seconds,
+  `sh -c 'n=0; while [ $n -lt 36 ] && [ ! -f <answers file>.done ]; do sleep 15; n=$((n+1)); done'; [ -f <answers file>.done ] && echo finished || echo waiting`,
+  repeated until it says `finished`, then read the answers file. After 30
+  minutes in all without the marker, answer the list yourself and record
+  `reader=self`, as when no reader can be started.
 - Never `AskUserQuestion` inside the loop (*The loop never waits on chat*).
 - At `tech-lead` or `product-owner`, when your model is not Opus-class or above,
   say in one line that this level is recommended for an Opus-class model at
