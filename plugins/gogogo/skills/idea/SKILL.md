@@ -135,21 +135,21 @@ of the removal and of the check below.
 
 Then, wherever step 3 ends with an upstream draft on disk (before step 4 shows
 it, and on step 1's declined path), check the draft and the title file for
-those values, one `-e` per value, leaving out any empty value. Check copies
-from which the kept plugin paths are blanked, so only bare occurrences count
-(a folder named `skills` is caught, `skills/dev/SKILL.md` is not):
+those values, one `-e` per value, leaving out any empty value:
 
 ```bash
-sed -E 's#(skills|scripts|references|evals)/[A-Za-z0-9_./-]+##g' <draft file> > <draft check file>
-sed -E 's#(skills|scripts|references|evals)/[A-Za-z0-9_./-]+##g' <title file> > <title check file>
-grep -n -i -F -e <value> -e <value> <draft check file> <title check file>
+grep -n -i -F -e <value> -e <value> <draft file> <title file>
 ```
 
-The check files go in the same scratch folder. Exit 1 (nothing found): go on.
-Exit 0: remove what it printed from the draft or title, add each item to the
-removal list by kind, and run all three again; after three runs that still
-exit 0, post nothing and say so. Any other exit: post nothing and say the check
-could not run. Run it again after every change at step 4.
+Exit 1 (nothing found): go on. Exit 0: look at each printed hit. A hit is
+acceptable only when it lies inside a plugin-relative path (`skills/...`,
+`scripts/...`) for which `test -e "<plugin root>/<that path>"` succeeds; the
+plugin's root is the folder whose `scripts/` this skill names in full. Remove
+every other hit from the draft or title, add each removal to the list by kind,
+and run the grep again. The check passes when every printed hit is an
+acceptable plugin path. After three runs with a hit that is not acceptable,
+post nothing and say so. Any other exit: post nothing and say the check could
+not run. Run it again after every change at step 4.
 
 Keep a list of what you removed, in your own reply and never in the draft
 file: each item by its kind and where it was (*a hostname, in the second

@@ -125,12 +125,14 @@ class Skill(unittest.TestCase):
         start = text.index("Then, wherever step 3 ends")
         para = text[start:text.index("Keep a list of what you removed", start)]
         grep = next(l for l in para.splitlines() if "grep -n -i -F" in l)
-        self.assertIn("<draft check file>", grep)
-        self.assertIn("<title check file>", grep)
-        sed = [l for l in para.splitlines() if "sed -E" in l]
-        self.assertEqual(len(sed), 2, "one sed per file, so the plugin paths are blanked first")
+        self.assertIn("<draft file>", grep)
+        self.assertIn("<title file>", grep)
+        self.assertNotIn("sed -E", para)
+        self.assertNotIn("check file", para)
+        self.assertIn("test -e", para)
+        self.assertIn("plugin's root", para)
         self.assertIn("empty", para)
-        self.assertRegex(para, r"after three runs")
+        self.assertRegex(para, r"(?i)after three runs")
         step2 = text[text.index("## 2. Draft"):text.index("## 3. Public trackers")]
         self.assertRegex(step2, r"(?s)title file.*empty file for a comment")
 
