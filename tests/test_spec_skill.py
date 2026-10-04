@@ -346,6 +346,13 @@ class BeforeYouWrite(unittest.TestCase):
         body = "## Test cases\n\n1. " + example + "\n\n## Files\n"
         self.assertIn("tests/test_x.py::test_y", test_guard.licences(body))
 
+    def test_recon_keeps_other_backticks_off_the_licence_line(self):
+        """Guards a path-like token in the free text licensing a whole file (gogogo#118)."""
+        recon = (PLUGIN / "skills" / "spec" / "references" / "recon.md").read_text(encoding="utf-8")
+        text = "\n".join(section(recon, "## Tests a Design reverses"))
+        self.assertIn("backticked", text)
+        self.assertIn("bare path", text)
+
     def test_red_flags_name_the_rewrite_licence(self):
         """Guards the red-flag row for a Design that reverses a test (gogogo#118)."""
         flags = "\n".join(section(skill_text(), "## Red flags in your draft"))

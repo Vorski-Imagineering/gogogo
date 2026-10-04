@@ -83,6 +83,9 @@ the spec and name them.
    path: that licenses every hunk in the file. Put each test in the Hard Stop
    approval question for that Design; the line cites that Approvals row, or row
    1 when no Hard Stop is triggered.
+   Put no other backticked text on that line: the guard reads every backticked
+   token, and a bare path licenses every change to that file. Describe what the
+   test asserts in plain words.
 4. `test_guard.py` reads licences only from `## Design` and `## Test cases`,
    so a licence in Approvals alone is never read. The build cannot license its
    own rewrite.
