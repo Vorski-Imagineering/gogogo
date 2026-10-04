@@ -328,6 +328,16 @@ class IssueWork(Repos):
         self.assertEqual(len(lines), 1, lines)
         self.assertNotIn("mentions", self.stderr)
 
+    def test_and_inside_a_repo_name_does_not_split_it(self):
+        for repo, body in (("acme/search-and-rescue", "Closes acme/search-and-rescue#46"),
+                           ("o/and-x", "Refs o/and-x#46")):
+            with self.subTest(repo=repo):
+                (self.clone / ".agents" / "dev-process.md").write_text(
+                    f'+++\n[tracker]\nissues_repo = "{repo}"\ncode_repo = "o/code"\n+++\n')
+                code, lines = self.work(46, {"graphql": timeline([pr(63, "docs/notes", body=body)])})
+                self.assertEqual(code, 1, self.stderr)
+                self.assertIn("PR #63 open", lines[0])
+
 
 if __name__ == "__main__":
     unittest.main()

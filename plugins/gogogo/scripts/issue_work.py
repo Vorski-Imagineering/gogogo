@@ -69,7 +69,7 @@ def claims(pr, number, issues_repo):
         match = CLAIM_LINE.match(line)
         if not match:
             continue
-        for entry in re.split(r",|\band\b", match.group(1), flags=re.I):
+        for entry in re.split(r",|\s+and\s+", match.group(1), flags=re.I):
             if entry.strip().rstrip(".);").strip().lower() in forms:
                 return True
     return False
