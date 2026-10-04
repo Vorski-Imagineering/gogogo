@@ -108,7 +108,9 @@ def pattern(name):
 def _plugin_path(token):
     """True when the token names an existing path under the plugin."""
     token = token.strip(EDGE)
-    if "/" not in token:
+    # Only a relative path: an absolute or home path, or one that climbs with `..`, can carry a
+    # private name in the part that is not the plugin's.
+    if "/" not in token or token.startswith(("/", "~")) or ".." in token.split("/") or "\\" in token:
         return False
     for candidate in (token, token.removeprefix("plugins/gogogo/")):
         try:
@@ -141,8 +143,8 @@ def check(title_file, body_file, profile=None):
     """(hits, number of names); raises Refused when the check cannot be made."""
     try:
         title_text = Path(title_file).read_text(encoding="utf-8")
-    except OSError as e:
-        raise Refused(f"cannot read the title file {title_file}: {e.strerror or e}")
+    except (OSError, UnicodeDecodeError) as e:
+        raise Refused(f"cannot read the title file {title_file}: {getattr(e, 'strerror', None) or e}")
     if len([ln for ln in title_text.splitlines() if ln.strip()]) != 1:
         raise Refused(f"the title file {title_file} must hold exactly one non-empty line")
     try:
@@ -152,7 +154,7 @@ def check(title_file, body_file, profile=None):
     try:
         path = Path(profile) if profile else profile_check.find_profile()
         settings, _ = profile_check.split_profile(path.read_text(encoding="utf-8"))
-    except (OSError, profile_check.ProfileError) as e:
+    except (OSError, UnicodeDecodeError, profile_check.ProfileError) as e:
         raise Refused(f"cannot read the profile: {e}")
     root = path.resolve().parent.parent
     names = derive(settings, root)

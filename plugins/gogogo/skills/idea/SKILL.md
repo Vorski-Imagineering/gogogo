@@ -101,8 +101,8 @@ this body over as the issue's original report, unchanged.
 
 ## 3. Public trackers
 
-When `tracker.public` is true, the title and body keep only what is known to be
-safe to publish. When unsure, remove it. Do this before the person sees the
+When `tracker.public` is true, or the target is gogogo's tracker (§ *The
+target*), the title and body keep only what is known to be safe to publish. When unsure, remove it. Do this before the person sees the
 draft, and again on the whole draft after every change. Remove:
 
 - any path outside this checkout: absolute (`/Users/`, `/home/`, `/tmp/`,
@@ -111,10 +111,12 @@ draft, and again on the whole draft after every change. Remove:
 - every repo, project, client, product or folder name from outside this
   checkout, in any form (`owner/repo`, a bare name, a folder), except
   `tracker.issues_repo`, `tracker.code_repo`, and tools and products anyone
-  would know as public;
+  would know as public (for gogogo's tracker: `Vorski-Imagineering/gogogo` and
+  nothing else of this repo's);
 - hostnames and IP addresses, except inside a link the next rule keeps;
-- links, except into `tracker.issues_repo` or `tracker.code_repo`, or to a
-  public product's documentation. A share, preview, signed or secret link (a
+- links, except into `tracker.issues_repo` or `tracker.code_repo` (for gogogo's
+  tracker: into `Vorski-Imagineering/gogogo`), or to a public product's
+  documentation. A share, preview, signed or secret link (a
   shared document, a gist, a preview deploy, a URL with a token) is removed
   wherever it points. The rule on names above applies inside a kept link too;
 - anything that looks like a token or key, and email addresses;
@@ -139,8 +141,9 @@ person reading it twice is not a check. A script does it:
 python3 "${CLAUDE_PLUGIN_ROOT}/scripts/name_check.py" --title "<scratch>/idea-title.txt" "<draft>"
 ```
 
-`<scratch>/idea-title.txt` holds the title and nothing else, one line (for a
-comment, a one-line summary the script can read; it is not posted). The draft
+Write the title to `<scratch>/idea-title.txt`, the title and nothing else, one
+line (for a comment, write a one-line summary so the script can read the file;
+it is not posted), and write it again whenever the target or the title changes. The draft
 is the file step 2 wrote. By the exit:
 
 - **0**: it printed `name-check: clean (…)`. Go on to step 4.
@@ -162,13 +165,16 @@ Show the target, the title (for a new issue), the whole body and step 3's
 list of removals. Then ask with `AskUserQuestion`: **post it** (naming the
 target: *file it as a new issue in <tracker.issues_repo>* or *post it as a
 comment on <tracker.issues_repo>#<n>*), **change something**, or **don't post**.
-For gogogo's tracker also show step 3a's last `name-check: clean` line, and say
+For gogogo's tracker the target is named as *file it as a new issue in
+Vorski-Imagineering/gogogo* or *post it as a comment on
+Vorski-Imagineering/gogogo#<n>*, and you also show step 3a's last `name-check: clean` line, and say
 that the check cannot see every private name: read the title and body once more
 yourself before choosing.
 
 - Change something: edit the draft, or change the target within § *The
-  target* (a new issue then needs step 2's title), run step 3 again, and ask
-  again.
+  target* (a new issue then needs step 2's title), run step 3 again (for
+  gogogo's tracker, then step 3a again, which counts toward its three runs),
+  and ask again.
 - Don't post, or the question is declined: post nothing, say where the draft
   file is, and stop.
 
@@ -189,7 +195,8 @@ gh issue view <n> --repo <tracker.issues_repo> --json state,url -q '.state + " "
 Post only when it exits 0 and prints `OPEN` and a URL ending `/issues/<n>` in
 `tracker.issues_repo` (compared ignoring case). Anything else (closed, a pull
 request, not found, an error): post nothing, tell the person why, set the
-target to a new issue, write step 2's title, run step 3 again, and go back to
+target to a new issue, write step 2's title, run step 3 again (for gogogo's
+tracker, then step 3a on the new title file and the draft), and go back to
 step 4. Then:
 
 ```bash

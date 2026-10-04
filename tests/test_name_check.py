@@ -13,6 +13,9 @@ import unittest
 from pathlib import Path
 
 SCRIPT = Path(__file__).resolve().parents[1] / "plugins" / "gogogo" / "scripts" / "name_check.py"
+sys.path.insert(0, str(SCRIPT.parent))
+
+import name_check  # noqa: E402
 ENV = {**os.environ, "GIT_CONFIG_GLOBAL": os.devnull, "GIT_CONFIG_NOSYSTEM": "1"}
 
 PROFILE = """+++
@@ -139,6 +142,117 @@ class NameCheck(unittest.TestCase):
         self.assertTrue(lines[0].startswith("name-check: clean ("), lines)
         self.assertIn(str(self.tmp / "title.txt"), lines[0])
         self.assertIn(str(self.tmp / "draft.md"), lines[0])
+
+    def test_a_title_or_profile_that_is_not_text_is_refused(self):
+        title = self.tmp / "title.txt"
+        body = self.tmp / "draft.md"
+        body.write_text("x\n")
+        title.write_bytes(b"caf\xe9 \xff\n")
+        args = [sys.executable, str(SCRIPT), "--profile", str(self.repo / ".agents" / "dev-process.md"),
+                "--title", str(title), str(body)]
+        out = subprocess.run(args, cwd=self.repo, env=ENV, capture_output=True, text=True)
+        self.assertEqual((out.returncode, out.stdout), (2, ""))
+        title.write_text("t\n")
+        bad = self.tmp / "bad-profile.md"
+        bad.write_bytes(b"\xff\xfe")
+        args[args.index("--profile") + 1] = str(bad)
+        out = subprocess.run(args, cwd=self.repo, env=ENV, capture_output=True, text=True)
+        self.assertEqual((out.returncode, out.stdout), (2, ""))
+
+    def test_the_title_option_is_required(self):
+        body = self.tmp / "draft.md"
+        body.write_text("x\n")
+        out = subprocess.run([sys.executable, str(SCRIPT), str(body)], cwd=self.repo, env=ENV,
+                             capture_output=True, text=True)
+        self.assertEqual((out.returncode, out.stdout), (2, ""))
+        self.assertIn("--title", out.stderr)
+
+    def test_the_reasons_say_what_is_wrong(self):
+        code, _, err = self.check("x\n", title_text=False)
+        self.assertIn("cannot read the title file", err)
+        code, _, err = self.check("x\n", title_text="a\nb\n")
+        self.assertIn("exactly one non-empty line", err)
+        self.assertIn("name_check:", err)
+        code, _, err = self.check("x\n", profile=self.tmp / "none.md")
+        self.assertIn("cannot read the profile", err)
+
+
+class Pieces(unittest.TestCase):
+    """The parts the script is built from, one at a time."""
+
+    def test_a_remote_url_gives_owner_and_name(self):
+        for url, expected in (("git@github.com:acme/acme-ledger.git", "acme/acme-ledger"),
+                              ("https://github.com/acme/acme-ledger.git", "acme/acme-ledger"),
+                              ("git@host:acme/acme-ledger", "acme/acme-ledger"),
+                              ("https://host/group/acme/acme-ledger", "acme/acme-ledger"),
+                              ("https://host/Xavier/Xtra", "Xavier/Xtra"),
+                              ("justaname", None)):
+            self.assertEqual(name_check._remote_names(url), expected, url)
+
+    def names(self, settings, root):
+        return name_check.derive(settings, root)
+
+    def test_names_are_derived_from_each_source_and_kept_apart(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp).resolve() / "plain-folder"
+            root.mkdir()
+            settings = {"tracker": {"issues_repo": "acme/issues-x", "code_repo": "acme/code-y"},
+                        "environments": [{"name": "a"}, {"name": "b", "url": "https://stage.example.test/x"}],
+                        "publish": {"private_names": ["abc", "ab", "Abc", "Vorski-Imagineering/gogogo"]}}
+            found = self.names(settings, root)
+        for expected in ("acme/issues-x", "issues-x", "acme/code-y", "code-y", "acme", "plain-folder",
+                         "stage.example.test", "abc"):
+            self.assertIn(expected, found)
+        self.assertNotIn("ab", found, "under three characters")
+        self.assertEqual([n for n in found if n.lower() == "abc"], ["abc"], "de-duplicated ignoring case")
+
+    def test_the_repo_folder_is_the_git_toplevel_not_the_profiles_folder(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            repo = Path(tmp).resolve() / "top-level-name"
+            (repo / "sub").mkdir(parents=True)
+            subprocess.run(["git", "init", "-q", "-b", "main"], cwd=repo, env=ENV, check=True)
+            self.assertIn("top-level-name", self.names({}, repo / "sub"))
+
+    def test_a_folder_that_is_no_repo_is_still_a_name(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp).resolve() / "not-a-repo-folder"
+            root.mkdir()
+            self.assertIn("not-a-repo-folder", self.names({}, root))
+
+    def test_only_the_listed_separators_stand_for_each_other(self):
+        pattern = name_check.pattern("acme-ledger")
+        for text in ("acme ledger", "acme_ledger", "acme.ledger", "ACME-LEDGER"):
+            self.assertTrue(pattern.search(text), text)
+        for text in ("acmexledger", "acmeXledger", "acme/ledger", "acme--ledger"):
+            self.assertFalse(pattern.search(text), text)
+
+    def exempt(self, text, name):
+        return name_check.hits("f", text, [name_check.pattern(name)])
+
+    def test_the_exempt_path_is_the_whole_token_between_its_edges(self):
+        for text in ("see plugins/gogogo/scripts/notify.py here", "see `plugins/gogogo/scripts/notify.py`, ok",
+                     "(plugins/gogogo/scripts/notify.py)", "see plugins/gogogo/ here", "see scripts/notify.py"):
+            self.assertEqual(self.exempt(text, "plugins" if "plugins" in text else "notify"), [], text)
+        self.assertEqual(self.exempt("see plugins/gogogo/scripts/notify.pyX here", "notify")[0][3], "notify")
+        self.assertEqual(self.exempt("end plugins/gogogo/scripts/notify.py", "notify py"), [])
+
+    def test_only_a_relative_path_inside_the_plugin_is_exempt(self):
+        for token in ("/Users/jdoe/cache/gogogo/scripts/notify.py", "~/gogogo/scripts/notify.py",
+                      "scripts/jdoe/../notify.py", "../gogogo/scripts/notify.py"):
+            self.assertEqual(len(self.exempt(f"see {token} here", "jdoe" if "jdoe" in token else "gogogo")), 1, token)
+
+    def test_a_shorter_name_inside_a_longer_one_is_one_hit(self):
+        found = name_check.hits("f", "in acme-ledger now\n", [name_check.pattern("acme-ledger"),
+                                                              name_check.pattern("ledger"),
+                                                              name_check.pattern("acme")])
+        self.assertEqual([h[3] for h in found], ["acme-ledger"])
+
+    def test_the_name_length_limit_is_three(self):
+        settings = {"publish": {"private_names": ["abc", "ab"]}}
+        with tempfile.TemporaryDirectory() as tmp:
+            found = name_check.derive(settings, Path(tmp).resolve() / "x")
+        self.assertIn("abc", found)
+        self.assertNotIn("ab", found)
 
 
 if __name__ == "__main__":
