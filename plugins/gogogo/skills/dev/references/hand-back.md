@@ -209,12 +209,17 @@ repo's own command merges instead, and its own checks stand. In order:
    - exit 2 (the PR could not be read; nothing on stdout, and empty output is
      never `ready`): run it again, up to three times, 10 seconds apart; still 2:
      stop reason `ci`, detail "could not be read";
-   - `ready`: the sha after it must be `<verified sha>`. When it is not, someone
-     pushed after verification: those commits are unverified. Re-verify as
-     *The base moved* does (every lane, the gates, and review, mutation and
-     verification), record the new `<verified sha>` and go back to step 2; when
-     you cannot, stop reason `merge`, detail "the head changed after
-     verification". When it matches, go on to 7;
+   - `ready`: the sha after it must be `<verified sha>`. When it is not,
+     someone pushed after verification, and those commits are not in your
+     checkout. Read the PR's branch name (`gh pr view <pr> --json
+     headRefName -q .headRefName`), run `git fetch origin <headRefName>`, and
+     merge the pushed commits in with `git merge origin/<headRefName>` (no
+     rebase, no force push). Re-run every lane's `run` command and the gates
+     (and review, mutation and verification, as *The base moved* does), then
+     go back to step 2, which records the local HEAD, now including those
+     commits. A conflict you cannot resolve, or work you cannot re-verify, is
+     stop reason `merge`, detail "the head changed after verification". When
+     it matches, go on to 7;
    - `behind` or `conflict`: *The base moved*, below;
    - `checks-failed`, `checks-pending` (once the wait's budget is spent) or
      `no-checks`: stop reason `ci`;

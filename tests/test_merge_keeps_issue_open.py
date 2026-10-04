@@ -83,6 +83,14 @@ class OneMergeProcedure(unittest.TestCase):
         self.assertIn("exit 2", step)
         self.assertIn("<verified sha>", step)
 
+    def test_a_head_that_changed_is_fetched_and_merged_in_before_it_is_recorded_again(self):
+        body = self.FILES[0].read_text(encoding="utf-8")
+        branch = body.split("`ready`: the sha after it")[1].split("go on to 7")[0]
+        self.assertIn("git fetch origin <headRefName>", branch)
+        self.assertIn("git merge origin/<headRefName>", branch)
+        self.assertLess(branch.index("git merge origin/<headRefName>"), branch.index("step 2"))
+        self.assertIn("the head changed after verification", branch)
+
     def test_the_merge_stop_is_a_stop_reason(self):
         import sys
         sys.path.insert(0, str(ROOT / "plugins" / "gogogo" / "scripts"))
