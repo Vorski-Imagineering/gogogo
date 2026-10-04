@@ -100,6 +100,7 @@ class Skill(unittest.TestCase):
         for line in create:
             self.assertIn("--body-file", line)
             self.assertIn("--repo", line)
+            self.assertIn('--title "$(cat <title file>)"', line, "post the title that was checked")
         for flag in ("--label", "--add-label"):
             self.assertNotIn(flag, text)
         self.assertNotRegex(text, r'tracker\.py"? move')
@@ -130,6 +131,7 @@ class Skill(unittest.TestCase):
         self.assertNotIn("sed -E", para)
         self.assertNotIn("check file", para)
         self.assertIn("test -e", para)
+        self.assertIn("matched text", para)
         self.assertIn("plugin's root", para)
         self.assertIn("empty", para)
         self.assertRegex(para, r"(?i)after three runs")

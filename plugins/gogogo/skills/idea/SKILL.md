@@ -67,7 +67,7 @@ Never edit another issue's body; it may be a spec.
 ## 2. Draft
 
 Write the draft to a file in the scratchpad. The title, for a new issue, is
-`<area>: <what>` (always also written to a title file next to the draft, an empty file for a comment, for step 3's name check), in the style of the titles step 1's search returned, if it
+`<area>: <what>` (always also written to a title file next to the draft, an empty file for a comment, for step 3's name check; step 5 posts the title from that file), in the style of the titles step 1's search returned, if it
 returned any; a comment has none. The body has these headings and no others,
 in this order:
 
@@ -142,7 +142,7 @@ grep -n -i -F -e <value> -e <value> <draft file> <title file>
 ```
 
 Exit 1 (nothing found): go on. Exit 0: look at each printed hit. A hit is
-acceptable only when it lies inside a plugin-relative path (`skills/...`,
+acceptable only when the matched text itself lies inside a plugin-relative path (`skills/...`,
 `scripts/...`) for which `test -e "<plugin root>/<that path>"` succeeds; the
 plugin's root is the folder whose `scripts/` this skill names in full. Remove
 every other hit from the draft or title, add each removal to the list by kind,
@@ -176,7 +176,7 @@ comment on <target repo>#<n>*), **change something**, or **don't post**.
 A new issue:
 
 ```bash
-gh issue create --repo <target repo> --title "<title>" --body-file <file>
+gh issue create --repo <target repo> --title "$(cat <title file>)" --body-file <file>
 ```
 
 A comment on #<n>, however the target was chosen. First:
