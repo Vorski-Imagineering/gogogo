@@ -242,6 +242,37 @@ class SeveralIssues(unittest.TestCase):
         self.assertRegex((ROOT / "README.md").read_text(encoding="utf-8"), r"`/gogogo:spec #\d+ #\d+")
 
 
+WHO = "## Who decides"
+
+
+class WhoDecides(unittest.TestCase):
+    """The repo's `independence` level says which decisions are asked (gogogo#90)."""
+
+    def test_who_decides_names_the_levels(self):
+        lines = skill_text().splitlines()
+        heads = [i for i, line in enumerate(lines) if line.startswith(WHO)]
+        self.assertEqual(len(heads), 1)
+        profile = next(i for i, line in enumerate(lines) if line.startswith("## First: read this repo's profile"))
+        between = [line for line in lines[profile + 1:heads[0]] if line.startswith("## ")]
+        self.assertEqual(between, [], "## Who decides must come directly after the profile section")
+        sub = "\n".join(section(skill_text(), WHO))
+        for name in ("`independence`", "junior-dev", "tech-lead", "product-owner", "Decided without asking"):
+            self.assertIn(name, sub)
+        self.assertIn("independence", pc.FIELDS)
+        named = set(re.findall(r"`([a-z_]+(?:\.[a-z_]+)+)`", skill_text()))
+        named = {n for n in named if n.rsplit(".", 1)[1] not in ("py", "sh", "md", "json")}
+        for setting in named:
+            self.assertIn(setting, pc.FIELDS, setting)
+
+    def test_decided_without_asking_is_outside_the_table(self):
+        approvals = "\n".join(section(skill_text(), "## `## Approvals`"))
+        self.assertIn("Not approved", approvals)
+        self.assertIn("Decided without asking", approvals)
+        self.assertLess(approvals.index("Not approved"), approvals.index("Decided without asking"))
+        self.assertIn("Who decides", approvals)
+        self.assertIn(WHO, skill_text().splitlines(), "the section it points at is gone")
+
+
 BUILDING = "## Is someone building it already?"
 BEFORE = "## Before you write"
 
@@ -263,11 +294,63 @@ class BeforeYouWrite(unittest.TestCase):
         for name in ("tracker.columns.in_progress", "tracker.columns.needs_human", "gh pr list"):
             self.assertIn(name, sub)
 
-    def test_before_you_write_steps_zero_to_seven(self):
+    def test_building_check_uses_status_branch_rule(self):
+        """Guards: the branch rule drifting from /gogogo:status's (gogogo#143)."""
+        import stranded_work as sw
+        sub = "\n".join(section(skill_text(), BUILDING))
+        self.assertIn(sw.ISSUE_AFTER_SLASH, sub)
+        self.assertIn(sw.ISSUE_AT_START, sub)
+
+    def test_building_check_lists_past_thirty_prs(self):
+        """Guards: the 30-PR default cap of `gh pr list` (gogogo#143)."""
+        sub = "\n".join(section(skill_text(), BUILDING))
+        found = re.search(r"gh pr list[^\n]*--limit (\d+)", sub)
+        self.assertTrue(found, "no --limit on the pull request list")
+        self.assertGreaterEqual(int(found.group(1)), 1000)
+
+    def test_building_check_names_claim_keywords(self):
+        """Guards: a bare mention counting as a claim (gogogo#143)."""
+        sub = "\n".join(section(skill_text(), BUILDING)).lower()
+        for word in ("refs", "fixes", "closes", "resolves"):
+            self.assertIn(word, sub)
+
+    def test_posting_dependent_check_shares_the_claim_rule(self):
+        """Guards: the dependent's in-flight check matching a mention (gogogo#143)."""
+        text = POSTING.read_text(encoding="utf-8")
+        self.assertNotIn('--search "<D>"', text)
+        self.assertIn("Is someone building it already?", text)
+
+    def test_before_you_write_steps_zero_to_eight(self):
         steps = self.before_steps()
-        self.assertEqual([int(n) for n, _ in steps], list(range(0, 8)))
+        self.assertEqual([int(n) for n, _ in steps], list(range(0, 9)))
         self.assertIn("today", steps[6][1])
         self.assertIn("Prior work", steps[7][1])
+        self.assertIn("Rewrite licensed", steps[8][1])
+
+    def test_step_eight_names_the_licence_form_and_the_lanes(self):
+        """Guards step 8 losing the form test_guard.py reads (gogogo#118)."""
+        eight = self.before_steps()[8][1]
+        for part in ("**Rewrite licensed**", "::", "tests"):
+            self.assertIn(part, eight)
+
+    def test_the_skill_example_licenses_under_the_real_parser(self):
+        """Guards an example line that test_guard.py would not read (gogogo#118)."""
+        import test_guard
+        eight = self.before_steps()[8][1]
+        example = next((ln.strip() for ln in eight.splitlines()
+                        if ln.strip().startswith("**Rewrite licensed**")), None)
+        self.assertIsNotNone(example, "no example line in step 8")
+        for placeholder, value in (("<path>", "tests/test_x.py"), ("<name>", "test_y"),
+                                   ("<N>", "1"), ("<k>", "1")):
+            example = example.replace(placeholder, value)
+        body = "## Test cases\n\n1. " + example + "\n\n## Files\n"
+        self.assertEqual(test_guard.licences(body), ["tests/test_x.py::test_y"])
+        self.assertEqual(example.count("`"), 2, "a second backticked token could license a whole file")
+
+    def test_red_flags_name_the_rewrite_licence(self):
+        """Guards the red-flag row for a Design that reverses a test (gogogo#118)."""
+        flags = "\n".join(section(skill_text(), "## Red flags in your draft"))
+        self.assertIn("Rewrite licensed", flags)
 
     def test_close_command_has_reopen_comment(self):
         six = self.before_steps()[6][1]

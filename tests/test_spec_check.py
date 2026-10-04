@@ -181,6 +181,30 @@ class Items(unittest.TestCase):
         for name in ("README.md", "review_stats.py", "preflight.extra"):
             self.assertIn(f"F:{name}", f_ids)
 
+    DOTFILE_EDIT = "**Edit:** `.gitignore`, `Makefile` and `preflight.extra`."
+
+    def dotfile_body(self):
+        return BODY.replace(BODY[BODY.index("**Edit:**"):BODY.index("\n", BODY.index("**Edit:**"))],
+                            self.DOTFILE_EDIT)
+
+    def test_a_dotfile_and_extensionless_edit_name_are_items_when_the_tree_has_them(self):
+        listed = items(self.dotfile_body(), tree=lambda: [".gitignore", "Makefile"])
+        f_ids = [i["id"] for i in listed["items"] if i["id"].startswith("F:")]
+        self.assertIn("F:.gitignore", f_ids)
+        self.assertIn("F:Makefile", f_ids)
+        self.assertNotIn("F:preflight.extra", f_ids)
+
+    def test_a_changed_dotfile_the_spec_lists_is_met_not_outside(self):
+        listed = items(self.dotfile_body(), changed=[".gitignore"], tree=lambda: [".gitignore", "Makefile"])
+        status = {i["id"]: i.get("status") for i in listed["items"]}
+        self.assertEqual(status["F:.gitignore"], "met")
+        self.assertEqual(listed["outside"], [])
+
+    def test_a_create_dotfile_counts_without_the_tree(self):
+        body = BODY.replace("**Create:** `tests/test_list.py`.", "**Create:** `.editorconfig`.")
+        listed = items(body, tree=lambda: [])
+        self.assertIn("F:.editorconfig", [i["id"] for i in listed["items"]])
+
     def test_the_tree_is_read_only_for_a_slashless_edit_name(self):
         listed = items(BODY, tree=lambda: (_ for _ in ()).throw(AssertionError("tree read")))
         self.assertEqual([i["id"] for i in listed["items"]], IDS)
@@ -202,6 +226,43 @@ class Items(unittest.TestCase):
         out, code = call("items", body="## Request\n\nPlease fix it.\n")
         self.assertEqual(code, 1)
         self.assertIn("no spec in this body", out)
+
+    def f_items(self, group, line, **kw):
+        body = BODY.replace(BODY[BODY.index(group):BODY.index("\n", BODY.index(group))], line)
+        return [i["id"] for i in items(body, **kw)["items"] if i["id"].startswith("F:") and i["id"] != "F:tests/test_list.py"]
+
+    def test_brace_path_is_one_item_per_file(self):
+        # Guards Design 1-2: `scripts/{a,b}.py` is two files, not one with braces in its name.
+        got = self.f_items("**Create:**", "**Create:** `scripts/{a,b}.py`.", tree=lambda: [])
+        self.assertEqual([g for g in got if g.startswith("F:scripts/")], ["F:scripts/a.py", "F:scripts/b.py"])
+        self.assertFalse([g for g in got if "{" in g], got)
+
+    def test_several_brace_groups_expand_in_order(self):
+        # Guards several groups, first slowest.
+        got = self.f_items("**Edit:**", "**Edit:** `src/{x,y}/{m,n}.py`.", tree=lambda: [])
+        self.assertEqual(got[:4], ["F:src/x/m.py", "F:src/x/n.py", "F:src/y/m.py", "F:src/y/n.py"])
+
+    def test_slashless_filter_runs_on_each_expanded_name(self):
+        # Guards trap 1: expansion before the slash-less filter.
+        got = self.f_items("**Edit:**", "**Edit:** `{tracker,nope}.py`.",
+                           tree=lambda: [".claude/scripts/tracker.py"])
+        self.assertEqual(got, ["F:tracker.py"])
+
+    def test_brace_files_met_and_not_outside(self):
+        # Guards the report's symptom: missing plus outside.
+        body = BODY.replace(BODY[BODY.index("**Create:**"):BODY.index("\n", BODY.index("**Create:**"))],
+                            "**Create:** `scripts/{a,b}.py`.")
+        listed = items(body, changed=["scripts/a.py", "scripts/b.py"], tree=lambda: [])
+        status = {i["id"]: i.get("status") for i in listed["items"]}
+        self.assertEqual(status["F:scripts/a.py"], "met")
+        self.assertEqual(status["F:scripts/b.py"], "met")
+        self.assertEqual([o for o in listed["outside"] if o.startswith("scripts/")], [])
+
+    def test_unexpandable_braces_stay_as_written(self):
+        # Guards Design 1's unchanged cases.
+        for path in ("a/{b.py", "a/{b}.py", "a/{b,{c,d}}.py", "a/{x,y}/{m.py", "a/{x,y}/m}.py"):
+            got = self.f_items("**Create:**", f"**Create:** `{path}`.", tree=lambda: [])
+            self.assertEqual([g for g in got if g.startswith("F:a/")], [f"F:{path}"], path)
 
 
 def git(repo, *args):
@@ -395,6 +456,28 @@ class Verify(unittest.TestCase):
             self.assertEqual(code, 2, evidence + "\n" + out)
         out, code = self.verify(self.answers(D1="D1 | met | app/views.py::listed, app/views.py | "))
         self.assertEqual(code, 0, out)
+
+    def test_class_form_evidence_resolves(self):
+        # Guards the report's (b): Class.name and Class::name.
+        (self.dir / "app" / "views.py").write_text("class Listing:\n    def listed():\n        return rows\n")
+        for evidence in ("app/views.py::Listing.listed", "app/views.py::Listing::listed"):
+            out, code = self.verify(self.answers(D1=f"D1 | met | {evidence} | "))
+            self.assertEqual(code, 0, evidence + "\n" + out)
+
+    def test_class_form_part_at_the_start_of_the_file_resolves(self):
+        # Guards the search offset: the first part may sit at offset 0.
+        (self.dir / "app" / "views.py").write_text("Listing\n    listed\n")
+        for evidence in ("app/views.py::Listing.listed", "app/views.py::Listing::listed"):
+            out, code = self.verify(self.answers(D1=f"D1 | met | {evidence} | "))
+            self.assertEqual(code, 0, evidence + "\n" + out)
+
+    def test_class_form_evidence_still_refused_when_wrong(self):
+        # Guards Design 3: not everything with a dot is accepted.
+        (self.dir / "app" / "views.py").write_text("class Listing:\n    def listed():\n        return rows\n")
+        for evidence in ("Nope.listed", "Listing.nope", "listed.Listing", "Listing."):
+            out, code = self.verify(self.answers(D1=f"D1 | met | app/views.py::{evidence} | "))
+            self.assertEqual(code, 2, evidence + "\n" + out)
+            self.assertIn("not in the file", out)
 
     def test_evidence_outside_the_working_tree_is_refused(self):
         outside = self.dir.parent / "elsewhere.txt"

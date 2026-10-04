@@ -100,6 +100,16 @@ class Skill(unittest.TestCase):
         self.assertIn("Pull requests:", after)
         self.assertIn("Branches ahead of", after)
 
+    def test_independence_lines(self):
+        blocks = re.findall(r"```[^\n]*\n(.*?)```", skill_text(), re.S)
+        template = next(b for b in blocks if re.search(r"(?m)^BOARD", b) and re.search(r"(?m)^CODE", b))
+        lines = template.splitlines()
+        at = next(i for i, l in enumerate(lines) if l.startswith("profile:"))
+        self.assertEqual(lines[at + 1], "independence: <level>")
+        outside = re.sub(r"```[^\n]*\n.*?```", "", skill_text(), flags=re.S)
+        self.assertIn("**Independence: <level>**", outside)
+        self.assertIn("junior-dev (not set)", outside)
+
     def test_board_names_pull_request_cards_and_where_to_stop_them(self):
         shape = skill_text().split("## Shape", 1)[1].split("## Template", 1)[0]
         line = next((l for l in shape.splitlines() if "pull-request card(s)" in l), "")

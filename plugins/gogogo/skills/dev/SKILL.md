@@ -67,7 +67,8 @@ or data problem, not a thrown error, which itself narrows the search.
 
 Stop and say so, rather than guessing, when the issue:
 
-- names an **open product decision** nobody has answered;
+- names an **open decision of a kind the profile's `independence` asks
+  about** (§ *Who decides* in `/gogogo:spec`), not answered in the body;
 - needs a **Hard Stop** under the repo's rules with no recorded approval;
 - is a feature with no analysis pass. Those need a spec first, via
   `/gogogo:spec`, not an improvised implementation.
@@ -199,6 +200,8 @@ The profile's `## Recon traps` lists what this codebase specifically hides.
   - Exit 1 otherwise (two or more candidates, or a fork PR): show every line
     and ask which to continue, or to start fresh. A fork PR is someone else's:
     say a person reviews it, and stop.
+  - A `PR #<m> mentions #<n> but does not claim it` line on stderr is shown
+    in one line; that pull request is not a candidate.
   - Exit 2: show the reason and ask whether to start fresh.
 
   To start fresh, run
@@ -221,10 +224,12 @@ The profile's `## Recon traps` lists what this codebase specifically hides.
 - **Thread a change through every consumer.** If you change a value, a flag or
   a rule, find every place that reads it and every path that re-renders it. A
   partial thread is the "two things must agree, nothing enforces it" failure.
-- **A Hard Stop, or a decision that belongs to a person and is not in the
-  issue body, discovered mid-change → stop** and present the repo's proposal
-  format. Do not negotiate with yourself about whether it is "small". Hand
-  back as *stopped for a person* (§8).
+- **A Hard Stop, or a decision of a kind the level asks about and is not in
+  the issue body, discovered mid-change → stop** and present the repo's
+  proposal format. Do not negotiate with yourself about whether it is "small".
+  Hand back as *stopped for a person* (§8). At `product-owner`, a product decision
+  the body does not settle is taken, and recorded under *Decided without
+  asking* in the §7 report.
 - **Do not commit or push unless asked.** Leave the change in the working tree
   and say which branch it is on. (`auto-dev` overrides this.)
 
@@ -344,6 +349,9 @@ Comment in the reporter's language, not the codebase's:
   - `end` is `clean` when nothing was unlicensed, `restored` when every
     unlicensed item was restored and the change passes, `stopped` after the
     third attempt, and `unchecked` with `checked=no`.
+- **Decided without asking**, when there is any: one bullet per decision you
+  took that the body did not settle, with its reason, so the person can
+  overturn it.
 - **Anything they still own**: data, configuration, a decision left open.
 - **Where it is now, and only what is true when you post**: in the working
   tree, on a branch, or merged. Name the stage in the repo's words (the
@@ -381,10 +389,15 @@ and integration follow this skill and the repo's merge path. See the profile's
   follows the coverage: `precise` is `medium`, `broad` is `high`,
   `exhaustive` is `max`. The target is the change in round 1 (the working
   tree, or the branch against its base) and the corrections in later rounds
-  (their commit range, or the files named); the brief is §5 rule 1's.
+  (their commit range, or the files named); the brief is §5 rule 1's. In an
+  auto-dev run the turn may end at the review only as `/gogogo:auto-dev` §4
+  says (a goal active and the review started in the background).
 - The spec check's reader (§5) is a subagent started with the `Agent` tool,
   which does not see this conversation. Its prompt is §5's brief for the
-  reader and the item list, and it writes the answers file.
+  reader and the item list, and it writes the answers file. In an auto-dev
+  run the prompt also tells it to create `<answers file>.done` as its last
+  action, and it is waited on as `/gogogo:auto-dev`'s *Claude-specific* says,
+  never by ending the turn.
 - A mutation run (§6) can outlast the shell tool's foreground limit: start it
   with `run_in_background` and poll it as `/gogogo:auto-dev`'s
   *Claude-specific* says; in an auto-dev run never end the turn to wait for it.
@@ -394,3 +407,6 @@ and integration follow this skill and the repo's merge path. See the profile's
   `require_unattended.sh` also reads, and `unknown` when it is unset.
 - Browser checks use the `claude-in-chrome` tools; load the ones you need in one
   `ToolSearch` call.
+- At `tech-lead` or `product-owner`, when your model is not Opus-class or above,
+  say in one line that this level is recommended for an Opus-class model at
+  medium effort or higher, then carry on.

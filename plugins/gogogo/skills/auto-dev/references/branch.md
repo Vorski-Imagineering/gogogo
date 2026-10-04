@@ -46,6 +46,8 @@ the issue already has work:
 - Two or more `candidate:` lines, or any `fork PR` line: **skip** the issue
   with the reason `earlier work: <each line, joined by "; ">`, and leave its
   card where it is. Never build a competing version of a contributor's PR.
+- A `PR #<m> mentions #<n> but does not claim it` line on stderr goes into the
+  run report in one line; that pull request is not a candidate.
 - Exit 2: **skip** with the reason `could not check for earlier work: <the reason>`.
 
 Then take the card, before any branch exists, so anyone glancing at the board

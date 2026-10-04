@@ -49,6 +49,38 @@ you write anything, and nothing here repeats them.
 Every tracker command targets `tracker.issues_repo`. When it differs from
 `tracker.code_repo`, pass `--repo <issues_repo>` on every `gh issue` call.
 
+## Who decides
+
+Every choice you meet while speccing is one of three kinds. The kind is fixed
+by what the choice changes, never by how sure you are:
+
+| Kind | What it changes | Example |
+|---|---|---|
+| **Approval** | Anything the Hard Stop rules list, or applying a two-licence change | A script that starts refusing an action it used to allow |
+| **Product** | What a person sees, gets or has to do: on the board, in the tracker, in a report, or in the product | A skipped card moves to the needs-a-person column |
+| **Engineering** | How it is built, where a later change could undo it without anyone noticing a difference | Which pattern finds an issue number in a branch name |
+
+A choice that could be two kinds counts as the one that asks more: approval
+over product, product over engineering.
+
+The profile's `independence` sets which kinds you ask about. Absent means
+`junior-dev`.
+
+| Level | You ask about | You decide |
+|---|---|---|
+| `junior-dev` | approvals, product, engineering | nothing |
+| `tech-lead` | approvals, product | engineering |
+| `product-owner` | approvals | product, engineering |
+
+Approvals are asked at every level. A kind the level does not ask about is
+yours to decide: pick, and record it under *Decided without asking* in
+`## Approvals` with its reason (§ *`## Approvals`*), and build the spec's
+`## Design` on it.
+
+At `tech-lead` or `product-owner`, when your model is not Opus-class or above,
+say in one line that this level is recommended for an Opus-class model at
+medium effort or higher, then carry on.
+
 ## Given nothing to spec
 
 When the user gives no issue, no idea and no column (`/gogogo:spec` with no
@@ -112,9 +144,10 @@ stop it assuming approval nobody gave.
 
 - One row per question asked. Record what they picked it **over**: the rejected
   option is what prevents re-litigation.
-- **Any product decision goes to the user, not into your rationale.** Catching
-  yourself writing "Rationale for the split" means you approved something on
-  their behalf. Ask instead.
+- **Any decision of a kind the level asks about goes to the user
+  (§ *Who decides*)**, not into your rationale. Catching yourself writing
+  "Rationale for the split" about such a decision means you approved something
+  on their behalf. Ask instead.
 - A Hard Stop the user approved is a row, and that row is what licenses
   implementation.
 - No approvals needed? Then the row is literally *"None — every Hard Stop item
@@ -122,12 +155,21 @@ stop it assuming approval nobody gave.
   needed" and "nobody asked"; those have opposite consequences.
 - End with a `Not approved:` line for anything you raised and they did not take
   (`Not approved: none` when there is nothing).
+- Then, when the agent decided anything, a `Decided without asking:` line and
+  one bullet per decision with its reason. These are not approvals and no
+  verdict may cite them.
 
 ## Ask in rounds until no forks remain
 
 The Approvals table is the **output of a loop**, not of a single pass. Keep
 asking until pre-post check question 1 answers *"none"*.
 
+- At `tech-lead` and `product-owner`, ask at most one round per issue. When the
+  person answers against the recommendation, work out what follows from the
+  answer yourself.
+- Every question opens with the real case in one plain sentence, and each
+  option says what changes for people. Name no files, flags or exit codes in a
+  question.
 - **Never post a spec that lists open questions.** A spec whose own status is
   "blocked on Q1-Q5" is a questionnaire wearing a deliverable's clothes. The
   forks are not findings to report; they are work you have not finished.
@@ -266,19 +308,30 @@ has no card and no pull request.
 1. Run `<tracker.tool> show <N>` (for `shared`,
    `python3 "${CLAUDE_PLUGIN_ROOT}/scripts/tracker.py" show <N>`) when the
    profile has `tracker.tool`, and
-   `gh pr list --repo <tracker.code_repo> --state open --json number,title,body,headRefName,url`.
+   `gh pr list --repo <tracker.code_repo> --state open --limit 1000 --json number,title,body,headRefName,url`.
 2. It is being built when the card's column is `tracker.columns.in_progress`,
-   or an open pull request has `#<N>` as a whole token in its title or body, or
-   `<N>` between non-digits in its branch name. A plain search for the number
-   also finds `1<N>` and line numbers; match the token. A non-zero exit from
-   either command counts as being built, with the reason "could not check". A
-   card in `tracker.columns.needs_human` does not count: it was handed back for
-   a person, usually for exactly this re-spec.
+   or an open pull request **claims** `<N>`: any one of
+   - its branch name carries `<N>` by `/gogogo:status`'s rule: the first match
+     of `/(\d+)(?:-|$)` in the name, else of `^(\d+)-`, is `<N>`;
+   - its title has `#<N>` as a whole token;
+   - a body line, after optional spaces and a `-` or `*` bullet, starts with
+     `refs`, `close`, `closes`, `closed`, `fix`, `fixes`, `fixed`, `resolve`,
+     `resolves` or `resolved` (any case, optional `:`), then references split by `,` or `and`, one being `#<N>` or
+     `<tracker.issues_repo>#<N>` as a whole token.
+
+   Match the token, not a plain number search (`1<N>`, line numbers). A
+   non-zero exit from either command counts as being built, with the reason
+   "could not check". A card in `tracker.columns.needs_human` does not count:
+   it was handed back for a person, usually for exactly this re-spec.
+   An open pull request with `#<N>` as a token in its title or body that claims
+   it by none of these is a *mention*: say one line per mention, "PR <link>
+   mentions #<N> but does not claim it", whether or not it is being built, and
+   ask nothing about it.
 3. Not being built: go on to *Before you write*.
 4. Being built: say so in one sentence, naming the column or the pull request
    link, and that the build was made against the current spec. Ask: **change
    the spec anyway** or **leave it**. On *change it anyway*, go on; after
-   Posting step 6, comment on each pull request found: "The spec in #<N>
+   Posting step 6, comment on each pull request that claims it: "The spec in #<N>
    changed after this was built: <one line per changed Design or Test case
    item>". On *leave it*, a decline, or no person to ask: post nothing, add no
    label, and end this issue (in a run of several, no person to ask stops the
@@ -328,8 +381,16 @@ has no card and no pull request.
    it adds, or the searches run and "none found". Prior work is evidence, not
    authority: the Design still answers to this repo's code and the person's
    choices. It is not a question to the person.
+8. **A Design that changes tested behaviour licenses the rewrite.** For each
+   Design item that changes what existing code does, find the tests (the
+   lanes' `tests` patterns) that assert the old behaviour. Write one line per
+   test in `## Test cases`, and name each in the Hard Stop question:
+   ```
+   **Rewrite licensed** (Approvals row <N>): rewrite `<path>::<name>`: <what it asserts after> (Design <k>).
+   ```
+   Always `path::name`, never a bare path. With no Hard Stop, `<N>` is row 1.
 
-**REQUIRED REFERENCE:** read `references/recon.md` for how to do 2-5, and the
+**REQUIRED REFERENCE:** read `references/recon.md` for how to do 2-5 and 8, and the
 profile's `## Recon traps` for what this codebase specifically hides.
 
 ## Red flags in your draft
@@ -337,7 +398,7 @@ profile's `## Recon traps` for what this codebase specifically hides.
 | Phrase | Meaning |
 |---|---|
 | "choose between" / "either approach works" | Unresolved fork. Ask the user. |
-| "Rationale for the split/choice" | You approved a product decision yourself. |
+| "Rationale for the split/choice" | You decided a kind the level asks about. Ask instead. |
 | "add appropriate tests" | Name the cases and what each guards. |
 | "consider whether" / "may need to" | Handing over your uncertainty. |
 | "should be straightforward" | You have not read the code. |
@@ -363,21 +424,28 @@ profile's `## Recon traps` for what this codebase specifically hides.
 | A changed spec on an issue whose card is In progress or that has an open PR, not raised | The build was reviewed against the old spec and is now short of the new one. Ask first (§ Is someone building it already?). |
 | A follow-up specced with no case that hits it today | A question round spent on something nobody meets. Offer closing first (Before you write § 6). |
 | A new mechanism with no Prior work in Context | Options invented without looking at how others solved it (Before you write § 7). |
+| A Design that changes what a test asserts, with no `**Rewrite licensed**` line naming it | The build is restored three times and handed back (Before you write § 8). |
 
 ## Posting
 
 **REQUIRED REFERENCE:** read `references/posting.md` (in this skill's folder) in full before anything else in this step. It holds the whole of this step.
+
+**The reply after posting** lists the *Decided without asking* items in two or
+three lines, so the person can overturn any.
 
 ## Pre-post check
 
 Read it as the implementing agent: no memory, no access to you.
 
 1. Any point where I must choose and have no basis?
+   Is every decision the agent took of a kind the level does not ask about,
+   and listed under *Decided without asking*?
 2. Every claim checkable at a `file:line`?
 3. Do I know whether to stop for approval, including whether I may **apply** a
    two-licence change and not just write it?
 4. Can I tell when I am done?
-5. Is there a test that fails if I build the wrong thing?
+5. Is there a test that fails if I build the wrong thing, and is every test
+   the Design reverses licensed by name?
 6. Do I know what not to touch?
 
 Then read `## Verify by hand` as the reporter, who has no technical context:

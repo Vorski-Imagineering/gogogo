@@ -92,6 +92,7 @@ reporter = "none"
 | **A profile setting nobody reads, or a skill reading a setting nobody defines** | The checker and the skills drift | `references/profile-schema.md` is checked against `profile_check.py` by a test; a skill naming a setting must find it there |
 | **Headless runs differ from interactive ones** | The transcript can lack `permissionMode`; skills load differently | Test both when a change touches preflight |
 | **Mutation tools edit source files in place** | In the loaded tree that hands a broken script to another repo's run | Mutation runs only through `tools/mutate.py`, which works in a copy |
+| **A new eval case not in the suite's list** | `tests/test_eval_suite.py` lists every case in `CASES` exactly, so a spec that adds a case and does not list that file under Edit has its build read the edit as outside the spec | A spec that adds an eval case adds its name to `CASES` and lists `tests/test_eval_suite.py` under Edit |
 
 ## Lane constraints
 

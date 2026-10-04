@@ -108,9 +108,9 @@ order, checking each step before starting the next:
       - The dependent's card is in `tracker.columns.in_progress` (read with
         `<tracker.tool> show <D>`; for `shared`,
         `python3 "${CLAUDE_PLUGIN_ROOT}/scripts/tracker.py" show <D>`), or an
-        open pull request references it
-        (`gh pr list --repo <tracker.code_repo> --state open --search "<D>"`,
-        a PR whose title or body names `#<D>`): say so and ask before editing
+        open pull request claims it (read the list with the command of
+        *Is someone building it already?* step 1 and apply that section's
+        step 2 to `<D>`; a mere mention of `<D>` does not count): say so and ask before editing
         it. A read that fails counts as in flight; a profile with no
         `tracker.tool` or no `tracker.columns.in_progress` has no such column,
         so only the pull request check applies. A no, a

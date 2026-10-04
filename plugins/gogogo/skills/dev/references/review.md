@@ -43,7 +43,8 @@ change for bugs. In order:
   It is told:
   - `met`: the change does what the item says. Evidence is where: a file
     (`path`), a file and one line (`path:line`, a single line number, never
-    a range), or a file and the test's name (`path::name`); several are
+    a range), or a file and the test's name (`path::name`, or for a test inside a class
+    `path::Class.name` or `path::Class::name`); several are
     separated by `, `. Paths are relative to the working tree.
   - `missing`: nothing in the change does it. `differs`: the change does it
     another way than the item says; the note gives the spec's words and what

@@ -101,6 +101,8 @@ FIELDS = {
                "profile."),
     "review.coverage": (str, (), "precise / broad / exhaustive. Optional; absent means broad. How wide a net "
                         "the first review round casts; correction rounds are always precise."),
+    "independence": (str, (), "junior-dev / tech-lead / product-owner. Optional; absent means junior-dev. Which "
+                     "decisions Claude asks about and which it takes itself; see docs/independence-mode.md."),
     "auto_test.pass_column": (str, (TEST,), "Column a card moves to on PASS."),
     "auto_test.fail_column": (str, (TEST,), "Column a card moves to on FAIL."),
     "auto_test.fail_label": (str, (TEST,), "Label added on FAIL."),
@@ -192,6 +194,7 @@ ENUMS = {
     "handback.reporter": {"trailer", "assign", "none"},
     "notify": {"none", "telegram"},
     "review.coverage": {"precise", "broad", "exhaustive"},
+    "independence": {"junior-dev", "tech-lead", "product-owner"},
 }
 
 

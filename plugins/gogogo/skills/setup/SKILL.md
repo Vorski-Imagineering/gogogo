@@ -96,10 +96,21 @@ What each fix involves:
   - The sections `## Recon traps`, `## Lane constraints` and
     `## superpowers boundary`. When the repo already has local skills being
     replaced, **move** their project-specific text into these sections word
-    for word; do not rewrite it.
+    for word; do not rewrite it, **except a recipe for a step the plugin runs
+    itself**: text telling an agent how to send notifications (`notify`),
+    branch or set up a workspace (`integration.workspace`, `integration.base`),
+    merge (`integration.strategy`), move cards (`tracker.columns`, `stages`),
+    report and hand back (`handback`), or run preflight checks
+    (`preflight.extra`). That includes a send function, where its credentials
+    live, and a table keyed to the retired skill's own section numbers or
+    columns. Decide by what the text does, not by its heading. A project fact
+    such a step uses (a command, a host, a quirk of this repo's CI or deploy)
+    still moves. A section holding both moves its facts and leaves out its
+    recipe. The profile gets no section or line for what is left out.
 
   Show the draft to the user before writing it. It describes how their project
-  works; they approve it.
+  works; they approve it. Under **Left out**, name each part left out: the
+  retired skill, its heading, and the setting that covers it.
 - **A profile missing a setting the skills now require.** Add it with the
   value the board uses, shown to the user first. When the setting names a new
   column, the board needs that column too (below), and when the profile sets
@@ -256,15 +267,49 @@ What each fix involves:
   required check is not offered is reported and never acted on.
 - **Local skills the shared ones replace.** Move each to
   `.claude/skills-retired/` in the same change that moves its project
-  specifics into the profile, and update anything that names it.
+  specifics into the profile, and update anything that names it. Text left
+  out of the profile stays only in the retired copy.
 - **`CLAUDE.md` does not point at the profile.** Add a short section saying
   the process skills come from the `gogogo` plugin and this repo's specifics
   are in `.agents/dev-process.md`.
+- **Independence** (the `independence` row). How much Claude decides on its
+  own in this repo, and how much it brings to a person. The row is `INFO`, so
+  this question is asked on every setup run, after the `FAIL` and `WARN`
+  lines, a repo that is already set up included. Ask once with
+  `AskUserQuestion`, in plain words: which level Claude should work at in
+  this repo. One option per level, each one line on what it asks and what it
+  decides, with the current level marked:
+  - `junior-dev`: asks about every choice, and decides nothing itself;
+  - `tech-lead`: asks about approvals and anything people will see, and
+    decides how things are built;
+  - `product-owner`: asks only for approvals, and decides what is built and how.
+
+  Say that `tech-lead` and `product-owner` are best run on an Opus-class model at
+  medium effort or higher. On an answer different from the current level,
+  write `independence = "<level>"` to the profile (a top-level key, above the
+  first `[table]`) and commit it as setup commits any other profile change. On
+  a decline, write nothing and say the level stays as it is.
 - **Notifications** (the `notify` row). Telegram messages tell a person when
   an unattended run starts, changes state and closes. They are optional. A
   profile with no `notify` line sends whenever this machine has bot
   credentials; `notify = "none"` turns a repo off.
-  - `INFO notify: off`: ask once with `AskUserQuestion`:
+  - `INFO notify: off` and the row says this machine `already has bot`: ask
+    once with `AskUserQuestion`:
+    - **turn messages on here** (recommended): remove the profile's
+      `notify = "none"` line and commit it like setup's other profile changes.
+      Do not run steps 1 and 2. Tell the person that this machine's bot is
+      already set up and that every repo on it whose profile does not say
+      `notify = "none"` uses it. Then step 3 with `<scope>` set to `<repo>`
+      (the name part of `tracker.code_repo`); the re-check must show
+      `PASS notify: telegram (by default): bot @… -> …`.
+    - **keep them off**: change nothing, and say that `/gogogo:setup` can turn
+      them on later.
+  - `INFO notify: off` and the row says the credentials `fail`: show the
+    reason, then ask the same two-answer question. **Turn messages on here**:
+    remove the line and commit it as above, re-run the check, follow the
+    `WARN notify: telegram: <reason>` bullet below, then step 3 with `<scope>`
+    set to `<repo>`. **Keep them off**: as above.
+  - Any other `INFO notify: off`: ask once with `AskUserQuestion`:
     - **every repo on this machine** (recommended): steps 1 and 2 below, which
       write the per-user file.
     - **only this repo**: first make sure `.claude/gogogo/` is in the repo's

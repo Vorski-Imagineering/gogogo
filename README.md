@@ -49,7 +49,9 @@ repo first ([Adopting it in a repo](#adopting-it-in-a-repo), step 1).
 
 1. **`/gogogo:setup`**: checks the repo and sets up what is missing (the
    profile that describes your project, the board and its columns, the ready
-   label). It asks before writing anything.
+   label). It asks before writing anything. It also asks how independent
+   Claude should be in the repo: which decisions it brings to you and which it
+   takes itself ([Independence](docs/independence-mode.md)).
 2. **`/gogogo:spec`**: describe your idea, or give it an existing issue. It
    asks you questions until every decision is made, writes the spec into the
    issue (filing one if there isn't one yet), marks it ready and moves its card
@@ -66,9 +68,13 @@ repo first ([Adopting it in a repo](#adopting-it-in-a-repo), step 1).
    its questions now is what lets the run go on later without asking.
 2. **`/gogogo:auto-dev`** in a session started without permission prompts:
    ```bash
-   claude -n "$(basename "$(git rev-parse --show-toplevel)")-autodev" --permission-mode bypassPermissions "/gogogo:auto-dev"
+   claude -n "$(basename "$(git rev-parse --show-toplevel)")-autodev" --permission-mode bypassPermissions "/goal Run /gogogo:auto-dev on this repo. Met when /gogogo:auto-dev has printed its run report, or has stopped the whole run and said why."
    ```
    The `-n` name is what `/resume` and the terminal title show for the run.
+   `/goal` keeps the session taking turns until the run has printed its report,
+   and shows `◎ /goal active` meanwhile. In a session already open, type the
+   quoted `/goal …` text. Where `/goal` is unavailable (it says why), start
+   with `"/gogogo:auto-dev"` instead.
    Telegram messages when it starts, changes state and closes are optional:
    `/gogogo:setup` sets them up, and a run without them works the same.
    Before you start it, log a browser in to the environment where the agent
@@ -86,11 +92,11 @@ repo first ([Adopting it in a repo](#adopting-it-in-a-repo), step 1).
 
 [`/goal`](https://code.claude.com/docs/en/goal) keeps a session taking turns
 until a small model, reading only the transcript, judges a condition met or
-impossible. auto-dev already works the whole queue in one run, so a goal adds
-little to a run that ends with its close-run report. What it adds is
-persistence: a goal retries a turn that failed on a dropped connection, and
-after a usage limit it pauses, then carries on if the session waits for the
-reset.
+impossible. The launch command above starts the run under one. It keeps the
+run going when a turn would end while background work is in flight, retries a
+turn that failed on a dropped connection, and after a usage limit pauses, then
+carries on if the session waits for the reset. The one turn auto-dev itself may
+end is at the review, after one line saying it is waiting.
 
 The risk is a goal that names an outcome instead of the process. When auto-dev
 refuses to start or stops for you, the evaluator only sees "not met yet" and
@@ -101,17 +107,18 @@ and parks cards in `Human!Help!` with no note
 `tracker.py` now refuses that move unless the issue's newest comment says why,
 but a goal can still route around the skill in other ways).
 
-Use a goal when all of these hold:
+The launch's goal is safe to use when all of these hold:
 
 - the session runs in `bypassPermissions`, as above. The `/goal` docs suggest
   auto mode, but auto mode refuses the merge;
 - `/gogogo:auto-dev --triage-only` takes the issues you expect;
-- the condition names the skill, and makes a refusal or a stop the end:
+- the condition names the skill, and makes its run report or a whole-run stop
+  the end, as the launch's does. Keep it that way when you write your own:
   ```text
   /goal /gogogo:auto-dev has finished and printed its close-run report. Work issues only through /gogogo:auto-dev. If it refuses to start, that ends the goal: report why and change nothing to get round it.
   ```
 
-Don't use one when:
+Don't use a goal when:
 
 - auto-dev or dev refuses to start. Fix that first, with
   `/gogogo:setup` and you there;
@@ -310,8 +317,8 @@ rebased.
 | `/gogogo:auto-test` | Tests each shipped issue on the environment where a person confirms fixes, and records PASS, FAIL or NEEDS HUMAN on the issue. `--triage-only` lists what it would test or skip and changes nothing. |
 
 A session started or resumed in a repo with a profile opens with a one-line
-status from the plugin's own hook (cards in each profile column, open pull
-requests), shown only to the person and never added to Claude's context.
+status from the plugin's own hook (the repo's independence level, coloured in
+a terminal session, then cards in each profile column and open pull requests), shown only to the person and never added to Claude's context.
 
 Scripts the skills call, all in `plugins/gogogo/scripts/`:
 
@@ -325,7 +332,7 @@ Scripts the skills call, all in `plugins/gogogo/scripts/`:
 - `release.py`: numbers a production release, cuts its annotated `deploy-<build>` tag after the deploy, and prints the notes listing the issues it shipped.
 - `stranded_work.py`: finds local and `origin` branches holding work that nothing accounts for (no open issue, or an open issue with no open pull request and no stop marker naming the branch), and says what became of each branch's pull request.
 - `worktree_sweep.py`: removes the worktrees whose pull request merged or whose issue is closed, and keeps any with uncommitted changes, commits on no remote, or an open issue whose work has not merged. Without `--apply` it only lists.
-- `issue_work.py`: finds an issue's earlier work (open pull requests that reference it, branches named for it, the branch its stop marker names), so dev and auto-dev continue on it rather than start again.
+- `issue_work.py`: finds an issue's earlier work (open pull requests that claim it, branches named for it, the branch its stop marker names), so dev and auto-dev continue on it rather than start again.
 - `notify.py`: sends a run's messages by the profile's `notify` (Telegram today). With no `notify` line, messages are on whenever the machine has bot credentials (per user, or in the repo's own git-ignored `.claude/gogogo/notify.env`); `notify = "none"` turns a repo off. Off, or no credentials on the machine, sends nothing.
 - `review_stats.py`: reads back the review record on each issue and sums them up: rounds, why findings were applied or declined, how each review ended and what became of the issue, plus phase times, session ids, stops by reason, triage skips, and each session's issues taken, handed back and skipped.
 - `require_unattended.sh`: refuses to start the loop unless the session can run without prompts.
@@ -391,7 +398,9 @@ one step at a time, asking before anything is written:
   says.
 - **The ready label** (`dev ready` by default).
 - **Local skills this replaces.** Their project-specific text moves into the
-  profile word for word, and the old copies go to `.claude/skills-retired/`.
+  profile word for word, except recipes for steps the plugin runs itself,
+  which setup lists and leaves out, and the old copies go to
+  `.claude/skills-retired/`.
 - **A pointer in `CLAUDE.md`**, so every session knows where the process lives.
 
 Run it again at any time to check that a repo is still set up right.

@@ -608,7 +608,16 @@ def check_notify(profile, rep):
         return
     detail = line.split(": ", 1)[1] if line.startswith("notify: ") else line
     if state == notify.OFF:
-        rep.info("notify", "off (no messages); /gogogo:setup can set up Telegram")
+        bot = notify.machine_bot(str(profile))
+        if bot is None:
+            rep.info("notify", "off (no messages); /gogogo:setup can set up Telegram")
+        elif bot[0]:
+            # describe() reads "bot @<name> -> <chat>"; the skill keys on "already has bot".
+            rep.info("notify", f'off: the profile says notify = "none", and this machine already has bot '
+                     f"{bot[1].split(' ', 1)[1]}, which works; removing that line turns messages on here")
+        else:
+            rep.info("notify", f'off: the profile says notify = "none"; this machine has bot '
+                     f"credentials, but they fail: {bot[1]}")
     elif state == notify.READY:
         rep.ok("notify", detail)
     elif state == notify.NO_CREDENTIALS:
@@ -616,6 +625,15 @@ def check_notify(profile, rep):
                  "-> /gogogo:setup walks you through it")
     else:
         rep.warn("notify", detail)
+
+
+def check_independence(settings, rep):
+    """Which decisions Claude asks about in this repo. Never WARNs or FAILs: no level is wrong."""
+    level = settings.get("independence")
+    if level:
+        rep.info("independence", str(level))
+    else:
+        rep.info("independence", "junior-dev (not set); /gogogo:setup can set it")
 
 
 def numbers(items, limit=10):
@@ -1185,6 +1203,7 @@ def main(argv=None):
         check_hard_stop_source(root, (settings.get("hard_stops") or {}).get("source"), rep)
         check_tracker(root, settings, rep)
         check_notify(path, rep)
+        check_independence(settings, rep)
     check_local_skills(root, rep)
     check_claude_md(root, rep)
     check_session_hook(PLUGIN_ROOT, rep)

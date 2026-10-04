@@ -19,6 +19,7 @@ the repo's profile, `.agents/dev-process.md`
 | `gates.always`, `gates.when` | Checks run before every merge, and extra ones by path. |
 | a lane's `mutate` | The command that mutation-tests the lines a change made; every mutant its tests miss is killed or accounted for before the merge. |
 | `stages` | Where a merged change goes next, and which board column says so. |
+| `independence` | Which decisions Claude asks about and which it takes itself: `junior-dev` (default), `tech-lead` or `product-owner`. |
 
 ## The shape
 
@@ -65,7 +66,7 @@ mention a worktree makes dev and auto-dev stop before branching and point at
 `/gogogo:setup`.
 
 **Unless the issue already has work.** Before cutting a branch,
-`issue_work.py <n>` looks for an open pull request that references the issue,
+`issue_work.py <n>` looks for an open pull request that claims the issue (its branch carries the number, `#<n>` is in its title, or a body line starts with `Refs`, `Fixes`, `Closes` or `Resolves` and names it; a pull request that only mentions it is noted, not continued),
 a local or `origin` branch named for it that is ahead of the base, and the
 branch its stop-marker comment names. With exactly one, the skills continue on
 it instead, updated with `git merge origin/<base>` (never a rebase or a force
