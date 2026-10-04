@@ -172,8 +172,9 @@ class Events(Case):
             self.assertNotIn("<b>", plain, name)
             self.assertNotIn("<a ", plain, name)
             self.assertIn("code", plain, name)
+        for name in ("issue_skipped", "issue_started", "issue_merged", "needs_you"):
+            self.assertIn('<a href="https://github.com/o/issues/issues/7">#7</a>', self.render(name)[0], name)
         html, plain = self.render("issue_merged")
-        self.assertIn('<a href="https://github.com/o/issues/issues/7">#7</a>', html)
         self.assertEqual(plain.splitlines()[0], "🟢 code #7 merged (abc1234) → Released")
         self.assertEqual(plain.splitlines()[1], "Fix it")
         html, plain = self.render("run_started", "🔵 3 ready")
