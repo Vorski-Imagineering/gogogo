@@ -161,5 +161,132 @@ class Reads(unittest.TestCase):
             self.assertIn("acme/code", cmd)
 
 
+def check_run(conclusion, status="COMPLETED", name="job"):
+    return {"name": name, "status": status, "conclusion": conclusion}
+
+
+class CheckStates(unittest.TestCase):
+    """Each way a check run or a commit status can end, and what it makes of the PR."""
+
+    def test_every_failing_conclusion_fails_the_checks(self):
+        for conclusion in ("FAILURE", "ERROR", "CANCELLED", "TIMED_OUT", "ACTION_REQUIRED", "STARTUP_FAILURE"):
+            with self.subTest(conclusion=conclusion):
+                _, out, _, _ = outcome(pr(statusCheckRollup=[check_run(conclusion, name="x-" + conclusion)]))
+                self.assertTrue(out.startswith("checks-failed:"), out)
+                self.assertIn("x-" + conclusion, out)
+
+    def test_every_passing_conclusion_counts_as_a_check_that_ran(self):
+        for conclusion in ("SUCCESS", "NEUTRAL"):
+            with self.subTest(conclusion=conclusion):
+                status, out, _, _ = outcome(pr(statusCheckRollup=[check_run(conclusion)]),
+                                            argv=("7", "--require-checks"))
+                self.assertEqual((status, out.startswith("ready:")), (0, True), out)
+
+    def test_a_conclusion_that_is_not_a_pass_is_not_a_pass(self):
+        _, out, _, _ = outcome(pr(statusCheckRollup=[check_run("STALE", name="old")]))
+        self.assertTrue(out.startswith("checks-pending:"), out)
+        self.assertIn("old", out)
+
+    def test_exactly_one_check_that_ran_satisfies_require_checks(self):
+        skipped = check_run("SKIPPED", name="skipped")
+        status, out, _, _ = outcome(pr(statusCheckRollup=[skipped, check_run("SUCCESS")]),
+                                    argv=("7", "--require-checks"))
+        self.assertEqual(status, 0, out)
+        status, out, _, _ = outcome(pr(statusCheckRollup=[skipped, skipped]), argv=("7", "--require-checks"))
+        self.assertEqual((status, out.startswith("no-checks:")), (1, True), out)
+
+    def test_commit_statuses_pass_fail_or_wait_by_state(self):
+        cases = {"SUCCESS": "ready", "FAILURE": "checks-failed", "ERROR": "checks-failed",
+                 "PENDING": "checks-pending", "EXPECTED": "checks-pending"}
+        for state, expected in cases.items():
+            with self.subTest(state=state):
+                _, out, _, _ = outcome(pr(statusCheckRollup=[{"context": "ci/x", "state": state}]))
+                self.assertTrue(out.startswith(expected + ":"), out)
+
+    def test_a_commit_status_that_passed_counts_as_a_check_that_ran(self):
+        status, _, _, _ = outcome(pr(statusCheckRollup=[{"context": "ci/x", "state": "SUCCESS"}]),
+                                  argv=("7", "--require-checks"))
+        self.assertEqual(status, 0)
+
+    def test_an_entry_with_a_status_and_a_state_is_read_as_a_check_run(self):
+        both = {"name": "odd", "status": "COMPLETED", "conclusion": "FAILURE", "state": "SUCCESS"}
+        _, out, _, _ = outcome(pr(statusCheckRollup=[both]))
+        self.assertTrue(out.startswith("checks-failed:"), out)
+
+
+class Details(unittest.TestCase):
+    """The facts each outcome line carries (the wording around them is not pinned)."""
+
+    def test_the_lines_carry_the_state_the_base_and_the_decision(self):
+        _, out, _, _ = outcome(pr(state="CLOSED"))
+        self.assertIn("CLOSED", out)
+        _, out, _, _ = outcome(pr(mergeStateStatus="BEHIND", baseRefName="trunk"))
+        self.assertIn("trunk", out)
+        _, out, _, _ = outcome(pr(reviewDecision="REVIEW_REQUIRED", mergeStateStatus="BLOCKED"))
+        self.assertIn("review required", out)
+        _, out, _, _ = outcome(pr(reviewDecision="CHANGES_REQUESTED", mergeStateStatus="BLOCKED"))
+        self.assertIn("changes requested", out)
+
+    def test_each_outcome_is_one_line(self):
+        for data in (pr(), pr(state="MERGED"), pr(isDraft=True), pr(mergeStateStatus="BEHIND")):
+            _, out, _, _ = outcome(data)
+            self.assertEqual(len(out.splitlines()), 1, out)
+
+
+class Settling(unittest.TestCase):
+    def test_either_field_reading_unknown_is_read_again(self):
+        for field in ("mergeable", "mergeStateStatus"):
+            with self.subTest(field=field):
+                _, out, _, calls = outcome(pr(**{field: "UNKNOWN"}), pr())
+                self.assertEqual(len(calls), 2)
+                self.assertTrue(out.startswith("ready:"), out)
+
+    def test_either_field_still_unknown_is_unknown_never_ready(self):
+        for field in ("mergeable", "mergeStateStatus"):
+            with self.subTest(field=field):
+                status, out, _, _ = outcome(pr(**{field: "UNKNOWN"}))
+                self.assertEqual(status, 1)
+                self.assertTrue(out.startswith("unknown:"), out)
+
+    def test_a_draft_or_closed_pr_is_not_waited_on(self):
+        for data in (pr(isDraft=True, mergeable="UNKNOWN"), pr(state="MERGED", mergeable="UNKNOWN")):
+            _, _, _, calls = outcome(data)
+            self.assertEqual(len(calls), 1)
+
+
+class Plumbing(unittest.TestCase):
+    def test_gh_is_asked_for_exactly_these_fields(self):
+        _, _, _, calls = outcome(pr(), argv=("7",))
+        self.assertEqual(calls, [("gh", "pr", "view", "7", "--json", "state,isDraft,mergeable,"
+                                  "mergeStateStatus,reviewDecision,headRefOid,baseRefName,statusCheckRollup")])
+        _, _, _, calls = outcome(pr(), argv=("7", "--repo", "acme/code"))
+        self.assertEqual(calls[0][:6], ("gh", "pr", "view", "7", "--repo", "acme/code"))
+        self.assertEqual(calls[0][6], "--json")
+
+    def test_run_captures_text_output(self):
+        done_ = mr.run(sys.executable, "-c", "import sys; print('out'); print('err', file=sys.stderr)")
+        self.assertEqual((done_.stdout, done_.stderr), ("out\n", "err\n"))
+
+    def test_a_silent_gh_failure_still_reports_its_exit(self):
+        status, out, err, _ = outcome(None, code=3, err="")
+        self.assertEqual((status, out), (2, ""))
+        self.assertIn("3", err)
+
+    def test_output_that_is_not_json_is_unreadable_not_ready(self):
+        answers = [subprocess.CompletedProcess([], 0, "not json", "")]
+        out, errs = io.StringIO(), io.StringIO()
+        with mock.patch.object(mr, "run", lambda *c: answers[0]), redirect_stdout(out), redirect_stderr(errs):
+            status = mr.main(["7"])
+        self.assertEqual((status, out.getvalue()), (2, ""))
+        self.assertIn("7", errs.getvalue())
+
+    def test_run_as_a_script_it_runs_main(self):
+        done_ = subprocess.run([sys.executable, str(ROOT / "plugins" / "gogogo" / "scripts" / "merge_ready.py"),
+                                "--help"], capture_output=True, text=True)
+        self.assertEqual(done_.returncode, 0)
+        self.assertIn("usage:", done_.stdout)
+        self.assertIn("--require-checks", done_.stdout)
+
+
 if __name__ == "__main__":
     unittest.main()
