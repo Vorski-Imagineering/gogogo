@@ -505,11 +505,12 @@ def print_ruleset(settings, default_branch, branch):
             return 2
         checks = []
     elif wanted[branch] and not checks:
-        # The latest merged PR ran no checks (a docs-only PR, say). A new ruleset gets
+        # No check name: the latest merged PR ran none (a docs-only PR, say), none passed,
+        # or nothing has merged yet. A new ruleset gets
         # none; replacing one that requires a check would drop it.
         refusal = _requires_a_check(code_repo, branch)
         if refusal:
-            print(f"the latest PR merged into {branch} ran no checks, so {refusal}", file=sys.stderr)
+            print(f"no merged PR into {branch} gives a passing check to require, so {refusal}", file=sys.stderr)
             return 2
     print(json.dumps(ruleset_body(branch, checks if isinstance(checks, list) else [], wanted[branch]), indent=2))
     return 0

@@ -1841,7 +1841,7 @@ class BranchRulesExact(unittest.TestCase):
                 "required_status_checks": [{"context": "tests"}]}}]}), "")
         code, out, err = self._ruleset_after_a_pr_with_no_checks(gogogo, requires)
         self.assertEqual((code, out), (2, ""))
-        self.assertIn("ran no checks", err)
+        self.assertIn("no merged PR into main gives a passing check to require", err)
         self.assertEqual(self._ruleset_after_a_pr_with_no_checks(gogogo, (1, "", "gh: HTTP 502"))[:2], (2, ""))
         self.assertEqual(self._ruleset_after_a_pr_with_no_checks((1, "", "gh: HTTP 403"))[:2], (2, ""))
         self.assertEqual(self._ruleset_after_a_pr_with_no_checks(gogogo, (0, "[]", ""))[:2], (2, ""))
