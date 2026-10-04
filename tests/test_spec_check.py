@@ -236,7 +236,7 @@ class Items(unittest.TestCase):
 
     def test_unexpandable_braces_stay_as_written(self):
         # Guards Design 1's unchanged cases.
-        for path in ("a/{b.py", "a/{b}.py", "a/{b,{c,d}}.py"):
+        for path in ("a/{b.py", "a/{b}.py", "a/{b,{c,d}}.py", "a/{x,y}/{m.py", "a/{x,y}/m}.py"):
             got = self.f_items("**Create:**", f"**Create:** `{path}`.", tree=lambda: [])
             self.assertEqual([g for g in got if g.startswith("F:a/")], [f"F:{path}"], path)
 
@@ -436,6 +436,13 @@ class Verify(unittest.TestCase):
     def test_class_form_evidence_resolves(self):
         # Guards the report's (b): Class.name and Class::name.
         (self.dir / "app" / "views.py").write_text("class Listing:\n    def listed():\n        return rows\n")
+        for evidence in ("app/views.py::Listing.listed", "app/views.py::Listing::listed"):
+            out, code = self.verify(self.answers(D1=f"D1 | met | {evidence} | "))
+            self.assertEqual(code, 0, evidence + "\n" + out)
+
+    def test_class_form_part_at_the_start_of_the_file_resolves(self):
+        # Guards the search offset: the first part may sit at offset 0.
+        (self.dir / "app" / "views.py").write_text("Listing\n    listed\n")
         for evidence in ("app/views.py::Listing.listed", "app/views.py::Listing::listed"):
             out, code = self.verify(self.answers(D1=f"D1 | met | {evidence} | "))
             self.assertEqual(code, 0, evidence + "\n" + out)
