@@ -96,6 +96,30 @@ class NeverWaits(unittest.TestCase):
         for name in ("timeout 540", "AskUserQuestion"):
             self.assertIn(name, claude)
 
+    def test_launch_command_starts_a_goal(self):
+        claude = self.text.split("\n## Claude-specific")[1]
+        lines = self.launch_line_in(claude)
+        self.assertEqual(len(lines), 1, lines)
+        for name in ('"/goal ', "/gogogo:auto-dev", "--permission-mode bypassPermissions"):
+            self.assertIn(name, lines[0])
+
+    def launch_line_in(self, text):
+        return [ln.strip() for ln in text.splitlines() if ln.strip().startswith("claude -n")]
+
+    def test_readme_launch_matches_skill(self):
+        claude = self.text.split("\n## Claude-specific")[1]
+        skill = self.launch_line_in(claude)
+        readme = self.launch_line_in((SKILL.parents[4] / "README.md").read_text(encoding="utf-8"))
+        self.assertEqual(len(skill), 1, skill)
+        self.assertEqual(readme[:1], skill)
+
+    def test_review_wait_notice_is_the_only_turn_end(self):
+        step = section(self.text, "4. Change, test, review, verify")
+        self.assertIn("Waiting on the review (started <HH:MM>); the run resumes when it reports.", step)
+        claude = self.text.split("\n## Claude-specific")[1]
+        self.assertIn("30 minutes", claude)
+        self.assertIn("reader=self", claude)
+
 
 class Independence(unittest.TestCase):
     """dev and auto-dev read the repo's `independence` level (gogogo#90)."""
