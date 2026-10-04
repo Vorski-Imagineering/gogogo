@@ -24,7 +24,7 @@ import profile_check as pc  # noqa: E402
 CASES = {
     "dev-third-attempt", "dev-reversal", "dev-unlicensed-weaker-test",
     "auto-dev-label-less-card", "auto-dev-open-decision", "auto-dev-list-fails",
-    "auto-dev-review-wait",
+    "auto-dev-review-wait", "dev-merge-refused",
     "spec-declined-question", "spec-being-built", "spec-nothing-hits-today",
     "spec-no-argument-offers-new", "spec-pr-mentions-only",
     "spec-reverses-tested-behaviour",
@@ -63,6 +63,11 @@ class Suite(unittest.TestCase):
                 self.assertTrue(fired.is_file())
                 self.assertEqual(TYPE.search(fired.read_text(encoding="utf-8")).group(1), "tool_used")
                 self.assertGreaterEqual(len(list((c / "graders").glob("*.md"))), 2)
+
+    def test_the_merge_refused_case_does_not_accept_what_an_answer_without_the_plugin_says(self):
+        text = (EVALS / "dev-merge-refused" / "graders" / "names-the-way-out.md").read_text(encoding="utf-8")
+        self.assertNotRegex(text, r"(?i)needs")
+        self.assertIn("Human!Help!", text)
 
     def test_no_grader_calls_a_judge(self):
         judged = [str(g.relative_to(EVALS)) for g in EVALS.glob("*/graders/*.md")
