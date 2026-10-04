@@ -8,7 +8,8 @@ to the profile's `integration.base`, else `main`, and is compared as
 `origin/<base>` when that exists. It collects, in order:
 
   1. open pull requests whose base repository is `tracker.code_repo` and that
-     cross-reference the issue (`Closes #<n>`, `Refs #<n>`, any branch name);
+     claim the issue (by branch, by `#<n>` in the title, or by a
+     `Refs`/`Fixes`/`Closes`/`Resolves` line in the body);
   2. branches in `refs/heads` and `refs/remotes/origin` whose name carries the
      issue number (the rule /gogogo:status uses) and that are ahead of the base;
   3. the branch (`/tree/<branch>`) or `tracker.code_repo` pull request
@@ -24,12 +25,17 @@ and an open pull request from another repository as
 
     fork PR #<m> from <owner/repo>: cannot be continued
 
+An open pull request that only mentions the issue is not a candidate; it is
+noted on stderr as `PR #<m> mentions #<n> but does not claim it` and changes no
+exit code.
+
 Exit 0 when there is no earlier work (said on stderr), 1 when lines were
 printed, 2 when it cannot tell (no profile, or a `gh` or `git` call failed),
 with the reason on stderr and nothing on stdout.
 """
 import argparse
 import json
+import re
 import sys
 from pathlib import Path
 
@@ -40,10 +46,33 @@ from stranded_work import base_ref, gh, git, issue_in_branch, newest_stop, stop_
 QUERY = """
 query($owner:String!,$name:String!,$number:Int!){repository(owner:$owner,name:$name){issue(number:$number){
   timelineItems(itemTypes:[CROSS_REFERENCED_EVENT],first:100){nodes{... on CrossReferencedEvent{source{
-    __typename ... on PullRequest{number state headRefName isCrossRepository
+    __typename ... on PullRequest{number state title body headRefName isCrossRepository
       headRepository{nameWithOwner} baseRepository{nameWithOwner}}}}}}
   comments(last:100){nodes{body}}}}}
 """
+
+
+CLAIM_LINE = re.compile(r"^\s*(?:[-*]\s+)?(?:refs|close[sd]?|fix(?:es|ed)?|resolve[sd]?)\s*:?\s+(.+)$", re.I)
+
+
+def claims(pr, number, issues_repo):
+    """True when the pull request claims the issue: its branch carries the number, `#<n>` is a whole
+    token in its title, or a body line starts with a linking keyword followed by `#<n>`."""
+    forms = {f"#{number}", f"{issues_repo.lower()}#{number}"}
+    if issue_in_branch(pr.get("headRefName") or "") == str(number):
+        return True
+    token = re.compile(r"(?<!\w)(?:" + re.escape(issues_repo) + r")?#" + str(number) + r"(?!\d)", re.I)
+    for found in token.finditer(pr.get("title") or ""):
+        if found.group(0).lower() in forms:
+            return True
+    for line in (pr.get("body") or "").splitlines():
+        match = CLAIM_LINE.match(line)
+        if not match:
+            continue
+        for entry in re.split(r",|\band\b", match.group(1), flags=re.I):
+            if entry.strip().rstrip(".);").strip().lower() in forms:
+                return True
+    return False
 
 
 class CannotTell(Exception):
@@ -115,11 +144,17 @@ def find(number, base_name):
 
     candidates = {}  # branch -> {"pr": n, "reason": r}, in the order found
     forks = []
+    mentions = []
     for node in issue["timelineItems"]["nodes"]:
         source = (node or {}).get("source") or {}
         if source.get("__typename") != "PullRequest" or source.get("state") != "OPEN":
             continue
         if ((source.get("baseRepository") or {}).get("nameWithOwner") or "").lower() != code_repo.lower():
+            continue
+        if not claims(source, number, issues_repo):
+            line = f"PR #{source['number']} mentions #{number} but does not claim it"
+            if line not in mentions:
+                mentions.append(line)
             continue
         head = (source.get("headRepository") or {}).get("nameWithOwner")
         if source.get("isCrossRepository") or (head or "").lower() != code_repo.lower():
@@ -157,7 +192,7 @@ def find(number, base_name):
         if "reason" in found:
             line += f", stop marker reason={found['reason']}"
         lines.append(line)
-    return lines + forks
+    return lines + forks, mentions
 
 
 def main(argv=None):
@@ -166,10 +201,12 @@ def main(argv=None):
     parser.add_argument("--base", default=None, help="the branch work merges into (default: integration.base, else main)")
     args = parser.parse_args(argv)
     try:
-        lines = find(args.issue, args.base)
+        lines, mentions = find(args.issue, args.base)
     except CannotTell as exc:
         print(f"cannot tell whether #{args.issue} has earlier work: {exc}", file=sys.stderr)
         return 2
+    for mention in mentions:
+        print(mention, file=sys.stderr)
     for line in lines:
         print(line)
     if not lines:

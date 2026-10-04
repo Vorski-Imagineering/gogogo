@@ -47,8 +47,9 @@ def timeline(prs=(), comments=()):
         "comments": {"nodes": [{"body": c} for c in comments]}}}}}
 
 
-def pr(number, branch, head="o/code", base="o/code", state="OPEN"):
+def pr(number, branch, head="o/code", base="o/code", state="OPEN", title="", body=""):
     return {"__typename": "PullRequest", "number": number, "state": state, "headRefName": branch,
+            "title": title, "body": body,
             "isCrossRepository": head != base,
             "headRepository": {"nameWithOwner": head} if head else None,
             "baseRepository": {"nameWithOwner": base}}
@@ -96,7 +97,7 @@ class IssueWork(Repos):
 
     def test_an_open_pr_on_an_unnumbered_name_is_found(self):
         self.remote_only("issue-46", 2)
-        code, lines = self.work(46, {"graphql": timeline([pr(63, "issue-46")])})
+        code, lines = self.work(46, {"graphql": timeline([pr(63, "issue-46", body="Refs #46")])})
         self.assertEqual(code, 1)
         self.assertEqual(len(lines), 1, lines)
         self.assertTrue(lines[0].startswith("candidate: issue-46 (remote), 2 commit(s) ahead of main"), lines[0])
@@ -122,7 +123,7 @@ class IssueWork(Repos):
                          ["candidate: fix/387-a", "candidate: fix/387-b"])
 
     def test_a_fork_pr_cannot_be_continued(self):
-        code, lines = self.work(9, {"graphql": timeline([pr(12, "patch-1", head="stranger/code")])})
+        code, lines = self.work(9, {"graphql": timeline([pr(12, "patch-1", head="stranger/code", body="Refs #9")])})
         self.assertEqual(code, 1)
         self.assertEqual(lines, ["fork PR #12 from stranger/code: cannot be continued"])
 
@@ -192,6 +193,8 @@ class IssueWork(Repos):
         self.assertIn(("-F", "number=46"), pairs)
         query = next(v for f, v in pairs if f == "-f" and v.startswith("query="))
         self.assertIn("timelineItems", query)
+        self.assertIn("title", query)
+        self.assertIn("body", query)
 
     def test_a_stop_link_pr_is_looked_up_in_the_code_repo(self):
         self.remote_only("issue-50", 1)
@@ -243,7 +246,8 @@ class IssueWork(Repos):
     def test_every_timeline_node_is_read(self):
         self.remote_only("issue-46", 1)
         prs = [pr(60, "old", state="CLOSED"), pr(61, "x", head="o/other", base="o/other"),
-               pr(62, "patch-1", head="stranger/code"), pr(63, "issue-46")]
+               pr(62, "patch-1", head="stranger/code", title="Fix (Refs #46)"),
+               pr(63, "issue-46", body="Refs #46")]
         code, lines = self.work(46, {"graphql": timeline(prs)})
         self.assertEqual(lines, ["candidate: issue-46 (remote), 1 commit(s) ahead of main, PR #63 open",
                                  "fork PR #62 from stranger/code: cannot be continued"])
@@ -252,6 +256,67 @@ class IssueWork(Repos):
         (self.clone / ".agents" / "dev-process.md").unlink()
         code, lines = self.work(9, {"graphql": timeline()})
         self.assertEqual((code, lines), (2, []))
+
+    def test_a_pr_that_only_mentions_the_issue_is_noted_not_offered(self):
+        mention = pr(63, "docs/notes", title="Docs", body="Context: this came up while speccing #46.")
+        code, lines = self.work(46, {"graphql": timeline([mention])})
+        self.assertEqual((code, lines), (0, []))
+        self.assertIn("PR #63 mentions #46 but does not claim it", self.stderr)
+        self.assertIn("no earlier work for #46", self.stderr)
+
+    def test_a_title_claim_is_a_candidate(self):
+        self.remote_only("docs/notes", 1)
+        code, lines = self.work(46, {"graphql": timeline([pr(63, "docs/notes", title="Docs (Refs #46)")])})
+        self.assertEqual(code, 1)
+        self.assertEqual(len(lines), 1, lines)
+        self.assertIn("PR #63 open", lines[0])
+
+    def test_body_lines_that_claim(self):
+        for body in ("Refs #46", "- fixes: #12, #46", "Closes o/code#46.", "RESOLVES #12 and #46",
+                     "text\n  * Fixed #46;"):
+            with self.subTest(body=body):
+                code, lines = self.work(46, {"graphql": timeline([pr(63, "docs/notes", body=body)])})
+                self.assertEqual(code, 1, self.stderr)
+                self.assertEqual(len(lines), 1, lines)
+                self.assertIn("PR #63 open", lines[0])
+
+    def test_body_lines_that_do_not_claim(self):
+        for body in ("see Refs #46 later", "Refs #460", "Refs other/repo#46", "Refs #12"):
+            with self.subTest(body=body):
+                code, lines = self.work(46, {"graphql": timeline([pr(63, "docs/notes", body=body)])})
+                self.assertEqual((code, lines), (0, []))
+                self.assertIn("PR #63 mentions #46 but does not claim it", self.stderr)
+
+    def test_a_title_token_must_be_whole(self):
+        for title in ("Docs #460", "Docs x#46", "Docs other/repo#46"):
+            with self.subTest(title=title):
+                code, lines = self.work(46, {"graphql": timeline([pr(63, "docs/notes", title=title)])})
+                self.assertEqual((code, lines), (0, []))
+
+    def test_a_fork_pr_that_only_mentions_is_a_mention_not_a_fork_line(self):
+        fork = pr(12, "patch-1", head="x/fork", body="Related to #46")
+        code, lines = self.work(46, {"graphql": timeline([fork])})
+        self.assertEqual((code, lines), (0, []))
+        self.assertIn("PR #12 mentions #46 but does not claim it", self.stderr)
+
+    def test_a_numbered_branch_claims_with_no_title_or_body(self):
+        self.remote_only("fix/46-thing", 1)
+        code, lines = self.work(46, {"graphql": timeline([pr(63, "fix/46-thing")])})
+        self.assertEqual(code, 1)
+        self.assertIn("PR #63 open", lines[0])
+
+    def test_a_stop_marker_pr_is_a_candidate_whatever_it_says(self):
+        self.remote_only("docs/notes", 1)
+        comment = "**Needs you:** see https://github.com/o/code/pull/70\n<!-- gogogo:stop v=1 reason=ci -->"
+        code, lines = self.work(46, {"graphql": timeline([pr(70, "docs/notes", body="mentions #46")],
+                                                         comments=[comment]),
+                                     "prview": {"70": {"headRefName": "docs/notes"}}})
+        self.assertEqual(code, 1)
+        self.assertIn("stop marker reason=ci", lines[0])
+
+    def test_a_failed_lookup_prints_no_mention(self):
+        self.work(9, {"graphql": "fail"})
+        self.assertNotIn("mentions", self.stderr)
 
 
 if __name__ == "__main__":
