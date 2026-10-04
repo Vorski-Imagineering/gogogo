@@ -68,8 +68,8 @@ filed or written without a yes.
 After the answers to step 3, `touch` the file `.gogogo-memory-review` in the
 memory directory, only when every proposal got a yes or a no, every yes was
 filed or written, and every expiry read succeeded. If the session ends with a
-proposal unanswered, a yes that failed to land, or a read that failed, do not
-touch it, so the next wrap-up looks again.
+proposal unanswered, a yes that failed to land, or a read that failed, do not touch
+it, so the next wrap-up looks again.
 
 ## 5. Report
 
