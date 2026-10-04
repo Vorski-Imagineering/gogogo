@@ -1741,6 +1741,11 @@ class BranchRulesExact(unittest.TestCase):
         self.assertEqual(listed(rows[0]["detail"], " has ", " only in classic"), ["no force push", "no deletion"])
         self.assertIn("--ruleset main", rows[0]["fix"])
 
+    def test_a_bypassable_classic_fail_lists_what_else_is_missing(self):
+        rows = self.rows([], {"allow_force_pushes": {"enabled": False}, "enforce_admins": {"enabled": False}})
+        self.assertEqual(listed(rows[0]["detail"], " has ", " only in classic"), ["no force push"])
+        self.assertEqual(listed(rows[0]["detail"], "; it is also missing: "), ["no deletion", "a required check"])
+
     def test_the_merge_script_info_is_the_specs(self):
         self.assertEqual(self.rows(self.FULL[:2], wants_check=False, needs_ci=True), [
             {"level": "INFO", "check": self.CHECK, "fix": "",
@@ -1829,6 +1834,14 @@ class BranchRulesExact(unittest.TestCase):
             self.assertEqual(sc.check_names("o/code", "main"), ["e2e"])
         self.assertEqual(calls[0], ("gh", *self.PR_LIST.split()))
 
+    def test_a_merged_pr_without_a_merge_date_is_not_the_latest(self):
+        calls = []
+        prs = [{"number": 30, "mergedAt": "2026-03-01T00:00:00Z"}, {"number": 12}]
+        replies = {self.PR_LIST: (0, json.dumps(prs), ""),
+                   "pr checks 30 --repo o/code --json name,bucket": (0, json.dumps([{"name": "e2e", "bucket": "pass"}]), "")}
+        with mock.patch.object(sc, "run", gh_stub(calls, replies)):
+            self.assertEqual(sc.check_names("o/code", "main"), ["e2e"])
+
     def test_the_branch_plan_is_design_4s(self):
         plan = sc.branch_plan
         self.assertEqual(plan({"integration": {"strategy": "run-branch-pr", "final_target": "staging"}}, "main"),
@@ -1878,6 +1891,8 @@ class BranchRulesExact(unittest.TestCase):
         self.assertEqual([(r["level"], r["fix"]) for r in rows], [("WARN", "")])
         self.assertIn("gh: HTTP 500", rows[0]["detail"])
         self.assertIn("rulesets", rows[0]["detail"])
+        _, rows = self.branches({self.RULESETS: (0, json.dumps({"message": "Moved Permanently"}), "")})
+        self.assertEqual([(r["level"], r["fix"]) for r in rows], [("WARN", "")])
 
     def test_no_branch_to_check_warns_once(self):
         rep = sc.Report()
