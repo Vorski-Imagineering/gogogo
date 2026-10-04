@@ -122,6 +122,12 @@ means finished work sits unverified while you go and ask.
    fixed. Triage-only mode runs it too, since it only reads.
 13. **The profile's `preflight.extra`**, each as it says. A check that says
    "report only" is reported and never acted on.
+13. **Run PRs merged after their run** (only when `integration.strategy` is
+   `run-branch-pr` and the profile has `tracker.tool`): move the cards a
+   late-merged run PR carried, as `references/merge.md` *Cards a late-merged
+   run PR carried* says, and no others. Its lines go at the top of the run
+   report. It never stops the run. With `--triage-only` it moves nothing and
+   reports what it would move.
 
 ## The loop never waits on chat
 
@@ -389,15 +395,25 @@ every issue taken with its outcome and merge commit (and *label added by
 the run* for each one §2 labelled), every issue skipped with the reason and its column, anything left half-done with its branch, every other card
 moved to `tracker.columns.needs_human` (taken, then stopped) with its Needs-you line, the stranded
 work from preflight, anything the profile's `stop.extra` checks raised, and
-the `notify failed` lines §8 says are due.
+the `notify failed` lines §8 says are due. It also lists every
+`**Suspected gogogo fault:**` line written in this run (form and rules in
+`references/gogogo-faults.md` in this plugin), each with its issue's link; a
+fault seen outside any issue gets the same line with where it was seen
+(`preflight item <n>`, `triage of #<n>`) in place of the link. With none, the
+report says "Suspected gogogo faults: none". No notify message and no stop.
+
+When the run's final PR is still open at the close, the report also gives its
+*After merging* list (§6, `run-branch-pr`): each card the run landed and where
+to move it once that PR is merged.
 
 ## Stop the whole run and ask when
 
 - the unattended-mode check fails, at the start or before any merge;
 - the base is red before you start, or the run branch goes red mid-run, or
   a `run-branch-pr` final PR that is a release fails §6's checks step;
-- a merge conflicts, or the merge check says NOT-MERGED or cannot tell (after
-  the reopen *Verify the merge landed* asks for);
+- the merge check cannot tell (after the reopen *Verify the merge landed* asks
+  for). A refused or conflicting merge, and one that did not land, are not
+  here: they stop that issue (stop reason `merge`) and the run goes on;
 - a two-licence apply fails or half-applies;
 - the same change fails verification after the bound on two issues in a row
   (the environment, not the issues, is the likely cause);

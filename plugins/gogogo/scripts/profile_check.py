@@ -86,7 +86,7 @@ FIELDS = {
     "integration.command": (str, (), "Merge command, for merge-script."),
     "integration.final_target": (str, (), "Branch the run's PR targets, for run-branch-pr."),
     "integration.mode_check": (str, (), "Command that proves unattended mode is on."),
-    "integration.ci_before_merge": (bool, (LOOP,), "True if CI must pass on each issue before it merges."),
+    "integration.ci_before_merge": (bool, (LOOP,), "True if a PR with no CI checks at all must not merge. Checks that exist are always awaited."),
     "integration.workspace": (str, (), "checkout | worktree. Optional; absent means checkout. Where dev and "
                               "auto-dev do an issue's work: in the checkout, or in a git worktree "
                               "../<repo>-wt-<n> beside it. Worktree support is in development."),
