@@ -711,6 +711,11 @@ class SchemaDoc(unittest.TestCase):
                           else set(required.replace("`", "").replace(" ", "").split(",")))
             self.assertEqual(documented, set(pc.FIELDS[path][1]), path)
 
+    def test_doc_and_checker_give_ci_before_merge_the_same_meaning(self):
+        doc = (PLUGIN / "references" / "profile-schema.md").read_text()
+        row = next(line for line in doc.splitlines() if line.startswith("| `integration.ci_before_merge` |"))
+        self.assertEqual(row.split("|")[4].strip(), pc.FIELDS["integration.ci_before_merge"][2])
+
     def test_doc_and_checker_describe_lanes_the_same(self):
         doc = (PLUGIN / "references" / "profile-schema.md").read_text()
         row = next(line for line in doc.splitlines() if line.startswith("| `lanes` |"))
