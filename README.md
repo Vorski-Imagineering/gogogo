@@ -308,7 +308,7 @@ rebased.
 | Command | What it does |
 |---|---|
 | `/gogogo:spec` | Turns an issue into a spec another agent can build from without asking. Asks the owner in rounds, records the decisions, lints the result. |
-| `/gogogo:idea` | Files what the session has found as an un-specced issue (request, findings, open questions), after showing you the draft; on request, files it on gogogo itself with this repo's names removed. No further research; `/gogogo:spec` designs it later. |
+| `/gogogo:idea` | Files what the session has found as an un-specced issue (request, findings, open questions), after showing you the draft. No further research; `/gogogo:spec` designs it later. |
 | `/gogogo:dev` | One issue end to end: read, triage, find the cause, change, review, verify on real data, report, move the card. |
 | `/gogogo:auto-dev` | Works the ready queue unattended, one issue after another, each on its own branch. `--triage-only` reads the queue and changes nothing. |
 | `/gogogo:setup` | Opens with the repo's setup and configuration, then onboards it, or checks it is still set up right: plugin settings, profile, Hard Stops, board and columns, ready label, competing local skills. |
@@ -429,8 +429,8 @@ claude plugin update gogogo@vorski-skills --scope project
 **Changing the process.** Anything specific to one repo goes in that repo's
 `.agents/dev-process.md`. A change to how every repo works is a PR here. A fault in gogogo
 itself, seen in a run, shows as a `Suspected gogogo fault` line on the issue
-and in auto-dev's close-run report. File it here with `/gogogo:idea` ("file it
-on gogogo"), which removes the repo's names before you approve the post.
+and in auto-dev's close-run report. A person files it
+on gogogo from that line, with the repo's names removed by hand.
 
 ## Using gogogo, or working on it
 

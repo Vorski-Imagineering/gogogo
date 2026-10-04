@@ -1,7 +1,7 @@
 # Suspected gogogo faults
 
 A fault in the plugin itself, noticed during a run, is written down where the
-run already reports, so a person can file it upstream with `/gogogo:idea`
+run already reports, so a person can file it on gogogo
 without the fault being lost. This file says what counts, what the line looks
 like, and what a run never does about one. `${CLAUDE_PLUGIN_ROOT}` below is
 not filled in for you: it is the plugin's folder, the one whose `scripts/` the
@@ -45,6 +45,6 @@ report it sits in.
 ## Never
 
 Because of one, a run never stops, moves a card, opens or comments on an issue
-anywhere, changes the plugin, or posts to `Vorski-Imagineering/gogogo`. Filing
-it upstream is `/gogogo:idea` with its upstream target, and a person approves
-the post.
+anywhere, changes the plugin, or posts to `Vorski-Imagineering/gogogo`. A person
+files it on `Vorski-Imagineering/gogogo` from the line, with the repo's names
+removed by hand.

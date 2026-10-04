@@ -100,46 +100,9 @@ class Skill(unittest.TestCase):
         for line in create:
             self.assertIn("--body-file", line)
             self.assertIn("--repo", line)
-            self.assertIn('--title "$(cat <title file>)"', line, "post the title that was checked")
         for flag in ("--label", "--add-label"):
             self.assertNotIn(flag, text)
         self.assertNotRegex(text, r'tracker\.py"? move')
-
-    def test_upstream_target(self):
-        text = skill_text()
-        start = text.index("## The target")
-        target = text[start:text.index("\n## ", start + 1)]
-        self.assertIn("Vorski-Imagineering/gogogo", target)
-        verbs = ("create", "comment", "list", "view")
-        for verb in verbs:
-            lines = [line for line in text.splitlines() if f"gh issue {verb}" in line]
-            self.assertTrue(lines, verb)
-            for line in lines:
-                self.assertIn("--repo <target repo>", line)
-
-    def test_description_names_gogogo_as_a_filing_target(self):
-        front = skill_text().split("---")[1]
-        self.assertRegex(front, r"(?m)^description: .*gogogo")
-
-    def test_name_check_covers_the_title_and_is_bounded(self):
-        text = skill_text()
-        start = text.index("Then, wherever step 3 ends")
-        para = text[start:text.index("Keep a list of what you removed", start)]
-        grep = next(l for l in para.splitlines() if "grep -n -i -F" in l)
-        self.assertIn("<draft file>", grep)
-        self.assertIn("<title file>", grep)
-        self.assertNotIn("sed -E", para)
-        self.assertNotIn("check file", para)
-        self.assertIn("test -e", para)
-        self.assertIn("matched text", para)
-        self.assertIn("plugin's root", para)
-        self.assertIn("empty", para)
-        self.assertRegex(para, r"(?i)after three runs")
-        step2 = text[text.index("## 2. Draft"):text.index("## 3. Public trackers")]
-        self.assertRegex(step2, r"(?s)title file.*empty file for a comment")
-
-    def test_name_check_command(self):
-        self.assertTrue(any("grep -n -i -F" in line for line in skill_text().splitlines()))
 
     def test_no_project_names(self):
         self.assertIsNone(re.search(PROJECT_NAMES, skill_text(), re.I))

@@ -1,6 +1,6 @@
 ---
 name: idea
-description: Use when the user wants to keep what this session has found as a new tracker issue without speccing it ("make it an issue", "file this before I close", "an un-specced issue"), or to file a finding on gogogo itself ("file this on gogogo", upstream), or when research is unfinished and the session is about to end. Not for writing a spec; that is spec.
+description: Use when the user wants to keep what this session has found as a new tracker issue without speccing it ("make it an issue", "file this before I close", "an un-specced issue"), or when research is unfinished and the session is about to end. Not for writing a spec; that is spec.
 ---
 
 # idea: save what this session found, as an un-specced issue
@@ -18,7 +18,7 @@ python3 "${CLAUDE_PLUGIN_ROOT}/scripts/profile_check.py" --for idea --show
 
 Exit 0 prints the settings; use them wherever this skill says *the profile*.
 Any other exit: **stop and report the line it printed**. Every `gh issue` call
-below passes `--repo <target repo>` (§ *The target*).
+below passes `--repo <tracker.issues_repo>`.
 
 Any `warning:` line the check printed goes, verbatim, at the top of your report to the person; if it printed none, the report says so.
 
@@ -39,35 +39,27 @@ only one. An answer or a change that chooses a target anywhere else, or more
 than one, is refused as a whole: say so, change nothing, and ask again. Merely
 mentioning another repo is not choosing it.
 
-One exception, the *upstream target*: when the person asks in words for it to
-go to gogogo ("file it on gogogo", "upstream", "against the plugin"), and
-`tracker.issues_repo` is not `Vorski-Imagineering/gogogo` (compared ignoring
-case), the target is a new issue in `Vorski-Imagineering/gogogo`, or a comment
-on an open issue there. Still one target, and any other repo is still refused
-as a whole. `<target repo>` below is `tracker.issues_repo`, or
-`Vorski-Imagineering/gogogo` for the upstream target.
-
 ## 1. Look for an issue that already covers it
 
 ```bash
-gh issue list --repo <target repo> --state open --search "<two to four key terms>" --json number,title,url --limit 10
+gh issue list --repo <tracker.issues_repo> --state open --search "<two to four key terms>" --json number,title,url --limit 10
 ```
 
 When one is a likely match, show it and ask with `AskUserQuestion`: **add these
-findings as a comment on <target repo>#<n>**, or **file a new issue in
-<target repo>**. The answer, or another issue in `<target repo>`
+findings as a comment on <tracker.issues_repo>#<n>**, or **file a new issue in
+<tracker.issues_repo>**. The answer, or another issue in `tracker.issues_repo`
 the person chooses instead, sets the target for steps 2 to 5 (§ *The target*).
 An answer that chooses no target counts as declined. No likely
 match: the target is a new issue. A declined question: write the draft as for
-a new issue (steps 2 and 3), post nothing, run step 3's name check when the target is the
-upstream target, say where it is and what step 3 removed, and stop.
+a new issue (steps 2 and 3), post nothing, say where it is and what step 3
+removed, and stop.
 
 Never edit another issue's body; it may be a spec.
 
 ## 2. Draft
 
 Write the draft to a file in the scratchpad. The title, for a new issue, is
-`<area>: <what>` (always also written to a title file next to the draft, an empty file for a comment, for step 3's name check; step 5 posts the title from that file), in the style of the titles step 1's search returned, if it
+`<area>: <what>`, in the style of the titles step 1's search returned, if it
 returned any; a comment has none. The body has these headings and no others,
 in this order:
 
@@ -96,17 +88,13 @@ this body over as the issue's original report, unchanged.
 
 ## 3. Public trackers
 
-When `tracker.public` is true, or the target is the upstream target (whatever
-`tracker.public` says), the title and body keep only what is known to be safe
-to publish. When unsure, remove it. Do this before the person sees the
+When `tracker.public` is true, the title and body keep only what is known to be
+safe to publish. When unsure, remove it. Do this before the person sees the
 draft, and again on the whole draft after every change. Remove:
 
 - any path outside this checkout: absolute (`/Users/`, `/home/`, `/tmp/`,
   `/private/`, `C:\`), home-relative (`~/`), or into another checkout. A path
-  inside this checkout is written relative to its root, and is kept. A path
-  inside the plugin's folder, wherever it is installed (an installed copy sits
-  in a cache folder outside the checkout), is rewritten relative to the
-  plugin's root and kept; every other path outside the checkout is removed;
+  inside this checkout is written relative to its root, and is kept;
 - every repo, project, client, product or folder name from outside this
   checkout, in any form (`owner/repo`, a bare name, a folder), except
   `tracker.issues_repo`, `tracker.code_repo`, and tools and products anyone
@@ -122,35 +110,6 @@ draft, and again on the whole draft after every change. Remove:
   command output, wherever it is, a kept link included. The kinds above are
   the usual ones, not the only ones.
 
-For the upstream target, the draft goes to a tracker that is not this
-checkout's, so the exceptions for `tracker.issues_repo` and
-`tracker.code_repo` above do not apply, and these are removed too: the name and
-owner parts of `tracker.issues_repo` and `tracker.code_repo`,
-`tracker.project_owner`, this checkout's folder name, the host of each
-`environments` entry's `url`, links into this checkout's tracker, and every
-path inside this checkout except a path inside the plugin, kept relative to the
-plugin's root (`skills/dev/SKILL.md`, `scripts/verify_merged.py`). Any of these
-values equal to `Vorski-Imagineering` or `gogogo` (ignoring case) is left out
-of the removal and of the check below.
-
-Then, wherever step 3 ends with an upstream draft on disk (before step 4 shows
-it, and on step 1's declined path), check the draft and the title file for
-those values, one `-e` per value, leaving out any empty value:
-
-```bash
-grep -n -i -F -e <value> -e <value> <draft file> <title file>
-```
-
-Exit 1 (nothing found): go on. Exit 0: look at each printed hit. A hit is
-acceptable only when the matched text itself lies inside a plugin-relative path (`skills/...`,
-`scripts/...`) for which `test -e "<plugin root>/<that path>"` succeeds; the
-plugin's root is the folder whose `scripts/` this skill names in full. Remove
-every other hit from the draft or title, add each removal to the list by kind,
-and run the grep again. The check passes when every printed hit is an
-acceptable plugin path. After three runs with a hit that is not acceptable,
-post nothing and say so. Any other exit: post nothing and say the check could
-not run. Run it again after every change at step 4.
-
 Keep a list of what you removed, in your own reply and never in the draft
 file: each item by its kind and where it was (*a hostname, in the second
 finding*), never the removed text. Step 4 shows it with the draft, and every
@@ -161,13 +120,12 @@ removed is put back. A person who wants it published posts it themselves.
 
 Show the target, the title (for a new issue), the whole body and step 3's
 list of removals. Then ask with `AskUserQuestion`: **post it** (naming the
-target: *file it as a new issue in <target repo>* or *post it as a
-comment on <target repo>#<n>*), **change something**, or **don't post**.
+target: *file it as a new issue in <tracker.issues_repo>* or *post it as a
+comment on <tracker.issues_repo>#<n>*), **change something**, or **don't post**.
 
 - Change something: edit the draft, or change the target within § *The
-  target* (a new issue then needs step 2's title), run step 3 again (the name
-  check included), and ask again. When the target repo changed, run step 1's
-  search again for the new `<target repo>` first.
+  target* (a new issue then needs step 2's title), run step 3 again, and ask
+  again.
 - Don't post, or the question is declined: post nothing, say where the draft
   file is, and stop.
 
@@ -176,23 +134,23 @@ comment on <target repo>#<n>*), **change something**, or **don't post**.
 A new issue:
 
 ```bash
-gh issue create --repo <target repo> --title "$(cat <title file>)" --body-file <file>
+gh issue create --repo <tracker.issues_repo> --title "<title>" --body-file <file>
 ```
 
 A comment on #<n>, however the target was chosen. First:
 
 ```bash
-gh issue view <n> --repo <target repo> --json state,url -q '.state + " " + .url'
+gh issue view <n> --repo <tracker.issues_repo> --json state,url -q '.state + " " + .url'
 ```
 
 Post only when it exits 0 and prints `OPEN` and a URL ending `/issues/<n>` in
-`<target repo>` (compared ignoring case). Anything else (closed, a pull
+`tracker.issues_repo` (compared ignoring case). Anything else (closed, a pull
 request, not found, an error): post nothing, tell the person why, set the
 target to a new issue, write step 2's title, run step 3 again, and go back to
 step 4. Then:
 
 ```bash
-gh issue comment <n> --repo <target repo> --body-file <file>
+gh issue comment <n> --repo <tracker.issues_repo> --body-file <file>
 ```
 
 No label of any kind. Above all never `tracker.ready_marker`: it means
@@ -200,9 +158,7 @@ No label of any kind. Above all never `tracker.ready_marker`: it means
 
 ## 6. The card
 
-Skipped for the upstream target, and say so: the issue is in gogogo's tracker,
-whose board places it. Otherwise, only when `tracker.kind` is `github-project`
-and `tracker.tool` is `shared`.
+Only when `tracker.kind` is `github-project` and `tracker.tool` is `shared`.
 The board's own workflows add a new issue and place it, a few seconds after it
 is filed, so read the card back before concluding anything:
 
@@ -229,7 +185,7 @@ step was skipped, and why.
 
 ## 7. Report
 
-- the issue's or the comment's link, naming `<target repo>`;
+- the issue's or the comment's link;
 - the card's column as read back, or why there is none;
 - what step 3 removed;
 - for a new issue, next: `/gogogo:spec <n>` when someone is ready to design
