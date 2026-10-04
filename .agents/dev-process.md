@@ -1,5 +1,6 @@
 +++
 profile = 1
+independence = "product-owner"
 
 [tracker]
 kind = "github-project"
