@@ -325,7 +325,9 @@ def check_branch_rules(repo, branch, rules, classic, checks, wants_check, needs_
         return
     no_names = not checks or isinstance(checks, str)
     if no_names and not target:
-        rep.warn(check, f"no check name can be derived: no PR with a passing check has been merged into {branch}")
+        rep.warn(check, f"no check name can be derived: the checks on the latest PR merged into {branch} could not "
+                        f"be read ({checks})" if isinstance(checks, str) else
+                        f"no check name can be derived: no PR with a passing check has been merged into {branch}")
         return
     if by_classic["a required check"]:
         names = ", ".join(required.get("contexts") or [c.get("context", "?") for c in required.get("checks") or []])

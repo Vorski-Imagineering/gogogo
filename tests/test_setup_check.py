@@ -1751,6 +1751,12 @@ class BranchRulesExact(unittest.TestCase):
             {"level": "WARN", "check": self.CHECK, "fix": "",
              "detail": "no check name can be derived: no PR with a passing check has been merged into main"}])
 
+    def test_an_unreadable_check_read_on_the_default_branch_gives_the_error(self):
+        row = self.rows(self.FULL[:2], checks="HTTP 502", needs_ci=True, target=False)[0]
+        self.assertEqual(row["level"], "WARN")
+        self.assertTrue(row["detail"].endswith(" (HTTP 502)"), row["detail"])
+        self.assertNotIn("has been merged", row["detail"])
+
     def test_a_bypassable_classic_check_lists_its_names(self):
         for tests in ({"contexts": [], "checks": [{"context": "tests"}, {"context": "lint"}]},
                       {"contexts": ["tests", "lint"], "checks": []}):
