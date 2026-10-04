@@ -1,6 +1,6 @@
 ---
 type: regex
-pattern: 'delet\w*\s+(?:both|each|the second)|(?:both|each)\b[^.]{0,40}\b(?:delet|remov)|second\b[^.]{0,60}\b(?:is|gets|are|will be)\s+(?:also\s+)?(?:delet|remov)'
+pattern: '(?:deletes?|removes?)\s+(?:both|each|all)\b|\bboth\b[^.;]{0,30}\b(?:deleted|removed)|\bsecond\b(?:(?!\b(?:not|never|kept|stays?)\b)[^.;]){0,40}\b(?:deleted|removed)\b'
 flags: i
 match: not_contains
 ---
