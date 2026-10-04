@@ -27,7 +27,7 @@ CASES = {
     "spec-declined-question", "spec-being-built", "spec-nothing-hits-today",
     "spec-no-argument-offers-new", "spec-pr-mentions-only",
     "status-sweep-lists-only", "wrap-up-asks-before-removing",
-    "setup-connected-message",
+    "setup-connected-message", "setup-leaves-out-plugin-steps",
 }
 TAGS = re.compile(r"^tags:\s*\[([^\]]*)\]\s*$", re.M)
 TYPE = re.compile(r"^type:\s*(\S+)\s*$", re.M)

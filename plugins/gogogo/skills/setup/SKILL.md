@@ -96,10 +96,21 @@ What each fix involves:
   - The sections `## Recon traps`, `## Lane constraints` and
     `## superpowers boundary`. When the repo already has local skills being
     replaced, **move** their project-specific text into these sections word
-    for word; do not rewrite it.
+    for word; do not rewrite it, **except a recipe for a step the plugin runs
+    itself**: text telling an agent how to send notifications (`notify`),
+    branch or set up a workspace (`integration.workspace`, `integration.base`),
+    merge (`integration.strategy`), move cards (`tracker.columns`, `stages`),
+    report and hand back (`handback`), or run preflight checks
+    (`preflight.extra`). That includes a send function, where its credentials
+    live, and a table keyed to the retired skill's own section numbers or
+    columns. Decide by what the text does, not by its heading. A project fact
+    such a step uses (a command, a host, a quirk of this repo's CI or deploy)
+    still moves. A section holding both moves its facts and leaves out its
+    recipe. The profile gets no section or line for what is left out.
 
   Show the draft to the user before writing it. It describes how their project
-  works; they approve it.
+  works; they approve it. Under **Left out**, name each part left out: the
+  retired skill, its heading, and the setting that covers it.
 - **A profile missing a setting the skills now require.** Add it with the
   value the board uses, shown to the user first. When the setting names a new
   column, the board needs that column too (below), and when the profile sets
@@ -243,7 +254,8 @@ What each fix involves:
   keep failing.
 - **Local skills the shared ones replace.** Move each to
   `.claude/skills-retired/` in the same change that moves its project
-  specifics into the profile, and update anything that names it.
+  specifics into the profile, and update anything that names it. Text left
+  out of the profile stays only in the retired copy.
 - **`CLAUDE.md` does not point at the profile.** Add a short section saying
   the process skills come from the `gogogo` plugin and this repo's specifics
   are in `.agents/dev-process.md`.

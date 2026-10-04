@@ -306,6 +306,18 @@ class ReleaseShape(unittest.TestCase):
             self.assertIn(key, section)
             self.assertIn(key, profile_check.FIELDS)
 
+    def test_setup_skill_leaves_out_recipes_for_steps_the_plugin_runs(self):
+        import profile_check
+        text = (ROOT / "plugins" / "gogogo" / "skills" / "setup" / "SKILL.md").read_text(encoding="utf-8")
+        start = text.index("`## Recon traps`")
+        bullet = text[start:text.index("Show the draft", start)]
+        for key in ("notify", "integration.strategy", "handback"):
+            self.assertIn(key, bullet)
+            self.assertTrue(any(f == key or f.startswith(key + ".") for f in profile_check.FIELDS), key)
+        draft = text[text.index("Show the draft"):]
+        draft = draft[:draft.index("\n- ")]
+        self.assertIn("Left out", draft)
+
 
 class Audit(unittest.TestCase):
     def test_old_marketplace_name_warns(self):
