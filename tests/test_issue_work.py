@@ -318,6 +318,16 @@ class IssueWork(Repos):
         self.work(9, {"graphql": "fail"})
         self.assertNotIn("mentions", self.stderr)
 
+    def test_a_stop_marker_pr_is_not_also_a_mention(self):
+        self.remote_only("docs/notes", 1)
+        comment = "**Needs you:** see https://github.com/o/code/pull/70\n<!-- gogogo:stop v=1 reason=ci -->"
+        code, lines = self.work(46, {"graphql": timeline([pr(70, "docs/notes", body="mentions #46")],
+                                                         comments=[comment]),
+                                     "prview": {"70": {"headRefName": "docs/notes"}}})
+        self.assertEqual(code, 1)
+        self.assertEqual(len(lines), 1, lines)
+        self.assertNotIn("mentions", self.stderr)
+
 
 if __name__ == "__main__":
     unittest.main()

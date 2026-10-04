@@ -144,7 +144,7 @@ def find(number, base_name):
 
     candidates = {}  # branch -> {"pr": n, "reason": r}, in the order found
     forks = []
-    mentions = []
+    mentions = {}  # PR number -> (head branch, note)
     for node in issue["timelineItems"]["nodes"]:
         source = (node or {}).get("source") or {}
         if source.get("__typename") != "PullRequest" or source.get("state") != "OPEN":
@@ -152,9 +152,8 @@ def find(number, base_name):
         if ((source.get("baseRepository") or {}).get("nameWithOwner") or "").lower() != code_repo.lower():
             continue
         if not claims(source, number, issues_repo):
-            line = f"PR #{source['number']} mentions #{number} but does not claim it"
-            if line not in mentions:
-                mentions.append(line)
+            mentions.setdefault(source["number"], (source["headRefName"],
+                                f"PR #{source['number']} mentions #{number} but does not claim it"))
             continue
         head = (source.get("headRepository") or {}).get("nameWithOwner")
         if source.get("isCrossRepository") or (head or "").lower() != code_repo.lower():
@@ -192,7 +191,8 @@ def find(number, base_name):
         if "reason" in found:
             line += f", stop marker reason={found['reason']}"
         lines.append(line)
-    return lines + forks, mentions
+    notes = [note for branch, note in mentions.values() if branch not in candidates]
+    return lines + forks, notes
 
 
 def main(argv=None):
