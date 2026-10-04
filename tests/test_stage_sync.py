@@ -804,6 +804,14 @@ class Reverts(RepoTestCase):
         self.revert(undo, 'Revert "Revert "fix: x (Refs #12)""')
         self.assertEqual(self.reverts(), 0, self.out)
 
+    def test_a_second_revert_that_was_reverted_leaves_the_first_one_named(self):
+        """The fix stays out while an earlier revert stands: undoing the later revert re-lands nothing."""
+        first = self.revert(self.fix)
+        again = self.revert(self.fix, 'Revert "fix: x (Refs #12)" again')
+        self.revert(again, 'Revert "Revert "fix: x (Refs #12)" again"')
+        self.assertEqual(self.reverts(), 1, self.err)
+        self.assertIn(f"reverted by {first[:7]}", self.out)
+
     def test_nothing_reverted_exits_0(self):
         self.assertEqual(self.reverts(), 0, self.err)
         self.assertNotIn("reverted by", self.out)
@@ -1022,6 +1030,16 @@ class ShippedInGit(RepoTestCase):
         self.repo.tag("deploy-B")
         result = ss.shipped("deploy-B", "deploy-A", KNOWN, issues_repo="acme/issues")
         self.assertEqual(result.links, [])
+
+    def test_a_revert_in_the_range_does_not_hide_the_fixes_older_than_it(self):
+        self.repo.commit("base")
+        self.repo.tag("deploy-A")
+        self.repo.commit("fix: y (Refs #13)")
+        old = self.repo.commit("fix: x (Refs #12)")
+        self.repo.commit(f'Revert "fix: x (Refs #12)"\n\nThis reverts commit {old}.\n')
+        self.repo.tag("deploy-B")
+        result = ss.shipped("deploy-B", "deploy-A", KNOWN, issues_repo="acme/issues")
+        self.assertEqual(sorted(link.key for link in result.links), [("acme/issues", 12), ("acme/issues", 13)])
 
     def test_without_an_issues_repo_a_refs_subject_links_nothing(self):
         self.repo.commit("base")
