@@ -115,6 +115,12 @@ means finished work sits unverified while you go and ask.
    `/gogogo:dev` §8.
 12. **The profile's `preflight.extra`**, each as it says. A check that says
    "report only" is reported and never acted on.
+13. **Run PRs merged after their run** (only when `integration.strategy` is
+   `run-branch-pr` and the profile has `tracker.tool`): move the cards a
+   late-merged run PR carried, as `references/merge.md` *Cards a late-merged
+   run PR carried* says, and no others. Its lines go at the top of the run
+   report. It never stops the run. With `--triage-only` it moves nothing and
+   reports what it would move.
 
 ## The loop never waits on chat
 
@@ -382,6 +388,10 @@ the run* for each one §2 labelled), every issue skipped with the reason and its
 moved to `tracker.columns.needs_human` (taken, then stopped) with its Needs-you line, the stranded
 work from preflight, anything the profile's `stop.extra` checks raised, and
 the `notify failed` lines §8 says are due.
+
+When the run's final PR is still open at the close, the report also gives its
+*After merging* list (§6, `run-branch-pr`): each card the run landed and where
+to move it once that PR is merged.
 
 ## Stop the whole run and ask when
 

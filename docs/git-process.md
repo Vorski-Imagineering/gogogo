@@ -199,7 +199,11 @@ branch to `integration.final_target` carries the whole run.
 
 - When that final PR is a release, the loop merges it once its checks pass. A
   failure there stops the run and leaves every card where it is.
-- When it is not a release, it waits for a person.
+- When it is not a release, it waits for a person. Its description ends with
+  an *After merging* list: the cards it carries and how to move them. If the
+  person merges it after the run, the next run's preflight moves the cards
+  that PR carried and only those, when the PR merged with a merge commit and
+  the issues are still open.
 - It is merged with a **merge commit, never squashed**: a squash would leave
   the issue commits, and the `Ships-issue` links in them, out of the target's
   history. The PR's description says so.
@@ -265,7 +269,8 @@ exit means, and what the loop does next, is in
 card to the first of the profile's `stages`: for example "In Dev" when the base
 is served by a dev site, or "Released" when the base is production. Under
 `run-branch-pr`, when the loop sees the run's final PR merge, it moves every
-card the run landed to the next stage. Any other later stage is reached by a
+card the run landed to the next stage; a final PR merged later is caught by
+the next run's preflight, which moves the cards it carried. Any other later stage is reached by a
 deploy or a promotion. The issue stays open. No skill that writes code moves a
 card to Done: a person confirms the fix, or, where the repo runs
 `/gogogo:auto-test`, a PASS moves the card to `auto_test.pass_column` (Done, in
