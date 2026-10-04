@@ -312,8 +312,8 @@ rebased.
 | `/gogogo:auto-test` | Tests each shipped issue on the environment where a person confirms fixes, and records PASS, FAIL or NEEDS HUMAN on the issue. `--triage-only` lists what it would test or skip and changes nothing. |
 
 A session started or resumed in a repo with a profile opens with a one-line
-status from the plugin's own hook (cards in each profile column, open pull
-requests), shown only to the person and never added to Claude's context.
+status from the plugin's own hook (the repo's independence level, coloured in
+a terminal session, then cards in each profile column and open pull requests), shown only to the person and never added to Claude's context.
 
 Scripts the skills call, all in `plugins/gogogo/scripts/`:
 

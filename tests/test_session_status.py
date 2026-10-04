@@ -26,6 +26,20 @@ sys.path.insert(0, str(SCRIPTS))
 
 import session_status  # noqa: E402
 
+
+def setUpModule():
+    # Inside Claude Code the tests inherit CLAUDE_CODE_ENTRYPOINT=cli, which turns colour on.
+    # Every case starts without it; a case that wants colour sets it itself.
+    global _env
+    _env = mock.patch.dict(os.environ)
+    _env.start()
+    os.environ.pop("CLAUDE_CODE_ENTRYPOINT", None)
+    os.environ.pop("NO_COLOR", None)
+
+
+def tearDownModule():
+    _env.stop()
+
 PROJECT_NAMES = r"manage\.py|npm |firebase|django|htmx|sentry"
 
 PROFILE = """\
@@ -52,7 +66,7 @@ text
 """
 
 COLUMNS = ["New", "Dev Ready", "In progress", "Human!Help!", "Released", "Done"]
-LINE = ("gogogo · {name}: Dev Ready 3 · In progress 1 · Human!Help! 2 · Released 4 · "
+LINE = ("gogogo · {name} · independence: junior-dev (not set) · Dev Ready 3 · In progress 1 · Human!Help! 2 · Released 4 · "
         "2 PRs open — /gogogo:status for detail")
 
 
@@ -108,6 +122,12 @@ def repo_with_profile(tool="shared"):
     (tmp / ".agents").mkdir()
     (tmp / ".agents" / "dev-process.md").write_text(PROFILE.format(tool=tool), encoding="utf-8")
     return tmp
+
+
+def set_level(repo, level):
+    path = repo / ".agents" / "dev-process.md"
+    text = path.read_text(encoding="utf-8").replace("profile = 1\n", f'profile = 1\nindependence = "{level}"\n', 1)
+    path.write_text(text, encoding="utf-8")
 
 
 def run_main(start, board, clock=None):
@@ -190,7 +210,7 @@ class Line(unittest.TestCase):
         text = PROFILE.format(tool="shared").replace('column = "Released"', 'column = "Dev Ready"')
         (repo / ".agents" / "dev-process.md").write_text(text, encoding="utf-8")
         _, out, _ = run_main(repo, Board())
-        self.assertEqual(message(out), "gogogo · myrepo: Dev Ready 3 · In progress 1 · Human!Help! 2 · "
+        self.assertEqual(message(out), "gogogo · myrepo · independence: junior-dev (not set) · Dev Ready 3 · In progress 1 · Human!Help! 2 · "
                          "2 PRs open — /gogogo:status for detail")
 
     def test_board_columns_are_only_the_option_lines(self):
@@ -201,8 +221,86 @@ class Line(unittest.TestCase):
         repo = repo_with_profile(tool="./bin/board")
         board = Board()
         _, out, _ = run_main(repo, board)
-        self.assertEqual(message(out), "gogogo · myrepo: 2 PRs open — /gogogo:status for detail")
+        self.assertEqual(message(out), "gogogo · myrepo · independence: junior-dev (not set) · 2 PRs open — /gogogo:status for detail")
         self.assertEqual([c[0] for c, _ in board.calls], ["gh"])
+
+    def test_other_tracker_line_carries_the_level(self):
+        repo = repo_with_profile(tool="./bin/board")
+        set_level(repo, "product-owner")
+        _, out, _ = run_main(repo, Board())
+        self.assertEqual(message(out), "gogogo · myrepo · independence: product-owner · "
+                         "2 PRs open — /gogogo:status for detail")
+
+    def test_level_follows_the_folder_when_set(self):
+        repo = repo_with_profile()
+        set_level(repo, "tech-lead")
+        _, out, _ = run_main(repo, Board())
+        line = message(out)
+        self.assertEqual(line, LINE.format(name="myrepo").replace("junior-dev (not set)", "tech-lead"))
+        self.assertNotIn("\x1b", line)
+
+    def test_level_is_bold_and_coloured_in_a_terminal(self):
+        env = {"CLAUDE_CODE_ENTRYPOINT": "cli"}
+        for level, colour in (("junior-dev", "32"), ("tech-lead", "33"), ("product-owner", "31")):
+            self.assertEqual(session_status.independence({"independence": level}, env),
+                             f"independence: \x1b[1;{colour}m{level}\x1b[0m")
+        self.assertEqual(session_status.independence({}, env),
+                         "independence: \x1b[1;32mjunior-dev\x1b[0m (not set)")
+
+    def test_no_colour_outside_a_terminal_or_with_no_color(self):
+        for entry, no_color in ((None, None), ("sdk-cli", None), ("claude-vscode", None), ("cli", "1")):
+            env = {k: v for k, v in (("CLAUDE_CODE_ENTRYPOINT", entry), ("NO_COLOR", no_color)) if v is not None}
+            with mock.patch.dict(os.environ, env):
+                _, out, _ = run_main(repo_with_profile(), Board())
+            self.assertNotIn("\x1b", message(out), (entry, no_color))
+        with mock.patch.dict(os.environ, {"CLAUDE_CODE_ENTRYPOINT": "cli", "NO_COLOR": ""}):
+            _, out, _ = run_main(repo_with_profile(), Board())
+        self.assertIn("\x1b", message(out))
+
+    def test_an_empty_or_non_string_level_counts_as_not_set(self):
+        for raw in ('""', "3", "true", "[]"):
+            repo = repo_with_profile()
+            path = repo / ".agents" / "dev-process.md"
+            path.write_text(path.read_text(encoding="utf-8").replace(
+                "profile = 1\n", f"profile = 1\nindependence = {raw}\n", 1), encoding="utf-8")
+            code, out, _ = run_main(repo, Board())
+            self.assertEqual(code, 0, raw)
+            self.assertEqual(message(out), LINE.format(name="myrepo"), raw)
+            self.assertNotIn("\x1b", message(out), raw)
+
+    def test_control_characters_in_a_level_never_reach_the_line(self):
+        cases = ((r"x\u001b[2Jy", "independence: x[2Jy · "), (r"a\nb\u007fc", "independence: abc · "),
+                 (r"\u001b\n", "independence: junior-dev (not set) · "))
+        for raw, shown in cases:
+            repo = repo_with_profile()
+            path = repo / ".agents" / "dev-process.md"
+            path.write_text(path.read_text(encoding="utf-8").replace(
+                "profile = 1\n", f'profile = 1\nindependence = "{raw}"\n', 1), encoding="utf-8")
+            code, out, _ = run_main(repo, Board())  # plain: any ESC left would be the profile's
+            self.assertEqual(code, 0, raw)
+            line = message(out)
+            self.assertIn(shown, line, raw)
+            self.assertFalse(any(ord(c) < 32 or ord(c) == 127 for c in line), raw)
+
+    def test_a_space_in_a_level_is_kept(self):
+        repo = repo_with_profile()
+        set_level(repo, "tech lead")
+        with mock.patch.dict(os.environ, {"CLAUDE_CODE_ENTRYPOINT": "cli"}):
+            code, out, _ = run_main(repo, Board())
+        self.assertEqual(code, 0)
+        line = message(out)
+        self.assertIn("independence: tech lead · ", line)
+        self.assertNotIn("\x1b", line)
+
+    def test_unknown_level_is_shown_plain(self):
+        repo = repo_with_profile()
+        set_level(repo, "lead")
+        with mock.patch.dict(os.environ, {"CLAUDE_CODE_ENTRYPOINT": "cli"}):
+            code, out, _ = run_main(repo, Board())
+        self.assertEqual(code, 0)
+        line = message(out)
+        self.assertIn("independence: lead ·", line)
+        self.assertNotIn("\x1b", line)
 
 
 class Silence(unittest.TestCase):
@@ -230,6 +328,14 @@ class Failures(unittest.TestCase):
         self.assertEqual(code, 0)
         self.assertEqual(message(out), "gogogo: status unavailable: "
                          "settings: the file must start with a +++ line (TOML front matter)")
+
+    def test_unavailable_line_ends_with_the_level(self):
+        repo = repo_with_profile()
+        set_level(repo, "tech-lead")
+        _, out, _ = run_main(repo, Board(list_exit=2))
+        line = message(out)
+        self.assertTrue(line.startswith("gogogo: status unavailable: board"), line)
+        self.assertTrue(line.endswith(" · independence: tech-lead"), line)
 
     def test_board_read_failing_is_unavailable(self):
         repo = repo_with_profile()
@@ -327,32 +433,33 @@ class Reasons(unittest.TestCase):
     """Each failed read names itself and why, on one line."""
 
     U = "gogogo: status unavailable: "
+    S = " · independence: junior-dev (not set)"  # a read that failed still names the level
 
     def test_board_exit_with_and_without_a_reason(self):
-        self.assertEqual(unavailable(Board(list_exit=2)), self.U + "board unreadable: tracker.py exited 2: tracker.py: no board")
-        self.assertEqual(unavailable(Board(answers={"list": (2, "", "")})), self.U + "board unreadable: tracker.py exited 2")
+        self.assertEqual(unavailable(Board(list_exit=2)), self.U + "board unreadable: tracker.py exited 2: tracker.py: no board" + self.S)
+        self.assertEqual(unavailable(Board(answers={"list": (2, "", "")})), self.U + "board unreadable: tracker.py exited 2" + self.S)
         self.assertEqual(unavailable(Board(answers={"fields": (1, "", "x\nlast line\n")})),
-                         self.U + "board unreadable: tracker.py exited 1: last line")
+                         self.U + "board unreadable: tracker.py exited 1: last line" + self.S)
 
     def test_list_that_is_not_a_card_list(self):
         self.assertEqual(unavailable(Board(answers={"list": (0, "oops", "")})),
-                         self.U + "board unreadable: tracker.py list printed no card list")
+                         self.U + "board unreadable: tracker.py list printed no card list" + self.S)
 
     def test_pull_request_failures(self):
         self.assertEqual(unavailable(Board(answers={"gh": (1, "", "HTTP 401\n")})),
-                         self.U + "pull requests unreadable: gh exited 1: HTTP 401")
+                         self.U + "pull requests unreadable: gh exited 1: HTTP 401" + self.S)
         missing = FileNotFoundError(2, "No such file or directory")
         self.assertEqual(unavailable(Board(raise_on="gh", exc=missing)),
-                         self.U + "pull requests unreadable: gh: No such file or directory")
+                         self.U + "pull requests unreadable: gh: No such file or directory" + self.S)
         self.assertEqual(unavailable(Board(raise_on="gh", exc=PermissionError("denied"))),
-                         self.U + "pull requests unreadable: gh: denied")
+                         self.U + "pull requests unreadable: gh: denied" + self.S)
         noise = "x" * 50
         self.assertEqual(unavailable(Board(answers={"gh": (0, noise, "")})),
-                         self.U + f"pull requests unreadable: gh printed {noise[:40]!r}")
+                         self.U + f"pull requests unreadable: gh printed {noise[:40]!r}" + self.S)
 
     def test_no_code_repo(self):
         self.assertEqual(unavailable(Board(), profile_edit=lambda t: t.replace('code_repo = "o/r"\n', "")),
-                         self.U + "pull requests unreadable: tracker.code_repo is not set")
+                         self.U + "pull requests unreadable: tracker.code_repo is not set" + self.S)
 
     def test_a_spent_budget_reads_nothing_more(self):
         for spent, calls in ((15, 1), (14.5, 3)):
@@ -365,7 +472,7 @@ class Reasons(unittest.TestCase):
             line = unavailable(timed, clock=clock)
             self.assertEqual(len(board.calls), calls, spent)
             if spent == 15:
-                self.assertEqual(line, self.U + "board timed out after 15 s")
+                self.assertEqual(line, self.U + "board timed out after 15 s" + self.S)
             else:
                 self.assertEqual(board.calls[1][1]["timeout"], 0.5)
 
