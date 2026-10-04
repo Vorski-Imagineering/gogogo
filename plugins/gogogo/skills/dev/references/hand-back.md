@@ -138,6 +138,16 @@ Put the line it prints in the §7 report. It never forces: a worktree with
 uncommitted changes or commits on no remote is kept, and the line says why;
 its exit 1 then means only that, not a failed merge.
 
+When the work was in the checkout instead (no worktree), the merge deleted
+the branch on GitHub but not here. Once the merge is verified, and only when
+`git rev-parse <branch>` equals the `<verified sha>` the merge used
+(`--match-head-commit`): `git switch <base> && git pull --ff-only`, then
+`git branch -D <branch>`. A failed switch or pull (uncommitted changes make
+`git switch` fail; never stash and never force), or a different tip, keeps the
+branch, and the §7 report says which; otherwise it says the local branch was
+deleted. Any other merged branch left behind is deleted by the sweep
+(`worktree_sweep.py --apply`, which auto-dev's preflight runs).
+
 ### When you merge with `gh`: the squash body carries the link
 
 Applies when you merge a PR yourself with `gh` (`integration.strategy` is

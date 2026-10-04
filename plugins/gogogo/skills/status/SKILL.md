@@ -108,8 +108,9 @@ in its place in the report, and the others still run.
    ```
    Keep a branch only when its count is above 0. `worktree_sweep.py` runs
    without `--apply`, so it removes nothing; show its lines under
-   `Worktrees, sweep:`. Its exit 1 means it kept a worktree, not that it
-   failed; only exit 2 is an `unreadable` line.
+   `Worktrees, sweep:`, `remove branch <name>: …` lines (a local branch whose
+   merged pull request's head is its tip) included. Its exit 1 means it kept
+   a worktree, not that it failed; only exit 2 is an `unreadable` line.
 
 ## Shape
 

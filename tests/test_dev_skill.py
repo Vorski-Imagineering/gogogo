@@ -20,6 +20,7 @@ SKILLS = Path(__file__).resolve().parents[1] / "plugins" / "gogogo" / "skills"
 DEV = SKILLS / "dev" / "SKILL.md"
 AUTO_DEV = SKILLS / "auto-dev" / "SKILL.md"
 DEV_VERIFY = SKILLS / "dev" / "references" / "verify.md"
+DEV_HAND_BACK = SKILLS / "dev" / "references" / "hand-back.md"
 SKILL = DEV
 FOLD = "### Fold in comments the description does not hold yet"
 sys.path.insert(0, str(Path(__file__).resolve().parent))
@@ -94,6 +95,14 @@ class ExitStatus(unittest.TestCase):
         gates = section(self.auto_dev, "5.")
         for name in ("exit status", "/gogogo:dev` §6"):
             self.assertIn(name, gates)
+
+    def test_hand_back_deletes_the_merged_local_branch_of_checkout_work(self):
+        """Work done in the checkout leaves its local branch after a verified merge (gogogo#169)."""
+        text = DEV_HAND_BACK.read_text(encoding="utf-8")
+        paragraph = next(p for p in text.split("\n\n") if "git branch -D <branch>" in p)
+        self.assertIn("--match-head-commit", paragraph)
+        self.assertIn("git rev-parse <branch>", paragraph)
+        self.assertIn("git switch <base>", paragraph)
 
     def test_no_project_names(self):
         for path in (DEV, AUTO_DEV):

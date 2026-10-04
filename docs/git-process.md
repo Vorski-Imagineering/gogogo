@@ -85,7 +85,10 @@ feature alike. The number is what ties the branch back to the tracker:
 - `worktree_sweep.py` removes an issue's worktree once its pull request has
   merged or its issue is closed, and keeps any with uncommitted changes or
   commits on no remote; dev runs it after each verified merge, and auto-dev
-  at the start of each run;
+  at the start of each run. It also deletes a local branch whose merged pull
+  request's head is exactly the branch's tip (never the base, the current
+  branch, one checked out in a worktree, or a remote branch), and dev deletes
+  the branch of work done in the checkout once its merge is verified;
 - `stage_sync.py trailer --branch fix/<n>-<slug>` reads the issue from it.
 
 A branch whose name has no issue number is, to the process, work nobody owns.
