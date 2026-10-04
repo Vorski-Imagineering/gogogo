@@ -20,6 +20,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 PLUGIN = ROOT / "plugins" / "gogogo"
 DEV = PLUGIN / "skills" / "dev" / "SKILL.md"
+DEV_REVIEW = PLUGIN / "skills" / "dev" / "references" / "review.md"
 AUTO_DEV = PLUGIN / "skills" / "auto-dev" / "SKILL.md"
 SPEC = PLUGIN / "skills" / "spec" / "SKILL.md"
 sys.path.insert(0, str(PLUGIN / "scripts"))
@@ -68,7 +69,7 @@ class Skill(unittest.TestCase):
     """§5's reader brief names only what `spec_check.py verify` accepts (gogogo#81)."""
 
     def brief(self):
-        text = DEV.read_text(encoding="utf-8")
+        text = DEV_REVIEW.read_text(encoding="utf-8")
         return text[text.index("It is told:"):text.index("It does not judge quality")]
 
     def test_the_brief_names_only_evidence_forms_verify_accepts(self):
@@ -90,7 +91,7 @@ class Skill(unittest.TestCase):
 
 class Named(unittest.TestCase):
     def test_dev_names_the_script(self):
-        self.assertIn("scripts/spec_check.py", DEV.read_text(encoding="utf-8"))
+        self.assertIn("scripts/spec_check.py", DEV_REVIEW.read_text(encoding="utf-8"))
 
     def test_auto_dev_hands_a_stopped_check_to_needs_human(self):
         four = section(AUTO_DEV.read_text(encoding="utf-8"), "4.", "5.")

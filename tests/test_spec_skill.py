@@ -19,10 +19,14 @@ ROOT = Path(__file__).resolve().parents[1]
 PLUGIN = ROOT / "plugins" / "gogogo"
 SKILL = PLUGIN / "skills" / "spec" / "SKILL.md"
 SETUP = PLUGIN / "skills" / "setup" / "SKILL.md"
+SEVERAL = SKILL.parent / "references" / "several-issues.md"
+VERIFY_BY_HAND = SKILL.parent / "references" / "verify-by-hand.md"
+POSTING = SKILL.parent / "references" / "posting.md"
 sys.path.insert(0, str(PLUGIN / "scripts"))
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 import profile_check as pc  # noqa: E402
+from test_dev_skill import moved  # noqa: E402
 from test_profile_check import COMPLETE  # noqa: E402
 
 # The project-name grep in CLAUDE.md, as a regex.
@@ -32,6 +36,19 @@ DECLINED = "### When the user declines a question"
 
 def skill_text():
     return SKILL.read_text(encoding="utf-8")
+
+
+def with_moved():
+    """SKILL.md, then the three sections it moved to references (gogogo#130)."""
+    return "\n".join([skill_text()] + [moved(p) for p in (SEVERAL, VERIFY_BY_HAND, POSTING)])
+
+
+def several_lines():
+    return moved(SEVERAL).splitlines()
+
+
+def posting_lines():
+    return moved(POSTING).splitlines()
 
 
 def section(text, prefix, level="## "):
@@ -75,7 +92,7 @@ class Skill(unittest.TestCase):
         self.assertIn('profile_check.py" --for spec --show', text)
 
     def test_move_step_in_posting(self):
-        posting = section(skill_text(), "## Posting")
+        posting = posting_lines()
         steps = {int(m.group(1)): i for i, line in enumerate(posting) if (m := re.match(r"(\d+)\. ", line))}
         self.assertIn(7, steps)
         self.assertIn(8, steps)
@@ -93,12 +110,12 @@ class Skill(unittest.TestCase):
         self.assertTrue(queue_moves, eight)
         for line in queue_moves:
             self.assertIn("--from", line)
-        named = set(re.findall(r"`(tracker\.[a-z_]+(?:\.[a-z_]+)*)`", skill_text()))
+        named = set(re.findall(r"`(tracker\.[a-z_]+(?:\.[a-z_]+)*)`", with_moved()))
         for setting in named:
             self.assertIn(setting, pc.FIELDS, setting)
 
     def several_rules(self):
-        several = "\n".join(section(skill_text(), "## Several issues in one run"))
+        several = "\n".join(several_lines())
         return re.findall(r"^(\d+)\. (.*?)(?=^\d+\. |\Z)", several, re.M | re.S)
 
     def test_no_end_of_run_move_rule(self):
@@ -108,7 +125,7 @@ class Skill(unittest.TestCase):
 
     def test_rule_references_resolve(self):
         count = len(self.several_rules())
-        refs = [int(n) for n in re.findall(r"\brule (\d+)\b", skill_text())]
+        refs = [int(n) for n in re.findall(r"\brule (\d+)\b", with_moved())]
         self.assertTrue(refs)
         self.assertFalse([n for n in refs if not 1 <= n <= count], refs)
 
@@ -132,14 +149,14 @@ class ChangedMeanwhile(unittest.TestCase):
         self.assertIn("--json body,labels", before)
 
     def test_posting_step_one_compares_and_asks(self):
-        posting = section(skill_text(), "## Posting")
+        posting = posting_lines()
         steps = {int(m.group(1)): i for i, line in enumerate(posting) if (m := re.match(r"(\d+)\. ", line))}
         one = "\n".join(posting[steps[1]:steps[2]])
         for text in ("issue-<N>-start.json", "issue-<N>-now.json", "keep", "replace"):
             self.assertIn(text, one)
 
     def test_the_final_report_names_a_changed_issue(self):
-        rules = "\n".join(section(skill_text(), "## Several issues in one run"))
+        rules = "\n".join(several_lines())
         self.assertIn("changed by someone else meanwhile", rules)
 
     def test_red_flags_name_the_start_snapshot(self):
@@ -151,7 +168,7 @@ class Dependents(unittest.TestCase):
     """Posting step 4 checks the open specs that read this issue's body (gogogo#93)."""
 
     def posting(self):
-        return section(skill_text(), "## Posting")
+        return posting_lines()
 
     def step(self, number):
         posting = self.posting()
@@ -195,7 +212,7 @@ class SeveralIssues(unittest.TestCase):
         self.assertLess(heads[0], body)
 
     def test_several_issues_rules(self):
-        sub = "\n".join(section(skill_text(), RUN))
+        sub = "\n".join(several_lines())
         self.assertEqual([int(m) for m in re.findall(r"^(\d+)\. ", sub, re.M)], list(range(1, 8)))
         for name in ("list --status", "--issues-only", "--open-only", "spec_lint.py", "tracker.ready_marker"):
             self.assertIn(name, sub)
@@ -210,7 +227,7 @@ class SeveralIssues(unittest.TestCase):
         self.assertIn(RUN, skill_text().splitlines(), "the section it points at is gone")
 
     def test_step_eight_deferred_in_run(self):
-        lines = section(skill_text(), "## Posting")
+        lines = posting_lines()
         start = next(i for i, line in enumerate(lines) if line.startswith("8. "))
         end = next((i for i in range(start + 1, len(lines)) if re.match(r"\S", lines[i])), len(lines))
         self.assertIn("Several issues in one run", "\n".join(lines[start:end]))
@@ -261,6 +278,39 @@ class BeforeYouWrite(unittest.TestCase):
 
     def test_claude_specific_names_web_search(self):
         self.assertIn("WebSearch", "\n".join(section(skill_text(), "## Claude-specific")))
+
+
+GIVEN_NOTHING = "## Given nothing to spec"
+
+
+class GivenNothing(unittest.TestCase):
+    """With no argument, spec offers the standard New column (gogogo#136)."""
+
+    def test_section_placed(self):
+        lines = skill_text().splitlines()
+        heads = [i for i, line in enumerate(lines) if line.startswith(GIVEN_NOTHING)]
+        self.assertEqual(len(heads), 1)
+        profile = next(i for i, line in enumerate(lines) if line.startswith("## First: read this repo's profile"))
+        run = next(i for i, line in enumerate(lines) if line.startswith(RUN))
+        self.assertLess(profile, heads[0])
+        between = [line for line in lines[heads[0] + 1:run] if line.startswith("## ")]
+        self.assertLess(heads[0], run)
+        self.assertEqual(between, [])
+
+    def test_names_the_standard_column(self):
+        import tracker
+        self.assertIn(tracker.NEW_COLUMN, "\n".join(section(skill_text(), GIVEN_NOTHING)))
+
+    def test_uses_the_run_rules(self):
+        sub = "\n".join(section(skill_text(), GIVEN_NOTHING))
+        for name in ("references/several-issues.md", "rule 2", "rule 3", "AskUserQuestion"):
+            self.assertIn(name, sub)
+        for setting in re.findall(r"`(tracker\.[a-z_.]+)`", sub):
+            self.assertIn(setting, pc.FIELDS, setting)
+
+    def test_description_names_no_argument(self):
+        description = next(line for line in skill_text().splitlines() if line.startswith("description:"))
+        self.assertIn("no argument", description)
 
 
 if __name__ == "__main__":

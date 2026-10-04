@@ -45,6 +45,25 @@ A branch cut from a stale base silently reverts the previous issue's work when
 it is squashed back. `--ff-only` refuses a base that has diverged rather than
 merging into it.
 
+**In the checkout, or in a worktree per issue.** The profile's
+`integration.workspace` says where the branch goes, and `/gogogo:setup` asks
+you, recommending the checkout. With `checkout` (or no setting), the commands
+above run in the folder you work in, so the work in progress is where you
+look. With `worktree`, each issue gets its own folder beside the main one,
+cut from a freshly fetched base, and the main folder never switches branches:
+
+```bash
+git fetch origin && git worktree add -b fix/<issue-number>-<short-slug> ../<repo>-wt-<n> origin/<integration.base>
+```
+
+That is for several sessions working one repo at once, or a checkout that
+something live runs from (a plugin sessions load with `--plugin-dir`, a hook
+that runs a file inside it). Setup recommends moving the live thing to an
+installed copy first, so the checkout stays possible. Worktree support is in
+development. A profile that sets nothing while its `## Lane constraints`
+mention a worktree makes dev and auto-dev stop before branching and point at
+`/gogogo:setup`.
+
 **Unless the issue already has work.** Before cutting a branch,
 `issue_work.py <n>` looks for an open pull request that references the issue,
 a local or `origin` branch named for it that is ahead of the base, and the
@@ -62,6 +81,10 @@ feature alike. The number is what ties the branch back to the tracker:
   but has no open pull request and no stop marker naming it (a local branch
   only when it holds work on no remote or sits in a worktree);
 - `/gogogo:status` links each branch to its issue by that number;
+- `worktree_sweep.py` removes an issue's worktree once its pull request has
+  merged or its issue is closed, and keeps any with uncommitted changes or
+  commits on no remote; dev runs it after each verified merge, and auto-dev
+  at the start of each run;
 - `stage_sync.py trailer --branch fix/<n>-<slug>` reads the issue from it.
 
 A branch whose name has no issue number is, to the process, work nobody owns.
@@ -73,9 +96,10 @@ first commit, so the work survives a run that dies.
 It finishes an issue (merged, or stopped and handed back), returns to the base
 and cuts the next.
 
-**A checkout of its own.** An unattended run switches branches. Give it a
-clone or worktree nobody else is working in, so it never shares a working tree
-with a person.
+**A checkout of its own.** An unattended run with
+`integration.workspace = "checkout"` switches branches in the folder it runs
+in. Don't work in that folder while the run goes; give the run a clone of its
+own if you need to.
 
 **Branches left behind on purpose.** An issue that stops before its merge
 keeps its branch, pushed and unmerged, and its card moves to the
@@ -98,7 +122,7 @@ decides.
 `/gogogo:dev` creates the issue's `fix/<n>-<slug>` branch before its first edit,
 and commits, pushes or merges only when asked
 ([§4](../plugins/gogogo/skills/dev/SKILL.md#4-change),
-[§8](../plugins/gogogo/skills/dev/SKILL.md#name-the-issue-without-closing-it));
+[§8](../plugins/gogogo/skills/dev/references/hand-back.md#name-the-issue-without-closing-it));
 the other skills say in their own text what, if anything, they write.
 
 ## Before a PR merges
@@ -114,7 +138,7 @@ Every issue goes through the same checks, in this order, before its merge:
    (`spec_check.py`). A missing piece is built, a difference is matched or,
    when small, declared in the report, and anything larger goes to a person.
 3. **Review.** `/code-review`, applying a finding only on evidence, with three
-   attempts per finding and two rounds per prose file, until a round applies
+   attempts per finding and two rounds per prose file, and one more for a fix made in the second, until a round applies
    nothing (a person after 13 rounds). See
    [when-is-enough-enough.md](when-is-enough-enough.md).
 4. **Verify.** The path the issue describes is run on real data in the
@@ -225,7 +249,7 @@ The trailer is how a tag later finds the issues it ships
 can also confirm the `Ships-issue` link and that the issue is still open;
 nothing is commented and no card moves until it prints `MERGED`. What each
 exit means, and what the loop does next, is in
-[`/gogogo:auto-dev` § Verify the merge landed](../plugins/gogogo/skills/auto-dev/SKILL.md#verify-the-merge-landed-never-trust-an-exit-code-alone).
+[`/gogogo:auto-dev` § Verify the merge landed](../plugins/gogogo/skills/auto-dev/references/merge.md#verify-the-merge-landed-never-trust-an-exit-code-alone).
 
 **Move the card only as far as the code has got.** A verified merge moves the
 card to the first of the profile's `stages`: for example "In Dev" when the base
@@ -283,12 +307,7 @@ gogogo runs its own process, with `pr-squash` onto `main`
 - **`main` is production.** A merge reaches every adopting repo on its next
   plugin update, so a merge here is always a release.
 - **`/gogogo:auto-dev` on this repo** runs the plugin from this checkout, so it
-  never switches branches or pulls in that tree. Each issue gets its own
-  worktree from a freshly fetched base instead:
-  ```bash
-  git fetch origin && git worktree add -b fix/<n>-<slug> <path> origin/main
-  ```
-  or, for an issue that already has a branch, a worktree of that branch
-  (`git worktree add <path> <branch>`, or
-  `git worktree add --track -b <branch> <path> origin/<branch>` when it is
-  only on `origin`).
+  never switches branches or pulls in that tree. The profile sets
+  `integration.workspace = "worktree"` (the owner's choice, 2026-10-03), so
+  each issue gets its own worktree, `../gogogo-wt-<n>`, from a freshly fetched
+  base.

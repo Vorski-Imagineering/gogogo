@@ -51,6 +51,11 @@ What each fix involves:
     `stages`, `verify.agent` and `verify.human` below. Then read the deploy
     scripts and CI to fill in names, URLs and `reached_by`; if what is read
     contradicts the answer, say so and ask again, do not pick.
+  - **Workspace: ask.** Ask where gogogo does each issue's work, as the
+    *Where each issue's work goes* bullet below says: its explanation first,
+    then `AskUserQuestion` with two options, `The checkout` and
+    `A worktree per issue`, the recommended one first and marked. Record the
+    answer as `integration.workspace` (`"checkout"` or `"worktree"`).
   - `hard_stops`: the repo's own Hard Stop rules, usually a `CLAUDE.md`
     section. Name its items word for word. Hard Stops are the owner's
     decision, never the skill's, so if the repo has none, do not write any.
@@ -106,6 +111,43 @@ What each fix involves:
   `<path>: missing; using <value> (default since gogogo#<n>)` means the skills
   already run on `<value>`. Offer to write `<path>` into the profile with that
   value, shown to the user first, and write it only on a yes.
+- **Where each issue's work goes** (`WARN workspace: not decided`, or a new
+  profile). `integration.workspace` decides where `/gogogo:dev` and
+  `/gogogo:auto-dev` put an issue's branch. Ask it outright, every time it is
+  not set; never pick for the user.
+  1. When the `workspace` row names a `live checkout`, say first, before
+     anything else, exactly what runs from this folder: each reason it gives,
+     one per line. Explain that until that thing runs from an installed copy,
+     an issue's branch checked out here changes what it runs, for every
+     session on this machine. Recommend moving it to an installed copy (a
+     deploy step that copies it outside the repo, or the installed plugin in
+     place of `--plugin-dir`) and keeping the checkout. Offer
+     `A worktree per issue` only as the alternative to that recommendation.
+     With no live checkout, say nothing about live files.
+  2. Show this explanation, word for word, filling in `<repo>` with the main
+     worktree's folder name (the folder of the first entry of
+     `git worktree list --porcelain`), which is the name dev and auto-dev put
+     in `../<repo>-wt-<n>`, not the name part of `tracker.code_repo`. The option labels are not the explanation;
+     it is text shown before the question:
+
+     > **Where should gogogo do each issue's work in `<repo>`?**
+     >
+     > **The checkout** (recommended when one person works this repo in the normal way). Each issue's branch is checked out in the folder you already use. `git status`, your editor and your file browser show the work in progress where you look. When the issue merges, the folder goes back to the main branch, and nothing new is left on disk. The cost: while an agent works an issue, this folder is on that issue's branch. Don't do other work in it at the same time, and anything that runs files straight from this folder runs the branch's version.
+     >
+     > **A worktree per issue** (only for power users, such as several sessions working this repo at once, or a deploy that runs files from this folder and can't be moved). Each issue gets its own folder beside this one, `../<repo>-wt-<n>`, on its own branch, and this folder stays on the main branch. The cost: work in progress is not in the folder you look at, so you have to know to open `../<repo>-wt-<n>`. Worktrees are complex and tend to leave folders all over the disk. gogogo removes one only after its issue's merge is verified, a stopped issue's folder stays until the issue is finished, and other tools that make worktrees leave their own. Each folder needs its own installs and build state. **gogogo's worktree support is in development and not deeply tested.**
+
+  3. Ask with `AskUserQuestion`: `The checkout` and `A worktree per issue`,
+     the recommended one first and marked. `The checkout` is recommended,
+     unless the user has turned down moving a live thing to an installed copy
+     or has said several sessions work this repo at once.
+  4. Show the one-line profile change, `workspace = "checkout"` or
+     `workspace = "worktree"` under `[integration]`, and commit it like
+     setup's other profile changes. Re-run the check: the row reads
+     `INFO workspace: <value>`.
+  5. On `The checkout` with a live checkout, offer to file an issue in
+     `tracker.issues_repo` describing the move to an installed copy (what
+     runs from this folder, and the recommendation above), asking first.
+     Setup moves nothing itself.
 - **No board, or missing columns.** Every board uses the same Status
   columns, in this order:
 
@@ -247,7 +289,11 @@ What each fix involves:
        `python3 "${CLAUDE_PLUGIN_ROOT}/scripts/notify.py" chat-id`. Show the
        chats it prints; once they say which one is theirs, run
        `python3 "${CLAUDE_PLUGIN_ROOT}/scripts/notify.py" chat-id --save <its id>`.
-    3. Run `python3 "${CLAUDE_PLUGIN_ROOT}/scripts/notify.py" send --text "<repo>: notifications on"`,
+    3. Send the person a message that names this machine, with the hostname from `uname -n`,
+       and where it applies: `<scope>` is `every repo on this machine` when the
+       credentials went in the per-user file, and `<repo>` (the name part of
+       `tracker.code_repo`) when they went in the repo's own file:
+       `python3 "${CLAUDE_PLUGIN_ROOT}/scripts/notify.py" send --text "✅ gogogo is connected on $(uname -n) for <scope>. auto-dev runs there will report here: when a run starts and ends, and when each issue starts, is skipped, merges or needs you."`,
        and re-run the check: the row must be `PASS notify: telegram (by default): bot @… -> …`
        (`PASS notify: telegram: …` when the profile names the transport).
   - `WARN notify: telegram: <reason>`: show the reason. The usual causes are a
@@ -281,6 +327,9 @@ ones the user approves:
 - `release shape` → correct the profile's `environments`, `stages` or
   `verify.agent` to the shape the repo really has.
 - `local skills` → retire them as above.
+- `workspace` → ask where each issue's work goes, as the *Where each issue's
+  work goes* bullet above says. An `INFO workspace` row with a `live checkout`
+  is named to the user too: it is what runs from this folder.
 
 Name the `INFO` lines too (release shape, tool): they are what the check
 understood the repo to be, and the user should confirm it.

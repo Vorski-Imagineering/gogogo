@@ -324,6 +324,7 @@ Scripts the skills call, all in `plugins/gogogo/scripts/`:
 - `stage_sync.py`: writes the `Ships-issue` link at merge, and moves cards to a stage when a tag ships their commits (run by a repo's CI).
 - `release.py`: numbers a production release, cuts its annotated `deploy-<build>` tag after the deploy, and prints the notes listing the issues it shipped.
 - `stranded_work.py`: finds local and `origin` branches holding work that nothing accounts for (no open issue, or an open issue with no open pull request and no stop marker naming the branch), and says what became of each branch's pull request.
+- `worktree_sweep.py`: removes the worktrees whose pull request merged or whose issue is closed, and keeps any with uncommitted changes, commits on no remote, or an open issue whose work has not merged. Without `--apply` it only lists.
 - `issue_work.py`: finds an issue's earlier work (open pull requests that reference it, branches named for it, the branch its stop marker names), so dev and auto-dev continue on it rather than start again.
 - `notify.py`: sends a run's messages by the profile's `notify` (Telegram today). With no `notify` line, messages are on whenever the machine has bot credentials (per user, or in the repo's own git-ignored `.claude/gogogo/notify.env`); `notify = "none"` turns a repo off. Off, or no credentials on the machine, sends nothing.
 - `review_stats.py`: reads back the review record on each issue and sums them up: rounds, why findings were applied or declined, how each review ended and what became of the issue, plus phase times, session ids, stops by reason, triage skips, and each session's issues taken, handed back and skipped.
@@ -381,6 +382,13 @@ one step at a time, asking before anything is written:
   issues land in ⚡️ New for you to triage; the loop works Dev Ready, and moves
   an issue that stopped and needs you to Human!Help!. It can create the board,
   or check the one you have.
+- **Where each issue's work goes.** It asks you outright, explaining what
+  each choice changes day to day: the checkout you already work in
+  (recommended for one person working normally), or a worktree per issue
+  beside it (for several sessions at once, or a checkout something live runs
+  from; this support is in development). The answer is the profile's
+  `integration.workspace`, and `/gogogo:dev` and `/gogogo:auto-dev` do what it
+  says.
 - **The ready label** (`dev ready` by default).
 - **Local skills this replaces.** Their project-specific text moves into the
   profile word for word, and the old copies go to `.claude/skills-retired/`.

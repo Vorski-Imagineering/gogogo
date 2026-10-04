@@ -19,6 +19,7 @@ from pathlib import Path
 SKILLS = Path(__file__).resolve().parents[1] / "plugins" / "gogogo" / "skills"
 DEV = SKILLS / "dev" / "SKILL.md"
 AUTO_DEV = SKILLS / "auto-dev" / "SKILL.md"
+DEV_VERIFY = SKILLS / "dev" / "references" / "verify.md"
 SKILL = DEV
 FOLD = "### Fold in comments the description does not hold yet"
 sys.path.insert(0, str(Path(__file__).resolve().parent))
@@ -28,6 +29,20 @@ from test_tech_eval import PROJECT_NAMES  # noqa: E402
 
 def section(text, heading):
     return text.split(f"\n## {heading}")[1].split("\n## ")[0]
+
+
+def moved(path):
+    """A reference file's text after its title, note and Contents list: the
+    section it holds, as it stood in SKILL.md (gogogo#130)."""
+    lines = path.read_text(encoding="utf-8").split("\n")
+    i = next(n for n, ln in enumerate(lines) if ln.startswith("Part of ")) + 1
+    while i < len(lines) and not lines[i]:
+        i += 1
+    if i < len(lines) and lines[i] == "## Contents":
+        i += 1
+        while i < len(lines) and (not lines[i] or lines[i].startswith("- ")):
+            i += 1
+    return "\n".join(lines[i:])
 
 
 class WholeIssue(unittest.TestCase):
@@ -66,7 +81,7 @@ class ExitStatus(unittest.TestCase):
         self.auto_dev = AUTO_DEV.read_text(encoding="utf-8")
 
     def test_verify_saves_the_output_and_reads_the_status(self):
-        verify = section(self.dev, "6.")
+        verify = moved(DEV_VERIFY)
         blocks = re.findall(r"```bash\n(.*?)```", verify, re.S)
         self.assertTrue(
             any('echo "exit=$?"' in b and "> <scratch>/" in b for b in blocks), blocks)

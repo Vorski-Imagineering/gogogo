@@ -30,6 +30,12 @@ tests = ["tests/*"]
 ci = true
 
 [[lanes]]
+name = "evals"
+run = "python3 tools/eval_changed.py"
+tests = ["plugins/gogogo/evals/*"]
+ci = false
+
+[[lanes]]
 name = "live"
 env = "local"
 
@@ -55,7 +61,7 @@ moved_by = "the loop or /gogogo:dev, after the merge is verified"
 [verify]
 agent = ["local"]
 human = "main"
-rungs = ["seen-failing", "unit", "live"]
+rungs = ["seen-failing", "unit", "evals", "live"]
 
 [state]
 forbidden = ["editing plugins/gogogo while a run in another repo is using it"]
@@ -67,6 +73,7 @@ always = ["python3 -m unittest discover -s tests", "the project-name grep in CLA
 strategy = "pr-squash"
 base = "main"
 ci_before_merge = true
+workspace = "worktree"
 
 [handback]
 reporter = "none"
@@ -96,26 +103,30 @@ reporter = "none"
   Under load the tool marks slow kills "suspicious"; `tools/mutate.py` counts
   them as killed (#75), so a busy machine changes how long the run takes, not
   its counts.
+- **evals**: `python3 tools/eval_changed.py` runs the eval cases of each skill the
+  change touched (`plugins/gogogo/evals/`, with `claude plugin eval` on the
+  session's own login, about $0.60 a case), and passes when every case scores 2
+  of 3 runs. A case passing on its own does not prove the plugin did it: a new
+  case is first run with `--skill <s> --baseline`, which fails when the case does
+  as well without the plugin. Its `tests` pattern makes the test guard read a
+  weakened or removed case like a weakened test. Not run in CI.
 - **live**: a real run of the changed skill in an adopting repo, read-only
   unless the spec says otherwise. Triage-only (`/gogogo:auto-dev
   --triage-only`) and dry runs with posting blocked are the default. Say which
   repo and what was checked.
 - **auto-dev on this repo**: the plugin it runs is loaded from this checkout
-  (the **live** lane). Put each issue in its own git worktree or clone, never
-  switch branches in the tree the plugin was loaded from, and do not edit
-  `plugins/gogogo/` in that tree while the run is going. On this repo, in place
-  of auto-dev §3's `git switch` steps, branch the worktree from a freshly
-  fetched base: `git fetch origin && git worktree add -b fix/<n>-<slug> <path>
-  origin/main`. When auto-dev §3 continues on an issue's earlier branch, the
-  worktree is `git worktree add <path> <branch>`, or
-  `git worktree add --track -b <branch> <path> origin/<branch>` for a branch
-  only on `origin`. Switching branches in the loaded tree, or pulling into it,
-  changes the skills under the running loop (`CLAUDE.md` § What a change here
-  does). The 2026-10-01 runs used a worktree per issue.
+  (the **live** lane), so never switch branches or pull in that tree during a
+  run, and do not edit `plugins/gogogo/` in it while the run is going.
+  Switching branches in the loaded tree, or pulling into it, changes the
+  skills under the running loop (`CLAUDE.md` § What a change here does). The
+  owner chose a worktree per issue here on 2026-10-03
+  (`integration.workspace`); the skills make it. The skills remove an issue's
+  worktree after its merge is verified (`/gogogo:dev` §8), and each run starts
+  by sweeping leftovers whose work merged (auto-dev preflight 11).
 - **confirming a Released card**: `/gogogo:auto-test` is browser-based and is
   not set up here. Confirm instead against a worktree of `origin/main`: scripts
   in read-only or dry-run modes, and skill behaviour as scenario runs
-  (`claude -p --tools "" --system-prompt "$(cat <SKILL.md>)" "<situation>"`,
+  (`claude -p --tools "" --system-prompt "$(cat <SKILL.md> <its references/*.md>)" "<situation>"`,
   3 runs each, every answer read). Then comment on the issue, remove the ready
   label, close it, and run `tracker.py tidy --apply`: the board's own
   close→Done workflow is off.

@@ -14,4 +14,4 @@ jobs:
       - run: python3 -m unittest discover -s tests
       - name: Skills and scripts name no stack
         run: |
-          if grep -rniE 'manage\.py|npm |firebase|django|htmx|sentry' plugins/gogogo/skills plugins/gogogo/scripts; then exit 1; fi
+          if grep -rniE 'manage\.py|npm |firebase|django|htmx|sentry' plugins/gogogo/skills plugins/gogogo/scripts plugins/gogogo/evals; then exit 1; fi
