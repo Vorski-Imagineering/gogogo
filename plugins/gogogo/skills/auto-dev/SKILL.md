@@ -122,7 +122,7 @@ means finished work sits unverified while you go and ask.
    fixed. Triage-only mode runs it too, since it only reads.
 13. **The profile's `preflight.extra`**, each as it says. A check that says
    "report only" is reported and never acted on.
-13. **Run PRs merged after their run** (only when `integration.strategy` is
+14. **Run PRs merged after their run** (only when `integration.strategy` is
    `run-branch-pr` and the profile has `tracker.tool`): move the cards a
    late-merged run PR carried, as `references/merge.md` *Cards a late-merged
    run PR carried* says, and no others. Its lines go at the top of the run
