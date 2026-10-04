@@ -173,8 +173,74 @@ class Runner(unittest.TestCase):
             (root / "tests" / "test_b.py").write_text("")
             both = mutate.runner([f"{SCRIPTS}/a.py", f"{SCRIPTS}/b.py"], root)
             one_missing = mutate.runner([f"{SCRIPTS}/a.py", f"{SCRIPTS}/c.py"], root)
-        self.assertEqual(both, "python3 .gogogo-run.py python3 -m unittest tests.test_a tests.test_b")
-        self.assertEqual(one_missing, "python3 .gogogo-run.py python3 -m unittest discover -s tests")
+        self.assertEqual(both, "python3 .gogogo-run.py python3 .gogogo-unittest.py tests.test_a tests.test_b")
+        self.assertEqual(one_missing, "python3 .gogogo-run.py python3 .gogogo-unittest.py discover")
+
+
+class UnittestRunner(unittest.TestCase):
+    """The runner the wrapper execs: an exit while the tests load is a failed run, not a pass."""
+
+    def setUp(self):
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        self.dir = Path(tmp.name)
+        mutate.write_wrapper(self.dir)
+        (self.dir / "tests").mkdir()
+        (self.dir / "tests" / "__init__.py").write_text("")
+
+    def module(self, name, source):
+        (self.dir / "tests" / f"{name}.py").write_text(source)
+        return f"tests.{name}"
+
+    def run_tests(self, *args, wrapped=False):
+        command = [sys.executable, mutate.RUNNER, *args]
+        if wrapped:
+            command = [sys.executable, mutate.WRAPPER, *command]
+        return subprocess.run(command, cwd=self.dir, capture_output=True, text=True, timeout=60)
+
+    def exits_at_import(self, status):
+        (self.dir / "script.py").write_text(f"import sys\nsys.exit({status})\n")
+        return self.module("test_script", "import unittest\nimport script\n\n\nclass T(unittest.TestCase):\n"
+                                         "    def test_x(self):\n        pass\n")
+
+    def test_an_exit_while_the_tests_load_is_a_failed_run(self):
+        run = self.run_tests(self.exits_at_import(2))
+        self.assertEqual(run.returncode, 1)
+        self.assertIn("gogogo: the tests stopped while loading: ", run.stderr)
+
+    def test_an_exit_of_zero_while_the_tests_load_is_a_failed_run_too(self):
+        run = self.run_tests(self.exits_at_import(0))
+        self.assertEqual(run.returncode, 1)
+        self.assertIn("stopped while loading", run.stderr)
+
+    def test_an_exit_while_discovering_the_tests_is_a_failed_run(self):
+        self.exits_at_import(2)
+        run = self.run_tests("discover")
+        self.assertEqual(run.returncode, 1)
+
+    def test_running_the_tests_is_unchanged(self):
+        passing = self.module("test_pass", "import unittest\n\n\nclass T(unittest.TestCase):\n"
+                                           "    def test_x(self):\n        pass\n")
+        failing = self.module("test_fail", "import unittest\n\n\nclass T(unittest.TestCase):\n"
+                                           "    def test_x(self):\n        self.fail('no')\n")
+        exiting = self.module("test_exit", "import sys, unittest\n\n\nclass T(unittest.TestCase):\n"
+                                           "    def test_x(self):\n        sys.exit(3)\n")
+        self.assertEqual(self.run_tests(passing).returncode, 0)
+        self.assertEqual(self.run_tests(failing).returncode, 1)
+        self.assertEqual(self.run_tests(exiting).returncode, 1)
+
+    def test_a_run_with_no_test_is_a_failed_run(self):
+        empty = self.module("test_empty", "import unittest\n")
+        run = self.run_tests(empty)
+        self.assertEqual(run.returncode, 1)
+        self.assertIn("gogogo: no test ran", run.stderr)
+
+    def test_it_works_under_the_wrapper_which_marks_the_run(self):
+        run = self.run_tests(self.exits_at_import(2), wrapped=True)
+        self.assertEqual(run.returncode, 1)
+        self.assertIn("stopped while loading", run.stdout)
+        beat = (self.dir / mutate.HEARTBEAT).read_text().split()
+        self.assertEqual((beat.count("start"), beat.count("end")), (1, 1))
 
 
 class Wrapper(unittest.TestCase):

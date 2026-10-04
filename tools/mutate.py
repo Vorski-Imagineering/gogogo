@@ -23,7 +23,9 @@ Every test run goes through a wrapper, `.gogogo-run.py`, written into the copy.
 It runs the test command, hands its output on decoded as UTF-8 with anything
 unreadable replaced (the tool reads that output as text and hangs on bytes it
 cannot decode), keeps the command's exit code, and records the start and end
-of each run in `.gogogo-heartbeat` in the copy.
+of each run in `.gogogo-heartbeat` in the copy. The command it runs is a small test runner,
+`.gogogo-unittest.py`, which counts an exit or error while the tests load, and a run with no
+test, as a failed run (exit 1): the tool reads any other exit as "the tests passed".
 
 The stall check reads that heartbeat. Once the first test run (the baseline)
 has finished, a tool that starts or finishes no test run for 10 times that
@@ -64,6 +66,7 @@ HUNK = re.compile(r"^@@ -(\d+)")
 PLAIN_DIFF = ["--src-prefix=a/", "--dst-prefix=b/", "--no-color", "--no-ext-diff"]
 WRAPPER = ".gogogo-run.py"
 HEARTBEAT = ".gogogo-heartbeat"
+RUNNER = ".gogogo-unittest.py"
 # The stall window is max(STALL_MIN, STALL_TIMES x the first test run's seconds),
 # checked every STALL_POLL seconds; an ended tool gets KILL_AFTER seconds before SIGKILL.
 STALL_MIN = 600
@@ -113,6 +116,32 @@ os.dup2(fd, 1)
 os.dup2(fd, 2)
 os.close(fd)
 os.execvp(sys.argv[1], sys.argv[1:])
+'''
+
+RUNNER_SOURCE = '''"""Runs the tests for tools/mutate.py; written into its throwaway copy.
+
+The mutation tool counts any exit but 1 as "the tests passed". A mutant that ends the process
+while the tests load (a flipped `__main__` guard whose main() exits) would then survive
+although the tests catch it, so an exit or error while loading is a failed run here (exit 1).
+During the tests unittest already turns an exit into an error. A run with no test is failed too.
+"""
+import sys
+import unittest
+
+names = sys.argv[1:]
+try:
+    loader = unittest.TestLoader()
+    suite = loader.discover("tests") if names == ["discover"] else loader.loadTestsFromNames(names)
+except KeyboardInterrupt:
+    raise
+except BaseException as error:
+    print(f"gogogo: the tests stopped while loading: {error!r}", file=sys.stderr)
+    sys.exit(1)
+result = unittest.TextTestRunner(stream=sys.stderr).run(suite)
+if result.testsRun == 0:
+    print("gogogo: no test ran", file=sys.stderr)
+    sys.exit(1)
+sys.exit(0 if result.wasSuccessful() else 1)
 '''
 
 
@@ -249,14 +278,15 @@ def tool() -> str:
 
 def write_wrapper(copy: Path) -> None:
     (copy / WRAPPER).write_text(WRAPPER_SOURCE)
+    (copy / RUNNER).write_text(RUNNER_SOURCE)
 
 
 def runner(scripts: list[str], root: Path) -> str:
     """The test command, through the wrapper."""
     modules = [f"tests.test_{Path(s).stem}" for s in scripts]
     if all((root / "tests" / f"test_{Path(s).stem}.py").is_file() for s in scripts):
-        return f"python3 {WRAPPER} python3 -m unittest " + " ".join(modules)
-    return f"python3 {WRAPPER} python3 -m unittest discover -s tests"
+        return f"python3 {WRAPPER} python3 {RUNNER} " + " ".join(modules)
+    return f"python3 {WRAPPER} python3 {RUNNER} discover"
 
 
 def survivor(show: str) -> list[str]:
