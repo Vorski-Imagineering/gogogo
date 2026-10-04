@@ -26,7 +26,8 @@ CASES = {
     "auto-dev-label-less-card", "auto-dev-open-decision", "auto-dev-list-fails",
     "spec-declined-question", "spec-being-built", "spec-nothing-hits-today",
     "spec-no-argument-offers-new", "spec-pr-mentions-only",
-    "status-sweep-lists-only", "wrap-up-asks-before-removing",
+    "status-sweep-lists-only", "status-shows-independence",
+    "wrap-up-asks-before-removing",
     "setup-connected-message", "setup-leaves-out-plugin-steps",
     "setup-machine-has-bot",
 }
