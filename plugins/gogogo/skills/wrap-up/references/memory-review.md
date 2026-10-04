@@ -19,8 +19,9 @@ it from a copy you read earlier.
 
 ## 1. Expiry
 
-The memory directory also holds `MEMORY.md` (the index) and the
-`.gogogo-memory-review` marker. Neither is a memory: skip both in this scan, so
+The memory directory also holds `MEMORY.md` (the index), the
+`.gogogo-memory-review` marker and the `.gogogo-memory-review-pending` list
+(§4). None of the three is a memory: skip all three in this scan, so
 an index hook line such as "once #<n> ships" never makes the index a deletion
 candidate. An index line is edited only as the deletion of the memory it points
 at.
@@ -42,9 +43,12 @@ issue is closed; only §2 can shorten or delete it.
 ## 2. Promotion
 
 Check each memory file newer than `.gogogo-memory-review` in the memory
-directory (every file when the marker is missing). `MEMORY.md` and the marker
-itself are not memories: exclude both, since the index is always newer than the
-marker. Skip the rest: only what changed is read. Put each one in exactly one outcome:
+directory (every file when the marker is missing), and again every memory file
+named in `.gogogo-memory-review-pending` (when that list exists and the file is
+still there), even though it is older than the marker. `MEMORY.md`, the marker
+and the pending list are not memories: exclude all three, since the index is
+always newer than the marker. Skip the rest: only what changed or is pending is
+read. Put each one in exactly one outcome:
 
 - `covered`: a skill, the profile or `CLAUDE.md` already states it. Delete or shorten the memory.
 - `every-repo`: a rule that holds in every repo (nothing in it names a project, host, repo or command). Propose an issue for `Vorski-Imagineering/gogogo`.
@@ -66,10 +70,14 @@ filed or written without a yes.
 ## 4. Marker
 
 After the answers to step 3, `touch` the file `.gogogo-memory-review` in the
-memory directory, only when every proposal got a yes or a no, every yes was
-filed or written, and every expiry read succeeded. If the session ends with a
-proposal unanswered, a yes that failed to land, or a read that failed, do not touch
-it, so the next wrap-up looks again.
+memory directory, so what was answered never comes back. Then keep the pending
+list, `.gogogo-memory-review-pending`, in the same directory: one file name per
+line, only the name of the memory file and never its text. Put on it each memory
+whose proposal was left unanswered and each memory whose yes failed to land
+(the issue was not filed or the line not written). Take off it each memory that
+is now answered and landed. Write the list again from what is still pending, and
+delete the file when the list is empty. A failed expiry read needs no entry:
+§1 reads every memory each time.
 
 ## 5. Report
 

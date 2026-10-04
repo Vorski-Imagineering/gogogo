@@ -81,7 +81,8 @@ class MemoryReview(unittest.TestCase):
                 step = heading_section(text, heading)
                 self.assertIn("MEMORY.md", step)
                 self.assertIn(".gogogo-memory-review", step)
-                self.assertRegex(step, r"(?i)\b(skip|exclude)\b[^.]*\bboth\b")
+                self.assertIn(".gogogo-memory-review-pending", step)
+                self.assertRegex(step, r"(?i)\b(skip|exclude)\b[^.]*\ball three\b")
 
     def test_a_failed_read_keeps_the_memory(self):
         step = heading_section(review_text(), "## 1. Expiry")
@@ -89,12 +90,17 @@ class MemoryReview(unittest.TestCase):
         self.assertRegex(step, r"(?i)never delete on a failed read")
         self.assertRegex(step, r"(?i)another repo")
 
-    def test_the_marker_waits_for_answers_and_reads(self):
-        step = heading_section(review_text(), "## 4. Marker")
-        self.assertRegex(step, r"(?i)only when every proposal[^.]*(yes|no)")
-        self.assertRegex(step, r"(?i)every\s+expiry\s+read\s+succeeded")
-        self.assertRegex(step, r"(?i)every\s+yes[^.]*(carried out|landed|filed or written)")
-        self.assertRegex(step, r"(?i)do not touch")
+    def test_a_failed_yes_goes_on_the_pending_list_not_the_marker(self):
+        step = " ".join(heading_section(review_text(), "## 4. Marker").split())
+        self.assertRegex(step, r"(?i)\btouch\b[^.]*\.gogogo-memory-review\b(?!-)")
+        self.assertIn(".gogogo-memory-review-pending", step)
+        self.assertRegex(step, r"(?i)one file name per line")
+        self.assertRegex(step, r"(?i)(only|never)[^.]*(file name|its text)|never its text")
+        self.assertRegex(step, r"(?i)yes (failed|did not land)|failed to land")
+        self.assertRegex(step, r"(?i)delete[^.]*(empty)")
+        promo = heading_section(review_text(), "## 2. Promotion")
+        self.assertRegex(" ".join(promo.split()), r"(?i)pending[^.]*(again|regardless|even)|again[^.]*pending")
+        self.assertNotRegex(step, r"(?i)do not touch")
 
     def test_the_pointer_says_covered_memories_are_deleted_or_shortened(self):
         sec = heading_section(skill_text(), "## 2. Capture learnings")
