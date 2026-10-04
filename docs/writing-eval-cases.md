@@ -64,8 +64,9 @@ python3 tools/eval_changed.py --skill <skill> --baseline
 ```
 
 runs each of the skill's cases three times with the plugin and three without,
-and fails a case that does as well or better without it. It exits 0 when every
-case does better with the plugin.
+and fails a case that does as well or better without it. It exits 0 only when
+every case passed its threshold and did better with the plugin, and none
+failed to run.
 
 To see the new case fail on the old skill text, restore the skills from
 `origin/main` in a throwaway worktree and run the lane there:

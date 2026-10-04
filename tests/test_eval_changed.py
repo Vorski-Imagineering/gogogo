@@ -40,11 +40,17 @@ def case(root, name, skill):
 def doc(total=3, passed=3, cost=1.234, partial=False, deltas=None, scores=None):
     d = {"partial": partial, "costUsd": cost,
          "aggregates": {"casesTotal": total, "casesPassed": passed}, "cases": []}
+    if not deltas and not scores:
+        # A real result lists every case it ran: here, the cases `Lane.setUp` creates.
+        scores = {name: {"score": 1} for name in LANE_CASES}
     for name, delta in (deltas or {}).items():
         d["cases"].append({"name": name, "aggregates": {"delta": delta}})
     for name, aggregates in (scores or {}).items():
         d["cases"].append({"name": name, "aggregates": aggregates})
     return d
+
+
+LANE_CASES = ("dev-reversal", "dev-third-attempt", "auto-dev-list-fails", "spec-being-built")
 
 
 class Lane(unittest.TestCase):
@@ -188,6 +194,14 @@ class Lane(unittest.TestCase):
         self.assertEqual(rc, 1)
         self.assertIn("evals: dev-extra did not run", out)
         self.assertNotIn("dev-reversal did not run", out)
+
+    def test_a_result_that_lists_no_case_leaves_every_case_of_the_skill_missing(self):
+        d = doc()
+        d["cases"] = []
+        rc, out = self.run_lane(["--skill", "dev"], result=d)
+        self.assertEqual(rc, 1)
+        self.assertIn("evals: dev-reversal did not run", out)
+        self.assertIn("evals: dev-third-attempt did not run", out)
 
     def test_a_case_of_another_skill_that_is_not_in_the_result_is_not_missing(self):
         rc, out = self.run_lane(["--skill", "dev"], result=doc(total=2, passed=2, scores={

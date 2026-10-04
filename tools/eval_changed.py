@@ -155,10 +155,10 @@ def main(argv=None, root: Path = ROOT) -> int:
         if aggregates.get("scoreWithout") is not None:
             line += f" without={_score(aggregates['scoreWithout'])}"
         print(line)
-    # The cases a run is meant to run are the tagged cases of its skills; a result that lists
-    # cases and leaves one out (a case file that failed to load, say) is a failed run.
+    # The cases a run is meant to run are the tagged cases of its skills; a result that leaves
+    # one out (a case file that failed to load, say) is a failed run.
     ran = {c.get("name") for c in listed}
-    missing = sorted(n for n, tags in cases.items() if set(tags) & skills and n not in ran) if listed else []
+    missing = sorted(n for n, tags in cases.items() if set(tags) & skills and n not in ran)
     for name in missing:
         print(f"evals: {name} did not run")
     flat = []
