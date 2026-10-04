@@ -200,6 +200,8 @@ The profile's `## Recon traps` lists what this codebase specifically hides.
   - Exit 1 otherwise (two or more candidates, or a fork PR): show every line
     and ask which to continue, or to start fresh. A fork PR is someone else's:
     say a person reviews it, and stop.
+  - A `PR #<m> mentions #<n> but does not claim it` line on stderr is shown
+    in one line; that pull request is not a candidate.
   - Exit 2: show the reason and ask whether to start fresh.
 
   To start fresh, run

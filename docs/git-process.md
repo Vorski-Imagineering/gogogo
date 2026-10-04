@@ -66,7 +66,7 @@ mention a worktree makes dev and auto-dev stop before branching and point at
 `/gogogo:setup`.
 
 **Unless the issue already has work.** Before cutting a branch,
-`issue_work.py <n>` looks for an open pull request that references the issue,
+`issue_work.py <n>` looks for an open pull request that claims the issue (its branch carries the number, `#<n>` is in its title, or a body line starts with `Refs`, `Fixes`, `Closes` or `Resolves` and names it; a pull request that only mentions it is noted, not continued),
 a local or `origin` branch named for it that is ahead of the base, and the
 branch its stop-marker comment names. With exactly one, the skills continue on
 it instead, updated with `git merge origin/<base>` (never a rebase or a force
