@@ -29,6 +29,8 @@ ENV = {**os.environ, "GIT_CONFIG_GLOBAL": os.devnull, "GIT_CONFIG_NOSYSTEM": "1"
 FAKE_GH = r"""#!/usr/bin/env python3
 import json, os, sys
 args = sys.argv[1:]
+if os.environ.get("FAKE_GH_LOG"):
+    open(os.environ["FAKE_GH_LOG"], "a").write(" ".join(args) + "\\n")
 fixture = json.load(open(os.environ["FAKE_GH"]))
 def arg(flag):
     return args[args.index(flag) + 1]
@@ -42,6 +44,15 @@ if answer == "fail" or fixture.get("down"):
     print("gh: network down", file=sys.stderr)
     sys.exit(1)
 print(json.dumps(answer))
+"""
+
+# Runs the real git, except `git branch -D` when FAKE_GIT_REFUSE_D is set.
+FAKE_GIT = """#!/bin/sh
+if [ -n "$FAKE_GIT_REFUSE_D" ] && [ "$1" = branch ] && [ "$2" = -D ]; then
+    echo "fatal: refused by the test" >&2
+    exit 1
+fi
+exec {git} "$@"
 """
 
 
@@ -71,9 +82,13 @@ class Sweep(unittest.TestCase):
         bin_dir.mkdir()
         (bin_dir / "gh").write_text(FAKE_GH)
         (bin_dir / "gh").chmod(0o755)
+        (bin_dir / "git").write_text(FAKE_GIT.format(git=shutil.which("git")))
+        (bin_dir / "git").chmod(0o755)
         self.fixture = self.tmp / "gh.json"
         self.fixture.write_text("{}")
-        self.env = {**ENV, "PATH": f"{bin_dir}{os.pathsep}{ENV['PATH']}", "FAKE_GH": str(self.fixture)}
+        self.gh_log = self.tmp / "gh.log"
+        self.env = {**ENV, "PATH": f"{bin_dir}{os.pathsep}{ENV['PATH']}", "FAKE_GH": str(self.fixture),
+                    "FAKE_GH_LOG": str(self.gh_log)}
 
     def run_git(self, cwd, *args):
         return subprocess.run(["git", *args], cwd=cwd, env=ENV, check=True, capture_output=True, text=True)
@@ -225,6 +240,103 @@ class Sweep(unittest.TestCase):
     def test_9_only_the_main_worktree_is_kept_with_a_reason(self):
         self.assertEqual(self.sweep("--only", str(self.clone)),
                          (1, [f"keep {self.clone} (main): the main worktree is never removed"]))
+
+    def local_branch(self, name, commits=1):
+        """A local branch `commits` commits ahead of main, on no remote."""
+        sha = self.git("rev-parse", "main").stdout.strip()
+        tree = self.git("rev-parse", "main^{tree}").stdout.strip()
+        for n in range(commits):
+            sha = self.git("commit-tree", tree, "-p", sha, "-m", f"{name} {n}").stdout.strip()
+        self.git("update-ref", f"refs/heads/{name}", sha)
+        return sha
+
+    def looked_up(self):
+        return self.gh_log.read_text() if self.gh_log.exists() else ""
+
+    def test_11_a_merged_pr_at_the_tip_removes_the_local_branch(self):
+        tip = self.local_branch("fix/12-x")
+        fixture = {"pr": {"fix/12-x": [pr(3, "MERGED", oid=tip)]}}
+        line = "remove branch fix/12-x: PR #3 merged at its tip"
+        self.assertEqual(self.sweep(fixture=fixture), (0, [line]))
+        self.assertIn("fix/12-x", self.branches(), "removed without --apply")
+        self.assertEqual(self.sweep("--apply", fixture=fixture), (0, [line]))
+        self.assertNotIn("fix/12-x", self.branches())
+
+    def test_11_a_merged_pr_from_an_older_tip_keeps_the_branch(self):
+        tip = self.local_branch("fix/12-x", commits=2)
+        older = self.git("rev-parse", f"{tip}^").stdout.strip()
+        code, lines = self.sweep("--apply", fixture={"pr": {"fix/12-x": [pr(3, "MERGED", oid=older)]}})
+        self.assertEqual((code, lines), (0, []))
+        self.assertIn("fix/12-x", self.branches())
+
+    def test_11_a_merged_pr_whose_head_is_ahead_of_the_tip_keeps_the_branch(self):
+        head = self.local_branch("fix/12-x", commits=2)
+        tip = self.git("rev-parse", f"{head}^").stdout.strip()
+        self.git("update-ref", "refs/heads/fix/12-x", tip)
+        code, lines = self.sweep("--apply", fixture={"pr": {"fix/12-x": [pr(3, "MERGED", oid=head)]}})
+        self.assertEqual((code, lines), (0, []))
+        self.assertIn("fix/12-x", self.branches())
+
+    def test_11_an_open_pr_or_none_keeps_the_branch(self):
+        tip = self.local_branch("fix/12-x")
+        self.local_branch("fix/13-y")
+        fixture = {"pr": {"fix/12-x": [pr(3, "OPEN", oid=tip)]}}
+        self.assertEqual(self.sweep("--apply", fixture=fixture), (0, []))
+        self.assertIn("fix/12-x", self.branches())
+        self.assertIn("fix/13-y", self.branches())
+
+    def test_11_a_branch_with_nothing_off_the_remotes_is_not_looked_up(self):
+        self.git("branch", "fix/12-x", "main")
+        self.assertEqual(self.sweep("--apply"), (0, []))
+        self.assertNotIn("fix/12-x", self.looked_up())
+        self.assertIn("fix/12-x", self.branches())
+
+    def test_11_the_base_the_current_and_a_worktree_branch_are_never_touched(self):
+        base_tip = self.local_branch("scratch")
+        self.git("update-ref", "refs/heads/main", base_tip)
+        current = self.local_branch("fix/12-x")
+        self.git("switch", "-q", "fix/12-x")
+        checked_out = self.local_branch("fix/13-y")
+        self.git("worktree", "add", "-q", str(self.tmp / "wt-13"), "fix/13-y")
+        (self.tmp / "wt-13" / "dirty.txt").write_text("not committed\n")
+        fixture = {"pr": {"main": [pr(1, "MERGED", oid=base_tip)], "fix/12-x": [pr(2, "MERGED", oid=current)],
+                          "fix/13-y": [pr(3, "MERGED", oid=checked_out)]},
+                   "issue": {"13": {"state": "OPEN", "comments": []}}}
+        code, lines = self.sweep("--apply", fixture=fixture)
+        self.assertFalse([ln for ln in lines if ln.startswith("remove branch")], lines)
+        self.assertTrue({"main", "fix/12-x", "fix/13-y"} <= set(self.branches()))
+        self.assertNotIn("pr list --repo o/code --head main ", self.looked_up())
+
+    def test_11_a_branch_only_on_origin_is_untouched(self):
+        sha = self.local_branch("fix/15-w")
+        self.git("push", "-q", "origin", "fix/15-w")
+        self.git("branch", "-q", "-D", "fix/15-w")
+        fixture = {"pr": {"fix/15-w": [pr(5, "MERGED", oid=sha)]}}
+        self.assertEqual(self.sweep("--apply", fixture=fixture), (0, []))
+        self.assertIn("fix/15-w", self.git("ls-remote", "--heads", "origin").stdout)
+
+    def test_11_a_branch_that_will_not_delete_is_kept_and_reported(self):
+        tip = self.local_branch("fix/12-x")
+        self.env["FAKE_GIT_REFUSE_D"] = "1"
+        code, lines = self.sweep("--apply", fixture={"pr": {"fix/12-x": [pr(3, "MERGED", oid=tip)]}})
+        self.assertEqual(code, 1)
+        self.assertEqual(lines, ["remove branch fix/12-x: PR #3 merged at its tip",
+                                 "  branch fix/12-x kept: fatal: refused by the test"])
+        self.assertIn("fix/12-x", self.branches())
+
+    def test_11_a_failed_lookup_keeps_the_branch(self):
+        self.local_branch("fix/12-x")
+        self.assertEqual(self.sweep("--apply", fixture={"down": True}), (0, []))
+        self.assertIn("fix/12-x", self.branches())
+
+    def test_11_only_runs_no_branch_sweep(self):
+        tip = self.local_branch("fix/12-x")
+        here = self.worktree("fix/14-z")
+        fixture = {"pr": {"fix/12-x": [pr(3, "MERGED", oid=tip)]},
+                   "issue": {"14": {"state": "CLOSED", "comments": []}}}
+        code, lines = self.sweep("--apply", "--only", str(here), fixture=fixture)
+        self.assertEqual(lines, [f"remove {here} (fix/14-z): issue #14 closed"])
+        self.assertIn("fix/12-x", self.branches())
 
     def test_10_a_folder_deleted_by_hand_is_pruned(self):
         path = self.worktree("fix/12-x")

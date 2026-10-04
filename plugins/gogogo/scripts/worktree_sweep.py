@@ -22,6 +22,17 @@ Any `git` or `gh` failure for a worktree keeps it, `cannot tell: <message>`:
 no evidence never removes work. Prints `remove <path> (<branch>): <reason>` or
 `keep <path> (<branch>): <reason>`, one line per worktree.
 
+After the worktrees, a whole sweep (not `--only`) also looks at local branches:
+every branch that is not the base (`integration.base`, else `main`), not the one
+the current directory is on and not checked out in any worktree, and that has
+commits on no remote. When a same-repo pull request from it is MERGED and its
+head commit is exactly the branch's tip, it prints `remove branch <name>: PR
+#<m> merged at its tip`, and with `--apply` runs `git branch -D <name>` (a
+failure prints `  branch <name> kept: <git's first line>` and counts as kept).
+A branch whose merged head is older than its tip, one with no merged pull
+request, and one whose lookup failed are not printed and not touched. Remote
+branches are never touched.
+
 A whole sweep leaves out the main worktree and the one holding the current
 directory without a word. `--only PATH` never ends silent: PATH that is the
 main worktree prints `keep <path> (<branch>): the main worktree is never
@@ -87,6 +98,7 @@ def repos():
 
 
 KEEP, REMOVE, REMOVE_WITH_BRANCH = "keep", "remove", "remove with branch"
+REMOVE_BRANCH = "remove branch"
 
 
 def decide(tree, issues_repo, code_repo):
@@ -128,6 +140,41 @@ def decide(tree, issues_repo, code_repo):
     if issue.get("state") != "OPEN":
         return REMOVE, f"issue #{number} closed"
     return KEEP, f"issue #{number} open, work not merged"
+
+
+def base_branch():
+    """The profile's `integration.base`, else `main`."""
+    try:
+        settings, _ = profile_check.split_profile(profile_check.find_profile().read_text(encoding="utf-8"))
+    except (OSError, profile_check.ProfileError):
+        return "main"
+    return (settings.get("integration") or {}).get("base") or "main"
+
+
+def local_branches(trees, base, current):
+    """Local branches, by name, that are not the base, not `current` and not checked out in a worktree."""
+    out = git("for-each-ref", "--format=%(refname:short)", "refs/heads")
+    if out.returncode != 0:
+        return []
+    taken = {base, current, *(t["branch"] for t in trees)}
+    return sorted(b for b in out.stdout.split() if b not in taken)
+
+
+def decide_branch(branch, code_repo):
+    """(REMOVE_BRANCH, reason) when a merged pull request's head is exactly this branch's tip, else (None, None).
+    Anything that cannot be told, a failed lookup included, is None: no evidence never deletes."""
+    ref = f"refs/heads/{branch}"
+    ahead = git("rev-list", "--count", ref, "--not", "--remotes", "--")
+    tip = git("rev-parse", "--verify", "-q", ref)
+    if ahead.returncode != 0 or tip.returncode != 0 or ahead.stdout.strip() == "0" or not code_repo:
+        return None, None
+    prs, error = pull_requests(code_repo, branch)
+    if error:
+        return None, None
+    for p in prs:
+        if p.get("state") == "MERGED" and p.get("headRefOid") == tip.stdout.strip():
+            return REMOVE_BRANCH, f"PR #{p['number']} merged at its tip"
+    return None, None
 
 
 def _contains(head, tip):
@@ -197,6 +244,18 @@ def main(argv=None):
             kept = True
         elif args.apply and not remove(tree, verdict):
             kept = True
+    if not args.only:
+        current = git("branch", "--show-current").stdout.strip()
+        for branch in local_branches(trees, base_branch(), current):
+            verdict, reason = decide_branch(branch, code_repo)
+            if verdict is None:
+                continue
+            print(f"{REMOVE_BRANCH} {branch}: {reason}")
+            if args.apply:
+                out = git("branch", "-D", branch)
+                if out.returncode != 0:
+                    print(f"  branch {branch} kept: {_first_line(out, 'git branch -D')}")
+                    kept = True
     if args.apply:
         git("worktree", "prune")
     return 1 if kept else 0
