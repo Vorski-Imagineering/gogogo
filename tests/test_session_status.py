@@ -282,6 +282,16 @@ class Line(unittest.TestCase):
             self.assertIn(shown, line, raw)
             self.assertFalse(any(ord(c) < 32 or ord(c) == 127 for c in line), raw)
 
+    def test_a_space_in_a_level_is_kept(self):
+        repo = repo_with_profile()
+        set_level(repo, "tech lead")
+        with mock.patch.dict(os.environ, {"CLAUDE_CODE_ENTRYPOINT": "cli"}):
+            code, out, _ = run_main(repo, Board())
+        self.assertEqual(code, 0)
+        line = message(out)
+        self.assertIn("independence: tech lead · ", line)
+        self.assertNotIn("\x1b", line)
+
     def test_unknown_level_is_shown_plain(self):
         repo = repo_with_profile()
         set_level(repo, "lead")
