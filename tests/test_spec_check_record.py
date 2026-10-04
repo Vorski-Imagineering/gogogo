@@ -77,7 +77,7 @@ class Skill(unittest.TestCase):
         self.assertGreaterEqual(len(forms), 3, forms)
         self.assertFalse([f for f in re.findall(r"`([^`]*)`", self.brief()) if re.search(r":[^`]*-", f)])
         with tempfile.TemporaryDirectory() as tmp, contextlib.chdir(tmp):
-            Path("a.py").write_text("def name():\n    pass\n")
+            Path("a.py").write_text("class Class:\n    def name():\n        pass\n")
             for form in forms:
                 evidence = form.replace("path", "a.py", 1).replace("line", "1").replace("::name", "::name")
                 self.assertIsNone(spec_check._resolves(evidence), form)

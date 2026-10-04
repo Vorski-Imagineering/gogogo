@@ -203,6 +203,43 @@ class Items(unittest.TestCase):
         self.assertEqual(code, 1)
         self.assertIn("no spec in this body", out)
 
+    def f_items(self, group, line, **kw):
+        body = BODY.replace(BODY[BODY.index(group):BODY.index("\n", BODY.index(group))], line)
+        return [i["id"] for i in items(body, **kw)["items"] if i["id"].startswith("F:") and i["id"] != "F:tests/test_list.py"]
+
+    def test_brace_path_is_one_item_per_file(self):
+        # Guards Design 1-2: `scripts/{a,b}.py` is two files, not one with braces in its name.
+        got = self.f_items("**Create:**", "**Create:** `scripts/{a,b}.py`.", tree=lambda: [])
+        self.assertEqual([g for g in got if g.startswith("F:scripts/")], ["F:scripts/a.py", "F:scripts/b.py"])
+        self.assertFalse([g for g in got if "{" in g], got)
+
+    def test_several_brace_groups_expand_in_order(self):
+        # Guards several groups, first slowest.
+        got = self.f_items("**Edit:**", "**Edit:** `src/{x,y}/{m,n}.py`.", tree=lambda: [])
+        self.assertEqual(got[:4], ["F:src/x/m.py", "F:src/x/n.py", "F:src/y/m.py", "F:src/y/n.py"])
+
+    def test_slashless_filter_runs_on_each_expanded_name(self):
+        # Guards trap 1: expansion before the slash-less filter.
+        got = self.f_items("**Edit:**", "**Edit:** `{tracker,nope}.py`.",
+                           tree=lambda: [".claude/scripts/tracker.py"])
+        self.assertEqual(got, ["F:tracker.py"])
+
+    def test_brace_files_met_and_not_outside(self):
+        # Guards the report's symptom: missing plus outside.
+        body = BODY.replace(BODY[BODY.index("**Create:**"):BODY.index("\n", BODY.index("**Create:**"))],
+                            "**Create:** `scripts/{a,b}.py`.")
+        listed = items(body, changed=["scripts/a.py", "scripts/b.py"], tree=lambda: [])
+        status = {i["id"]: i.get("status") for i in listed["items"]}
+        self.assertEqual(status["F:scripts/a.py"], "met")
+        self.assertEqual(status["F:scripts/b.py"], "met")
+        self.assertEqual([o for o in listed["outside"] if o.startswith("scripts/")], [])
+
+    def test_unexpandable_braces_stay_as_written(self):
+        # Guards Design 1's unchanged cases.
+        for path in ("a/{b.py", "a/{b}.py", "a/{b,{c,d}}.py"):
+            got = self.f_items("**Create:**", f"**Create:** `{path}`.", tree=lambda: [])
+            self.assertEqual([g for g in got if g.startswith("F:a/")], [f"F:{path}"], path)
+
 
 def git(repo, *args):
     subprocess.run(["git", *args], cwd=repo, check=True, capture_output=True)
@@ -395,6 +432,21 @@ class Verify(unittest.TestCase):
             self.assertEqual(code, 2, evidence + "\n" + out)
         out, code = self.verify(self.answers(D1="D1 | met | app/views.py::listed, app/views.py | "))
         self.assertEqual(code, 0, out)
+
+    def test_class_form_evidence_resolves(self):
+        # Guards the report's (b): Class.name and Class::name.
+        (self.dir / "app" / "views.py").write_text("class Listing:\n    def listed():\n        return rows\n")
+        for evidence in ("app/views.py::Listing.listed", "app/views.py::Listing::listed"):
+            out, code = self.verify(self.answers(D1=f"D1 | met | {evidence} | "))
+            self.assertEqual(code, 0, evidence + "\n" + out)
+
+    def test_class_form_evidence_still_refused_when_wrong(self):
+        # Guards Design 3: not everything with a dot is accepted.
+        (self.dir / "app" / "views.py").write_text("class Listing:\n    def listed():\n        return rows\n")
+        for evidence in ("Nope.listed", "Listing.nope", "listed.Listing", "Listing."):
+            out, code = self.verify(self.answers(D1=f"D1 | met | app/views.py::{evidence} | "))
+            self.assertEqual(code, 2, evidence + "\n" + out)
+            self.assertIn("not in the file", out)
 
     def test_evidence_outside_the_working_tree_is_refused(self):
         outside = self.dir.parent / "elsewhere.txt"
