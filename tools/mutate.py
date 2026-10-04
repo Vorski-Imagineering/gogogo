@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Mutate the lines a change made to this repo's scripts, and report what the tests miss.
 
-    tools/mutate.py <base> [--keep]
+    tools/mutate.py <base> [--keep] [--jobs N]
 
 This repo's `mutate` command for its `unit` lane (`.agents/dev-process.md`),
 meeting the contract in the plugin's `references/profile-schema.md` § Lanes.
@@ -12,10 +12,16 @@ since the change left <base> (`git merge-base <base> HEAD`), uncommitted and
 new files included, and runs each script's own `tests/test_<name>.py` against
 each mutant. Any other changed file there is printed as `not covered:`.
 
+The changed lines are cut into parts that run at once, `--jobs` of them at a
+time (half the processors unless given), each in its own throwaway copy and
+each against its own script's test module only. A test run stops at its first
+failure: one failed test already decides the mutant. When one part cannot
+finish, the others are stopped and the run exits 2.
+
 The mutation tool (mutmut 2.5.1, pinned: later versions cannot import this
 repo's tests) writes each mutant over the source file, so it runs only in a
 throwaway copy of the tracked and unignored files, never in this tree: this
-tree may be the plugin another repo's run is loading. The copy is removed on
+tree may be the plugin another repo's run is loading. Each copy is removed on
 every exit, unless `--keep`. The tool is installed on first use into
 ${XDG_CACHE_HOME:-~/.cache}/gogogo/mutmut-2.5.1, or taken from GOGOGO_MUTMUT.
 
@@ -46,7 +52,9 @@ Standard library only.
 from __future__ import annotations
 
 import argparse
+import concurrent.futures
 import contextlib
+import math
 import os
 import re
 import shutil
@@ -55,6 +63,7 @@ import sqlite3
 import subprocess
 import sys
 import tempfile
+import threading
 import time
 from pathlib import Path
 
@@ -62,6 +71,7 @@ SCRIPTS = "plugins/gogogo/scripts"
 VERSION = "2.5.1"
 PINS = (f"mutmut=={VERSION}", "whatthepatch==1.0.7")
 HUNK = re.compile(r"^@@ -(\d+)")
+HUNK_COUNTS = re.compile(r"^@@ -\d+(?:,(\d+))? \+(\d+)(?:,(\d+))? @@")
 # Fixed whatever the user's git config says: the tool reads paths after a/ and b/.
 PLAIN_DIFF = ["--src-prefix=a/", "--dst-prefix=b/", "--no-color", "--no-ext-diff"]
 WRAPPER = ".gogogo-run.py"
@@ -73,6 +83,8 @@ STALL_MIN = 600
 STALL_TIMES = 10
 STALL_POLL = 15
 KILL_AFTER = 10
+# Set when one part of a run cannot finish: every other part's tool is then ended.
+STOPPING = threading.Event()
 
 WRAPPER_SOURCE = f'''"""Runs one test command for tools/mutate.py; written into its throwaway copy.
 
@@ -137,7 +149,8 @@ except KeyboardInterrupt:
 except BaseException as error:
     print(f"gogogo: the tests stopped while loading: {error!r}", file=sys.stderr)
     sys.exit(1)
-result = unittest.TextTestRunner(stream=sys.stderr).run(suite)
+# One failed test decides the mutant, so the run stops there.
+result = unittest.TextTestRunner(stream=sys.stderr, failfast=True).run(suite)
 if result.testsRun == 0:
     print("gogogo: no test ran", file=sys.stderr)
     sys.exit(1)
@@ -192,6 +205,9 @@ def _run_mutmut(args: list[str], cwd=None) -> subprocess.CompletedProcess:
                     break
                 except subprocess.TimeoutExpired:
                     pass
+                if STOPPING.is_set():
+                    _end_group(proc, KILL_AFTER)
+                    raise Stop("stopped: another part of the run could not finish")
                 try:
                     stat = beat.stat()
                     now_seen = (stat.st_size, stat.st_mtime_ns)
@@ -281,11 +297,54 @@ def write_wrapper(copy: Path) -> None:
     (copy / RUNNER).write_text(RUNNER_SOURCE)
 
 
-def runner(scripts: list[str], root: Path) -> str:
-    """The test command, through the wrapper."""
-    modules = [f"tests.test_{Path(s).stem}" for s in scripts]
-    if all((root / "tests" / f"test_{Path(s).stem}.py").is_file() for s in scripts):
-        return f"python3 {WRAPPER} python3 {RUNNER} " + " ".join(modules)
+def patch_lines(patch: str) -> dict[str, list[int]]:
+    """Per file, the sorted line numbers in the new file of every line `patch` adds."""
+    lines: dict[str, list[int]] = {}
+    path, old_left, new_left, at = None, 0, 0, 0
+    for text in patch.splitlines():
+        if old_left > 0 or new_left > 0:
+            if text.startswith("+"):
+                lines.setdefault(path, []).append(at)
+                at, new_left = at + 1, new_left - 1
+            elif text.startswith("-"):
+                old_left -= 1
+            elif text.startswith(" "):
+                at, old_left, new_left = at + 1, old_left - 1, new_left - 1
+            continue
+        hunk = HUNK_COUNTS.match(text)
+        if hunk:
+            old_left = 1 if hunk.group(1) is None else int(hunk.group(1))
+            at = int(hunk.group(2))
+            new_left = 1 if hunk.group(3) is None else int(hunk.group(3))
+        elif text.startswith("+++ b/"):
+            path = text[6:].strip()
+    return {path: sorted(found) for path, found in lines.items()}
+
+
+def shards(lines: dict[str, list[int]], jobs: int) -> list[tuple[str, list[int]]]:
+    """The parts of a run: each file's lines dealt round-robin into parts of about total/jobs lines."""
+    total = sum(len(found) for found in lines.values())
+    if not total:
+        return []
+    size = math.ceil(total / jobs)
+    parts = []
+    for path in sorted(lines):
+        found = sorted(lines[path])
+        k = math.ceil(len(found) / size)
+        parts += [(path, found[i::k]) for i in range(k)]
+    return parts
+
+
+def shard_patch(script: str, lines: list[int]) -> str:
+    """A patch the tool reads as exactly `lines` of `script`: it uses only each added line's number."""
+    return f"--- a/{script}\n+++ b/{script}\n" + "".join(f"@@ -0,0 +{n},1 @@\n+x\n" for n in lines)
+
+
+def runner(script: str, root: Path) -> str:
+    """The test command for one script, through the wrapper: its own test module, or the whole suite."""
+    name = f"test_{Path(script).stem}"
+    if (root / "tests" / f"{name}.py").is_file():
+        return f"python3 {WRAPPER} python3 {RUNNER} tests.{name}"
     return f"python3 {WRAPPER} python3 {RUNNER} discover"
 
 
@@ -309,21 +368,15 @@ def survivor(show: str) -> list[str]:
     return [f"SURVIVED {path}:{first if first is not None else '?'}", *body]
 
 
-def mutate(base: str, keep: bool) -> int:
-    fork = merge_base(base)
-    scripts = changed_scripts(fork)
-    if not scripts:
-        print("mutants: 0 killed: 0 survived: 0 timeout: 0")
-        return 0
-    patch = make_patch(fork, scripts)
-    exe = tool()
+def run_part(exe: str, script: str, lines: list[int], keep: bool) -> tuple[int, int, list[tuple]]:
+    """One part in its own copy: (killed, timeout, survivors), each survivor as (path, line, its lines)."""
     copy = Path(tempfile.mkdtemp(prefix="gogogo-mutate-"))
     try:
         copy_tree(copy)
-        (copy / ".gogogo-mutate.patch").write_text(patch)
+        (copy / ".gogogo-mutate.patch").write_text(shard_patch(script, lines))
         write_wrapper(copy)
-        run = _run_mutmut([exe, "run", "--paths-to-mutate", ",".join(scripts), "--use-patch-file", ".gogogo-mutate.patch",
-                    "--runner", runner(scripts, copy), "--no-progress"], cwd=str(copy))
+        run = _run_mutmut([exe, "run", "--paths-to-mutate", script, "--use-patch-file", ".gogogo-mutate.patch",
+                           "--runner", runner(script, copy), "--no-progress"], cwd=str(copy))
         if run.returncode % 2 == 1:
             raise Stop("\n".join((run.stdout + run.stderr).strip().splitlines()[-20:])
                        or f"the mutation tool exited {run.returncode}")
@@ -340,11 +393,12 @@ def mutate(base: str, keep: bool) -> int:
         missing = ids("untested") + ids("skipped")
         if missing:
             raise Stop(f"incomplete: {len(missing)} mutants were not run")
+        survivors = []
         for mutant in survived:
-            print("\n".join(survivor(_run([exe, "show", mutant], cwd=str(copy)).stdout)))
-        total = len(killed) + len(survived) + len(timeout)
-        print(f"mutants: {total} killed: {len(killed)} survived: {len(survived)} timeout: {len(timeout)}")
-        return 1 if survived else 0
+            shown = survivor(_run([exe, "show", mutant], cwd=str(copy)).stdout)
+            path, _, line = shown[0][len("SURVIVED "):].rpartition(":")
+            survivors.append((path, int(line) if line.isdigit() else math.inf, shown))
+        return len(killed), len(timeout), survivors
     finally:
         if keep:
             print(f"kept the copy at {copy}", file=sys.stderr)
@@ -352,13 +406,55 @@ def mutate(base: str, keep: bool) -> int:
             shutil.rmtree(copy, ignore_errors=True)
 
 
+def mutate(base: str, keep: bool, jobs: int) -> int:
+    STOPPING.clear()
+    fork = merge_base(base)
+    scripts = changed_scripts(fork)
+    parts = shards(patch_lines(make_patch(fork, scripts)), jobs) if scripts else []
+    if not parts:
+        print("mutants: 0 killed: 0 survived: 0 timeout: 0")
+        return 0
+    exe = tool()
+    results, failed = [], None
+    with concurrent.futures.ThreadPoolExecutor(max_workers=jobs) as pool:
+        futures = [pool.submit(run_part, exe, script, lines, keep) for script, lines in parts]
+        try:
+            for future in concurrent.futures.as_completed(futures):
+                try:
+                    results.append(future.result())
+                except Exception as error:  # the first error is raised once every part has ended
+                    STOPPING.set()
+                    failed = failed or error
+        except BaseException:
+            # An interrupt: end every part's tool before the pool waits for them.
+            STOPPING.set()
+            raise
+    if failed:
+        raise failed
+    survivors = sorted((s for _, _, found in results for s in found), key=lambda s: s[:2])
+    for _, _, shown in survivors:
+        print("\n".join(shown))
+    killed, timeout = sum(r[0] for r in results), sum(r[1] for r in results)
+    print(f"mutants: {killed + len(survivors) + timeout} killed: {killed} survived: {len(survivors)} timeout: {timeout}")
+    return 1 if survivors else 0
+
+
+def _jobs(text: str) -> int:
+    jobs = int(text)
+    if jobs < 1:
+        raise argparse.ArgumentTypeError("must be 1 or more")
+    return jobs
+
+
 def main(argv=None) -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("base", help="the branch the change merges into")
-    parser.add_argument("--keep", action="store_true", help="leave the copy and print its path")
+    parser.add_argument("--keep", action="store_true", help="leave each copy and print its path")
+    parser.add_argument("--jobs", type=_jobs, default=max(1, (os.cpu_count() or 2) // 2),
+                        help="how many parts run at once (default: half the processors)")
     args = parser.parse_args(argv)
     try:
-        return mutate(args.base, args.keep)
+        return mutate(args.base, args.keep, args.jobs)
     except Stop as exc:
         print(exc, file=sys.stderr)
         return 2

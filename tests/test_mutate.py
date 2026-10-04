@@ -16,6 +16,7 @@ import os
 import subprocess
 import sys
 import tempfile
+import threading
 import time
 import unittest
 from pathlib import Path
@@ -170,11 +171,40 @@ class Runner(unittest.TestCase):
             root = Path(tmp)
             (root / "tests").mkdir()
             (root / "tests" / "test_a.py").write_text("")
-            (root / "tests" / "test_b.py").write_text("")
-            both = mutate.runner([f"{SCRIPTS}/a.py", f"{SCRIPTS}/b.py"], root)
-            one_missing = mutate.runner([f"{SCRIPTS}/a.py", f"{SCRIPTS}/c.py"], root)
-        self.assertEqual(both, "python3 .gogogo-run.py python3 .gogogo-unittest.py tests.test_a tests.test_b")
-        self.assertEqual(one_missing, "python3 .gogogo-run.py python3 .gogogo-unittest.py discover")
+            own = mutate.runner(f"{SCRIPTS}/a.py", root)
+            missing = mutate.runner(f"{SCRIPTS}/c.py", root)
+        self.assertEqual(own, "python3 .gogogo-run.py python3 .gogogo-unittest.py tests.test_a")
+        self.assertEqual(missing, "python3 .gogogo-run.py python3 .gogogo-unittest.py discover")
+
+
+class Parts(unittest.TestCase):
+    """The changed lines, cut into parts that run at once (gogogo#175)."""
+
+    def test_patch_lines_are_the_added_lines_of_each_file(self):
+        r = Repo()
+        self.addCleanup(r.close)
+        r.write(f"{SCRIPTS}/a.py", "def a():\n    return 2\n")
+        r.write(f"{SCRIPTS}/b.py", "def b():\n    x = 1\n    return x\n")
+        with contextlib.chdir(r.dir), contextlib.redirect_stdout(io.StringIO()):
+            fork = mutate.merge_base("main")
+            lines = mutate.patch_lines(mutate.make_patch(fork, mutate.changed_scripts(fork)))
+        self.assertEqual(lines, {f"{SCRIPTS}/a.py": [2], f"{SCRIPTS}/b.py": [1, 2, 3]})
+
+    def test_patch_lines_do_not_read_content_as_a_file_header(self):
+        patch = (f"--- a/{SCRIPTS}/a.py\n+++ b/{SCRIPTS}/a.py\n@@ -1,3 +1,3 @@\n keep\n"
+                 "--- a/x\n+++ b/x\n end\n")
+        self.assertEqual(mutate.patch_lines(patch), {f"{SCRIPTS}/a.py": [2]})
+
+    def test_every_line_is_in_exactly_one_part(self):
+        lines = {"b": [1, 2], "a": [1, 2, 3, 4, 5, 6]}
+        self.assertEqual(mutate.shards(lines, 4), [("a", [1, 4]), ("a", [2, 5]), ("a", [3, 6]), ("b", [1, 2])])
+        self.assertEqual(mutate.shards(lines, 1), [("a", [1, 2, 3, 4, 5, 6]), ("b", [1, 2])])
+        self.assertEqual(mutate.shards({}, 4), [])
+
+    def test_a_parts_patch_names_its_lines_in_the_form_the_tool_reads(self):
+        self.assertEqual(mutate.shard_patch(f"{SCRIPTS}/a.py", [12, 40]),
+                         f"--- a/{SCRIPTS}/a.py\n+++ b/{SCRIPTS}/a.py\n"
+                         "@@ -0,0 +12,1 @@\n+x\n@@ -0,0 +40,1 @@\n+x\n")
 
 
 class UnittestRunner(unittest.TestCase):
@@ -228,6 +258,14 @@ class UnittestRunner(unittest.TestCase):
         self.assertEqual(self.run_tests(passing).returncode, 0)
         self.assertEqual(self.run_tests(failing).returncode, 1)
         self.assertEqual(self.run_tests(exiting).returncode, 1)
+
+    def test_the_run_stops_at_the_first_failing_test(self):
+        two = self.module("test_two", "import unittest\n\n\nclass T(unittest.TestCase):\n"
+                                      "    def test_x(self):\n        self.fail('no')\n\n"
+                                      "    def test_y(self):\n        self.fail('no')\n")
+        out = self.run_tests(two)
+        self.assertEqual(out.returncode, 1, out.stderr)
+        self.assertIn("Ran 1 test", out.stderr)
 
     def test_a_run_with_no_test_is_a_failed_run(self):
         empty = self.module("test_empty", "import unittest\n")
@@ -335,8 +373,8 @@ def gone(pid):
     return False
 
 
-class StallCheck(unittest.TestCase):
-    """A tool that stops starting test runs is ended; one that keeps starting them is not."""
+class FakeToolCase(unittest.TestCase):
+    """A changed script, the fake tool as a real program, and the stall check's times cut to seconds."""
 
     def setUp(self):
         self.r = Repo()
@@ -352,6 +390,11 @@ class StallCheck(unittest.TestCase):
             patcher = mock.patch.object(mutate, name, value)
             patcher.start()
             self.addCleanup(patcher.stop)
+
+
+
+class StallCheck(FakeToolCase):
+    """A tool that stops starting test runs is ended; one that keeps starting them is not."""
 
     def run_tool(self, runs, pause, stall, ids=""):
         env = {"GOGOGO_MUTMUT": str(self.tool), "FAKE_PIDS": str(self.tmp / "pids"), "FAKE_RUNS": str(runs),
@@ -380,6 +423,64 @@ class StallCheck(unittest.TestCase):
         self.assertEqual(out.splitlines()[-1], "mutants: 3 killed: 3 survived: 0 timeout: 0")
 
 
+class StopSignal(FakeToolCase):
+    def test_a_part_is_ended_when_another_could_not_finish(self):
+        copy = self.tmp / "copy"
+        copy.mkdir()
+        mutate.write_wrapper(copy)
+        env = {"FAKE_PIDS": str(self.tmp / "pids"), "FAKE_RUNS": "40", "FAKE_PAUSE": "0.5", "FAKE_STALL": "0"}
+        pids_file = self.tmp / "pids"
+        mutate.STOPPING.clear()  # an earlier failed run in this process leaves it set
+
+        def stop_once_started():
+            # The fake runs for 20 seconds by itself, so a missing check is red, not a hang.
+            while not (pids_file.is_file() and len(pids_file.read_text().split()) == 2):
+                time.sleep(0.05)
+            mutate.STOPPING.set()
+        self.addCleanup(mutate.STOPPING.clear)
+        threading.Thread(target=stop_once_started, daemon=True).start()
+        start = time.monotonic()
+        with mock.patch.dict(os.environ, env), self.assertRaises(mutate.Stop) as raised:
+            mutate._run_mutmut([str(self.tool), "run", "--runner", f"{sys.executable} {mutate.WRAPPER} true"],
+                               cwd=str(copy))
+        self.assertLess(time.monotonic() - start, 5)
+        self.assertTrue(str(raised.exception).startswith("stopped:"), raised.exception)
+        pids = [int(p) for p in (self.tmp / "pids").read_text().split()]
+        self.assertTrue(all(gone(pid) for pid in pids), pids)
+
+
+class TwoScripts(unittest.TestCase):
+    def setUp(self):
+        self.r = Repo()
+        self.addCleanup(self.r.close)
+        self.r.write(f"{SCRIPTS}/a.py", "def a():\n    return 2\n")
+        self.r.write(f"{SCRIPTS}/b.py", "def b():\n    return 1\n")
+        self.r.write("tests/test_b.py", "import unittest\n")
+
+    def test_each_script_runs_in_its_own_copy_against_its_own_tests(self):
+        ids = {"killed": "1 2", "survived": "3"}
+        code, out, _, calls = run_main(self.r.dir, "--jobs", "2", fake=tool(run_code=2, ids=ids))
+        self.assertEqual(code, 1)
+        self.assertEqual(out.splitlines()[-1], "mutants: 6 killed: 4 survived: 2 timeout: 0")
+        runs = [(args, cwd) for args, cwd in calls if args[:2] == [TOOL, "run"]]
+        option = lambda args, name: args[args.index(name) + 1]  # noqa: E731
+        self.assertEqual(sorted((option(args, "--paths-to-mutate"), option(args, "--runner")) for args, _ in runs),
+                         [(f"{SCRIPTS}/{n}.py", f"python3 .gogogo-run.py python3 .gogogo-unittest.py tests.test_{n}")
+                          for n in "ab"])
+        self.assertEqual(len({cwd for _, cwd in runs}), 2)
+        self.assertFalse([cwd for _, cwd in runs if Path(cwd).exists()])
+
+    def test_a_part_that_fails_is_no_evidence(self):
+        def fake(args, cwd):
+            if args[1] == "run" and args[args.index("--paths-to-mutate") + 1].endswith("b.py"):
+                return done(args, "", 1)
+            return tool(ids={"killed": "1"})(args, cwd)
+        code, out, _, calls = run_main(self.r.dir, "--jobs", "2", fake=fake)
+        self.assertEqual(code, 2)
+        self.assertFalse([ln for ln in out.splitlines() if ln.startswith("mutants:")])
+        self.assertFalse([cwd for args, cwd in calls if args[0] == TOOL and Path(cwd).exists()])
+
+
 class Counts(unittest.TestCase):
     def setUp(self):
         self.r = Repo()
@@ -399,6 +500,22 @@ class Counts(unittest.TestCase):
         self.assertEqual(out.splitlines()[-1], "mutants: 3 killed: 3 survived: 0 timeout: 0")
         self.assertFalse([ln for ln in out.splitlines() if ln.startswith("SURVIVED")])
         self.assertFalse([args for args, _ in calls if args[:1] == [TOOL] and args[1:] == ["show", "3"]])
+
+    def test_one_changed_line_is_one_part_whatever_the_jobs(self):
+        code, _, _, calls = run_main(self.r.dir, "--jobs", "8", fake=tool(ids={"killed": "1"}))
+        self.assertEqual(code, 0)
+        self.assertEqual(len([args for args, _ in calls if args[:2] == [TOOL, "run"]]), 1)
+
+    def test_jobs_below_one_start_nothing(self):
+        started = []
+
+        def fake(args, cwd):
+            started.append(args)
+            return tool()(args, cwd)
+        with self.assertRaises(SystemExit) as raised:
+            run_main(self.r.dir, "--jobs", "0", fake=fake)
+        self.assertEqual(raised.exception.code, 2)
+        self.assertFalse(started)
 
     def test_a_failed_result_read_is_no_evidence(self):
         def fake(args, cwd):
