@@ -1654,12 +1654,20 @@ class BranchRulesExact(unittest.TestCase):
         self.assertEqual(post, f'`python3 "{script}" --ruleset main | gh api -X POST repos/o/r/rulesets --input -` '
                                "(undo: `gh api -X DELETE repos/o/r/rulesets/<id from the POST's output>`)")
         put = self.rows(self.FULL[:2], needs_ci=True, existing=7)[0]["fix"]
-        saved = '"$(git rev-parse --git-dir)/gogogo-ruleset-7-before.json"'
+        saved = '"$(git rev-parse --git-common-dir)/gogogo-ruleset-7-before.json"'
         self.assertEqual(put, "first save the existing ruleset: `gh api repos/o/r/rulesets/7 "
                               f"--jq '{{name,target,enforcement,bypass_actors,conditions,rules}}' > {saved}`, then "
                               f'`python3 "{script}" --ruleset main | gh api -X PUT repos/o/r/rulesets/7 --input -` '
                               f"(undo: `gh api -X PUT repos/o/r/rulesets/7 --input {saved}`; undo before applying "
                               "this fix a second time, or the save holds the state after the first PUT)")
+
+    def test_the_put_saves_where_a_linked_worktree_leaves_it(self):
+        # In a linked worktree --git-dir is .git/worktrees/<name>, removed with the worktree.
+        fix = self.rows(self.FULL[:2], needs_ci=True, existing=7)[0]["fix"]
+        save, undo = fix.split("(undo:", 1)
+        for part in (save, undo):
+            self.assertIn('"$(git rev-parse --git-common-dir)/gogogo-ruleset-7-before.json"', part)
+        self.assertNotIn("--git-dir)", fix)
 
     # Design 1's levels and the names each row lists
     def test_a_branch_is_the_merge_target_unless_told_otherwise(self):

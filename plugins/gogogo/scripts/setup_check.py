@@ -241,7 +241,7 @@ def _ruleset_fix(repo, branch, existing):
     if existing is None:
         return (f"`python3 \"{script}\" --ruleset {branch} | gh api -X POST repos/{repo}/rulesets --input -` "
                 f"(undo: `gh api -X DELETE repos/{repo}/rulesets/<id from the POST's output>`)")
-    saved = f'"$(git rev-parse --git-dir)/gogogo-ruleset-{existing}-before.json"'
+    saved = f'"$(git rev-parse --git-common-dir)/gogogo-ruleset-{existing}-before.json"'
     return (f"first save the existing ruleset: `gh api repos/{repo}/rulesets/{existing} "
             f"--jq '{{name,target,enforcement,bypass_actors,conditions,rules}}' > {saved}`, then "
             f"`python3 \"{script}\" --ruleset {branch} | gh api -X PUT repos/{repo}/rulesets/{existing} --input -` "
