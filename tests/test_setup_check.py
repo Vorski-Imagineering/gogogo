@@ -997,9 +997,10 @@ class BoardTidiness(unittest.TestCase):
 class Notify(unittest.TestCase):
     """The notify row: one per state, never a FAIL, so it never changes the exit code."""
 
-    def row(self, state, line):
+    def row(self, state, line, bot=None):
         rep = sc.Report()
-        with mock.patch("notify.status", return_value=(state, line, "")):
+        with mock.patch("notify.status", return_value=(state, line, "")), \
+                mock.patch("notify.machine_bot", return_value=bot):
             sc.check_notify("profile.md", rep)
         rows = [r for r in rep.rows if r["check"] == "notify"]
         self.assertEqual(len(rows), 1)
@@ -1017,8 +1018,25 @@ class Notify(unittest.TestCase):
         failed = self.row(notify.FAILED, "notify: telegram: Unauthorized")
         self.assertEqual((failed["level"], failed["detail"]), ("WARN", "telegram: Unauthorized"))
 
-    def real_row(self, repo_file_ignored):
-        """The row from notify's own status, in a temp repo with no `notify` line and full credentials."""
+    def test_off_rows_say_whether_this_machine_already_has_a_bot(self):
+        import notify
+        on = self.row(notify.OFF, "notify: off", bot=(True, "bot @b -> Vic"))
+        self.assertEqual(on["level"], "INFO")
+        self.assertTrue(on["detail"].startswith('off: the profile says notify = "none"'))
+        self.assertIn("already has bot @b -> Vic", on["detail"])
+        bad = self.row(notify.OFF, "notify: off", bot=(False, "Unauthorized"))
+        self.assertEqual(bad["level"], "INFO")
+        self.assertIn("fail: Unauthorized", bad["detail"])
+        none = self.row(notify.OFF, "notify: off", bot=None)
+        self.assertEqual(none["detail"], "off (no messages); /gogogo:setup can set up Telegram")
+
+    def test_a_profile_saying_none_is_told_about_the_machines_bot(self):
+        row = self.real_row(True, notify_line='notify = "none"\n')
+        self.assertEqual(row["level"], "INFO")
+        self.assertIn("already has bot @b -> Vic", row["detail"])
+
+    def real_row(self, repo_file_ignored, notify_line=""):
+        """The row from notify's own status, in a temp repo with the given `notify` line (none by default) and full credentials."""
         import notify
         tmp = Path(tempfile.mkdtemp())
         self.addCleanup(shutil.rmtree, tmp, ignore_errors=True)
@@ -1031,7 +1049,7 @@ class Notify(unittest.TestCase):
         repo_file.write_text(f"{notify.CHAT_KEY}=8\n")
         profile = tmp / ".agents" / "dev-process.md"
         profile.parent.mkdir()
-        profile.write_text("+++\nprofile = 1\n+++\n\n## superpowers boundary\nx\n")
+        profile.write_text(f"+++\nprofile = 1\n{notify_line}+++\n\n## superpowers boundary\nx\n")
         answers = [{"ok": True, "result": {"username": "b"}}, {"ok": True, "result": {"first_name": "Vic"}}]
         rep = sc.Report()
         with mock.patch.object(notify, "CREDENTIALS", creds), \

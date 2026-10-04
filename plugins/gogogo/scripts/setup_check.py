@@ -305,7 +305,16 @@ def check_notify(profile, rep):
         return
     detail = line.split(": ", 1)[1] if line.startswith("notify: ") else line
     if state == notify.OFF:
-        rep.info("notify", "off (no messages); /gogogo:setup can set up Telegram")
+        bot = notify.machine_bot(str(profile))
+        if bot is None:
+            rep.info("notify", "off (no messages); /gogogo:setup can set up Telegram")
+        elif bot[0]:
+            # describe() reads "bot @<name> -> <chat>"; the skill keys on "already has bot".
+            rep.info("notify", f'off: the profile says notify = "none", and this machine already has bot '
+                     f"{bot[1].split(' ', 1)[1]}, which works; removing that line turns messages on here")
+        else:
+            rep.info("notify", f'off: the profile says notify = "none"; this machine has bot '
+                     f"credentials, but they fail: {bot[1]}")
     elif state == notify.READY:
         rep.ok("notify", detail)
     elif state == notify.NO_CREDENTIALS:

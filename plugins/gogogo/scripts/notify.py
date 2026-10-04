@@ -254,6 +254,19 @@ def status(profile_path=None):
         return FAILED, f"notify: {label}: {exc}", transport.token
 
 
+def machine_bot(profile_path=None):
+    """Does this machine already have a bot? None when either credential is missing,
+    (True, "bot @<name> -> <chat>") when both resolve and Telegram answers, and
+    (False, reason) when they fail. Reads only (getMe, getChat); sends nothing."""
+    transport = Telegram(_root(profile_path))
+    if transport.missing():
+        return None
+    try:
+        return True, transport.describe()
+    except SendError as exc:
+        return False, str(exc)
+
+
 # --- commands --------------------------------------------------------------
 
 def _units(text):
