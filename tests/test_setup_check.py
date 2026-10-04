@@ -1596,5 +1596,306 @@ class SessionHook(unittest.TestCase):
         self.assertEqual(self.row({"hooks/hooks.json": json.dumps(no_command)})["level"], "WARN")
 
 
+
+def gh_stub(calls, replies):
+    """A stand-in for `run`: records each command and answers `gh <args>` by its exact
+    argument string from `replies` ({"api repos/o/code": (0, out, err)}); anything else
+    gets exit 0 and no output."""
+    def fake_run(*cmd, cwd=None):
+        calls.append(cmd)
+        rc, out, err = replies.get(" ".join(cmd[1:]), (0, "", ""))
+        return subprocess.CompletedProcess(cmd, rc, out, err)
+    return fake_run
+
+
+def listed(detail, after, before=None):
+    """The comma-separated names in `detail` between `after` and `before` (or the end)."""
+    start = detail.index(after) + len(after)
+    end = detail.index(before, start) if before else len(detail)
+    return detail[start:end].split(", ")
+
+
+class BranchRulesExact(unittest.TestCase):
+    """Issue #57: what the spec fixes word for word, asserted exactly, and each name a row lists."""
+    CHECK = "code repo: branch rules (main)"
+    FULL = [{"type": "deletion", "ruleset_id": 7, "bypass_actors": []},
+            {"type": "non_fast_forward", "ruleset_id": 7, "bypass_actors": []},
+            {"type": "required_status_checks", "ruleset_id": 7, "bypass_actors": []}]
+    NOT_PROTECTED = (1, "", "gh: Branch not protected (HTTP 404)")
+    PR_LIST = "pr list --repo o/code --base main --state merged --limit 1 --json number"
+    PR_CHECKS = "pr checks 12 --repo o/code --json name,bucket"
+
+    def rows(self, rules, classic=None, checks=("tests",), wants_check=True, needs_ci=False, **kw):
+        rep = sc.Report()
+        sc.check_branch_rules("o/r", "main", rules, {} if classic is None else classic,
+                              list(checks) if isinstance(checks, tuple) else checks, wants_check, needs_ci, rep, **kw)
+        return rep.rows
+
+    def classic(self, enforce, checks=None, **extra):
+        body = {"allow_force_pushes": {"enabled": False}, "allow_deletions": {"enabled": False},
+                "enforce_admins": {"enabled": enforce}}
+        if checks is not None:
+            body["required_status_checks"] = checks
+        return dict(body, **extra)
+
+    # The ruleset body and the fix commands (Design 3)
+    def test_the_ruleset_body_is_the_specs(self):
+        self.assertEqual(sc.ruleset_body("main", ["tests", "lint"], True), {
+            "name": "gogogo: main", "target": "branch", "enforcement": "active", "bypass_actors": [],
+            "conditions": {"ref_name": {"include": ["refs/heads/main"], "exclude": []}},
+            "rules": [{"type": "deletion"}, {"type": "non_fast_forward"},
+                      {"type": "required_status_checks", "parameters": {
+                          "strict_required_status_checks_policy": False,
+                          "required_status_checks": [{"context": "tests"}, {"context": "lint"}]}}]})
+
+    def test_the_post_and_put_fixes_are_the_specs_commands(self):
+        script = Path(sc.__file__).resolve()
+        post = self.rows(self.FULL[:2], needs_ci=True)[0]["fix"]
+        self.assertEqual(post, f'`python3 "{script}" --ruleset main | gh api -X POST repos/o/r/rulesets --input -` '
+                               "(undo: `gh api -X DELETE repos/o/r/rulesets/<id from the POST's output>`)")
+        put = self.rows(self.FULL[:2], needs_ci=True, existing=7)[0]["fix"]
+        saved = '"$(git rev-parse --git-dir)/gogogo-ruleset-7-before.json"'
+        self.assertEqual(put, "first save the existing ruleset: `gh api repos/o/r/rulesets/7 "
+                              f"--jq '{{name,target,enforcement,bypass_actors,conditions,rules}}' > {saved}`, then "
+                              f'`python3 "{script}" --ruleset main | gh api -X PUT repos/o/r/rulesets/7 --input -` '
+                              f"(undo: `gh api -X PUT repos/o/r/rulesets/7 --input {saved}`; undo before applying "
+                              "this fix a second time, or the save holds the state after the first PUT)")
+
+    # Design 1's levels and the names each row lists
+    def test_a_branch_is_the_merge_target_unless_told_otherwise(self):
+        rep = sc.Report()
+        sc.check_branch_rules("o/r", "main", self.FULL[:2], {}, [], True, True, rep)
+        self.assertEqual([r["level"] for r in rep.rows], ["FAIL"])
+
+    def test_a_classic_check_given_only_as_checks_counts(self):
+        classic = self.classic(True, {"contexts": [], "checks": [{"context": "tests", "app_id": 1}]})
+        self.assertEqual([r["level"] for r in self.rows([], classic)], ["PASS"])
+
+    def test_unreadable_classic_protection_says_it_needs_admin_with_the_error(self):
+        for rules in ([], self.FULL[:2]):
+            row = self.rows(rules, "HTTP 403", needs_ci=True)[0]
+            self.assertEqual(row["level"], "WARN")
+            self.assertIn("classic branch protection, which needs admin to read (HTTP 403)", row["detail"])
+        row = self.rows([], "HTTP 403")[0]
+        self.assertEqual(listed(row["detail"], "has no ruleset for ", "; "), ["no force push", "no deletion"])
+
+    def test_a_fail_lists_each_missing_rule_by_name(self):
+        row = self.rows([self.FULL[1]])[0]
+        self.assertEqual(listed(row["detail"], "is missing: "), ["no deletion", "a required check"])
+        row = self.rows([self.FULL[2]])[0]
+        self.assertEqual(listed(row["detail"], "is missing: "), ["no force push", "no deletion"])
+
+    def test_a_bypass_lists_each_actor(self):
+        actors = [{"actor_type": "RepositoryRole", "actor_id": 5}, {"actor_type": "Integration", "actor_id": 9}]
+        row = self.rows([dict(r, bypass_actors=actors) for r in self.FULL])[0]
+        self.assertEqual(listed(row["detail"], "can be bypassed by: "), ["Integration 9", "RepositoryRole 5"])
+
+    def test_a_bypass_on_other_rulesets_names_each_in_settings(self):
+        actor = [{"actor_type": "RepositoryRole", "actor_id": 5}]
+        one = [dict(r, ruleset_id=9, ruleset_name="other", bypass_actors=actor) for r in self.FULL]
+        self.assertEqual(self.rows(one)[0]["fix"], "empty the bypass list in Settings > Rules for the ruleset 'other'")
+        two = [dict(self.FULL[0], ruleset_id=3, ruleset_name="a", bypass_actors=actor),
+               dict(self.FULL[1], ruleset_id=4, bypass_actors=actor), dict(self.FULL[2], ruleset_id=4)]
+        self.assertEqual(self.rows(two)[0]["fix"],
+                         "empty the bypass list in Settings > Rules for the rulesets 'a', id 4")
+
+    def test_a_classic_block_also_held_by_a_ruleset_passes(self):
+        self.assertEqual([r["level"] for r in self.rows(self.FULL, {"allow_force_pushes": {"enabled": False}})],
+                         ["PASS"])
+
+    def test_bypassable_classic_rules_are_each_named_once(self):
+        def held(rules, classic):
+            row = self.rows(rules, classic)[0]
+            self.assertEqual(row["level"], "FAIL")
+            return row["detail"], listed(row["detail"], " has ", " only in classic")
+        tests = {"contexts": ["tests"], "checks": []}
+        detail, names = held([self.FULL[0], self.FULL[2]], dict(self.classic(False, tests),
+                                                                allow_deletions={"enabled": True}))
+        self.assertEqual(names, ["no force push"])
+        self.assertNotIn("a required check", detail)
+        detail, names = held([self.FULL[2]], self.classic(False))
+        self.assertEqual(names, ["no force push", "no deletion"])
+        self.assertNotIn("a required check", detail)
+        detail, names = held([], self.classic(False, tests))
+        self.assertEqual(names, ["no force push", "no deletion", "a required check"])
+        self.assertEqual(detail.count("a required check"), 1)
+        detail, names = held([], self.classic(False))
+        self.assertEqual(names, ["no force push", "no deletion"])
+        self.assertTrue(detail.startswith("o/r main has "), detail)
+        self.assertIn("a required check", detail)
+
+    def test_the_merge_script_info_is_the_specs(self):
+        self.assertEqual(self.rows(self.FULL[:2], wants_check=False, needs_ci=True), [
+            {"level": "INFO", "check": self.CHECK, "fix": "",
+             "detail": "a required check is not offered: the merge script pushes to main directly"}])
+
+    def test_no_derivable_name_on_the_default_branch_is_the_specs_warn(self):
+        self.assertEqual(self.rows(self.FULL[:2], checks=[], needs_ci=True, target=False), [
+            {"level": "WARN", "check": self.CHECK, "fix": "",
+             "detail": "no check name can be derived: no PR with a passing check has been merged into main"}])
+
+    def test_a_bypassable_classic_check_lists_its_names(self):
+        for tests in ({"contexts": [], "checks": [{"context": "tests"}, {"context": "lint"}]},
+                      {"contexts": ["tests", "lint"], "checks": []}):
+            row = self.rows(self.FULL[:2], {"required_status_checks": tests, "enforce_admins": {"enabled": False}},
+                            needs_ci=True)[0]
+            self.assertEqual(listed(row["detail"], " requires ", " only in classic"), ["tests", "lint"])
+
+    def test_design_9_fixes_are_the_specs(self):
+        classic = {"required_status_checks": {"contexts": ["tests"]}, "enforce_admins": {"enabled": False}}
+        row = self.rows(self.FULL[:2], classic, checks="HTTP 502", needs_ci=True)[0]
+        self.assertTrue(row["detail"].endswith(" (HTTP 502)"), row["detail"])
+        self.assertEqual(row["fix"], "re-run once the latest merged PR's checks can be read, to get the ruleset command")
+        row = self.rows(self.FULL[:2], classic, checks=[], needs_ci=True)[0]
+        self.assertEqual(row["fix"], "merge a PR into `main` whose checks pass, then re-run to get the ruleset command")
+
+    def test_no_check_on_the_merge_target_asks_for_ci(self):
+        row = self.rows(self.FULL[:2], checks=[], needs_ci=True)[0]
+        self.assertTrue(row["detail"].endswith("no check passed on the latest PR merged into main"), row["detail"])
+        self.assertEqual(row["fix"], "add a CI workflow that runs on every pull request to `main`, merge one PR, re-run")
+        row = self.rows(self.FULL[:2], checks="HTTP 502", needs_ci=True)[0]
+        self.assertTrue(row["detail"].endswith("no check passed on the latest PR merged into main (HTTP 502)"),
+                        row["detail"])
+
+    def test_a_missing_check_names_what_passed(self):
+        row = self.rows(self.FULL[:2], checks=["tests", "lint"], needs_ci=True)[0]
+        self.assertEqual(re.search(r"passed: (.*)\)$", row["detail"]).group(1).split(", "), ["tests", "lint"])
+
+    # The reads (Designs 2 and 4)
+    def test_gh_json_reads_json_only_where_the_caller_allows_a_failed_exit(self):
+        replies = {"x": (0, "not json", ""), "y": (1, '[{"a": 1}]', "gh: failed"), "z": (1, "", "gh: boom")}
+        with mock.patch.object(sc, "run", gh_stub([], replies)):
+            value, error = sc._gh_json("x")
+            self.assertIsNone(value)
+            self.assertTrue(error)
+            self.assertEqual(sc._gh_json("y", json_on_failure=True), ([{"a": 1}], None))
+            self.assertEqual(sc._gh_json("y"), (None, "gh: failed"))
+            self.assertEqual(sc._gh_json("z", json_on_failure=True), (None, "gh: boom"))
+
+    def test_check_names_asks_gh_exactly_and_reads_a_failed_checks_exit(self):
+        calls = []
+        replies = {self.PR_LIST: (0, json.dumps([{"number": 12}]), ""),
+                   self.PR_CHECKS: (8, json.dumps([{"name": "tests", "bucket": "pass"},
+                                                   {"name": "lint", "bucket": "fail"}]), "")}
+        with mock.patch.object(sc, "run", gh_stub(calls, replies)):
+            self.assertEqual(sc.check_names("o/code", "main"), ["tests"])
+        self.assertEqual(calls, [("gh", *self.PR_LIST.split()), ("gh", *self.PR_CHECKS.split())])
+
+    def test_the_branch_plan_is_design_4s(self):
+        plan = sc.branch_plan
+        self.assertEqual(plan({"integration": {"strategy": "run-branch-pr", "final_target": "staging"}}, "main"),
+                         ([("staging", True, True), ("main", True, False)], None))
+        self.assertEqual(plan({"integration": {"strategy": "run-branch-pr"}}, "main"),
+                         ([("main", True, False)], "integration.final_target is not set; nothing to check"))
+        self.assertEqual(plan({"integration": {"strategy": "merge-script", "base": "dev"}}, "main"),
+                         ([("dev", False, True), ("main", True, False)], None))
+        self.assertEqual(plan({"integration": {"strategy": "pr-squash", "base": "main"}}, "main"),
+                         ([("main", True, True)], None))
+
+    def branches(self, replies, integration=None):
+        calls, rep = [], sc.Report()
+        settings = {"integration": integration or {"strategy": "pr-squash", "base": "main"}}
+        base = {"api repos/o/code/rules/branches/main": (0, "[]", ""),
+                "api repos/o/code/rulesets/7": (0, json.dumps({"bypass_actors": []}), ""),
+                "api repos/o/code/branches/main/protection": self.NOT_PROTECTED,
+                self.PR_LIST: (0, json.dumps([{"number": 12}]), ""),
+                self.PR_CHECKS: (0, json.dumps([{"name": "tests", "bucket": "pass"}]), "")}
+        with mock.patch.object(sc, "run", gh_stub(calls, dict(base, **replies))):
+            sc.check_branches("o/code", settings, "main", rep)
+        return calls, rep.rows
+
+    def test_a_ruleset_read_that_is_not_an_object_warns(self):
+        rules = {"api repos/o/code/rules/branches/main": (0, json.dumps(self.FULL), "")}
+        for body in ('"bypass_actors"', "[]"):
+            _, rows = self.branches(dict(rules, **{"api repos/o/code/rulesets/7": (0, body, "")}))
+            self.assertEqual([r["level"] for r in rows], ["WARN"])
+            self.assertIn("ruleset 7", rows[0]["detail"])
+            self.assertNotIn("None", rows[0]["detail"])
+
+    def test_classic_protection_is_read_from_its_endpoint(self):
+        calls, rows = self.branches({"api repos/o/code/branches/main/protection": (
+            0, json.dumps(self.classic(True, {"contexts": ["tests"]})), "")})
+        self.assertIn(("gh", "api", "repos/o/code/branches/main/protection"), calls)
+        self.assertEqual([r["level"] for r in rows], ["PASS"])
+        _, rows = self.branches({})
+        self.assertEqual([r["level"] for r in rows], ["FAIL"])
+        _, rows = self.branches({"api repos/o/code/branches/main/protection": (1, "", "gh: HTTP 500\nmore")})
+        self.assertEqual([r["level"] for r in rows], ["WARN"])
+        self.assertIn("(gh: HTTP 500)", rows[0]["detail"])
+
+    def test_no_branch_to_check_warns_once(self):
+        rep = sc.Report()
+        with mock.patch.object(sc, "run", gh_stub([], {})):
+            sc.check_branches("o/code", {"integration": {"strategy": "pr-squash"}}, None, rep)
+        self.assertEqual([(r["level"], r["check"]) for r in rep.rows], [("WARN", sc.BRANCH_RULES_CHECK)])
+
+    def test_ci_before_merge_makes_a_missing_check_fail(self):
+        rules = {"api repos/o/code/rules/branches/main": (0, json.dumps(self.FULL[:2]), "")}
+        _, rows = self.branches(rules, {"strategy": "pr-squash", "base": "main", "ci_before_merge": True})
+        self.assertEqual([r["level"] for r in rows], ["FAIL"])
+        _, rows = self.branches(rules, {"strategy": "pr-squash", "base": "main"})
+        self.assertEqual([r["level"] for r in rows], ["WARN"])
+
+    def test_ruleset_prints_for_a_new_ruleset_beside_another_one(self):
+        replies = {self.PR_LIST: (1, "", "gh: HTTP 502"),
+                   "api repos/o/code/rulesets": (0, json.dumps([{"id": 3, "name": "other"}]), "")}
+        settings = {"tracker": {"code_repo": "o/code"}, "integration": {"strategy": "pr-squash", "base": "main"}}
+        out = io.StringIO()
+        with mock.patch.object(sc, "run", gh_stub([], replies)), mock.patch("sys.stdout", out), \
+                mock.patch("sys.stderr"):
+            self.assertEqual(sc.print_ruleset(settings, "main", "main"), 0)
+        self.assertEqual(out.getvalue(), json.dumps(sc.ruleset_body("main", [], True), indent=2) + "\n")
+
+    def test_check_tracker_takes_the_default_branch_from_the_repo_read(self):
+        calls = []
+        replies = {"api repos/o/code": (0, json.dumps({"delete_branch_on_merge": True, "default_branch": "trunk"}), "")}
+        settings = {"tracker": {"issues_repo": "o/issues", "code_repo": "o/code"},
+                    "integration": {"strategy": "pr-squash"}}
+        with mock.patch.object(sc, "run", gh_stub(calls, replies)):
+            sc.check_tracker(Path("."), settings, sc.Report())
+        self.assertIn(("gh", "api", "repos/o/code/rules/branches/trunk"), calls)
+
+    # The --branch-rules and --ruleset flags (Designs 3 and 5)
+    PROFILE = ('+++\n[tracker]\nissues_repo = "o/issues"\ncode_repo = "o/code"\n'
+               '[integration]\nstrategy = "pr-squash"\nci_before_merge = true\n+++\n')
+
+    def main(self, argv, rules, profile=PROFILE):
+        folder = Path(tempfile.mkdtemp())
+        self.addCleanup(shutil.rmtree, folder)
+        path = folder / "dev-process.md"
+        if profile is not None:
+            path.write_text(profile, encoding="utf-8")
+        calls, out, err = [], io.StringIO(), io.StringIO()
+        replies = {"api repos/o/code": (0, json.dumps({"default_branch": "main"}), ""),
+                   "api repos/o/code/rules/branches/main": (0, json.dumps(rules), ""),
+                   "api repos/o/code/rulesets/7": (0, json.dumps({"bypass_actors": []}), ""),
+                   "api repos/o/code/branches/main/protection": self.NOT_PROTECTED,
+                   self.PR_LIST: (0, json.dumps([{"number": 12}]), ""),
+                   self.PR_CHECKS: (0, json.dumps([{"name": "tests", "bucket": "pass"}]), "")}
+        with mock.patch.object(sc.profile_check, "find_profile", return_value=path), \
+                mock.patch.object(sc, "run", gh_stub(calls, replies)), mock.patch("sys.stdout", out), \
+                mock.patch("sys.stderr", err):
+            code = sc.main(argv)
+        return code, out.getvalue(), calls
+
+    def test_branch_rules_flag_prints_only_the_branch_rows_and_exits_by_fail(self):
+        code, out, calls = self.main(["--branch-rules", "--json"], self.FULL)
+        rows = json.loads(out)
+        self.assertEqual((code, [(r["level"], r["check"]) for r in rows]), (0, [("PASS", self.CHECK)]))
+        self.assertEqual(out, json.dumps(rows, indent=2) + "\n")
+        self.assertIn(("gh", "api", "repos/o/code"), calls)
+        code, out, _ = self.main(["--branch-rules", "--json"], [])
+        self.assertEqual((code, [r["level"] for r in json.loads(out)]), (1, ["FAIL"]))
+
+    def test_ruleset_flag_prints_the_body_from_the_profile(self):
+        code, out, _ = self.main(["--ruleset", "main"], [])
+        self.assertEqual((code, json.loads(out)), (0, sc.ruleset_body("main", ["tests"], True)))
+
+    def test_flags_exit_2_without_a_profile_or_a_code_repo(self):
+        self.assertEqual(self.main(["--branch-rules"], [], profile=None)[0], 2)
+        no_repo = '+++\n[tracker]\nissues_repo = "o/issues"\n+++\n'
+        self.assertEqual(self.main(["--branch-rules"], [], profile=no_repo)[0], 2)
+        self.assertEqual(self.main(["--ruleset", "main"], [], profile=no_repo)[0], 2)
+
 if __name__ == "__main__":
     unittest.main()
