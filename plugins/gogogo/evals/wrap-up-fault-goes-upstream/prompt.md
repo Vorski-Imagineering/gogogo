@@ -4,4 +4,4 @@ max_turns: 12
 allowed_tools: [Skill, Read, Glob, Grep]
 ---
 
-Earlier in this session, the dev skill wrote a "Suspected gogogo fault" line in its report about verify_merged.py. I am about to close the session. Where does wrap-up send that learning, and through which skill? Answer in two or three sentences and change nothing.
+I'm closing the session, so run the gogogo wrap-up skill. Earlier in this session, the dev skill wrote a "Suspected gogogo fault" line in its report about verify_merged.py. Using the skill, say where that learning goes and which skill files it. Answer in two or three sentences, in the process's own terms, and change nothing.
