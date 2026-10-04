@@ -334,6 +334,50 @@ class OldestCard(unittest.TestCase):
         self.assertIn("Released 0 ·", message(out))
         self.assertNotIn("(oldest", message(out))
 
+    def profile_file(self, repo):
+        return repo / ".agents" / "dev-process.md"
+
+    def run_at(self, repo, listing, columns=COLUMNS, now=None):
+        board = Board(columns=columns, answers={"list": (0, json.dumps(listing), "")})
+        out = io.StringIO()
+        kw = {"now": now} if now else {}
+        with redirect_stdout(out), redirect_stderr(io.StringIO()):
+            session_status.main(start=repo, run=board, clock=Clock(), **kw)
+        return message(out.getvalue())
+
+    def test_a_card_with_no_column_is_not_counted_in_a_column_named_like_a_placeholder(self):
+        repo = repo_with_profile()
+        path = self.profile_file(repo)
+        path.write_text(path.read_text(encoding="utf-8").replace('column = "Released"', 'column = "Xxxx"'),
+                        encoding="utf-8")
+        line = self.run_at(repo, [{"number": 1, "kind": "Issue"}], columns=[*COLUMNS, "Xxxx"])
+        self.assertIn("Xxxx 0", line)
+
+    def test_a_stage_with_no_column_does_not_break_the_line(self):
+        repo = repo_with_profile()
+        path = self.profile_file(repo)
+        path.write_text(path.read_text(encoding="utf-8").replace(
+            'code_is = "merged"\n', 'code_is = "merged"\n\n[[stages]]\ncode_is = "other"\n'), encoding="utf-8")
+        _, out, _ = run_main(repo, Board())
+        self.assertEqual(message(out), LINE.format(name="myrepo"))
+
+    def test_a_card_with_an_empty_column_time_is_skipped_when_finding_the_oldest(self):
+        def since(days):
+            return (NOW - timedelta(days=days)).isoformat().replace("+00:00", "Z")
+        listing = [{"number": 1, "kind": "Issue", "status": "Released", "status_since": ""},
+                   {"number": 2, "kind": "Issue", "status": "Released", "status_since": None},
+                   {"number": 3, "kind": "Issue", "status": "Released", "status_since": since(2)}]
+        line = self.run_at(repo_with_profile(), listing, now=NOW)
+        self.assertIn("Released 3 (oldest 2 days)", line)
+
+    def test_the_age_is_counted_to_the_time_it_is_given_else_to_now(self):
+        later = datetime(2030, 1, 1, tzinfo=timezone.utc)
+        listing = [{"number": 1, "kind": "Issue", "status": "Released", "status_since": "2029-12-25T00:00:00Z"}]
+        self.assertIn("Released 1 (oldest 7 days)", self.run_at(repo_with_profile(), listing, now=later))
+        real = (datetime.now(timezone.utc) - timedelta(days=3, minutes=5)).isoformat().replace("+00:00", "Z")
+        listing = [{"number": 1, "kind": "Issue", "status": "Released", "status_since": real}]
+        self.assertIn("Released 1 (oldest 3 days)", self.run_at(repo_with_profile(), listing))
+
 
 class HooksJson(unittest.TestCase):
     def test_no_hook_runs_waiting(self):

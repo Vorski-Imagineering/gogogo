@@ -10,6 +10,7 @@ it must say nothing at all: no profile, nothing waiting, a board it cannot read.
 
 import io
 import json
+import subprocess
 import sys
 import tempfile
 import unittest
@@ -153,7 +154,7 @@ class Waiting(unittest.TestCase):
         seen = {}
 
         def record(**kw):
-            seen.update(kw, attempts=tracker.ATTEMPTS)
+            seen.update(kw, attempts=tracker.ATTEMPTS, timeout=tracker.CALL_TIMEOUT)
             return [], [], 0
         listing.side_effect = record
         with mock.patch.object(tracker, "list_cards", listing), redirect_stdout(io.StringIO()):
@@ -162,6 +163,75 @@ class Waiting(unittest.TestCase):
         self.assertEqual(seen["attempts"], 1)
         self.assertFalse(seen["crosscheck"])
         self.assertEqual(seen["repo"], "acme/issues")
+        self.assertIs(seen["open_only"], True)
+        self.assertIs(seen["issues_only"], True)
+        self.assertEqual(seen["timeout"], 15)
+        self.assertEqual((tracker.ATTEMPTS, tracker.CALL_TIMEOUT), (3, None), "the hook's limits are put back")
+
+    def two_stage_profile(self):
+        text = PROFILE.format(tool="shared")
+        extra = '\n[[stages]]\ncode_is = "x"\nenvironment = "production"\ncolumn = "In Staging"\n'
+        path = self.dir / "two.md"
+        path.write_text(text[:-4] + extra + "+++\n", encoding="utf-8")
+        return str(path)
+
+    def test_each_stage_column_has_its_line_and_the_hook_joins_them_with_a_semicolon(self):
+        cards = [card(1, days=2), card(2, status="In Staging", hours=5)]
+        first = "1 card(s) wait for you in Released, oldest 2 days: run /gogogo:status"
+        second = "1 card(s) wait for you in In Staging, oldest 5 hours: run /gogogo:status"
+        code, out, _ = self.run_main(cards=cards, profile=self.two_stage_profile())
+        self.assertEqual((code, out), (1, f"{first}\n{second}\n"))
+        code, out, _ = self.run_main("--hook", cards=cards, profile=self.two_stage_profile())
+        self.assertEqual(out, json.dumps({"systemMessage": f"{first}; {second}"}) + "\n")
+
+    def test_an_empty_stage_column_does_not_hide_the_ones_after_it(self):
+        self.assertEqual(waiting.waiting_lines(["Empty", "Released"], [card(1, days=1)], NOW),
+                         ["1 card(s) wait for you in Released, oldest 1 day: run /gogogo:status"])
+
+    def test_stage_columns_are_each_named_once_whatever_the_case_or_shape(self):
+        settings = {"stages": [{"column": "Released"}, {"column": "released"}, {}, "x",
+                               {"column": None}, {"column": "Other"}]}
+        self.assertEqual(waiting.stage_columns(settings), ["Released", "Other"])
+
+    def test_a_card_with_no_column_is_not_in_a_column_named_like_a_placeholder(self):
+        bare = {"kind": "Issue", "state": "OPEN"}
+        self.assertEqual(waiting.waiting_lines(["xxxx"], [bare], NOW), [])
+
+    def test_the_arguments_come_from_the_command_line_when_none_are_passed(self):
+        argv = ["waiting.py", "--hook", "--profile", self.profile()]
+        listing = mock.Mock(return_value=([card(1, hours=3)], [], 0))
+        out = io.StringIO()
+        with mock.patch.object(sys, "argv", argv), mock.patch.object(tracker, "list_cards", listing), \
+                redirect_stdout(out):
+            self.assertEqual(waiting.main(now=NOW), 0)
+        self.assertEqual(json.loads(out.getvalue()),
+                         {"systemMessage": "1 card(s) wait for you in Released, oldest 3 hours: run /gogogo:status"})
+
+    def test_help_in_the_hook_prints_nothing(self):
+        out = io.StringIO()
+        with redirect_stdout(out), redirect_stderr(io.StringIO()):
+            self.assertEqual(waiting.main(["--hook", "--help"], now=NOW), 0)
+        self.assertEqual(out.getvalue(), "")
+
+    def test_run_as_a_script_it_exits_2_with_the_reason_when_it_cannot_tell(self):
+        proc = subprocess.run([sys.executable, str(ROOT / "plugins" / "gogogo" / "scripts" / "waiting.py"),
+                               "--profile", str(self.dir / "none.md")],
+                              capture_output=True, text=True, cwd=self.dir)
+        self.assertEqual((proc.returncode, proc.stdout), (2, ""))
+        self.assertIn("waiting.py:", proc.stderr)
+
+    def test_it_imports_its_own_folder_ahead_of_anything_else_on_the_path(self):
+        decoy = self.dir / "decoy"
+        decoy.mkdir()
+        for name in ("profile_check", "tracker"):
+            (decoy / f"{name}.py").write_text("DECOY = True\n", encoding="utf-8")
+        script = ROOT / "plugins" / "gogogo" / "scripts" / "waiting.py"
+        code = (f"import sys, importlib.util; sys.path.insert(0, {str(decoy)!r}); "
+                f"spec = importlib.util.spec_from_file_location('waiting_copy', {str(script)!r}); "
+                "m = importlib.util.module_from_spec(spec); spec.loader.exec_module(m); "
+                "print(hasattr(m.tracker, 'DECOY'), hasattr(m.profile_check, 'DECOY'))")
+        proc = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True, cwd=self.dir)
+        self.assertEqual(proc.stdout.strip(), "False False", proc.stderr)
 
 
 if __name__ == "__main__":

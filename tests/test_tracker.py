@@ -971,5 +971,92 @@ class KeepingTheBoardCurrent(unittest.TestCase):
         moved.assert_called_once_with(7, "acme/issues", "Done", add_missing=True)
 
 
+class GraphqlCallShape(unittest.TestCase):
+    """What graphql() hands `subprocess.run`, and how often it tries."""
+
+    def transient(self):
+        return mock.Mock(returncode=1, stdout="", stderr="HTTP 502 bad gateway")
+
+    def test_the_call_is_captured_as_text_with_no_time_limit_by_default(self):
+        self.assertEqual((board.ATTEMPTS, board.CALL_TIMEOUT), (3, None))
+        ok = mock.Mock(returncode=0, stdout='{"data":{}}')
+        with mock.patch.object(board.subprocess, "run", return_value=ok) as run:
+            board.graphql("query {}")
+        self.assertEqual(run.call_args.kwargs, {"capture_output": True, "text": True, "timeout": None})
+
+    def test_a_transient_failure_is_tried_attempts_times_with_a_growing_wait(self):
+        for attempts, waits in ((1, []), (2, [2]), (3, [2, 4])):
+            with self.subTest(attempts=attempts), \
+                 mock.patch.object(board, "ATTEMPTS", attempts), \
+                 mock.patch.object(board.time, "sleep") as slept, \
+                 mock.patch.object(board.subprocess, "run", return_value=self.transient()) as run:
+                with self.assertRaises(board.BoardError):
+                    board.graphql("query {}")
+                self.assertEqual(run.call_count, attempts)
+                self.assertEqual([c.args[0] for c in slept.call_args_list], waits)
+
+    def test_a_transient_failure_that_clears_is_answered(self):
+        ok = mock.Mock(returncode=0, stdout='{"data":{"x":1}}')
+        with mock.patch.object(board.time, "sleep"), \
+             mock.patch.object(board.subprocess, "run", side_effect=[self.transient(), ok]) as run:
+            self.assertEqual(board.graphql("query {}"), {"x": 1})
+        self.assertEqual(run.call_count, 2)
+
+
+class StatusSinceAndArchive(unittest.TestCase):
+    def test_the_issue_side_card_carries_when_it_entered_its_column_and_no_close_reason(self):
+        node = issue_node(7, "seen", "Released")
+        node["projectItems"]["nodes"][0]["fieldValueByName"]["updatedAt"] = "2026-10-01T09:00:00Z"
+        bare = issue_node(8, "bare", "Released")
+        with mock.patch.object(board, "graphql", side_effect=[issue_page([node, bare])]):
+            cards = board.issue_side_cards(board.DEFAULT_REPO)
+        self.assertEqual(cards[0]["status_since"], "2026-10-01T09:00:00Z")
+        self.assertIsNone(cards[1]["status_since"])
+        self.assertIn("state_reason", cards[0])
+        self.assertIsNone(cards[0]["state_reason"])
+
+    def archive(self, card, wrote=None):
+        out, err = io.StringIO(), io.StringIO()
+        with mock.patch.object(board, "graphql", **(wrote or {"return_value": {}})), \
+             redirect_stdout(out), redirect_stderr(err):
+            code = board.archive_card(card, {"project_id": "P"})
+        return code, out.getvalue(), err.getvalue()
+
+    def test_archiving_names_the_card_and_the_column_it_left(self):
+        code, out, _ = self.archive({"number": 8, "repo": "a/b", "item_id": "I", "status": "Released"})
+        self.assertEqual((code, out), (0, "a/b#8: Released -> archived\n"))
+        code, out, _ = self.archive({"number": 9, "repo": "a/b", "item_id": "I", "status": None})
+        self.assertEqual(out, "a/b#9: no status -> archived\n")
+
+    def test_a_failed_archive_names_the_card_on_stderr(self):
+        code, out, err = self.archive({"number": 8, "repo": "a/b", "item_id": "I"},
+                                      {"side_effect": board.BoardError("nope")})
+        self.assertEqual((code, out), (2, ""))
+        self.assertEqual(err, "FAILED a/b#8 -> archive: nope\n")
+
+    def tidy(self, closed=(), archive=(), off_board=()):
+        out = io.StringIO()
+        with mock.patch.object(board, "untidy", return_value=(list(closed), list(archive), list(off_board))), \
+             redirect_stdout(out):
+            code = board.cmd_tidy(Namespace(repo="a/b", apply=False))
+        return code, out.getvalue()
+
+    def test_tidy_lists_each_kind_and_says_nothing_to_tidy_only_when_there_is_none(self):
+        item = {"number": 8, "repo": "a/b", "status": None, "title": "t"}
+        self.assertEqual(self.tidy(archive=[item]),
+                         (0, "closed as not planned, to archive: a/b#8 (no status)\n"))
+        self.assertEqual(self.tidy(closed=[dict(item, status="Released")]),
+                         (0, f"closed, not in {board.DONE_COLUMN}: a/b#8 (Released)\n"))
+        self.assertEqual(self.tidy(off_board=[item]), (0, "open, not on the board: a/b#8 t\n"))
+        self.assertEqual(self.tidy(), (0, "nothing to tidy\n"))
+
+    def test_tidy_is_a_command_with_an_apply_flag(self):
+        with mock.patch.object(sys, "argv", ["tracker.py", "tidy", "--apply"]), \
+             mock.patch.object(board, "configure"), \
+             mock.patch.object(board, "cmd_tidy", return_value=5) as tidied:
+            self.assertEqual(board.main(), 5)
+        self.assertTrue(tidied.call_args.args[0].apply)
+
+
 if __name__ == "__main__":
     unittest.main()
