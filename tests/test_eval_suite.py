@@ -27,6 +27,7 @@ CASES = {
     "auto-dev-review-wait",
     "spec-declined-question", "spec-being-built", "spec-nothing-hits-today",
     "spec-no-argument-offers-new", "spec-pr-mentions-only",
+    "spec-reverses-tested-behaviour",
     "status-sweep-lists-only", "status-shows-independence",
     "wrap-up-asks-before-removing",
     "setup-connected-message", "setup-leaves-out-plugin-steps",
