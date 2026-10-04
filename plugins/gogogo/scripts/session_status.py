@@ -100,6 +100,8 @@ def independence(settings, environ=None):
     """`independence: <level>`, the level bold and coloured only in an interactive terminal."""
     environ = os.environ if environ is None else environ
     level = settings.get("independence")
+    if isinstance(level, str):  # a profile is untrusted text: no control character reaches the terminal
+        level = "".join(c for c in level if ord(c) >= 32 and ord(c) != 127)
     is_set = isinstance(level, str) and bool(level)
     shown = level if is_set else "junior-dev"
     unset = "" if is_set else " (not set)"

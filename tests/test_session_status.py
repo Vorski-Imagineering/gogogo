@@ -268,6 +268,21 @@ class Line(unittest.TestCase):
             self.assertEqual(message(out), LINE.format(name="myrepo"), raw)
             self.assertNotIn("\x1b", message(out), raw)
 
+    def test_control_characters_in_a_level_never_reach_the_line(self):
+        cases = ((r"x\u001b[2Jy", "independence: x[2Jy · "), (r"a\nb\u007fc", "independence: abc · "),
+                 (r"\u001b\n", "independence: junior-dev (not set) · "))
+        for raw, shown in cases:
+            repo = repo_with_profile()
+            path = repo / ".agents" / "dev-process.md"
+            path.write_text(path.read_text(encoding="utf-8").replace(
+                "profile = 1\n", f'profile = 1\nindependence = "{raw}"\n', 1), encoding="utf-8")
+            with mock.patch.dict(os.environ, {"CLAUDE_CODE_ENTRYPOINT": "cli"}):
+                code, out, _ = run_main(repo, Board())
+            self.assertEqual(code, 0, raw)
+            line = message(out)
+            self.assertIn(shown, line, raw)
+            self.assertFalse(any(ord(c) < 32 or ord(c) == 127 for c in line), raw)
+
     def test_unknown_level_is_shown_plain(self):
         repo = repo_with_profile()
         set_level(repo, "lead")
