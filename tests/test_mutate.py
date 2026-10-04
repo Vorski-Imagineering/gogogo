@@ -443,7 +443,7 @@ class StopSignal(FakeToolCase):
         with mock.patch.dict(os.environ, env), self.assertRaises(mutate.Stop) as raised:
             mutate._run_mutmut([str(self.tool), "run", "--runner", f"{sys.executable} {mutate.WRAPPER} true"],
                                cwd=str(copy))
-        self.assertLess(time.monotonic() - start, 10)
+        self.assertLess(time.monotonic() - start, 5)
         self.assertTrue(str(raised.exception).startswith("stopped:"), raised.exception)
         pids = [int(p) for p in (self.tmp / "pids").read_text().split()]
         self.assertTrue(all(gone(pid) for pid in pids), pids)
@@ -507,9 +507,15 @@ class Counts(unittest.TestCase):
         self.assertEqual(len([args for args, _ in calls if args[:2] == [TOOL, "run"]]), 1)
 
     def test_jobs_below_one_start_nothing(self):
+        started = []
+
+        def fake(args, cwd):
+            started.append(args)
+            return tool()(args, cwd)
         with self.assertRaises(SystemExit) as raised:
-            run_main(self.r.dir, "--jobs", "0", fake=tool())
+            run_main(self.r.dir, "--jobs", "0", fake=fake)
         self.assertEqual(raised.exception.code, 2)
+        self.assertFalse(started)
 
     def test_a_failed_result_read_is_no_evidence(self):
         def fake(args, cwd):
