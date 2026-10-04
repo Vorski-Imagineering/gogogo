@@ -53,6 +53,9 @@ file = "docs/roadmap.md"
 [review]
 coverage = "broad"
 
+[publish]
+private_names = ["acme-secret"]
+
 [release]
 major = 1
 
@@ -361,6 +364,20 @@ class WrongValues(unittest.TestCase):
             settings["independence"] = level
             for skill in (None, *pc.SKILLS):
                 self.assertEqual(pc.check(settings, sections, skill), ([], []), (level, skill))
+
+    def test_publish_private_names_is_an_optional_list(self):
+        # gogogo#163: absent means []; no DEFAULTS entry, so no warning either way.
+        settings, sections = parse()
+        settings.pop("publish", None)
+        for skill in (None, *pc.SKILLS):
+            self.assertEqual(pc.check(settings, sections, skill), ([], []), skill)
+        settings["publish"] = {"private_names": ["Tangerine Billing"]}
+        for skill in (None, *pc.SKILLS):
+            self.assertEqual(pc.check(settings, sections, skill), ([], []), skill)
+        settings["publish"] = {"private_names": "Tangerine Billing"}
+        errors, _ = pc.check(settings, sections)
+        self.assertTrue(any(e.startswith("publish.private_names") for e in errors), errors)
+        self.assertNotIn("publish.private_names", pc.DEFAULTS)
 
     def test_workspace_is_checkout_or_worktree_and_optional(self):
         # gogogo#94: optional; absent means checkout. A typo must not silently mean checkout.

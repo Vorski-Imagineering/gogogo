@@ -315,7 +315,7 @@ rebased.
 | Command | What it does |
 |---|---|
 | `/gogogo:spec` | Turns an issue into a spec another agent can build from without asking. Asks the owner in rounds, records the decisions, lints the result. |
-| `/gogogo:idea` | Files what the session has found as an un-specced issue (request, findings, open questions), after showing you the draft. No further research; `/gogogo:spec` designs it later. |
+| `/gogogo:idea` | Files what the session has found as an un-specced issue (request, findings, open questions), after showing you the draft. No further research; `/gogogo:spec` designs it later. When you name gogogo's own tracker, it files a suspected gogogo fault there, only after `name_check.py` finds none of this repo's names in the title and body. |
 | `/gogogo:dev` | One issue end to end: read, triage, find the cause, change, review, verify on real data, report, move the card. |
 | `/gogogo:auto-dev` | Works the ready queue unattended, one issue after another, each on its own branch. `--triage-only` reads the queue and changes nothing. |
 | `/gogogo:setup` | Opens with the repo's setup and configuration, then onboards it, or checks it is still set up right: plugin settings, profile, Hard Stops, board and columns, ready label, competing local skills. |
@@ -344,6 +344,7 @@ Scripts the skills call, all in `plugins/gogogo/scripts/`:
 - `stranded_work.py`: finds local and `origin` branches holding work that nothing accounts for (no open issue, or an open issue with no open pull request and no stop marker naming the branch), and says what became of each branch's pull request.
 - `worktree_sweep.py`: removes the worktrees whose pull request merged or whose issue is closed, and keeps any with uncommitted changes, commits on no remote, or an open issue whose work has not merged. It also removes a local branch whose merged pull request's head is exactly the branch's tip. Without `--apply` it only lists. `--only <path>` always says why when it removes nothing (the current directory is inside it, the main worktree, or no worktree of this repo).
 - `issue_work.py`: finds an issue's earlier work (open pull requests that claim it, branches named for it, the branch its stop marker names), so dev and auto-dev continue on it rather than start again.
+- `name_check.py`: checks a draft's title and body for the names of the repo it came from (the profile's repos, git remotes, folder names, environment hosts and `publish.private_names`) before `/gogogo:idea` files it on gogogo's tracker. Read-only; exit 0 clean, 1 a hit (printed by file and line), 2 it cannot check.
 - `notify.py`: sends a run's messages by the profile's `notify` (Telegram today). With no `notify` line, messages are on whenever the machine has bot credentials (per user, or in the repo's own git-ignored `.claude/gogogo/notify.env`); `notify = "none"` turns a repo off. Off, or no credentials on the machine, sends nothing.
 - `review_stats.py`: reads back the review record on each issue and sums them up: rounds, why findings were applied or declined, how each review ended and what became of the issue, plus phase times, session ids, stops by reason, triage skips, and each session's issues taken, handed back and skipped.
 - `require_unattended.sh`: refuses to start the loop unless the session can run without prompts.

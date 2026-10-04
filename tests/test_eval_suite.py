@@ -37,6 +37,7 @@ CASES = {
     "wrap-up-fault-goes-upstream",
     "setup-connected-message", "setup-leaves-out-plugin-steps",
     "setup-machine-has-bot",
+    "idea-files-upstream-checked",
 }
 TAGS = re.compile(r"^tags:\s*\[([^\]]*)\]\s*$", re.M)
 TYPE = re.compile(r"^type:\s*(\S+)\s*$", re.M)
