@@ -252,6 +252,19 @@ What each fix involves:
   back off. Ask, then run the `gh api -X PATCH` command the row prints and
   re-run the check. If the user declines, leave it and say the line will
   keep failing.
+- **Branch rules** (`FAIL code repo: branch rules (<branch>)`). Say, in plain
+  words, what the rules mean once they are on: nobody can force-push or
+  delete `<branch>`, admins and agents included; and, when the row offers a
+  required check, every change to `<branch>`, docs included, needs a pull
+  request whose named check passes, and nobody can bypass it. For a default
+  branch that is not the merge target, also say that a promotion pushed
+  straight to it will then be refused. Give the undo command the row prints.
+  When the row replaces an existing ruleset, say that its save command runs
+  first and that the undo restores the saved ruleset.
+  Ask, then run the commands the row prints, in order (it pipes
+  `setup_check.py --ruleset <branch>` into `gh api`) and re-run the check. If
+  the user declines, leave the row failing and say so. An INFO row saying a
+  required check is not offered is reported and never acted on.
 - **Local skills the shared ones replace.** Move each to
   `.claude/skills-retired/` in the same change that moves its project
   specifics into the profile, and update anything that names it. Text left

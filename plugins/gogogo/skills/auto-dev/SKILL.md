@@ -113,9 +113,16 @@ means finished work sits unverified while you go and ask.
    report. Exit 1 means it kept a worktree, which is not a failure: the run
    goes on. Each issue's own worktree is removed after its merge, by
    `/gogogo:dev` §8.
-12. **The profile's `preflight.extra`**, each as it says. A check that says
+12. **Branch rules, reported, not acted on:**
+   ```bash
+   python3 "${CLAUDE_PLUGIN_ROOT}/scripts/setup_check.py" --branch-rules
+   ```
+   Put every FAIL and WARN row it prints at the top of the run report and go
+   on. A missing rule never stops the run; `/gogogo:setup` is where it is
+   fixed. Triage-only mode runs it too, since it only reads.
+13. **The profile's `preflight.extra`**, each as it says. A check that says
    "report only" is reported and never acted on.
-13. **Run PRs merged after their run** (only when `integration.strategy` is
+14. **Run PRs merged after their run** (only when `integration.strategy` is
    `run-branch-pr` and the profile has `tracker.tool`): move the cards a
    late-merged run PR carried, as `references/merge.md` *Cards a late-merged
    run PR carried* says, and no others. Its lines go at the top of the run
@@ -382,7 +389,8 @@ tracker comment. Never put a token on a command line or in a report.
 ## 9. Close the run
 
 In a run that tried to send *run started*, first send *run closed* (§8). Then
-one report, opening with the notify line preflight item 8 put there, if any:
+one report, opening with the notify line preflight item 8 put there and the
+branch-rules FAIL and WARN rows from preflight item 12, if any:
 every issue taken with its outcome and merge commit (and *label added by
 the run* for each one §2 labelled), every issue skipped with the reason and its column, anything left half-done with its branch, every other card
 moved to `tracker.columns.needs_human` (taken, then stopped) with its Needs-you line, the stranded

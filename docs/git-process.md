@@ -314,7 +314,8 @@ gogogo runs its own process, with `pr-squash` onto `main`
 
 - **A change to skill behaviour, the profile format or what a script writes**
   (the Hard Stops in [`CLAUDE.md`](../CLAUDE.md)) goes through a PR. Docs and
-  evidence are small commits pushed to `main`.
+  evidence are small PRs too: `main` refuses a direct push until its `tests`
+  check has passed.
 - **CI** (`.github/workflows/tests.yml`) runs the unit tests and the
   project-name grep on every PR and every push to `main`;
   `ci_before_merge` is on.

@@ -2,6 +2,8 @@
 """Check that this repo is set up for the gogogo skills, and say what to fix.
 
     setup_check.py [--json]
+    setup_check.py --branch-rules [--json]
+    setup_check.py --ruleset BRANCH
 
 Run from anywhere inside the repo. Prints one line per check:
 
@@ -12,6 +14,12 @@ Run from anywhere inside the repo. Prints one line per check:
 
 Exit 0 when nothing FAILs, 1 otherwise. It only reads: nothing is created,
 changed or moved. `/gogogo:setup` uses it and does the fixing, with approval.
+
+`--branch-rules` runs only the branch-rules rows (what GitHub enforces on the
+branches the profile merges into, and on the default branch), for
+`/gogogo:auto-dev`'s preflight. `--ruleset BRANCH` prints the ruleset body the
+branch-rules fix sends to GitHub, and exits 2 for a branch the profile does not
+give.
 """
 import argparse
 import fnmatch
@@ -34,6 +42,7 @@ READY_LABEL_COLOUR = "0E8A16"
 READY_LABEL_DESCRIPTION = "The spec is in this issue's body and needs nothing further from anyone."
 READY_LABEL_COLOUR_CHECK = "tracker: ready label colour"
 DELETE_BRANCH_CHECK = "code repo: delete merged branches"
+BRANCH_RULES_CHECK = "code repo: branch rules"
 # Local skills that the shared plugin replaces. A copy left in .claude/skills
 # competes with the shared one for the same requests.
 REPLACED_LOCAL_SKILLS = [
@@ -60,8 +69,8 @@ class Report:
     def fail(self, check, detail, fix):
         self.add("FAIL", check, detail, fix)
 
-    def warn(self, check, detail):
-        self.add("WARN", check, detail)
+    def warn(self, check, detail, fix=""):
+        self.add("WARN", check, detail, fix)
 
     def info(self, check, detail):
         self.add("INFO", check, detail)
@@ -215,6 +224,298 @@ def check_delete_branch(repo, setting, error, rep):
                                       "to read")
 
 
+def ruleset_body(branch, checks, wants_check):
+    """The ruleset `--ruleset` prints: no deletion, no force push, and the checks
+    that must pass, with nobody able to bypass them (issue #57)."""
+    rules = [{"type": "deletion"}, {"type": "non_fast_forward"}]
+    if wants_check and checks:
+        rules.append({"type": "required_status_checks", "parameters": {
+            "strict_required_status_checks_policy": False,
+            "required_status_checks": [{"context": name} for name in checks]}})
+    return {"name": f"gogogo: {branch}", "target": "branch", "enforcement": "active", "bypass_actors": [],
+            "conditions": {"ref_name": {"include": [f"refs/heads/{branch}"], "exclude": []}}, "rules": rules}
+
+
+def _ruleset_fix(repo, branch, existing):
+    script = Path(__file__).resolve()
+    if existing is None:
+        return (f"`python3 \"{script}\" --ruleset {branch} | gh api -X POST repos/{repo}/rulesets --input -` "
+                f"(undo: `gh api -X DELETE repos/{repo}/rulesets/<id from the POST's output>`)")
+    saved = f'"$(git rev-parse --git-common-dir)/gogogo-ruleset-{existing}-before.json"'
+    return (f"first save the existing ruleset: `gh api repos/{repo}/rulesets/{existing} "
+            f"--jq '{{name,target,enforcement,bypass_actors,conditions,rules}}' > {saved}`, then "
+            f"`python3 \"{script}\" --ruleset {branch} | gh api -X PUT repos/{repo}/rulesets/{existing} --input -` "
+            f"(undo: `gh api -X PUT repos/{repo}/rulesets/{existing} --input {saved}`; undo before applying "
+            f"this fix a second time, or the save holds the state after the first PUT)")
+
+
+def check_branch_rules(repo, branch, rules, classic, checks, wants_check, needs_ci, rep, *, target=True,
+                       existing=None):
+    """rules: list from rules/branches/<branch>, each rule carrying its ruleset's
+    `bypass_actors` and `ruleset_name`, or an error string (also when a ruleset
+    could not be read).
+    classic: dict from branches/<branch>/protection, {} when GitHub says
+    'Branch not protected', or an error string.
+    checks: names that passed on the latest PR merged into <branch>, [] when
+    none, or an error string.
+    wants_check: False for merge-script's integration.base only.
+    target: False for a default branch that is not the merge target.
+    existing: the id of a ruleset already named `gogogo: <branch>`, or None."""
+    check = f"{BRANCH_RULES_CHECK} ({branch})"
+    if isinstance(rules, str):
+        rep.warn(check, f"could not read the rules on {repo} {branch}: {rules}")
+        return
+    types = {r.get("type") for r in rules}
+    old = classic if isinstance(classic, dict) else {}
+    required = old.get("required_status_checks") or {}
+    by_rules = {"no force push": "non_fast_forward" in types, "no deletion": "deletion" in types,
+                "a required check": "required_status_checks" in types}
+    by_classic = {"no force push": (old.get("allow_force_pushes") or {}).get("enabled") is False,
+                  "no deletion": (old.get("allow_deletions") or {}).get("enabled") is False,
+                  "a required check": bool(required.get("contexts") or required.get("checks"))}
+    # Classic protection with enforce admins off binds nobody who has an admin's
+    # login, and the agents use one. A rule held only there counts as missing.
+    admins_bypass = (old.get("enforce_admins") or {}).get("enabled") is not True
+    present = {name: by_rules[name] or (by_classic[name] and not admins_bypass) for name in by_rules}
+    fix = _ruleset_fix(repo, branch, existing)
+    basic = [name for name in ("no force push", "no deletion") if not present[name]]
+    if basic and isinstance(classic, str):
+        rep.warn(check, f"{repo} {branch} has no ruleset for {', '.join(basic)}; it may be set in classic branch "
+                        f"protection, which needs admin to read ({classic})", fix)
+        return
+    if basic:
+        lacks_check = wants_check and not present["a required check"]
+        classic_only = [name for name in basic if by_classic[name]]
+        if not classic_only:
+            missing = basic + (["a required check"] if lacks_check else [])
+            rep.fail(check, f"{repo} {branch} is missing: {', '.join(missing)}", fix)
+            return
+        if lacks_check and by_classic["a required check"]:
+            classic_only.append("a required check")
+        others = [name for name in basic if name not in classic_only]
+        if lacks_check and "a required check" not in classic_only:
+            others.append("a required check")
+        detail = (f"{repo} {branch} has {', '.join(classic_only)} only in classic branch protection, which "
+                  "admins can bypass (enforce admins is off), and agents use an admin's login")
+        if others:
+            detail += f"; it is also missing: {', '.join(others)}"
+        rep.fail(check, detail, fix)
+        return
+    actors = [a for r in rules for a in r.get("bypass_actors") or []]
+    if actors:
+        named = ", ".join(sorted({f"{a.get('actor_type')} {a.get('actor_id')}" for a in actors}))
+        bypassing = {r.get("ruleset_id") for r in rules if r.get("bypass_actors")}
+        # Name each ruleset as Settings > Rules lists it; its id only when the read gave no name.
+        names = sorted({repr(r.get("ruleset_name")) if r.get("ruleset_name") else f"id {r.get('ruleset_id')}"
+                        for r in rules if r.get("bypass_actors")})
+        rep.fail(check, f"{repo} {branch} can be bypassed by: {named}",
+                 fix if bypassing == {existing} else
+                 f"empty the bypass list in Settings > Rules for the ruleset{'s' if len(names) > 1 else ''} "
+                 f"{', '.join(names)}")
+        return
+    if present["a required check"]:
+        rep.ok(check, f"{repo} {branch}")
+        return
+    if not wants_check:
+        rep.info(check, f"a required check is not offered: the merge script pushes to {branch} directly")
+        return
+    if isinstance(classic, str):
+        rep.warn(check, f"{repo} {branch} has no ruleset requiring a check; one may be required in classic branch "
+                        f"protection, which needs admin to read ({classic})", fix)
+        return
+    no_names = not checks or isinstance(checks, str)
+    if no_names and not target:
+        rep.warn(check, f"no check name can be derived: the checks on the latest PR merged into {branch} could not "
+                        f"be read ({checks})" if isinstance(checks, str) else
+                        f"no check name can be derived: no PR with a passing check has been merged into {branch}")
+        return
+    if by_classic["a required check"]:
+        names = ", ".join(required.get("contexts") or [c.get("context", "?") for c in required.get("checks") or []])
+        detail = (f"{repo} {branch} requires {names} only in classic branch protection, which admins can bypass "
+                  "(enforce admins is off)")
+        if isinstance(checks, str):
+            detail += f" ({checks})"
+            level_fix = "re-run once the latest merged PR's checks can be read, to get the ruleset command"
+        else:
+            level_fix = fix if not no_names else (f"merge a PR into `{branch}` whose checks pass, then re-run to "
+                                                  "get the ruleset command")
+    elif no_names:
+        detail = f"{repo} {branch} requires no check, and no check passed on the latest PR merged into {branch}"
+        if isinstance(checks, str):
+            detail += f" ({checks})"
+        level_fix = (f"add a CI workflow that runs on every pull request to `{branch}`, merge one PR, re-run")
+    else:
+        detail = f"{repo} {branch} requires no check (the latest merged PR passed: {', '.join(checks)})"
+        level_fix = fix
+    if needs_ci:
+        rep.fail(check, detail, level_fix)
+    else:
+        rep.warn(check, detail, level_fix)
+
+
+def _gh_json(*args, json_on_failure=False):
+    """(parsed stdout, None) or (None, gh's error line). A failed call is an
+    error even when GitHub printed its error as JSON, except where the caller
+    says a non-zero exit can carry real output (`gh pr checks` exits non-zero
+    when a check failed)."""
+    out = run("gh", *args)
+    try:
+        value = json.loads(out.stdout) if out.stdout.strip() else None
+    except json.JSONDecodeError:
+        value = None
+    if out.returncode != 0 and (value is None or not json_on_failure):
+        return None, (out.stderr.strip().splitlines() or [f"gh exited {out.returncode}"])[0]
+    if value is None:
+        return None, "gh printed nothing readable"
+    return value, None
+
+
+def check_names(repo, branch):
+    """The checks that passed on the latest PR merged into `branch`: [] when none, or an error string."""
+    # gh pr list sorts by creation, not merge date: read a page and take the latest merged.
+    prs, error = _gh_json("pr", "list", "--repo", repo, "--base", branch, "--state", "merged", "--limit", "20",
+                          "--json", "number,mergedAt")
+    if error:
+        return error
+    if not prs:
+        return []
+    latest = max(prs, key=lambda pr: pr.get("mergedAt") or "")
+    checks, error = _gh_json("pr", "checks", str(latest["number"]), "--repo", repo, "--json", "name,bucket",
+                             json_on_failure=True)
+    if error and "no checks reported" in error:
+        # gh exits 1 with this line for a PR that ran no checks: none passed, not a failed read.
+        return []
+    if error:
+        return error
+    return [c["name"] for c in checks if c.get("bucket") == "pass"]
+
+
+def branch_plan(settings, default_branch):
+    """[(branch, wants_check, target)] to check, and a reason when there is nothing to check."""
+    integration = settings.get("integration") or {}
+    strategy = integration.get("strategy")
+    plan, note = [], None
+    if strategy == "run-branch-pr":
+        if integration.get("final_target"):
+            plan.append((integration["final_target"], True, True))
+        else:
+            note = "integration.final_target is not set; nothing to check"
+    else:
+        base = integration.get("base") or default_branch
+        if base:
+            plan.append((base, strategy != "merge-script", True))
+    if default_branch and default_branch not in [b for b, _, _ in plan]:
+        plan.append((default_branch, True, False))
+    return plan, note
+
+
+def _rules_with_bypass(repo, branch):
+    rules, error = _gh_json("api", f"repos/{repo}/rules/branches/{branch}")
+    if error:
+        return error
+    if not isinstance(rules, list):
+        return "gh printed something that is not a list"
+    bypass = {}
+    for ruleset in {r.get("ruleset_id") for r in rules}:
+        body, error = _gh_json("api", f"repos/{repo}/rulesets/{ruleset}")
+        if error or not isinstance(body, dict):
+            return f"ruleset {ruleset}: {error or 'gh printed something that is not a JSON object'}"
+        if "bypass_actors" not in body:
+            return f"ruleset {ruleset}: its bypass list is not shown to this gh login"
+        bypass[ruleset] = (body.get("bypass_actors", []), body.get("name"))
+    return [dict(r, bypass_actors=bypass[r.get("ruleset_id")][0], ruleset_name=bypass[r.get("ruleset_id")][1])
+            for r in rules]
+
+
+def _classic(repo, branch):
+    out = run("gh", "api", f"repos/{repo}/branches/{branch}/protection")
+    if out.returncode != 0:
+        if "Branch not protected" in out.stderr:
+            return {}
+        return (out.stderr.strip().splitlines() or [f"gh exited {out.returncode}"])[0]
+    try:
+        value = json.loads(out.stdout)
+    except json.JSONDecodeError:
+        return "gh printed something that is not JSON"
+    return value if isinstance(value, dict) else "gh printed something that is not a JSON object"
+
+
+def _rulesets(repo):
+    """({ruleset name: id} over every page of the repo's rulesets, None), or (None, gh's error)."""
+    rulesets, error = _gh_json("api", f"repos/{repo}/rulesets", "--paginate")
+    if not error and not isinstance(rulesets, list):
+        error = "gh printed something that is not a list"
+    if error:
+        return None, error
+    return {r.get("name"): r.get("id") for r in rulesets if isinstance(r, dict)}, None
+
+
+def check_branches(code_repo, settings, default_branch, rep):
+    """The branch-rules rows for every branch Design 4 of issue #57 names; returns the plan."""
+    plan, note = branch_plan(settings, default_branch)
+    if note:
+        rep.warn(BRANCH_RULES_CHECK, note)
+    if not plan:
+        if not note:
+            rep.warn(BRANCH_RULES_CHECK, "no branch to check: integration.base is not set and the default branch "
+                                         "could not be read")
+        return plan
+    needs_ci = bool((settings.get("integration") or {}).get("ci_before_merge"))
+    named, error = _rulesets(code_repo)
+    for branch, wants_check, target in plan:
+        # Without the rulesets list there is no telling a POST from a PUT: no fix is offered.
+        rules = f"could not read the rulesets: {error}" if error else _rules_with_bypass(code_repo, branch)
+        check_branch_rules(code_repo, branch, rules, _classic(code_repo, branch),
+                           check_names(code_repo, branch) if wants_check else [], wants_check, needs_ci, rep,
+                           target=target, existing=(named or {}).get(f"gogogo: {branch}"))
+    return plan
+
+
+def _requires_a_check(repo, branch):
+    """Why a body with no check must not replace the `gogogo: <branch>` ruleset, or None when it may."""
+    named, error = _rulesets(repo)
+    if error:
+        return f"the rulesets could not be read to see whether one requires a check ({error})"
+    if f"gogogo: {branch}" not in named:
+        return None
+    ruleset = named[f"gogogo: {branch}"]
+    body, error = _gh_json("api", f"repos/{repo}/rulesets/{ruleset}")
+    if error or not isinstance(body, dict):
+        return f"ruleset {ruleset} could not be read to see whether it requires a check ({error or 'not a JSON object'})"
+    if any(isinstance(r, dict) and r.get("type") == "required_status_checks" for r in body.get("rules") or []):
+        return f"the required check of the existing ruleset {ruleset} would be dropped"
+    return None
+
+
+def print_ruleset(settings, default_branch, branch):
+    plan, _ = branch_plan(settings, default_branch)
+    wanted = {b: w for b, w, _ in plan}
+    if branch not in wanted:
+        print(f"{branch} is not a branch the profile merges into or the default branch "
+              f"({', '.join(wanted) or 'none'})", file=sys.stderr)
+        return 2
+    code_repo = (settings.get("tracker") or {}).get("code_repo")
+    checks = check_names(code_repo, branch) if wanted[branch] else []
+    if isinstance(checks, str):
+        # A new ruleset still gets no force push and no deletion; replacing an
+        # existing one without its check could drop a check it already requires.
+        named, error = _rulesets(code_repo)
+        if error or f"gogogo: {branch}" in named:
+            print(f"could not read the checks to require on {branch}: {checks}", file=sys.stderr)
+            return 2
+        checks = []
+    elif wanted[branch] and not checks:
+        # No check name: the latest merged PR ran none (a docs-only PR, say), none passed,
+        # or nothing has merged yet. A new ruleset gets
+        # none; replacing one that requires a check would drop it.
+        refusal = _requires_a_check(code_repo, branch)
+        if refusal:
+            print(f"no merged PR into {branch} gives a passing check to require, so {refusal}", file=sys.stderr)
+            return 2
+    print(json.dumps(ruleset_body(branch, checks if isinstance(checks, list) else [], wanted[branch]), indent=2))
+    return 0
+
+
 def check_tracker(root, settings, rep):
     tracker = settings.get("tracker") or {}
     repo = tracker.get("issues_repo")
@@ -234,15 +535,17 @@ def check_tracker(root, settings, rep):
     code_repo = tracker.get("code_repo")
     if code_repo:
         api = run("gh", "api", f"repos/{code_repo}")
-        setting, error = None, None
+        setting, error, default_branch = None, None, None
         if api.returncode != 0:
             error = (api.stderr.strip().splitlines() or [f"gh exited {api.returncode}"])[0]
         else:
             try:
-                setting = json.loads(api.stdout).get("delete_branch_on_merge")
+                body = json.loads(api.stdout)
+                setting, default_branch = body.get("delete_branch_on_merge"), body.get("default_branch")
             except (json.JSONDecodeError, AttributeError):
                 error = "gh printed something that is not a JSON object"
         check_delete_branch(code_repo, setting, error, rep)
+        check_branches(code_repo, settings, default_branch, rep)
 
     label = tracker.get("ready_marker")
     if label:
@@ -835,8 +1138,35 @@ def config_header(root, settings, rep, profile=None):
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--json", action="store_true")
+    parser.add_argument("--branch-rules", action="store_true", help="only the branch-rules rows")
+    parser.add_argument("--ruleset", metavar="BRANCH", help="print the ruleset body for BRANCH")
     args = parser.parse_args(argv)
     rep = Report()
+
+    if args.branch_rules or args.ruleset:
+        path = profile_check.find_profile()
+        try:
+            settings, _ = profile_check.split_profile(path.read_text(encoding="utf-8"))
+        except (OSError, profile_check.ProfileError) as exc:
+            print(f"profile: {exc}", file=sys.stderr)
+            return 2
+        code_repo = (settings.get("tracker") or {}).get("code_repo")
+        if not code_repo:
+            print("profile: tracker.code_repo is not set", file=sys.stderr)
+            return 2
+        body, error = _gh_json("api", f"repos/{code_repo}")
+        default_branch = body.get("default_branch") if isinstance(body, dict) else None
+        if args.ruleset:
+            return print_ruleset(settings, default_branch, args.ruleset)
+        if error:
+            rep.warn(BRANCH_RULES_CHECK, f"could not read {code_repo}: {error}")
+        check_branches(code_repo, settings, default_branch, rep)
+        if args.json:
+            json.dump(rep.rows, sys.stdout, indent=2)
+            print()
+        else:
+            rep.print()
+        return 1 if rep.failed() else 0
 
     top = run("git", "rev-parse", "--show-toplevel")
     if top.returncode != 0:
