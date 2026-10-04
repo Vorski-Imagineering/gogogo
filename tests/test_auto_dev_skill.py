@@ -240,6 +240,10 @@ class LateRunPr(unittest.TestCase):
         for word in ("Ships-issue", "--parents", "verify_merged.py", "--open", "move", "--from",
                      "--state open", "mergeCommit.oid"):
             self.assertIn(word, sub)
+        step5 = sub.split("\n5. ")[1].split("\n6. ")[0]
+        for word in ("gh pr view", "--json commits", "messageBody", "Ships-issue"):
+            self.assertIn(word, step5)
+        self.assertNotIn("as in step 4", step5)
 
     def test_final_pr_description_lists_after_merging(self):
         bullet = moved(MERGE).split("- **`run-branch-pr`**")[1].split("\n- **")[0]

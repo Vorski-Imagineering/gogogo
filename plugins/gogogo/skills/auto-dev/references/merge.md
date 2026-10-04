@@ -149,8 +149,11 @@ reported and the run goes on.
    except a card also carried by an open run PR (a later run re-landed it):
    find open run PRs with
    `gh pr list --repo <tracker.code_repo> --base <integration.final_target> --state open --json number,headRefName`
-   (same prefix test), read their Ships-issue links as in step 4, and leave
-   and report such a card.
+   (same prefix test). An open PR has no merge commit, so step 4's read does
+   not apply: for each, read its own commits with
+   `gh pr view <n> --repo <tracker.code_repo> --json commits -q '.commits[].messageBody'`
+   and keep the `Ships-issue:` lines that link to `tracker.issues_repo`. Leave
+   and report any card so linked.
    For each such PR run
    `python3 "${CLAUDE_PLUGIN_ROOT}/scripts/verify_merged.py" <pr> <integration.final_target> --repo <tracker.code_repo> --open <tracker.issues_repo>#<n> ...`
    for its cards. Exit 0: `<tracker.tool> move <n> --from "<run column>" --to "<next column>"`
