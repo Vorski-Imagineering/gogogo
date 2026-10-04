@@ -38,6 +38,7 @@ CASES = {
     "setup-connected-message", "setup-leaves-out-plugin-steps",
     "setup-machine-has-bot",
     "idea-files-upstream-checked",
+    "auto-dev-sends-event-json",
 }
 TAGS = re.compile(r"^tags:\s*\[([^\]]*)\]\s*$", re.M)
 TYPE = re.compile(r"^type:\s*(\S+)\s*$", re.M)
