@@ -22,6 +22,14 @@ Any `git` or `gh` failure for a worktree keeps it, `cannot tell: <message>`:
 no evidence never removes work. Prints `remove <path> (<branch>): <reason>` or
 `keep <path> (<branch>): <reason>`, one line per worktree.
 
+A whole sweep leaves out the main worktree and the one holding the current
+directory without a word. `--only PATH` never ends silent: PATH that is the
+main worktree prints `keep <path> (<branch>): the main worktree is never
+removed`; PATH holding the current directory prints `keep <path> (<branch>):
+the current directory is inside it; run this from <main worktree>`; PATH that
+is no worktree of this repo prints `worktree_sweep: <path> is not a worktree of
+this repo` on stderr. Nothing is removed in any of the three.
+
 With `--apply`, each `remove` runs `git worktree remove <path>` (never
 `--force`, so git refuses a dirty one too) and, only when its pull request
 merged, `git branch -D <branch>` (a squash merge leaves the branch's commits
@@ -29,7 +37,7 @@ off the base, so `-d` would refuse). A failure is printed and the worktree
 counts as kept. Then `git worktree prune` clears entries whose folder is gone.
 
 Exit 0 when no worktree is kept, 1 when any is, 2 when the worktree list
-cannot be read. The pull request and issue repos are the profile's
+cannot be read or `--only` names no worktree. The pull request and issue repos are the profile's
 `tracker.code_repo` and `tracker.issues_repo`.
 """
 import argparse
@@ -164,7 +172,20 @@ def main(argv=None):
     here = Path.cwd()
     candidates = [t for t in trees[1:] if not _inside(here, t["path"])]
     if args.only:
-        candidates = [t for t in candidates if Path(t["path"]).resolve() == Path(args.only).resolve()]
+        target = Path(args.only).resolve()
+        named = [t for t in trees if Path(t["path"]).resolve() == target]
+        if not named:
+            print(f"worktree_sweep: {target} is not a worktree of this repo", file=sys.stderr)
+            return 2
+        tree = named[0]
+        label = f"keep {tree['path']} ({tree['branch'] or 'detached'})"
+        if tree is trees[0]:
+            print(f"{label}: the main worktree is never removed")
+            return 1
+        if _inside(here, tree["path"]):
+            print(f"{label}: the current directory is inside it; run this from {trees[0]['path']}")
+            return 1
+        candidates = [tree]
     issues_repo, code_repo = repos()
 
     kept = False
