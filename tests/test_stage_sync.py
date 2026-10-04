@@ -792,6 +792,18 @@ class Reverts(RepoTestCase):
                       self.out)
         self.assertEqual(self.calls, [])
 
+    def test_a_fix_landed_again_after_its_revert_is_not_named(self):
+        """Reland by a new commit: else the card is handed back again on every run."""
+        self.revert(self.fix)
+        self.repo.commit("fix: x again (Refs #12)")
+        self.assertEqual(self.reverts(), 0, self.out)
+
+    def test_a_revert_that_was_itself_reverted_is_not_named(self):
+        """Reland by revert-of-revert; the revert's own subject carries the Refs and is no fix."""
+        undo = self.revert(self.fix)
+        self.revert(undo, 'Revert "Revert "fix: x (Refs #12)""')
+        self.assertEqual(self.reverts(), 0, self.out)
+
     def test_nothing_reverted_exits_0(self):
         self.assertEqual(self.reverts(), 0, self.err)
         self.assertNotIn("reverted by", self.out)
@@ -1001,6 +1013,15 @@ class ShippedInGit(RepoTestCase):
         result = ss.shipped("deploy-B", "deploy-A", KNOWN, issues_repo="acme/issues")
         self.assertEqual([link.key for link in result.links], [("acme/issues", 12), ("acme/other", 3)])
         self.assertEqual(result.unlinked_commits, 1)
+
+    def test_a_revert_commit_does_not_ship_the_issue_in_its_subject(self):
+        self.repo.commit("base")
+        fix = self.repo.commit("fix: x (Refs #12)")
+        self.repo.tag("deploy-A")
+        self.repo.commit(f'Revert "fix: x (Refs #12)"\n\nThis reverts commit {fix}.\n')
+        self.repo.tag("deploy-B")
+        result = ss.shipped("deploy-B", "deploy-A", KNOWN, issues_repo="acme/issues")
+        self.assertEqual(result.links, [])
 
     def test_without_an_issues_repo_a_refs_subject_links_nothing(self):
         self.repo.commit("base")

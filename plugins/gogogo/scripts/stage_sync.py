@@ -716,7 +716,9 @@ def shipped(tag: str, prev: str, known: dict[str, str], issues_repo: str = "") -
     rev_range = f"{prev}..{tag}"
     refs: dict[str, list[IssueLink]] = {}
     if issues_repo:
-        for sha, subject, _ in log_records(rev_range):
+        for sha, subject, body in log_records(rev_range):
+            if _REVERTS.search(body):  # a revert's subject quotes the fix it removes; it ships nothing
+                continue
             for match in _REFS.finditer(subject):
                 repo = f"{match['owner']}/{match['name']}" if match["owner"] else issues_repo
                 refs.setdefault(sha, []).append(IssueLink(repo, int(match["number"])))
@@ -835,7 +837,9 @@ def log_records(main_ref: str) -> list[tuple[str, str, str]]:
 def subject_links(records: list[tuple[str, str, str]], issues_repo: str) -> dict[tuple[str, int], list[str]]:
     """{(owner/repo, number): shas} from the `Refs` in each subject; a bare `#n` is the issues repo."""
     links: dict[tuple[str, int], list[str]] = {}
-    for sha, subject, _ in records:
+    for sha, subject, body in records:
+        if _REVERTS.search(body):  # a revert's subject quotes the fix it removes; it is no fix
+            continue
         for match in _REFS.finditer(subject):
             repo = f"{match['owner']}/{match['name']}" if match["owner"] else issues_repo
             links.setdefault(link_key(repo, int(match["number"])), []).append(sha)
@@ -852,13 +856,19 @@ def find_reverts(cards: list[dict], profile: Profile, main_ref: str) -> list[Rev
     links = {key: list(linked.shas) for key, linked in trailer_links(main_ref, profile.known).items()}
     for key, shas in subject_links(records, profile.issues_repo).items():
         links.setdefault(key, []).extend(s for s in shas if s not in links[key])
+    age = {sha: i for i, (sha, _, _) in enumerate(records)}  # newest first: a lower index is newer
     hits = []
     for card in cards:
         key = link_key(card_repo(card, profile.issues_repo), card["number"])
         for shipped_sha in links.get(key, []):
             for prefix, sha, subject in reverted:
-                if shipped_sha.startswith(prefix):
-                    hits.append(Revert(key, shipped_sha, sha, subject))
+                if not shipped_sha.startswith(prefix):
+                    continue
+                if any(sha.startswith(p) for p, _, _ in reverted):
+                    continue  # the revert was itself reverted: the fix is back
+                if any(age.get(other, len(age)) < age[sha] for other in links[key]):
+                    continue  # a fix for the issue landed after the revert
+                hits.append(Revert(key, shipped_sha, sha, subject))
     return hits
 
 

@@ -38,6 +38,10 @@ class ReleaseWorkflow(unittest.TestCase):
         self.assertIn("ref: ${{ github.event.workflow_run.head_sha }}", self.text)
         self.assertRegex(self.text, r"release\.py --profile \.agents/dev-process\.md tag --push origin")
 
+    def test_no_concurrency_group_so_no_queued_run_is_dropped(self):
+        """A group keeps one pending run, so a merge's tag would be skipped under a burst; tags differ per commit."""
+        self.assertNotIn("concurrency:", self.text)
+
     def test_the_profile_adopts_the_release_standard(self):
         settings, _ = pc.split_profile((ROOT / ".agents" / "dev-process.md").read_text(encoding="utf-8"))
         self.assertEqual(settings.get("release"), {"major": 1})
