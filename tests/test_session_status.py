@@ -276,8 +276,7 @@ class Line(unittest.TestCase):
             path = repo / ".agents" / "dev-process.md"
             path.write_text(path.read_text(encoding="utf-8").replace(
                 "profile = 1\n", f'profile = 1\nindependence = "{raw}"\n', 1), encoding="utf-8")
-            with mock.patch.dict(os.environ, {"CLAUDE_CODE_ENTRYPOINT": "cli"}):
-                code, out, _ = run_main(repo, Board())
+            code, out, _ = run_main(repo, Board())  # plain: any ESC left would be the profile's
             self.assertEqual(code, 0, raw)
             line = message(out)
             self.assertIn(shown, line, raw)
