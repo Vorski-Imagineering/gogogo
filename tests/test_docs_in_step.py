@@ -58,6 +58,11 @@ class DocsInStep(unittest.TestCase):
         for name in scripts:
             self.assertTrue([ln for ln in lines if ln.startswith(f"- `{name}`")], f"README does not list {name}")
 
+    def test_readme_names_the_session_start_line_and_reverts(self):
+        readme = (ROOT / "README.md").read_text(encoding="utf-8")
+        self.assertIn("waiting.py", readme)
+        self.assertRegex(readme, r"stage_sync\.py.*\breverts\b")
+
     def test_docs_name_only_known_settings(self):
         seen = set()
         for doc in DOCS:

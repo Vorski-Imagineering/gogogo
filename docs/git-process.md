@@ -276,6 +276,23 @@ card to Done: a person confirms the fix, or, where the repo runs
 `/gogogo:auto-test`, a PASS moves the card to `auto_test.pass_column` (Done, in
 some repos) and closes the issue when `auto_test.pass_closes` is true.
 
+**When a shipped fix is reverted.** A revert leaves the original commit in the
+history, so nothing that asks "is this commit in the tag?" can see it.
+`stage_sync.py reverts` reads the base branch instead: for each open card in a
+stage column, it looks for a commit saying `This reverts commit <sha>` (what
+`git revert` and GitHub's Revert button write) of a commit linked to that
+issue, by its `Ships-issue` trailer or the `Refs #<n>` in its subject. With
+`--apply`, which `/gogogo:auto-dev` runs in its preflight, it comments on the
+issue naming the revert, with a `reverted` stop marker, and moves the card to
+`tracker.columns.needs_human`. A person decides whether to fix it again or close
+it. A hand-written revert without that line, and a rollback by redeploying an
+older tag, are not detected.
+
+**Closed as not planned.** `tracker.py tidy` files every issue closed as
+completed under Done and archives every issue closed as not planned: it leaves
+the board and can be restored from the board's archive, so Done holds only work
+that was done.
+
 ## Releases and tags
 
 **A merge is a release** when the stage it reaches has an environment with the
@@ -321,6 +338,10 @@ gogogo runs its own process, with `pr-squash` onto `main`
   `ci_before_merge` is on.
 - **`main` is production.** A merge reaches every adopting repo on its next
   plugin update, so a merge here is always a release.
+- **Tags.** The profile has `[release]` with `major = 1`, so every push to
+  `main` that passes the tests is tagged `deploy-<build>` and versioned
+  `1.0.<build>` by `.github/workflows/release.yml`, which runs
+  `release.py tag --push origin` after the `tests` workflow succeeds.
 - **`/gogogo:auto-dev` on this repo** runs the plugin from this checkout, so it
   never switches branches or pulls in that tree. The profile sets
   `integration.workspace = "worktree"` (the owner's choice, 2026-10-03), so

@@ -41,7 +41,7 @@ one, on its own line directly under the `**Needs you:**` line, and no other
 report does (the reopen line below is not a stop), except a triage skip from
 `/gogogo:auto-dev`, which carries the skip marker instead:
 
-`<!-- gogogo:stop v=1 reason=<hard-stop|decision|spec|review|tests|mutation|verify|gate|ci|merge> session=<id|unknown> -->`
+`<!-- gogogo:stop v=1 reason=<hard-stop|decision|spec|review|tests|mutation|verify|gate|ci|merge|reverted> session=<id|unknown> -->`
 
 | reason | when |
 |---|---|
@@ -55,6 +55,7 @@ report does (the reopen line below is not a stop), except a triage skip from
 | `gate` | a gate that could not be made to pass (`/gogogo:auto-dev` §5) |
 | `ci` | the PR's checks failed or could not be read (*Merging a PR*, below) |
 | `merge` | the merge was refused or could not complete: draft, review required, branch rule, merge queue, permission, or the base kept moving (*Merging a PR*, below) |
+| `reverted` | a shipped fix was reverted on the base (`stage_sync.py reverts --apply`, run by `/gogogo:auto-dev` preflight) |
 
 Nothing sweeps cards out of `tracker.columns.needs_human`, and no run takes an
 issue from there: a person moves it on once they have done what it asked, or

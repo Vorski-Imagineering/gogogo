@@ -735,6 +735,266 @@ class SyncAgainstRealGit(RepoTestCase):
 
 
 # --------------------------------------------------------------------------
+# reverts: a shipped fix taken back out
+# --------------------------------------------------------------------------
+
+
+def stage_card(number, status="Released", state="OPEN"):
+    return dict(card(number, status=status), state=state)
+
+
+class Reverts(RepoTestCase):
+    """`reverts` against real git; the board, the comment read and every write faked."""
+
+    STOP = "<!-- gogogo:stop v=1 reason=reverted -->"
+
+    def setUp(self):
+        super().setUp()
+        profile = Path(self.write_profile())
+        profile.write_text(profile.read_text().replace(
+            'back_to_queue = "Dev Ready" }', 'back_to_queue = "Dev Ready", needs_human = "Human!Help!" }'))
+        self.profile = str(profile)
+        self.repo.commit("base")
+        self.fix = self.repo.commit("fix: x (Refs #12)")
+        self.repo.commit("unrelated work")
+
+    def revert(self, sha, subject='Revert "fix: x (Refs #12)"'):
+        return self.repo.commit(f"{subject}\n\nThis reverts commit {sha}.\n")
+
+    def reverts(self, *extra, cards=None, newest="", fail=None, main_ref="main"):
+        cards = [stage_card(12)] if cards is None else cards
+        self.calls, self.bodies, self.list_kwargs = [], [], {}
+        ref_args = ["--main-ref", main_ref] if main_ref else []
+
+        def fake_run(cmd):
+            self.calls.append(cmd)
+            if "--body-file" in cmd:
+                self.bodies.append(Path(cmd[cmd.index("--body-file") + 1]).read_text())
+            return 1 if fail and fail(cmd) else 0
+
+        def fake_list_cards(*, repo=None, **_):
+            if not repo:
+                raise ValueError("list_cards needs repo=tracker.DEFAULT_REPO")
+            self.list_kwargs = {"repo": repo, **_}
+            return cards, [], 0
+
+        with mock.patch.object(ss.tracker, "list_cards", side_effect=fake_list_cards), \
+             mock.patch.object(ss.tracker, "board_meta", return_value={"options": {"Released": "r", "Human!Help!": "h"}}), \
+             mock.patch.object(ss.tracker, "newest_comment", return_value=newest), \
+             mock.patch.object(ss, "run", side_effect=fake_run):
+            code, self.out, self.err = run_main("--profile", self.profile, "reverts", *ref_args, *extra)
+        return code
+
+    def test_a_reverted_fix_is_named_with_both_commits(self):
+        undo = self.revert(self.fix)
+        self.assertEqual(self.reverts(), 1, self.err)
+        self.assertIn(f"#12: shipped by {self.fix[:7]}, reverted by {undo[:7]} (Revert \"fix: x (Refs #12)\")",
+                      self.out)
+        self.assertEqual(self.calls, [])
+
+    def test_a_fix_landed_again_after_its_revert_is_not_named(self):
+        """Reland by a new commit: else the card is handed back again on every run."""
+        self.revert(self.fix)
+        self.repo.commit("fix: x again (Refs #12)")
+        self.assertEqual(self.reverts(), 0, self.out)
+
+    def test_a_revert_that_was_itself_reverted_is_not_named(self):
+        """Reland by revert-of-revert; the revert's own subject carries the Refs and is no fix."""
+        undo = self.revert(self.fix)
+        self.revert(undo, 'Revert "Revert "fix: x (Refs #12)""')
+        self.assertEqual(self.reverts(), 0, self.out)
+
+    def test_a_second_revert_that_was_reverted_leaves_the_first_one_named(self):
+        """The fix stays out while an earlier revert stands: undoing the later revert re-lands nothing."""
+        first = self.revert(self.fix)
+        again = self.revert(self.fix, 'Revert "fix: x (Refs #12)" again')
+        self.revert(again, 'Revert "Revert "fix: x (Refs #12)" again"')
+        self.assertEqual(self.reverts(), 1, self.err)
+        self.assertIn(f"reverted by {first[:7]}", self.out)
+
+    def test_nothing_reverted_exits_0(self):
+        self.assertEqual(self.reverts(), 0, self.err)
+        self.assertNotIn("reverted by", self.out)
+
+    def test_an_abbreviated_sha_of_seven_is_read_and_six_is_not(self):
+        self.revert(self.fix[:6])
+        self.assertEqual(self.reverts(), 0, self.out)
+        self.revert(self.fix[:7])
+        self.assertEqual(self.reverts(), 1, self.err)
+        self.assertIn(f"#12: shipped by {self.fix[:7]}", self.out)
+
+    def test_the_ships_issue_trailer_and_the_full_repo_form_link_too(self):
+        other = self.repo.commit(squash_body(ss.format_trailer(ss.IssueLink("acme/issues", 13))))
+        full = self.repo.commit("fix: y (Refs acme/issues#14)")
+        self.revert(other, "Revert trailer")
+        self.revert(full, "Revert full")
+        self.assertEqual(self.reverts(cards=[stage_card(13), stage_card(14)]), 1, self.err)
+        self.assertIn(f"#13: shipped by {other[:7]}", self.out)
+        self.assertIn(f"#14: shipped by {full[:7]}", self.out)
+
+    def test_a_revert_of_another_issues_commit_or_a_closed_issue_is_not_named(self):
+        other = self.repo.commit("fix: z (Refs #99)")
+        self.revert(other, 'Revert "fix: z"')
+        self.assertEqual(self.reverts(), 0, self.out)
+        self.assertNotIn("#12", self.out)
+        self.revert(self.fix)
+        self.assertEqual(self.reverts(cards=[stage_card(12, state="CLOSED")]), 0, self.out)
+        self.assertEqual(self.reverts(cards=[stage_card(12, status="Dev Ready")]), 0, self.out)
+
+    def test_apply_comments_with_the_stop_marker_then_moves_to_needs_human(self):
+        undo = self.revert(self.fix)
+        self.assertEqual(self.reverts("--apply"), 1, self.err)
+        self.assertEqual([c[:3] for c in self.calls if c[0] == "gh"], [["gh", "issue", "comment"]])
+        move = self.calls[-1]
+        self.assertEqual(move[4:6], ["move", "12"])
+        self.assertEqual(move[move.index("--to") + 1], "needs_human")
+        self.assertEqual(move[:4], [sys.executable, str(SCRIPTS / "tracker.py"), "--profile", self.profile])
+        body = self.bodies[0]
+        self.assertIn(undo[:7], body)
+        lines = body.splitlines()
+        self.assertIn(self.STOP, lines)
+        self.assertTrue(lines[lines.index(self.STOP) - 1].startswith("**Needs you:**"))
+        self.assertTrue(ss.tracker.has_reason(body))
+
+    def test_apply_with_a_failed_comment_does_not_move_that_card(self):
+        self.revert(self.fix)
+        self.assertEqual(self.reverts("--apply", fail=lambda cmd: "comment" in cmd), 2)
+        self.assertNotIn("move", [c[4] for c in self.calls if c[0] != "gh"])
+        self.assertIn("comment failed", self.err)
+
+    def test_apply_again_after_the_comment_writes_nothing(self):
+        undo = self.revert(self.fix)
+        self.assertEqual(self.reverts("--apply"), 1, self.err)
+        posted = self.bodies[0]
+        self.assertEqual(self.reverts("--apply", newest=posted), 1, self.err)
+        self.assertEqual(self.calls, [])
+        self.assertIn(undo[:7], self.out)
+
+    def hit(self, issues_repo="acme/issues"):
+        return ss.Revert(("acme/issues", 12), "a" * 40, "b" * 40, 'Revert "x"')
+
+    def test_a_hit_is_a_line_naming_the_issue_the_two_commits_and_the_subject(self):
+        hit = self.hit()
+        self.assertEqual(hit.line("Acme/Issues"), '#12: shipped by aaaaaaa, reverted by bbbbbbb (Revert "x")')
+        other = ss.Revert(("acme/other", 3), "a" * 40, "b" * 40, "s")
+        self.assertEqual(other.line("acme/issues"), "acme/other#3: shipped by aaaaaaa, reverted by bbbbbbb (s)")
+        with self.assertRaises(Exception):
+            hit.sha = "c"
+
+    def test_the_comment_is_exactly_the_one_the_spec_gives(self):
+        self.assertEqual(ss.revert_comment(self.hit(), "main"),
+                         'The fix for this issue was reverted by bbbbbbb on main: Revert "x".\n\n'
+                         "**Needs you:** decide whether to fix again or close\n"
+                         "<!-- gogogo:stop v=1 reason=reverted -->\n")
+
+    def test_a_commit_message_ending_in_an_x_is_read_whole(self):
+        self.repo.commit("subject\n\nbody ends X")
+        sha, subject, body = ss.log_records("main")[0]
+        self.assertEqual((subject, body), ("subject", "subject\n\nbody ends X"))
+
+    def test_apply_hands_exactly_these_commands_to_gh_and_the_tracker(self):
+        self.revert(self.fix)
+        self.assertEqual(self.reverts("--apply"), 1, self.err)
+        comment, move = self.calls
+        body_file = comment[-1]
+        self.assertEqual(comment[:-1], ["gh", "issue", "comment", "12", "--repo", "acme/issues", "--body-file"])
+        self.assertTrue(body_file.endswith(".md"), body_file)
+        self.assertEqual(move, [sys.executable, str(SCRIPTS / "tracker.py"), "--profile", self.profile,
+                                "move", "12", "--repo", "acme/issues", "--to", "needs_human"])
+        self.assertIn("acme/issues#12: -> Human!Help!\n", self.out)
+        self.assertNotIn("Traceback", self.err)
+
+    def test_apply_reads_the_board_for_open_issue_cards_only(self):
+        self.revert(self.fix)
+        self.reverts()
+        self.assertIs(self.list_kwargs["open_only"], True)
+        self.assertIs(self.list_kwargs["issues_only"], True)
+
+    def test_a_card_with_no_column_is_not_in_a_column_named_like_a_placeholder(self):
+        profile = Path(self.profile)
+        profile.write_text(profile.read_text().replace('column = "Released"', 'column = "Xxxx"'))
+        self.revert(self.fix)
+        self.assertEqual(self.reverts(cards=[stage_card(12, status=None)]), 0, self.out)
+
+    def test_nothing_reverted_says_so_exactly(self):
+        self.assertEqual(self.reverts(), 0)
+        self.assertEqual(self.out, "no shipped fix has been reverted\n")
+
+    def test_the_base_is_origin_slash_the_profiles_base_or_main(self):
+        self.revert(self.fix)
+        self.repo.git("update-ref", "refs/remotes/origin/main", "HEAD")
+        self.assertEqual(self.reverts("--apply", main_ref=None), 1, self.err)
+        self.assertIn(" on main: ", self.bodies[0])
+        profile = Path(self.profile)
+        profile.write_text(profile.read_text().replace("[handback]", '[integration]\nbase = "trunk"\n\n[handback]'))
+        self.repo.git("update-ref", "refs/remotes/origin/trunk", "HEAD")
+        self.repo.git("update-ref", "-d", "refs/remotes/origin/main")
+        self.assertEqual(self.reverts("--apply", main_ref=None), 1, self.err)
+        self.assertIn(" on trunk: ", self.bodies[0])
+        self.assertNotIn("origin/", self.bodies[0])
+
+    def test_two_reverts_of_one_fix_still_hand_back_every_issue(self):
+        self.revert(self.fix)
+        self.revert(self.fix, "Revert again")
+        other = self.repo.commit("fix: y (Refs #13)")
+        self.revert(other, "Revert y")
+        self.assertEqual(self.reverts("--apply", cards=[stage_card(12), stage_card(13)]), 1, self.err)
+        commented = [c[c.index("comment") + 1] for c in self.calls if c[0] == "gh"]
+        self.assertEqual(commented, ["12", "13"])
+        self.assertIn("acme/issues#13: -> Human!Help!", self.out)
+
+    def test_an_issue_already_commented_on_is_reported_as_such_and_not_moved(self):
+        undo = self.revert(self.fix)
+        self.reverts("--apply")
+        code = self.reverts("--apply", newest=self.bodies[0])
+        self.assertEqual((code, self.calls), (1, []))
+        self.assertRegex(self.out, rf"acme/issues#12: its newest comment already names {undo[:7]} -")
+        self.assertNotIn("->", self.out)
+
+    def test_a_move_that_fails_is_exit_2_and_not_a_crash(self):
+        self.revert(self.fix)
+        self.assertEqual(self.reverts("--apply", fail=lambda cmd: cmd[0] != "gh"), 2)
+        self.assertNotIn("Traceback", self.err)
+        self.assertNotIn("->", self.out.split("\n", 1)[1])
+
+    def test_a_failed_comment_is_not_a_crash(self):
+        self.revert(self.fix)
+        self.assertEqual(self.reverts("--apply", fail=lambda cmd: cmd[0] == "gh"), 2)
+        self.assertNotIn("Traceback", self.err)
+
+    def apply_one(self, newest="", fail=None, wipe=False):
+        profile = ss.load_profile(self.profile)
+        calls = []
+
+        def fake_run(cmd):
+            calls.append(cmd)
+            if wipe and cmd[0] == "gh":
+                Path(cmd[-1]).unlink()
+            return 1 if fail and fail(cmd) else 0
+        with mock.patch.object(ss.tracker, "newest_comment", return_value=newest), \
+             mock.patch.object(ss, "run", side_effect=fake_run):
+            return ss.apply_revert(profile, self.hit(), "main"), calls
+
+    def test_apply_revert_says_what_it_did(self):
+        self.assertEqual(self.apply_one()[0], "moved")
+        self.assertEqual(self.apply_one(newest="reverted by bbbbbbb earlier")[0], "already")
+        self.assertEqual(self.apply_one(newest="reverted by bbbbbbb earlier")[1], [])
+        self.assertEqual(self.apply_one(fail=lambda cmd: cmd[0] == "gh")[0], "comment-failed")
+        self.assertEqual(self.apply_one(fail=lambda cmd: cmd[0] != "gh")[0], "move-failed")
+
+    def test_the_comment_file_is_removed_even_when_the_stand_in_already_took_it(self):
+        self.assertEqual(self.apply_one(wipe=True)[0], "moved")
+
+    def test_an_unreadable_newest_comment_still_comments_and_moves(self):
+        profile = ss.load_profile(self.profile)
+        with mock.patch.object(ss.tracker, "newest_comment", side_effect=ss.tracker.BoardError("x")), \
+             mock.patch.object(ss, "run", return_value=0) as ran:
+            self.assertEqual(ss.apply_revert(profile, self.hit(), "main"), "moved")
+        self.assertEqual(ran.call_count, 2)
+
+
+
+# --------------------------------------------------------------------------
 # what a tag ships
 # --------------------------------------------------------------------------
 
@@ -749,6 +1009,45 @@ class ShippedInGit(RepoTestCase):
         result = ss.shipped("deploy-B", "deploy-A", KNOWN)
         self.assertEqual([link.key for link in result.links], [("acme/issues", 1)])
         self.assertEqual(result.unlinked_commits, 1)
+
+    def test_refs_in_a_subject_link_a_commit_once(self):
+        self.repo.commit("base")
+        self.repo.tag("deploy-A")
+        self.repo.commit("fix: x (Refs #12)")
+        self.repo.commit("fix: y (Refs #12)\n\n" + ss.format_trailer(ss.IssueLink("acme/issues", 12)))
+        self.repo.commit("feat: z (Refs acme/other#3)")
+        self.repo.commit("a commit with no link")
+        self.repo.tag("deploy-B")
+        result = ss.shipped("deploy-B", "deploy-A", KNOWN, issues_repo="acme/issues")
+        self.assertEqual([link.key for link in result.links], [("acme/issues", 12), ("acme/other", 3)])
+        self.assertEqual(result.unlinked_commits, 1)
+
+    def test_a_revert_commit_does_not_ship_the_issue_in_its_subject(self):
+        self.repo.commit("base")
+        fix = self.repo.commit("fix: x (Refs #12)")
+        self.repo.tag("deploy-A")
+        self.repo.commit(f'Revert "fix: x (Refs #12)"\n\nThis reverts commit {fix}.\n')
+        self.repo.tag("deploy-B")
+        result = ss.shipped("deploy-B", "deploy-A", KNOWN, issues_repo="acme/issues")
+        self.assertEqual(result.links, [])
+
+    def test_a_revert_in_the_range_does_not_hide_the_fixes_older_than_it(self):
+        self.repo.commit("base")
+        self.repo.tag("deploy-A")
+        self.repo.commit("fix: y (Refs #13)")
+        old = self.repo.commit("fix: x (Refs #12)")
+        self.repo.commit(f'Revert "fix: x (Refs #12)"\n\nThis reverts commit {old}.\n')
+        self.repo.tag("deploy-B")
+        result = ss.shipped("deploy-B", "deploy-A", KNOWN, issues_repo="acme/issues")
+        self.assertEqual(sorted(link.key for link in result.links), [("acme/issues", 12), ("acme/issues", 13)])
+
+    def test_without_an_issues_repo_a_refs_subject_links_nothing(self):
+        self.repo.commit("base")
+        self.repo.tag("deploy-A")
+        self.repo.commit("fix: x (Refs #12)")
+        self.repo.tag("deploy-B")
+        result = ss.shipped("deploy-B", "deploy-A", KNOWN)
+        self.assertEqual((result.links, result.unlinked_commits), ([], 1))
 
     def test_previous_tag_skips_other_tags(self):
         self.repo.commit("one")

@@ -3,7 +3,9 @@
 One way to number, tag and describe a production release, in every repo that
 adopts it. A repo adopts it by having a `[release]` table in its profile
 (`references/profile-schema.md` § Release). `scripts/release.py` does the
-work; `/gogogo:setup` reports whether a repo follows it.
+work; `/gogogo:setup` reports whether a repo follows it. gogogo follows it
+itself: its `main` is production, and a workflow after its tests tags every
+push to `main` `deploy-<build>`, version `1.0.<build>`.
 
 Nothing here is bumped by hand except a deliberate major. Every number people
 remember to bump goes wrong; the two that stay right are mechanical: a tag cut

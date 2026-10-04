@@ -250,6 +250,13 @@ commands, the environments, the Hard Stop rules) lives in one file per repo,
    confirms the fix, or, where the repo runs `/gogogo:auto-test`, a PASS there
    moves the card to the profile's `auto_test.pass_column` (Done, in some
    repos) and closes the issue when `auto_test.pass_closes` is true.
+5. **Waiting for you.** The board line each Claude Code session in an adopting
+   repo opens with (below) gives each stage column's oldest card's age after
+   its count, such as `Released 13 (oldest 2 days)`, and no age when the
+   column is empty. A fix later reverted on the base goes
+   back to `Human!Help!` with a comment naming the revert (`stage_sync.py reverts`,
+   run at the start of every auto-dev run), and an issue closed as not planned
+   is archived off the board rather than filed under Done.
 
 **What makes it safe to leave running:**
 
@@ -320,7 +327,7 @@ rebased.
 
 A session started or resumed in a repo with a profile opens with a one-line
 status from the plugin's own hook (the repo's independence level, coloured in
-a terminal session, then cards in each profile column and open pull requests), shown only to the person and never added to Claude's context.
+a terminal session, then cards in each profile column, with the oldest card's age for each stage column, and open pull requests), shown only to the person and never added to Claude's context.
 
 Scripts the skills call, all in `plugins/gogogo/scripts/`:
 
@@ -331,8 +338,9 @@ Scripts the skills call, all in `plugins/gogogo/scripts/`:
 - `tracker.py`: lists and moves cards on a GitHub Project board, by column name, with read-back, and refuses a move to the needs-a-person column unless the issue's newest comment says why.
 - `merge_ready.py`: reads a PR's state and prints one outcome (`ready`, `behind`, `draft`, `checks-failed` and so on), so dev and auto-dev decide a merge the same way. It only reads.
 - `verify_merged.py`: confirms a PR's merge is really on the base branch.
-- `stage_sync.py`: writes the `Ships-issue` link at merge, and moves cards to a stage when a tag ships their commits (run by a repo's CI).
+- `stage_sync.py`: writes the `Ships-issue` link at merge, moves cards to a stage when a tag ships their commits (run by a repo's CI), and with `reverts` hands back a card whose shipped fix was reverted.
 - `release.py`: numbers a production release, cuts its annotated `deploy-<build>` tag after the deploy, and prints the notes listing the issues it shipped.
+- `waiting.py`: how many cards wait in each stage column and how old the oldest is, for `/gogogo:status` and by hand. Read-only.
 - `stranded_work.py`: finds local and `origin` branches holding work that nothing accounts for (no open issue, or an open issue with no open pull request and no stop marker naming the branch), and says what became of each branch's pull request.
 - `worktree_sweep.py`: removes the worktrees whose pull request merged or whose issue is closed, and keeps any with uncommitted changes, commits on no remote, or an open issue whose work has not merged. Without `--apply` it only lists.
 - `issue_work.py`: finds an issue's earlier work (open pull requests that claim it, branches named for it, the branch its stop marker names), so dev and auto-dev continue on it rather than start again.
@@ -465,6 +473,12 @@ writes need approval.
 - [`docs/process-measures.md`](docs/process-measures.md): what to measure about the process (quality, speed, tokens) and where the data is.
 - [`CONTRIBUTING.md`](CONTRIBUTING.md) and [`SECURITY.md`](SECURITY.md).
 - [`.agents/dev-process.md`](.agents/dev-process.md): this repo's own profile, as a worked example.
+
+**Releases.** Every push to `main` that passes the tests is a release of the
+plugin: `.github/workflows/release.yml` tags it `deploy-<build>`, version
+`1.0.<build>`, the build being `main`'s commit count, with notes listing what it
+shipped ([`references/versioning.md`](plugins/gogogo/references/versioning.md)).
+Quote the version, or the tag, when you report a problem.
 
 ## License
 

@@ -4,10 +4,15 @@
     stage_sync.py [--profile FILE] trailer (--issue ISSUE ... | --branch NAME) [--verify] [--co-authors-from RANGE]
     stage_sync.py [--profile FILE] sync --tag TAG [--main-ref REF] [--dry-run]
     stage_sync.py [--profile FILE] shipped --tag TAG [--titles]
+    stage_sync.py [--profile FILE] reverts [--main-ref REF] [--apply]
 
 `trailer` prints the `Ships-issue` lines a squash commit carries; `sync` moves
 every card whose linked commits are all in a tag to the stage whose `tag` glob
-matches it; `shipped` lists what a tag ships since the previous matching tag.
+matches it; `shipped` lists what a tag ships since the previous matching tag;
+`reverts` names each open card in a stage column whose shipped commit was
+reverted on the base (a `This reverts commit <sha>` line, as `git revert` and
+GitHub's Revert button write it), and with `--apply` comments on the issue
+with a stop marker and moves its card to `tracker.columns.needs_human`.
 
 Which issue a commit fixes lives in git, as a `Ships-issue` trailer on the
 squash commit, not on the board: a CI runner or a deploy box with no `gh` can
@@ -21,7 +26,7 @@ and move goes through `tracker.py`, given that same profile.
 
 Exit codes: 0 ok; 1 (`sync`) every possible move was made and something needs
 a look (a card with no linked commit, or a reporter that could not be
-assigned); 2 nothing trustworthy to act on, or a comment or move failed (a
+assigned), (`reverts`) a shipped fix was reverted; 2 nothing trustworthy to act on, or a comment or move failed (a
 failed comment leaves that card unmoved and the others still move);
 3 (`trailer --verify`) every issue exists but a reporter cannot be assigned.
 An unexpected crash exits 2, never 1.
@@ -699,18 +704,31 @@ def previous_tag(tag: str, glob: str) -> str | None:
     return proc.stdout.strip() or None
 
 
-def shipped(tag: str, prev: str, known: dict[str, str]) -> Shipped:
+def shipped(tag: str, prev: str, known: dict[str, str], issues_repo: str = "") -> Shipped:
     """The issues whose commits are in `prev..tag`, first-merged first.
 
+    A commit links to an issue by its `Ships-issue` trailer or, given
+    `issues_repo`, by `Refs #<n>` / `Refs <owner>/<repo>#<n>` in its subject,
+    read as `reverts` reads them; an issue named both ways counts once.
     Commits with no link are counted, not dropped: a short list that silently
     omits unlinked work reads as the whole release.
     """
+    rev_range = f"{prev}..{tag}"
+    refs: dict[str, list[IssueLink]] = {}
+    if issues_repo:
+        for sha, subject, body in log_records(rev_range):
+            if _REVERTS.search(body):  # a revert's subject quotes the fix it removes; it ships nothing
+                continue
+            for match in _REFS.finditer(subject):
+                repo = f"{match['owner']}/{match['name']}" if match["owner"] else issues_repo
+                refs.setdefault(sha, []).append(IssueLink(repo, int(match["number"])))
     seen: dict[tuple[str, int], IssueLink] = {}
     unlinked = 0
-    for commit in commits_with_trailers(f"{prev}..{tag}", known):
-        if not commit.links:
+    for commit in commits_with_trailers(rev_range, known):
+        links = commit.links + refs.get(commit.sha, [])
+        if not links:
             unlinked += 1
-        for link in commit.links:
+        for link in links:
             seen.setdefault(link.key, link)
     return Shipped(list(seen.values()), unlinked)
 
@@ -774,10 +792,161 @@ def cmd_shipped(args: argparse.Namespace, profile: Profile) -> int:
         print(f"Deployed {args.tag} to {environment}\n\n"
               f"first tag matching {stage['tag']}; nothing to compare with")
         return 0
-    result = shipped(args.tag, prev, profile.known)
+    result = shipped(args.tag, prev, profile.known, profile.issues_repo)
     titles = fetch_titles(result.links) if args.titles else None
     sys.stdout.write(render_shipped(args.tag, environment, result, titles))
     return 0
+
+
+# --------------------------------------------------------------------------
+# reverts — a shipped fix taken back out of the base
+# --------------------------------------------------------------------------
+
+#: `Refs #12` or `Refs owner/repo#12` in a subject: how every skill-made commit
+#: names its issue (dev § Name the issue without closing it).
+_REFS = re.compile(rf"\bRefs (?:(?P<owner>{_LOGIN})/(?P<name>{_NAME}))?#(?P<number>{_NUMBER})\b")
+#: A shorter sha is too likely to match a different commit.
+_REVERTS = re.compile(r"This reverts commit ([0-9a-fA-F]{7,40})\b")
+
+
+@dataclass(frozen=True)
+class Revert:
+    key: tuple[str, int]
+    shipped: str  # the reverted commit, full sha
+    sha: str  # the revert, full sha
+    subject: str
+
+    def line(self, issues_repo: str) -> str:
+        repo, number = self.key
+        ref = f"#{number}" if repo == issues_repo.lower() else f"{repo}#{number}"
+        return f"{ref}: shipped by {self.shipped[:7]}, reverted by {self.sha[:7]} ({self.subject})"
+
+
+def log_records(main_ref: str) -> list[tuple[str, str, str]]:
+    """(sha, subject, body) for every commit on `main_ref`, newest first."""
+    out = git("log", "--format=%H%x00%s%x00%B%x1e", main_ref)
+    records = []
+    for record in out.split("\x1e"):
+        record = record.strip("\n")
+        if record:
+            sha, subject, body = record.split("\x00", 2)
+            records.append((sha, subject, body))
+    return records
+
+
+def subject_links(records: list[tuple[str, str, str]], issues_repo: str) -> dict[tuple[str, int], list[str]]:
+    """{(owner/repo, number): shas} from the `Refs` in each subject; a bare `#n` is the issues repo."""
+    links: dict[tuple[str, int], list[str]] = {}
+    for sha, subject, body in records:
+        if _REVERTS.search(body):  # a revert's subject quotes the fix it removes; it is no fix
+            continue
+        for match in _REFS.finditer(subject):
+            repo = f"{match['owner']}/{match['name']}" if match["owner"] else issues_repo
+            links.setdefault(link_key(repo, int(match["number"])), []).append(sha)
+    return links
+
+
+def find_reverts(cards: list[dict], profile: Profile, main_ref: str) -> list[Revert]:
+    """Each card's linked commits that a commit on `main_ref` says it reverts."""
+    records = log_records(main_ref)
+    reverted = [(prefix.lower(), sha, subject)
+                for sha, subject, body in records for prefix in _REVERTS.findall(body)]
+    if not reverted:
+        return []
+    links = {key: list(linked.shas) for key, linked in trailer_links(main_ref, profile.known).items()}
+    for key, shas in subject_links(records, profile.issues_repo).items():
+        links.setdefault(key, []).extend(s for s in shas if s not in links[key])
+    age = {sha: i for i, (sha, _, _) in enumerate(records)}  # newest first: a lower index is newer
+    hits = []
+    for card in cards:
+        key = link_key(card_repo(card, profile.issues_repo), card["number"])
+        for shipped_sha in links.get(key, []):
+            for prefix, sha, subject in reverted:
+                if not shipped_sha.startswith(prefix):
+                    continue
+                if any(sha.startswith(p) for p, _, _ in reverted):
+                    continue  # the revert was itself reverted: the fix is back
+                if any(age.get(other, len(age)) < age[sha] for other in links[key]):
+                    continue  # a fix for the issue landed after the revert
+                hits.append(Revert(key, shipped_sha, sha, subject))
+    return hits
+
+
+def revert_comment(hit: Revert, base: str) -> str:
+    return (f"The fix for this issue was reverted by {hit.sha[:7]} on {base}: {hit.subject}.\n\n"
+            "**Needs you:** decide whether to fix again or close\n"
+            "<!-- gogogo:stop v=1 reason=reverted -->\n")
+
+
+def apply_revert(profile: Profile, hit: Revert, base: str) -> str:
+    """Comment, then move to needs_human. Returns "moved", "already" (the newest
+    comment already names this revert), "comment-failed" or "move-failed"."""
+    repo, number = hit.key[0], str(hit.key[1])
+    try:
+        if hit.sha[:7] in tracker.newest_comment(hit.key[1], repo):
+            return "already"
+    except tracker.BoardError:
+        pass  # a duplicate comment beats a card left in a column it no longer belongs in
+    with tempfile.NamedTemporaryFile("w", suffix=".md", delete=False, encoding="utf-8") as body:
+        body.write(revert_comment(hit, base))
+    try:
+        if run(["gh", "issue", "comment", number, "--repo", repo, "--body-file", body.name]):
+            return "comment-failed"
+    finally:
+        Path(body.name).unlink(missing_ok=True)
+    if run(tracker_cmd(profile, "move", number, "--repo", repo, "--to", "needs_human")):
+        return "move-failed"
+    return "moved"
+
+
+def reverts(profile: Profile, main_ref: str | None, apply: bool) -> int:
+    if profile.tracker.get("kind") != "github-project":
+        raise SyncError(f"tracker.kind is {profile.tracker.get('kind')!r}; "
+                        "reverts reads cards on a github-project board only")
+    base = (profile.settings.get("integration") or {}).get("base") or "main"
+    main_ref = main_ref or f"origin/{base}"
+    git("rev-parse", "--verify", "--quiet", f"{main_ref}^{{commit}}")
+    tracker.configure(str(profile.path))
+    if apply:
+        if not (profile.tracker.get("columns") or {}).get("needs_human"):
+            raise SyncError("tracker.columns.needs_human: missing; --apply moves a reverted card there")
+        tracker.require_columns(tracker.board_meta(), ["needs_human"])
+    columns = {tracker.column(s["column"]).lower() for s in profile.stages if s.get("column")}
+    cards, _recovered, _total = tracker.list_cards(open_only=True, issues_only=True, repo=tracker.DEFAULT_REPO)
+    cards = [c for c in cards if c.get("kind") == "Issue" and c.get("state") == "OPEN"
+             and (c.get("status") or "").lower() in columns]
+    hits = find_reverts(cards, profile, main_ref)
+    if not hits:
+        print("no shipped fix has been reverted")
+        return 0
+    for hit in hits:
+        print(hit.line(profile.issues_repo))
+    if not apply:
+        return 1
+
+    failed = []
+    done: set[tuple[str, int]] = set()
+    for hit in hits:  # newest revert first; one comment and one move per issue
+        if hit.key in done:
+            continue
+        done.add(hit.key)
+        ref = f"{hit.key[0]}#{hit.key[1]}"
+        outcome = apply_revert(profile, hit, main_ref.removeprefix("origin/"))
+        if outcome == "already":
+            print(f"{ref}: its newest comment already names {hit.sha[:7]} - nothing written")
+        elif outcome == "comment-failed":
+            print(f"{ref}: comment failed; card not moved", file=sys.stderr)
+            failed.append(ref)
+        elif outcome == "move-failed":
+            print(f"{ref}: commented, but the move to needs_human did not verify", file=sys.stderr)
+            failed.append(ref)
+        else:
+            print(f"{ref}: -> {tracker.column('needs_human')}")
+    return 2 if failed else 1
+
+
+def cmd_reverts(args: argparse.Namespace, profile: Profile) -> int:
+    return reverts(profile, args.main_ref, args.apply)
 
 
 # --------------------------------------------------------------------------
@@ -816,6 +985,13 @@ def main(argv: list[str] | None = None) -> int:
     ship.add_argument("--tag", required=True)
     ship.add_argument("--titles", action="store_true", help="look titles up with gh")
     ship.set_defaults(func=cmd_shipped)
+
+    rev = sub.add_parser("reverts", help="name, and with --apply hand back, cards whose shipped fix was reverted")
+    rev.add_argument("--main-ref", default=None,
+                     help="the branch to read reverts on (default origin/<integration.base>)")
+    rev.add_argument("--apply", action="store_true",
+                     help="comment on each issue with a stop marker, then move its card to needs_human")
+    rev.set_defaults(func=cmd_reverts)
 
     args = parser.parse_args(argv)
     try:

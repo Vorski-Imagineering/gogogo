@@ -15,6 +15,7 @@ import subprocess
 import sys
 import tempfile
 import unittest
+from datetime import datetime, timedelta, timezone
 from unittest import mock
 from contextlib import redirect_stderr, redirect_stdout
 from pathlib import Path
@@ -402,7 +403,96 @@ class OnlyTheSystemMessage(unittest.TestCase):
         message(out)
 
 
+NOW = datetime(2026, 10, 3, 12, 0, tzinfo=timezone.utc)
+
+
+def aged_board():
+    """Two issue cards in Released, entered 2 and 5 days before NOW; Dev Ready cards with ages too."""
+    def since(days):
+        return (NOW - timedelta(days=days)).isoformat().replace("+00:00", "Z")
+    listing = [{"number": 1, "kind": "Issue", "status": "Released", "status_since": since(2)},
+               {"number": 2, "kind": "Issue", "status": "Released", "status_since": since(5)},
+               {"number": 3, "kind": "Issue", "status": "Dev Ready", "status_since": since(9)}]
+    return Board(answers={"list": (0, json.dumps(listing), "")})
+
+
+class OldestCard(unittest.TestCase):
+    """Approvals row 9 of #89: the one session-start line gives each stage column's oldest card's age."""
+
+    def test_stage_column_gets_its_oldest_age_and_the_board_is_read_once(self):
+        repo = repo_with_profile()
+        board = aged_board()
+        out = io.StringIO()
+        with redirect_stdout(out), redirect_stderr(io.StringIO()):
+            session_status.main(start=repo, run=board, clock=Clock(), now=NOW)
+        line = message(out.getvalue())
+        self.assertIn("Released 2 (oldest 5 days)", line)
+        self.assertIn("Dev Ready 1 ·", line)
+        self.assertNotIn("Dev Ready 1 (oldest", line)
+        self.assertEqual(sum(1 for c, _ in board.calls if c[-2:] == ["list", "--json"]), 1)
+
+    def test_no_age_when_the_column_is_empty_or_has_no_times(self):
+        repo = repo_with_profile()
+        _, out, _ = run_main(repo, Board())  # cards() carries no status_since
+        self.assertNotIn("(oldest", message(out))
+        listing = [{"number": 1, "kind": "Issue", "status": "Dev Ready", "status_since": "2026-10-01T00:00:00Z"}]
+        _, out, _ = run_main(repo, Board(answers={"list": (0, json.dumps(listing), "")}))
+        self.assertIn("Released 0 ·", message(out))
+        self.assertNotIn("(oldest", message(out))
+
+    def profile_file(self, repo):
+        return repo / ".agents" / "dev-process.md"
+
+    def run_at(self, repo, listing, columns=COLUMNS, now=None):
+        board = Board(columns=columns, answers={"list": (0, json.dumps(listing), "")})
+        out = io.StringIO()
+        kw = {"now": now} if now else {}
+        with redirect_stdout(out), redirect_stderr(io.StringIO()):
+            session_status.main(start=repo, run=board, clock=Clock(), **kw)
+        return message(out.getvalue())
+
+    def test_a_card_with_no_column_is_not_counted_in_a_column_named_like_a_placeholder(self):
+        repo = repo_with_profile()
+        path = self.profile_file(repo)
+        path.write_text(path.read_text(encoding="utf-8").replace('column = "Released"', 'column = "Xxxx"'),
+                        encoding="utf-8")
+        line = self.run_at(repo, [{"number": 1, "kind": "Issue"}], columns=[*COLUMNS, "Xxxx"])
+        self.assertIn("Xxxx 0", line)
+
+    def test_a_stage_with_no_column_does_not_break_the_line(self):
+        repo = repo_with_profile()
+        path = self.profile_file(repo)
+        path.write_text(path.read_text(encoding="utf-8").replace(
+            'code_is = "merged"\n', 'code_is = "merged"\n\n[[stages]]\ncode_is = "other"\n'), encoding="utf-8")
+        _, out, _ = run_main(repo, Board())
+        self.assertEqual(message(out), LINE.format(name="myrepo"))
+
+    def test_a_card_with_an_empty_column_time_is_skipped_when_finding_the_oldest(self):
+        def since(days):
+            return (NOW - timedelta(days=days)).isoformat().replace("+00:00", "Z")
+        listing = [{"number": 1, "kind": "Issue", "status": "Released", "status_since": ""},
+                   {"number": 2, "kind": "Issue", "status": "Released", "status_since": None},
+                   {"number": 3, "kind": "Issue", "status": "Released", "status_since": since(2)}]
+        line = self.run_at(repo_with_profile(), listing, now=NOW)
+        self.assertIn("Released 3 (oldest 2 days)", line)
+
+    def test_the_age_is_counted_to_the_time_it_is_given_else_to_now(self):
+        later = datetime(2030, 1, 1, tzinfo=timezone.utc)
+        listing = [{"number": 1, "kind": "Issue", "status": "Released", "status_since": "2029-12-25T00:00:00Z"}]
+        self.assertIn("Released 1 (oldest 7 days)", self.run_at(repo_with_profile(), listing, now=later))
+        real = (datetime.now(timezone.utc) - timedelta(days=3, minutes=5)).isoformat().replace("+00:00", "Z")
+        listing = [{"number": 1, "kind": "Issue", "status": "Released", "status_since": real}]
+        self.assertIn("Released 1 (oldest 3 days)", self.run_at(repo_with_profile(), listing))
+
+
 class HooksJson(unittest.TestCase):
+    def test_no_hook_runs_waiting(self):
+        text = HOOKS.read_text(encoding="utf-8")
+        self.assertNotIn("waiting.py", text)
+        hooks = [h for e in json.loads(text)["hooks"]["SessionStart"] for h in e["hooks"]]
+        self.assertEqual([h["type"] for h in hooks], ["command"])
+
+
     def test_one_session_start_hook_on_startup_and_resume(self):
         hooks = json.loads(HOOKS.read_text(encoding="utf-8"))["hooks"]
         self.assertEqual(list(hooks), ["SessionStart"])

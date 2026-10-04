@@ -77,6 +77,11 @@ workspace = "worktree"
 
 [handback]
 reporter = "none"
+
+# deploy-<build> tags and <major>.0.<build> versions (references/versioning.md),
+# cut by .github/workflows/release.yml on every push to main that passes the tests.
+[release]
+major = 1
 +++
 
 # Process profile: gogogo
@@ -123,7 +128,7 @@ reporter = "none"
   owner chose a worktree per issue here on 2026-10-03
   (`integration.workspace`); the skills make it. The skills remove an issue's
   worktree after its merge is verified (`/gogogo:dev` §8), and each run starts
-  by sweeping leftovers whose work merged (auto-dev preflight 11).
+  by sweeping leftovers whose work merged (auto-dev preflight 12).
 - **confirming a Released card**: `/gogogo:auto-test` is browser-based and is
   not set up here. Confirm instead against a worktree of `origin/main`: scripts
   in read-only or dry-run modes, and skill behaviour as scenario runs

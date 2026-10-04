@@ -457,7 +457,7 @@ class PhaseTimesExact(StatsBase):
 
 class Stops(StatsBase):
     def test_every_reason_is_counted(self):
-        reasons = ("hard-stop", "decision", "spec", "review", "tests", "mutation", "verify", "gate", "ci", "merge")
+        reasons = ("hard-stop", "decision", "spec", "review", "tests", "mutation", "verify", "gate", "ci", "merge", "reverted")
         s = self.json_of([(40 + i, stop(reason) + "\n" + v2(pr=i)) for i, reason in enumerate(reasons)])["summary"]
         self.assertEqual(s["stops"], dict.fromkeys(reasons, 1))
         self.assertEqual(s["unreadable_stops"], 0)

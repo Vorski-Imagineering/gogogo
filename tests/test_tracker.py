@@ -718,6 +718,23 @@ class LabelTests(unittest.TestCase):
         self.assertEqual(board.flatten(draft)["labels"], [])
         self.assertEqual(board.flatten({"id": "X", "type": "ISSUE", "content": None})["labels"], [])
 
+    def test_flatten_carries_when_the_card_entered_its_column_and_why_it_closed(self):
+        aged = card(1, "a", "Released")
+        aged["fieldValueByName"]["updatedAt"] = "2026-10-01T09:00:00Z"
+        aged["content"]["stateReason"] = "NOT_PLANNED"
+        flat = board.flatten(aged)
+        self.assertEqual(flat["status_since"], "2026-10-01T09:00:00Z")
+        self.assertEqual(flat["state_reason"], "NOT_PLANNED")
+        plain = board.flatten(card(2, "b", "Released"))
+        self.assertIsNone(plain["status_since"])
+        self.assertIsNone(plain["state_reason"])
+        self.assertIsNone(board.flatten({"id": "X", "type": "ISSUE", "content": None})["status_since"])
+
+    def test_both_reads_ask_for_the_column_time(self):
+        for query in (board.ITEMS_QUERY, board.REPO_ISSUE_CARDS_QUERY):
+            self.assertRegex(query, r"ProjectV2ItemFieldSingleSelectValue \{ name updatedAt \}")
+        self.assertIn("stateReason", board.ITEMS_QUERY)
+
     def test_issue_side_cards_carry_labels(self):
         issue_side = issue_page([issue_node(7, "seen", "Dev Priority", label_names=("dev ready",))])
         with mock.patch.object(board, "graphql", side_effect=[issue_side]):
@@ -830,12 +847,14 @@ class KeepingTheBoardCurrent(unittest.TestCase):
         self.assertEqual(code, 2)
 
     def _untidy(self):
-        def item(n, state, status, kind="Issue"):
+        def item(n, state, status, kind="Issue", reason=None):
             return {"id": f"I{n}", "content": {"__typename": kind, "number": n, "title": "t",
-                                               "state": state, "repository": {"nameWithOwner": "acme/issues"}},
+                                               "state": state, "stateReason": reason,
+                                               "repository": {"nameWithOwner": "acme/issues"}},
                     "fieldValueByName": {"name": status} if status else None}
-        items = [item(1, "CLOSED", "Released"), item(2, "CLOSED", "Done"), item(3, "OPEN", "Backlog"),
-                 item(4, "CLOSED", "In progress", kind="PullRequest"), item(5, "CLOSED", None)]
+        items = [item(1, "CLOSED", "Released", reason="COMPLETED"), item(2, "CLOSED", "Done"),
+                 item(3, "OPEN", "Backlog"), item(4, "CLOSED", "In progress", kind="PullRequest"),
+                 item(5, "CLOSED", None), item(8, "CLOSED", "Released", reason="NOT_PLANNED")]
         issues = [
             {"number": 3, "title": "on board", "repository": {"nameWithOwner": "acme/issues"},
              "projectItems": {"nodes": [{"project": {"number": 2}}]}},
@@ -849,14 +868,58 @@ class KeepingTheBoardCurrent(unittest.TestCase):
             return board.untidy("acme/issues")
 
     def test_untidy_finds_closed_issues_outside_done_and_open_issues_off_the_board(self):
-        closed, off_board = self._untidy()
+        closed, archive, off_board = self._untidy()
         self.assertEqual([c["number"] for c in closed], [1, 5])
+        self.assertEqual([c["number"] for c in archive], [8])
         self.assertEqual([i["number"] for i in off_board], [6, 7])
+
+    def test_untidy_archives_not_planned_and_files_completed_under_done(self):
+        """Done means work that was done; an issue closed as not planned leaves the board."""
+        closed, archive, _ = self._untidy()
+        self.assertNotIn(8, [c["number"] for c in closed])
+        self.assertEqual([c["state_reason"] for c in archive], ["NOT_PLANNED"])
+        self.assertIn("COMPLETED", [c["state_reason"] for c in closed])
+
+    def test_tidy_apply_archives_not_planned_and_moves_completed_to_done(self):
+        done = [{"number": 1, "repo": "acme/issues", "status": "Released", "item_id": "I1"}]
+        archive = [{"number": 8, "repo": "acme/issues", "status": "Released", "item_id": "I8"}]
+        with mock.patch.object(board, "untidy", return_value=(done, archive, [])), \
+             mock.patch.object(board, "board_meta", return_value={"project_id": "PVT_x", "options": {}}), \
+             mock.patch.object(board, "move_card", return_value=0) as moved, \
+             mock.patch.object(board, "archive_card", return_value=0) as archived, \
+             mock.patch("builtins.print"):
+            code = board.cmd_tidy(Namespace(repo="acme/issues", apply=True))
+        self.assertEqual(code, 0)
+        self.assertEqual([c.args[0]["number"] for c in archived.call_args_list], [8])
+        self.assertEqual([c.args[:3] for c in moved.call_args_list], [(1, "acme/issues", board.DONE_COLUMN)])
+
+    def test_tidy_lists_the_archive_without_apply_and_writes_nothing(self):
+        archive = [{"number": 8, "repo": "acme/issues", "status": "Released", "item_id": "I8"}]
+        out = io.StringIO()
+        with mock.patch.object(board, "untidy", return_value=([], archive, [])), \
+             mock.patch.object(board, "archive_card") as archived, \
+             mock.patch.object(board, "move_card") as moved, \
+             mock.patch("sys.stdout", out):
+            self.assertEqual(board.cmd_tidy(Namespace(repo="acme/issues", apply=False)), 0)
+        archived.assert_not_called()
+        moved.assert_not_called()
+        self.assertIn("acme/issues#8", out.getvalue())
+        self.assertIn("archive", out.getvalue())
+
+    def test_archive_card_archives_the_item_and_reports_a_failure(self):
+        with mock.patch.object(board, "graphql", return_value={"archiveProjectV2Item": {"item": {"id": "I8"}}}) as wrote, \
+             mock.patch("builtins.print"):
+            self.assertEqual(board.archive_card({"number": 8, "repo": "a/b", "item_id": "I8"}, {"project_id": "PVT_x"}), 0)
+        self.assertEqual(wrote.call_args.kwargs, {"project": "PVT_x", "item": "I8"})
+        self.assertIn("archiveProjectV2Item", wrote.call_args.args[0])
+        with mock.patch.object(board, "graphql", side_effect=board.BoardError("nope")), \
+             mock.patch("builtins.print"):
+            self.assertEqual(board.archive_card({"number": 8, "repo": "a/b", "item_id": "I8"}, {"project_id": "PVT_x"}), 2)
 
     def test_tidy_apply_moves_closed_to_done_and_adds_missing_to_new(self):
         closed = [{"number": 1, "repo": "acme/issues", "status": "Released"}]
         off_board = [{"number": 7, "repo": "acme/issues", "title": "t"}]
-        with mock.patch.object(board, "untidy", return_value=(closed, off_board)), \
+        with mock.patch.object(board, "untidy", return_value=(closed, [], off_board)), \
              mock.patch.object(board, "board_meta", return_value={}), \
              mock.patch.object(board, "move_card", side_effect=[0, 2]) as moved, \
              mock.patch("builtins.print"):
@@ -867,7 +930,7 @@ class KeepingTheBoardCurrent(unittest.TestCase):
         self.assertTrue(moved.call_args_list[1].kwargs["add_missing"])
 
     def test_tidy_apply_moves_to_the_boards_spelling_of_new(self):
-        with mock.patch.object(board, "untidy", return_value=([], [{"number": 7, "repo": "a/b", "title": "t"}])), \
+        with mock.patch.object(board, "untidy", return_value=([], [], [{"number": 7, "repo": "a/b", "title": "t"}])), \
              mock.patch.object(board, "board_meta", return_value={"options": {"\u26a1 New": "o1", "Done": "o2"}}), \
              mock.patch.object(board, "move_card", return_value=0) as moved, mock.patch("builtins.print"):
             self.assertEqual(board.cmd_tidy(Namespace(repo="a/b", apply=True)), 0)
@@ -875,7 +938,7 @@ class KeepingTheBoardCurrent(unittest.TestCase):
 
     def test_tidy_apply_goes_on_after_a_card_that_cannot_move(self):
         closed = [{"number": 1, "repo": "a/b", "status": "Released"}, {"number": 2, "repo": "a/b", "status": "Released"}]
-        with mock.patch.object(board, "untidy", return_value=(closed, [])), \
+        with mock.patch.object(board, "untidy", return_value=(closed, [], [])), \
              mock.patch.object(board, "board_meta", return_value={"options": {}}), \
              mock.patch.object(board, "move_card", side_effect=[board.BoardError("gone"), 0]) as moved, \
              mock.patch("builtins.print"):
@@ -888,7 +951,7 @@ class KeepingTheBoardCurrent(unittest.TestCase):
 
     def test_a_card_with_an_odd_shape_does_not_stop_the_rest(self):
         closed = [{"number": 1, "repo": "a/b", "status": "Released"}, {"number": 2, "repo": "a/b", "status": "Released"}]
-        with mock.patch.object(board, "untidy", return_value=(closed, [])), \
+        with mock.patch.object(board, "untidy", return_value=(closed, [], [])), \
              mock.patch.object(board, "board_meta", return_value={"options": {}}), \
              mock.patch.object(board, "move_card", side_effect=[TypeError("None"), 0]) as moved, \
              mock.patch("builtins.print"):
@@ -896,7 +959,7 @@ class KeepingTheBoardCurrent(unittest.TestCase):
         self.assertEqual(moved.call_count, 2)
 
     def test_tidy_without_apply_writes_nothing(self):
-        with mock.patch.object(board, "untidy", return_value=([{"number": 1, "repo": "a/b", "status": None}], [])), \
+        with mock.patch.object(board, "untidy", return_value=([{"number": 1, "repo": "a/b", "status": None}], [], [])), \
              mock.patch.object(board, "move_card") as moved, mock.patch("builtins.print"):
             self.assertEqual(board.cmd_tidy(Namespace(repo="a/b", apply=False)), 0)
         moved.assert_not_called()
@@ -906,6 +969,93 @@ class KeepingTheBoardCurrent(unittest.TestCase):
         with mock.patch.object(board, "move_card", return_value=3) as moved:
             self.assertEqual(board.cmd_move(args), 3)
         moved.assert_called_once_with(7, "acme/issues", "Done", add_missing=True)
+
+
+class GraphqlCallShape(unittest.TestCase):
+    """What graphql() hands `subprocess.run`, and how often it tries."""
+
+    def transient(self):
+        return mock.Mock(returncode=1, stdout="", stderr="HTTP 502 bad gateway")
+
+    def test_the_call_is_captured_as_text_with_no_time_limit_by_default(self):
+        self.assertEqual((board.ATTEMPTS, board.CALL_TIMEOUT), (3, None))
+        ok = mock.Mock(returncode=0, stdout='{"data":{}}')
+        with mock.patch.object(board.subprocess, "run", return_value=ok) as run:
+            board.graphql("query {}")
+        self.assertEqual(run.call_args.kwargs, {"capture_output": True, "text": True, "timeout": None})
+
+    def test_a_transient_failure_is_tried_attempts_times_with_a_growing_wait(self):
+        for attempts, waits in ((1, []), (2, [2]), (3, [2, 4])):
+            with self.subTest(attempts=attempts), \
+                 mock.patch.object(board, "ATTEMPTS", attempts), \
+                 mock.patch.object(board.time, "sleep") as slept, \
+                 mock.patch.object(board.subprocess, "run", return_value=self.transient()) as run:
+                with self.assertRaises(board.BoardError):
+                    board.graphql("query {}")
+                self.assertEqual(run.call_count, attempts)
+                self.assertEqual([c.args[0] for c in slept.call_args_list], waits)
+
+    def test_a_transient_failure_that_clears_is_answered(self):
+        ok = mock.Mock(returncode=0, stdout='{"data":{"x":1}}')
+        with mock.patch.object(board.time, "sleep"), \
+             mock.patch.object(board.subprocess, "run", side_effect=[self.transient(), ok]) as run:
+            self.assertEqual(board.graphql("query {}"), {"x": 1})
+        self.assertEqual(run.call_count, 2)
+
+
+class StatusSinceAndArchive(unittest.TestCase):
+    def test_the_issue_side_card_carries_when_it_entered_its_column_and_no_close_reason(self):
+        node = issue_node(7, "seen", "Released")
+        node["projectItems"]["nodes"][0]["fieldValueByName"]["updatedAt"] = "2026-10-01T09:00:00Z"
+        bare = issue_node(8, "bare", "Released")
+        with mock.patch.object(board, "graphql", side_effect=[issue_page([node, bare])]):
+            cards = board.issue_side_cards(board.DEFAULT_REPO)
+        self.assertEqual(cards[0]["status_since"], "2026-10-01T09:00:00Z")
+        self.assertIsNone(cards[1]["status_since"])
+        self.assertIn("state_reason", cards[0])
+        self.assertIsNone(cards[0]["state_reason"])
+
+    def archive(self, card, wrote=None):
+        out, err = io.StringIO(), io.StringIO()
+        with mock.patch.object(board, "graphql", **(wrote or {"return_value": {}})), \
+             redirect_stdout(out), redirect_stderr(err):
+            code = board.archive_card(card, {"project_id": "P"})
+        return code, out.getvalue(), err.getvalue()
+
+    def test_archiving_names_the_card_and_the_column_it_left(self):
+        code, out, _ = self.archive({"number": 8, "repo": "a/b", "item_id": "I", "status": "Released"})
+        self.assertEqual((code, out), (0, "a/b#8: Released -> archived\n"))
+        code, out, _ = self.archive({"number": 9, "repo": "a/b", "item_id": "I", "status": None})
+        self.assertEqual(out, "a/b#9: no status -> archived\n")
+
+    def test_a_failed_archive_names_the_card_on_stderr(self):
+        code, out, err = self.archive({"number": 8, "repo": "a/b", "item_id": "I"},
+                                      {"side_effect": board.BoardError("nope")})
+        self.assertEqual((code, out), (2, ""))
+        self.assertEqual(err, "FAILED a/b#8 -> archive: nope\n")
+
+    def tidy(self, closed=(), archive=(), off_board=()):
+        out = io.StringIO()
+        with mock.patch.object(board, "untidy", return_value=(list(closed), list(archive), list(off_board))), \
+             redirect_stdout(out):
+            code = board.cmd_tidy(Namespace(repo="a/b", apply=False))
+        return code, out.getvalue()
+
+    def test_tidy_lists_each_kind_and_says_nothing_to_tidy_only_when_there_is_none(self):
+        item = {"number": 8, "repo": "a/b", "status": None, "title": "t"}
+        self.assertEqual(self.tidy(archive=[item]),
+                         (0, "closed as not planned, to archive: a/b#8 (no status)\n"))
+        self.assertEqual(self.tidy(closed=[dict(item, status="Released")]),
+                         (0, f"closed, not in {board.DONE_COLUMN}: a/b#8 (Released)\n"))
+        self.assertEqual(self.tidy(off_board=[item]), (0, "open, not on the board: a/b#8 t\n"))
+        self.assertEqual(self.tidy(), (0, "nothing to tidy\n"))
+
+    def test_tidy_is_a_command_with_an_apply_flag(self):
+        with mock.patch.object(sys, "argv", ["tracker.py", "tidy", "--apply"]), \
+             mock.patch.object(board, "configure"), \
+             mock.patch.object(board, "cmd_tidy", return_value=5) as tidied:
+            self.assertEqual(board.main(), 5)
+        self.assertTrue(tidied.call_args.args[0].apply)
 
 
 if __name__ == "__main__":

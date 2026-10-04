@@ -41,7 +41,9 @@ said "369 of 369"). `list` therefore asks a second, independent index (each
 open issue what it belongs to) and prints any card only that side can see.
 
 `views` and `tidy` keep the board current between runs: every view hides closed
-issues, every closed issue sits in Done, and every open issue is on the board.
+issues, every issue closed as completed sits in Done, every issue closed as not
+planned is archived (off the board, restorable from its archive: Done means
+work that was done), and every open issue is on the board.
 GitHub's own board workflows do this going forward once they are on; these
 commands fix what is already there.
 
@@ -73,6 +75,10 @@ PROJECT_NUMBER = 0
 DEFAULT_REPO = ""
 PAGE_SIZE = 100
 STATUS_FIELD = "Status"
+#: How many times graphql() tries, and how long one `gh` call may take (None:
+#: no limit). A caller that must finish fast (the session-start line) lowers both.
+ATTEMPTS = 3
+CALL_TIMEOUT: float | None = None
 
 
 class BoardError(Exception):
@@ -106,7 +112,8 @@ OPEN_FILTERS = ("is:open", "-is:closed")
 
 #: The reasons a `gogogo:stop` marker may give; equal to review_stats.STOPS,
 #: kept here so this tool does not import it.
-STOP_REASONS = ("hard-stop", "decision", "spec", "review", "tests", "mutation", "verify", "gate", "ci", "merge")
+STOP_REASONS = ("hard-stop", "decision", "spec", "review", "tests", "mutation", "verify", "gate", "ci", "merge",
+                "reverted")
 
 #: The markers that say why an issue was handed to a person.
 REASON_MARKER = re.compile(r"<!-- (gogogo:stop|gogogo:skip|auto-test v1) (.*?) -->")
@@ -215,8 +222,8 @@ def graphql(query: str, **variables: str | int) -> dict:
         cmd += [flag, f"{key}={value}"]
 
     last_error = ""
-    for attempt in range(3):
-        proc = subprocess.run(cmd, capture_output=True, text=True)
+    for attempt in range(ATTEMPTS):
+        proc = subprocess.run(cmd, capture_output=True, text=True, timeout=CALL_TIMEOUT)
         if proc.returncode == 0:
             payload = json.loads(proc.stdout)
             if payload.get("errors"):
@@ -231,7 +238,7 @@ def graphql(query: str, **variables: str | int) -> dict:
             marker in last_error
             for marker in ("rate limit", "was submitted too quickly", "502", "503", "timeout")
         )
-        if not transient:
+        if not transient or attempt + 1 == ATTEMPTS:
             break
         time.sleep(2 * (attempt + 1))
 
@@ -319,7 +326,7 @@ query($org: String!, $number: Int!, $size: Int!, $after: String) {
           content {
             __typename
             ... on Issue {
-              number title state url
+              number title state stateReason url
               repository { nameWithOwner }
               assignees(first: 10) { nodes { login } }
               labels(first: 20) { totalCount nodes { name } }
@@ -331,7 +338,7 @@ query($org: String!, $number: Int!, $size: Int!, $after: String) {
             ... on DraftIssue { title }
           }
           fieldValueByName(name: "Status") {
-            ... on ProjectV2ItemFieldSingleSelectValue { name }
+            ... on ProjectV2ItemFieldSingleSelectValue { name updatedAt }
           }
         }
       }
@@ -390,9 +397,15 @@ def issue_labels(content: dict) -> list[str]:
 
 
 def flatten(item: dict) -> dict:
-    """One card as flat fields; drafts and deleted content stay representable."""
+    """One card as flat fields; drafts and deleted content stay representable.
+
+    `status_since` is when the card entered its column (the Status value's
+    `updatedAt`), so a card moved back and forth starts again; `state_reason`
+    is the issue's `stateReason` (`COMPLETED`, `NOT_PLANNED`, ...).
+    """
     content = item.get("content") or {}
-    status = (item.get("fieldValueByName") or {}).get("name")
+    value = item.get("fieldValueByName") or {}
+    status = value.get("name")
     return {
         "item_id": item["id"],
         "kind": content.get("__typename") or item.get("type") or "Unknown",
@@ -402,6 +415,8 @@ def flatten(item: dict) -> dict:
         "url": content.get("url"),
         "repo": (content.get("repository") or {}).get("nameWithOwner"),
         "status": status,
+        "status_since": value.get("updatedAt"),
+        "state_reason": content.get("stateReason"),
         "assignees": [a["login"] for a in (content.get("assignees") or {}).get("nodes", [])],
         "labels": issue_labels(content),
     }
@@ -425,7 +440,7 @@ query($owner: String!, $name: String!, $size: Int!, $after: String) {
             isArchived
             project { number }
             fieldValueByName(name: "Status") {
-              ... on ProjectV2ItemFieldSingleSelectValue { name }
+              ... on ProjectV2ItemFieldSingleSelectValue { name updatedAt }
             }
           }
         }
@@ -477,6 +492,8 @@ def issue_side_cards(repo: str) -> list[dict]:
                 "url": issue["url"],
                 "repo": (issue.get("repository") or {}).get("nameWithOwner"),
                 "status": (node.get("fieldValueByName") or {}).get("name"),
+                "status_since": (node.get("fieldValueByName") or {}).get("updatedAt"),
+                "state_reason": None,  # open issues only
                 "assignees": [
                     a["login"] for a in (issue.get("assignees") or {}).get("nodes", [])
                 ],
@@ -844,11 +861,21 @@ def views_showing_closed(views: list[dict]) -> list[dict]:
             if not any(token in OPEN_FILTERS + CLOSED_FILTERS for token in (v.get("filter") or "").split())]
 
 
-def untidy(repo: str) -> tuple[list[dict], list[dict]]:
-    """Closed issues not in Done, and open issues in `repo` with no card here."""
+ARCHIVE_ITEM_MUTATION = """
+mutation($project: ID!, $item: ID!) {
+  archiveProjectV2Item(input: {projectId: $project, itemId: $item}) { item { id } }
+}
+"""
+
+
+def untidy(repo: str) -> tuple[list[dict], list[dict], list[dict]]:
+    """Closed issues not in Done, closed-as-not-planned ones to archive, and
+    open issues in `repo` with no card here."""
     cards = [flatten(i) for i in fetch_items()]
-    closed = [c for c in cards
-              if c["kind"] == "Issue" and c["state"] == "CLOSED"
+    closed = [c for c in cards if c["kind"] == "Issue" and c["state"] == "CLOSED"]
+    archive = [c for c in closed if c["state_reason"] == "NOT_PLANNED"]
+    closed = [c for c in closed
+              if c["state_reason"] != "NOT_PLANNED"
               and (c["status"] or "").lower() != DONE_COLUMN.lower()]
     off_board = [
         {"number": i["number"], "title": i["title"],
@@ -857,7 +884,19 @@ def untidy(repo: str) -> tuple[list[dict], list[dict]]:
         if not any((n.get("project") or {}).get("number") == PROJECT_NUMBER
                    for n in (i.get("projectItems") or {}).get("nodes") or [])
     ]
-    return closed, off_board
+    return closed, archive, off_board
+
+
+def archive_card(card: dict, meta: dict) -> int:
+    """Archive one card: off the board, restorable from the board's archive. 0 done, 2 failed."""
+    ref = f"{card['repo']}#{card['number']}"
+    try:
+        graphql(ARCHIVE_ITEM_MUTATION, project=meta["project_id"], item=card["item_id"])
+    except (BoardError, KeyError, TypeError) as exc:
+        print(f"FAILED {ref} -> archive: {exc}", file=sys.stderr)
+        return 2
+    print(f"{ref}: {card.get('status') or 'no status'} -> archived")
+    return 0
 
 
 def cmd_views(args: argparse.Namespace) -> int:
@@ -884,20 +923,24 @@ def _bare(name: str) -> str:
 
 
 def cmd_tidy(args: argparse.Namespace) -> int:
-    closed, off_board = untidy(args.repo)
+    closed, archive, off_board = untidy(args.repo)
     for c in closed:
         print(f"closed, not in {DONE_COLUMN}: {c['repo']}#{c['number']} ({c['status'] or 'no status'})")
+    for c in archive:
+        print(f"closed as not planned, to archive: {c['repo']}#{c['number']} ({c['status'] or 'no status'})")
     for i in off_board:
         print(f"open, not on the board: {i['repo']}#{i['number']} {i['title']}")
-    if not (closed or off_board):
+    if not (closed or archive or off_board):
         print("nothing to tidy")
     if not args.apply:
         return 0
     meta = board_meta()
+    worst = 0
+    for c in archive:
+        worst = max(worst, archive_card(c, meta))
     # The board's own spelling of New: "⚡️ New" and "⚡ New" differ only by a variation selector.
     new = next((o for o in meta.get("options") or {} if _bare(o) == _bare(NEW_COLUMN)), NEW_COLUMN)
     moves = [(c, DONE_COLUMN, False) for c in closed] + [(i, new, True) for i in off_board]
-    worst = 0
     for item, to, add in moves:
         try:
             code = move_card(item["number"], item["repo"], to, add_missing=add, meta=meta)
@@ -962,10 +1005,12 @@ def main() -> int:
     views.set_defaults(func=cmd_views)
 
     tidy = subparsers.add_parser(
-        "tidy", help=f"closed issues not in {DONE_COLUMN}, open issues not on the board")
+        "tidy", help=f"closed issues not in {DONE_COLUMN}, closed-as-not-planned ones to archive, "
+                     "open issues not on the board")
     tidy.add_argument("--repo", default=None, help="repo whose open issues belong on the board")
     tidy.add_argument("--apply", action="store_true",
-                      help=f"move each closed one to {DONE_COLUMN}, add each missing one to {NEW_COLUMN}")
+                      help=f"archive each not-planned one, move each other closed one to {DONE_COLUMN}, "
+                           f"add each missing one to {NEW_COLUMN}")
     tidy.set_defaults(func=cmd_tidy)
 
     args = parser.parse_args()
