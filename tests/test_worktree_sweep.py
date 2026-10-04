@@ -209,6 +209,12 @@ class Sweep(unittest.TestCase):
         line = f"keep {here} (fix/12-x): the current directory is inside it; run this from {self.clone}"
         self.assertEqual(self.sweep("--only", str(here), cwd=sub), (1, [line]))
 
+    def test_9_only_from_inside_a_detached_worktree_names_it_detached(self):
+        here = self.tmp / "detached-here"
+        self.git("worktree", "add", "-q", "--detach", str(here), "main")
+        line = f"keep {here} (detached): the current directory is inside it; run this from {self.clone}"
+        self.assertEqual(self.sweep("--only", str(here), cwd=here), (1, [line]))
+
     def test_9_only_a_path_that_is_no_worktree_is_a_usage_error(self):
         folder = self.tmp / "plain"
         folder.mkdir()
