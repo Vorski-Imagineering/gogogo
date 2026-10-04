@@ -37,12 +37,20 @@ def case(root, name, skill):
     write(root, f"plugins/gogogo/evals/{name}/prompt.md", f"---\ntags: [{skill}]\n---\n\nQuestion?\n")
 
 
-def doc(total=3, passed=3, cost=1.234, partial=False, deltas=None):
+def doc(total=3, passed=3, cost=1.234, partial=False, deltas=None, scores=None):
     d = {"partial": partial, "costUsd": cost,
          "aggregates": {"casesTotal": total, "casesPassed": passed}, "cases": []}
+    if not deltas and not scores:
+        # A real result lists every case it ran: here, the cases `Lane.setUp` creates.
+        scores = {name: {"score": 1} for name in LANE_CASES}
     for name, delta in (deltas or {}).items():
         d["cases"].append({"name": name, "aggregates": {"delta": delta}})
+    for name, aggregates in (scores or {}).items():
+        d["cases"].append({"name": name, "aggregates": aggregates})
     return d
+
+
+LANE_CASES = ("dev-reversal", "dev-third-attempt", "auto-dev-list-fails", "spec-being-built")
 
 
 class Lane(unittest.TestCase):
@@ -151,17 +159,55 @@ class Lane(unittest.TestCase):
 
     def test_baseline_fails_a_case_that_does_as_well_without_the_plugin(self):
         rc, out = self.run_lane(["--skill", "dev", "--baseline"],
-                                result=doc(total=2, passed=2, deltas={"dev-a": 1.0, "dev-b": 0.0}))
+                                result=doc(total=2, passed=2, deltas={"dev-reversal": 1.0, "dev-third-attempt": 0.0}))
         args = self.calls[0]
         self.assertEqual(args[args.index("--ablation") + 1], "with-without")
         self.assertEqual(rc, 1)
-        self.assertIn("evals: dev-b does as well without the plugin", out)
-        self.assertNotIn("dev-a does", out)
+        self.assertIn("evals: dev-third-attempt does as well without the plugin", out)
+        self.assertNotIn("dev-reversal does", out)
 
     def test_baseline_passes_when_every_case_does_better_with_the_plugin(self):
         rc, _ = self.run_lane(["--skill", "dev", "--baseline"],
-                              result=doc(total=2, passed=2, deltas={"dev-a": 1.0, "dev-b": 0.5}))
+                              result=doc(total=2, passed=2, deltas={"dev-reversal": 1.0, "dev-third-attempt": 0.5}))
         self.assertEqual(rc, 0)
+
+    def test_each_case_is_printed_with_its_score(self):
+        rc, out = self.run_lane(["--skill", "dev"], result=doc(total=2, passed=2, scores={
+            "dev-reversal": {"score": 1}, "dev-third-attempt": {"score": 0.67}}))
+        lines = out.splitlines()
+        self.assertEqual(rc, 0)
+        self.assertEqual(lines[-2:], ["evals: dev-reversal score=1.00", "evals: dev-third-attempt score=0.67"])
+        self.assertTrue(lines[-3].startswith("evals: cases=2 passed=2"))
+
+    def test_baseline_prints_the_score_without_the_plugin(self):
+        rc, out = self.run_lane(["--skill", "dev", "--baseline"], result=doc(total=2, passed=2, scores={
+            "dev-reversal": {"score": 1, "scoreWithout": 0.5, "delta": 0.5},
+            "dev-third-attempt": {"score": 1, "scoreWithout": 0, "delta": 1}}))
+        self.assertEqual(rc, 0)
+        self.assertIn("evals: dev-reversal score=1.00 without=0.50", out)
+        self.assertIn("evals: dev-third-attempt score=1.00 without=0.00", out)
+
+    def test_a_case_meant_to_run_that_is_not_in_the_result_fails_the_lane(self):
+        case(self.root, "dev-extra", "dev")
+        rc, out = self.run_lane(["--skill", "dev"], result=doc(total=2, passed=2, scores={
+            "dev-reversal": {"score": 1}, "dev-third-attempt": {"score": 1}}))
+        self.assertEqual(rc, 1)
+        self.assertIn("evals: dev-extra did not run", out)
+        self.assertNotIn("dev-reversal did not run", out)
+
+    def test_a_result_that_lists_no_case_leaves_every_case_of_the_skill_missing(self):
+        d = doc()
+        d["cases"] = []
+        rc, out = self.run_lane(["--skill", "dev"], result=d)
+        self.assertEqual(rc, 1)
+        self.assertIn("evals: dev-reversal did not run", out)
+        self.assertIn("evals: dev-third-attempt did not run", out)
+
+    def test_a_case_of_another_skill_that_is_not_in_the_result_is_not_missing(self):
+        rc, out = self.run_lane(["--skill", "dev"], result=doc(total=2, passed=2, scores={
+            "dev-reversal": {"score": 1}, "dev-third-attempt": {"score": 1}}))
+        self.assertEqual(rc, 0)
+        self.assertNotIn("did not run", out)
 
     def test_two_skills_are_one_run_tagged_in_order(self):
         write(self.root, "plugins/gogogo/skills/dev/SKILL.md", "changed\n")
