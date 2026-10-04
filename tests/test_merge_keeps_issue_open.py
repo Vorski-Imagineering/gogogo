@@ -89,6 +89,9 @@ class OneMergeProcedure(unittest.TestCase):
         self.assertIn("git fetch origin <headRefName>", branch)
         self.assertIn("git merge origin/<headRefName>", branch)
         self.assertLess(branch.index("git merge origin/<headRefName>"), branch.index("step 2"))
+        self.assertIn("git push origin HEAD", branch)
+        self.assertLess(branch.index("git merge origin/<headRefName>"), branch.index("git push origin HEAD"))
+        self.assertLess(branch.index("git push origin HEAD"), branch.index("step 2"))
         self.assertIn("the head changed after verification", branch)
 
     def test_the_merge_stop_is_a_stop_reason(self):

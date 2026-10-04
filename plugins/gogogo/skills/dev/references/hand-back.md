@@ -214,7 +214,8 @@ repo's own command merges instead, and its own checks stand. In order:
      checkout. Read the PR's branch name (`gh pr view <pr> --json
      headRefName -q .headRefName`), run `git fetch origin <headRefName>`, and
      merge the pushed commits in with `git merge origin/<headRefName>` (no
-     rebase, no force push). Re-run every lane's `run` command and the gates
+     rebase, no force push) and push the result (`git push origin HEAD`), so the
+     PR's head is the commit you verify. Re-run every lane's `run` command and the gates
      (and review, mutation and verification, as *The base moved* does), then
      go back to step 2, which records the local HEAD, now including those
      commits. A conflict you cannot resolve, or work you cannot re-verify, is
