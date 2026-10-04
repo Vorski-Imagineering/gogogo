@@ -93,6 +93,7 @@ class MemoryReview(unittest.TestCase):
         step = heading_section(review_text(), "## 4. Marker")
         self.assertRegex(step, r"(?i)only when every proposal[^.]*(yes|no)")
         self.assertRegex(step, r"(?i)every\s+expiry\s+read\s+succeeded")
+        self.assertRegex(step, r"(?i)every\s+yes[^.]*(carried out|landed|filed or written)")
         self.assertRegex(step, r"(?i)do not touch")
 
     def test_the_pointer_says_covered_memories_are_deleted_or_shortened(self):
