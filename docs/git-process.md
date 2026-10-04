@@ -14,7 +14,7 @@ the repo's profile, `.agents/dev-process.md`
 | `integration.strategy` | How a finished issue reaches the base: `pr-squash`, `run-branch-pr` or `merge-script`. |
 | `integration.final_target` | For `run-branch-pr`: the branch the run's final PR targets. |
 | `integration.command` | For `merge-script`: the repo's own merge command. |
-| `integration.ci_before_merge` | Whether CI must pass on each issue's PR before it merges. |
+| `integration.ci_before_merge` | Whether a PR on which no CI check ran may not merge (always so for a release and under `run-branch-pr`). Checks that exist are always awaited. |
 | `integration.mode_check` | A command that proves the session can run without prompts, in place of the plugin's check. |
 | `gates.always`, `gates.when` | Checks run before every merge, and extra ones by path. |
 | a lane's `mutate` | The command that mutation-tests the lines a change made; every mutant its tests miss is killed or accounted for before the merge. |
@@ -148,15 +148,23 @@ Every issue goes through the same checks, in this order, before its merge:
    pattern the change touches.
 6. **Unattended mode**, re-checked immediately before every merge and chained
    to it, so the merge cannot run if the check fails.
-7. **The PR's CI checks**, when the merge is a release or
-   `integration.ci_before_merge` is true. The loop watches them, then judges
-   each check's state, never the watch command's exit code. Every check
-   passing or skipped, with at least one passing, is a pass. A failed,
-   cancelled or still-pending check is a failure. No checks at all means
-   nothing ran: a failure where CI is required.
+7. **The PR's CI checks**, awaited before every pull-request merge. The loop
+   watches them, then asks `merge_ready.py`, which reads the PR's state, never
+   the watch command's exit code. A failed, cancelled or still-pending check
+   is a failure. No checks at all means nothing ran: a failure when the merge
+   is a release, the strategy is `run-branch-pr`, or `integration.ci_before_merge`
+   is true, otherwise the PR merges on the suite the agent ran.
+8. **The base, as it is now.** When the base moved during the issue, it is
+   merged into the branch (no rebase, no force push) and the lanes, gates and
+   CI run again; review, mutation and verification run again only when the
+   base's changes touch files the issue changed. The merge is pinned to the
+   commit that was checked (`--match-head-commit`).
 
 A failure at any step stops that issue at its branch or open PR and hands it
-back. The loop never hand-rolls a merge around a failed step.
+back. So does a merge GitHub refuses (a draft, a required review, a branch
+rule, a merge queue, a permission check): the card goes to the needs-a-person
+column with the reason and the PR link, and the loop goes on. It never merges
+with `--admin` or `--auto`. The loop never hand-rolls a merge around a failed step.
 
 ## Three ways to merge
 
@@ -171,7 +179,8 @@ fix/57-… ──PR──► main
 
 Open a PR from the issue branch to `integration.base`, wait for its checks
 when they are required, then
-`gh pr merge <pr> --squash --delete-branch`. Each issue becomes one commit on
+`gh pr merge <pr> --squash --delete-branch --match-head-commit <sha>`, the
+commit that was checked. Each issue becomes one commit on
 the base. gogogo itself uses it.
 
 ### `run-branch-pr`: issues collect on a run branch, one PR carries the run
@@ -234,7 +243,7 @@ paragraph that `stage_sync.py trailer` builds, with nothing after it:
 python3 "${CLAUDE_PLUGIN_ROOT}/scripts/stage_sync.py" --profile <profile> trailer \
   --issue <n>[=<reporter>] --verify --co-authors-from origin/<base>..HEAD > trailers.txt
 { git log --reverse --format='* %s' origin/<base>..HEAD; echo; cat trailers.txt; } > squash-body.txt
-gh pr merge <pr> --squash --delete-branch --body-file squash-body.txt
+gh pr merge <pr> --squash --delete-branch --match-head-commit <sha> --body-file squash-body.txt
 ```
 
 - Git reads trailers only from the final paragraph, and only when every line
