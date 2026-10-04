@@ -113,30 +113,36 @@ git rev-parse --show-toplevel
      Any line printed: **stop and report it** as "merge or close #N first; a new refresh
      cut from `<B>` would conflict with it". The checkout is untouched. A non-zero exit
      is a stop too: report its error, since a list it could not read is not an empty one.
-  3. **Record the start branch `S`**: `git branch --show-current`. When it prints nothing
-     (a detached HEAD), or a name starting with `roadmap-refresh-`, `S` is `B`.
-  4. Cut the refresh branch from the remote base `B`:
+  3. **Cut the refresh branch in a worktree**, from the remote base `B`, so the
+     checkout is never switched (other sessions may be working in it):
      ```bash
-     git switch -c roadmap-refresh-<YYYY-MM-DD-HHMM> origin/<B>
+     git worktree add -b roadmap-refresh-<YYYY-MM-DD-HHMM> <scratch>/roadmap-refresh-<YYYY-MM-DD-HHMM> origin/<B>
      ```
+     `<scratch>` is the session's scratch or temp directory (where `roadmap-pr.md` goes).
      `B` is `integration.final_target` when `integration.strategy` is `run-branch-pr`,
      otherwise `integration.base` (or the default branch when it is unset). Stop and
-     report if the switch fails. Steps 2 to 6 run on this branch.
+     report if this fails, a branch of that name already existing included (name it).
+     `W` is that path joined with the session folder's path relative to the repo root.
+     Steps 2 to 7 run with `W` as the working directory, so the script finds the same
+     profile there. The worktree is made from `origin/<B>`: it sees the committed
+     document, not an edit in the checkout.
 
 **Stopping early (the same repo).** Any stop between the cut and §7's push (step 2's
 "every mark agrees", its exit 2, or a stop a later step asks for) ends, when
-`git status --porcelain -- <file>` and `git log --oneline origin/<B>..HEAD` both print
-nothing, with:
+`git -C <W> status --porcelain -- <file>` and `git -C <W> log --oneline origin/<B>..HEAD`
+both print nothing, with these run from the session's own folder, never from inside the
+worktree:
 
 ```bash
-git switch <S>
+git worktree remove <scratch>/roadmap-refresh-<YYYY-MM-DD-HHMM>
 git branch -D roadmap-refresh-<YYYY-MM-DD-HHMM>
 ```
 
-and the report says the branch was removed; nothing was pushed, so nothing is lost. When
-the document has an uncommitted change, leave the branch and say which branch holds the
-change. When the branch holds a commit that was not pushed (a refused push in step 7),
-leave the branch too and say which branch holds the commit.
+and the report says the worktree and branch were removed; nothing was pushed, so nothing
+is lost. Otherwise (an uncommitted change to the document, or a commit that was not
+pushed, as after a refused push in step 7) leave both, and the report names the worktree
+path and the branch and says which holds the change. A temp folder the system cleaned
+leaves a stale entry; `git worktree prune` clears it.
 
 ## 2. Report
 
@@ -209,21 +215,24 @@ point at.
   git -C "$D" commit -m "roadmap: refresh marks from the tracker (<#n A → B>, ...)"
   git -C "$D" push
   ```
-- **The same repo:** on the refresh branch step 1 cut, in order:
+- **The same repo:** in `W`, on the refresh branch step 1 cut, in order:
   ```bash
   git add <file>
   git commit -m "roadmap: refresh marks from the tracker (<#n A → B>, ...)"
   git push -u origin roadmap-refresh-<YYYY-MM-DD-HHMM>
   gh pr create --base <B> --head roadmap-refresh-<YYYY-MM-DD-HHMM> \
     --title "roadmap: refresh marks from the tracker" --body-file <scratch>/roadmap-pr.md
-  git switch <S>
+  ```
+  then, from the session's own folder (never from inside the worktree):
+  ```bash
+  git worktree remove <scratch>/roadmap-refresh-<YYYY-MM-DD-HHMM>
   git branch -d roadmap-refresh-<YYYY-MM-DD-HHMM>
   ```
   Stop and report at the first command that fails, except the one case below; the
-  checkout stays on the refresh branch, and a pushed branch is a person's to open the PR
-  from. The body file holds step 8's account of what moved, which prose changed and which
-  rows were left for a person; the PR's number and the return to `S` come after it. When
-  `gh pr create` says a PR already exists for the branch, read it with
+  worktree and branch are kept and named, as in "Stopping early", and a pushed branch is
+  a person's to open the PR from. The body file holds step 8's account of what moved,
+  which prose changed and which rows were left for a person; the PR's number comes after
+  it. When `gh pr create` says a PR already exists for the branch, read it with
   `gh pr list --head roadmap-refresh-<YYYY-MM-DD-HHMM> --json number,url` and carry on.
   The PR is how the refresh lands under every `integration.strategy`; a person merges it
   the way the repo lands PRs. This skill never merges into the base itself.
@@ -233,4 +242,5 @@ point at.
 
 What moved (`#n A → B`), which prose changed, which rows were left for a person and why,
 and then: in another repo, the commit; in the same repo, the PR as the thing still to
-do, "merge #N to land the refresh" with its URL, and that the checkout is back on `S`.
+do, "merge #N to land the refresh" with its URL, and that the checkout was not switched. A kept worktree is named with
+its path and branch.
