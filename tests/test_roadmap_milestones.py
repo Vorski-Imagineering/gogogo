@@ -271,6 +271,11 @@ class Milestones(Case):
         self.assertEqual([i["kind"] for i in plan["items"]], ["link-section", "set-milestone"])
         self.assertEqual(self.plan(FakeGitHub(TWO, [iss(5, 1, D1)]), "--link", "Nope")[0], 2)
 
+    def test_with_nothing_linked_link_adds_to_every_table_section(self):
+        self.commit(roadmap((heading("A"), [5]), (heading("B"), [6]), (heading("C"), None)), D1)
+        _, plan, _ = self.plan(FakeGitHub([], [iss(5), iss(6)]), "--link", "C")
+        self.assertEqual([i["section"] for i in plan["items"] if i["kind"] == "link-section"], ["A", "B", "C"])
+
 
 class Apply(Case):
     def setUp(self):

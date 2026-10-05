@@ -355,20 +355,20 @@ def plan(doc: Doc, path: str, repo: str, github, history: History, link: list[st
     items, skipped, kept = [], list(doc.skipped), []
 
     # Sections offered as new milestones.
-    new: list[Section] = []
+    asked: list[Section] = []
     for heading in link:
         section = doc.by_heading(heading)
         if section is None:
             raise Unusable(f"--link {heading!r}: no ## heading with that text in the roadmap")
         if section.number is None:
-            new.append(section)
-    if not doc.linked() and not link:
-        new = [s for s in doc.sections if s.number is None and s.tables]
+            asked.append(section)
+    offered = [s for s in doc.sections if s.number is None and s.tables] if not doc.linked() else []
+    new = sorted({id(s): s for s in offered + asked}.values(), key=lambda s: s.line)
     for section in new:
         items.append(item("link-section", "both", section=section.heading,
                           milestone=ms(by_title.get(section.heading), titles, section.heading),
-                          why="no heading links a milestone yet" if not link
-                          else "asked for by name with --link"))
+                          why="asked for by name with --link" if section in asked
+                          else "no heading links a milestone yet"))
 
     # Headings and milestones: the document's side only.
     linked = doc.linked()
