@@ -533,7 +533,8 @@ class Exact(Case):
         self.commit(roadmap((heading("A", 1), []), (heading("B", 2), [5])), D2)
         self.commit(roadmap((heading("A", 1), [5]), (heading("B", 2), [])), D3)
         history = rm.History(rm.Git(self.doc), REPO)
-        self.assertEqual(history.placed(5), ("2026-10-03T10:00:00+00:00", self.git_sha("HEAD")))
+        time, sha = history.placed(5)  # git prints the time as +00:00 or Z, by version
+        self.assertEqual((rm.when(time), sha), (rm.when(D3), self.git_sha("HEAD")))
         self.assertEqual(history.placed(9), (None, None))
 
     def git_sha(self, rev):
