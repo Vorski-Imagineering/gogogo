@@ -243,12 +243,13 @@ class Git:
     """The document's own git repo: the committed text at HEAD and its first-parent history."""
 
     def __init__(self, path: Path):
-        self.dir = path.resolve().parent
+        self.root = path.resolve().parent
         self.root = Path(self._git("rev-parse", "--show-toplevel").strip())
         self.rel = path.resolve().relative_to(self.root.resolve()).as_posix()
 
     def _git(self, *args: str) -> str:
-        done = subprocess.run(["git", "-C", str(self.dir), *args], capture_output=True, text=True)
+        # From the repo's root: `rel` is a path from there, never from the document's folder.
+        done = subprocess.run(["git", "-C", str(self.root), *args], capture_output=True, text=True)
         if done.returncode != 0:
             raise ReadError(f"git {args[0]}: {rs.first_line(done.stderr or done.stdout)}")
         return done.stdout

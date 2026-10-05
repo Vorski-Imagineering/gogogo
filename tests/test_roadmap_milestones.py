@@ -343,6 +343,17 @@ class Safety(Case):
         code, plan, _ = self.plan(FakeGitHub(TWO, [iss(5, 1, D2)]))
         self.assertEqual((code, plan["items"]), (0, []))
 
+    def test_a_roadmap_in_a_subfolder_reads_its_history(self):
+        # Live run, 2026-10-05: a roadmap at docs/roadmap.md read as "no commit at HEAD".
+        self.profile.write_text(profile_text().replace('file = "roadmap.md"', 'file = "docs/roadmap.md"'),
+                                encoding="utf-8")
+        (self.root / "docs").mkdir()
+        self.doc = self.root / "docs" / "roadmap.md"
+        self.commit(roadmap((heading("A", 1), [5]), (heading("B", 2), [])), D1)
+        _, plan, err = self.plan(FakeGitHub(TWO, [iss(5, 2, D2)]))
+        self.assertIsNotNone(plan, err)
+        self.assertEqual([i["kind"] for i in plan["items"]], ["move-row"])
+
     def test_a_failed_read_is_exit_2_naming_the_issue(self):  # 18
         self.commit(roadmap((heading("A", 1), [5, 6])), D1)
         code, plan, err = self.plan(FakeGitHub(TWO, [iss(5, 1)], errors={6: rm.ReadError("#6: HTTP 502")}))
