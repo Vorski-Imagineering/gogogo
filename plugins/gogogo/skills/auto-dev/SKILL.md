@@ -250,6 +250,8 @@ by the run* for §8 and §9.
 `/gogogo:dev` §3–6, with these differences because nobody is watching:
 
 - **Every rung in `verify.rungs` is mandatory** for every issue.
+- **An authorisation** (`/gogogo:dev` §1) is read for every issue and obeyed;
+  §8's between-issues report names it.
 - The regression test must be seen failing, then the whole suite green once,
   on the final commit (by exit status, `/gogogo:dev` §6). Each correction
   round runs the focused commands `/gogogo:dev` review rule 1 names. Record
@@ -366,7 +368,7 @@ cards where they are.
 
 Report before starting the next one, a few lines: issue, what changed, how many
 new tests went red, what review found, what the real run showed, the merge
-commit, the card's new column, and *label added by the run* when §2 added it. The user is not watching every step; this log is
+commit, the card's new column, the authorisation it ran under (§4), and *label added by the run* when §2 added it. The user is not watching every step; this log is
 how they stay able to stop you. Then return to §1: the board may have moved.
 
 Send one short message per change of state, only **after** the thing is true.

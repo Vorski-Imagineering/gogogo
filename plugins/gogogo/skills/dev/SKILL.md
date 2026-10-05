@@ -48,6 +48,27 @@ gh api graphql -f query='{repository(owner:"<owner>",name:"<name>"){issue(number
 read gives the description's last edit (`lastEditedAt`, null when never
 edited) and each comment's link, time, author and text.
 
+**Is the work authorised?** A person can authorise more for an issue through
+`/gogogo:human-help`: a review that keeps going until it is clean, a stronger
+model, or a higher effort. Read it from the description:
+
+```bash
+gh issue view <n> --repo <tracker.issues_repo> --json body -q .body > <scratch>/issue-<n>-body.md
+python3 "${CLAUDE_PLUGIN_ROOT}/scripts/human_help.py" authorised <scratch>/issue-<n>-body.md
+```
+
+- Exit 0 and nothing printed: no authorisation; nothing in this skill about
+  one applies.
+- Exit 0 and a line: the issue is authorised with those settings
+  (`review=until-clean`, `model=<m>`, `effort=<e>`, each only when given),
+  from the newest `authorised:` row of `## Approvals`. Note that row's number
+  for §7. `review=until-clean` changes the review's limits
+  (`references/review.md`); `model` or `effort` moves §3 to §6 into a
+  subagent (`## Claude-specific`).
+- Exit 2: the `authorised:` row cannot be read. Hand the issue back by §8
+  with `reason=spec`, the Needs-you line naming that row and the script's
+  message. Never ignore or guess an authorisation.
+
 Read the whole issue: the description and every comment. §2 says which comments count.
 
 Reporters describe what they *saw*, in their own words. The words in the title
@@ -150,6 +171,9 @@ folded into: its comments are read as part of the issue's report, and the
 
 ## 3. Locate the real cause: expect data and state, not just code
 
+Under an authorisation that sets `model` or `effort` (§1), §3 to §6 run in
+one subagent, as `## Claude-specific` says; §7 and §8 stay in the session that started it.
+
 `rg` for the literal string first. **A miss is information.** Much of what shows
 on screen is data: user-editable names and labels, configuration records. A
 label the reporter quotes may not exist in the tree at all.
@@ -249,6 +273,8 @@ The profile's `## Recon traps` lists what this codebase specifically hides.
 
 Comment in the reporter's language, not the codebase's:
 
+- **Authorised**, when §1 found an authorisation: directly after the
+  report's first line, `Authorised: <the settings> (Approvals row <k>)`.
 - **What was happening**: the mechanism, one short paragraph, in their terms.
 - **What changed**: user-visible effects, as bullets.
 - **Comments read** (§2, *Fold in comments the description does not hold
@@ -411,6 +437,31 @@ and integration follow this skill and the repo's merge path. See the profile's
   *Claude-specific* says; in an auto-dev run never end the turn to wait for it.
 - In the record, `impl` is the session's model id; `reviewer` is
   `$CLAUDE_CODE_SUBAGENT_MODEL` when it is set, else the same as `impl`.
+  Under an authorisation with `model`, `impl` and `reviewer` are that
+  model's id as the subagent reports it. With `effort` and no `model`,
+  `impl` is the session's model, and §7's `Authorised:` line names the effort.
+- **An authorisation with `model` or `effort`** (§1) runs §3 to §6 in one
+  `Agent` call: `subagent_type: "gogogo:build-<effort>"` (`general-purpose`
+  when there is no `effort`), with `model: "<m>"`, left out when `m` is
+  `inherit` or absent. This session first places the work as §4's first
+  bullet says (asking there when it asks); in an `/gogogo:auto-dev` run,
+  auto-dev §3 has placed it, and that place is used. The prompt names the issue, that
+  worktree (or this folder), the body file and the authorisation line, and
+  tells it to follow `/gogogo:dev` §3 to §6 exactly, in that place, leaving
+  out §4's first bullet; to run the review as `/code-review` from
+  inside the subagent, so the review uses the same model and effort; to
+  start the spec check's reader with the same `model`; with
+  `review=until-clean`, to review as `references/review.md` says for it; in
+  an `/gogogo:auto-dev` run, to follow that skill's §4 differences too (it
+  commits and pushes each round, and every rung is mandatory); to post no
+  report, move no card and hand nothing back, on a stop too, whatever
+  auto-dev §4 says, and to go on to no other issue: the session that started
+  it runs §7 and §8; and to return everything §7 lists for the report, and,
+  when §3 to §6 stopped it, the stop's reason with the detail the step that
+  stopped it puts in the report or presents (a proposal; for a blocker,
+  `owner/repo#B` and what it must deliver).
+  Without `model` or `effort`, nothing moves:
+  `review=until-clean` alone works in this session.
 - In the record and the stop marker, `session` is `$CLAUDE_CODE_SESSION_ID`, the variable
   `require_unattended.sh` also reads, and `unknown` when it is unset.
 - Browser checks use the `claude-in-chrome` tools; load the ones you need in one

@@ -9,10 +9,14 @@ oldest card first: its stop reason (the newest `gogogo:stop` marker, or `skip`
 for a `gogogo:skip` marker, or `none`), the `**Needs you:**` line of that
 comment, the branch it names, the comments after it by someone with write
 access, and how many `gogogo:requeue` markers with the same reason the issue
-has. Exit 0 when listed (also when empty), 2 when the board or an issue cannot
-be read, with the reason on stderr and nothing on stdout.
+has. Write access is GitHub's permission call for each comment's author, read
+once per author: `admin`, `maintain` or `write` is a writer, a 404 is not, and
+any other failure is exit 2 (an org member with no access to the repo is not a
+writer). Exit 0 when listed (also when empty), 2 when the board, an issue or an
+author's permission cannot be read, with the reason on stderr and nothing on
+stdout.
 
-`authorised` prints the newest `authorised:` row of an Approvals table as
+`authorised` prints the newest Approvals row whose Chosen cell starts `authorised:` as
 `review=until-clean model=<m> effort=<e>` (only the keys present), or nothing.
 Exit 0 either way, 2 on an unreadable file or a row with an unknown key or value.
 """
@@ -30,7 +34,7 @@ SKIP = re.compile(r"<!-- gogogo:skip v=\d+ ")
 REQUEUE = re.compile(r"<!-- gogogo:requeue v=1 reason=([a-z-]+) -->")
 NEEDS_YOU = re.compile(r"^\*\*Needs you:\*\*\s*(.*)$", re.M)
 BRANCH = re.compile(r"/tree/([^\s)>\"]+)")
-WRITERS = {"OWNER", "MEMBER", "COLLABORATOR"}
+WRITE_PERMISSIONS = {"admin", "maintain", "write"}
 
 MODELS = {"fable", "opus", "sonnet", "inherit"}
 EFFORTS = {"high", "xhigh", "max"}
@@ -52,7 +56,7 @@ def stop_reason(body):
 def card(number, title, url, comments, labels):
     """One card from its issue's comments (oldest first), as a dict, or None if it has no stop marker.
 
-    `comments` are dicts with `body`, `url`, `author`, `association`, in order."""
+    `comments` are dicts with `body`, `url`, `author` and `writer` (the author has write access), in order."""
     last = None
     for index, comment in enumerate(comments):
         reason = stop_reason(comment["body"])
@@ -68,7 +72,7 @@ def card(number, title, url, comments, labels):
     answers = [
         {"author": c["author"], "url": c["url"], "body": c["body"]}
         for c in comments[index + 1:]
-        if c.get("association") in WRITERS and not REQUEUE.search(c["body"])
+        if c.get("writer") is True and not REQUEUE.search(c["body"])
     ]
     requeued = sum(1 for c in comments if (m := REQUEUE.search(c["body"])) and m.group(1) == reason)
     return {
@@ -88,11 +92,14 @@ def authorised(body):
     """The settings of the newest `authorised:` Approvals row, as a dict; {} when there is none.
 
     Raises ValueError on an unknown key or value in that row."""
-    rows = [line for line in body.splitlines() if re.search(r"\|\s*authorised:", line)]
-    if not rows:
+    # Only the Chosen cell (an Approvals row's third) authorises: one in Rejected was turned down.
+    # A table splits on unescaped pipes only: `\\|` inside a cell is text, and must not shift the columns.
+    chosen_cells = [cells[2] for cells in ([c.strip() for c in re.split(r"(?<!\\)\|", line.strip().strip("|"))]
+                                           for line in body.splitlines() if line.lstrip().startswith("|"))
+                    if len(cells) > 2 and cells[2].startswith("authorised:")]
+    if not chosen_cells:
         return {}
-    cells = [c.strip() for c in rows[-1].strip().strip("|").split("|")]
-    chosen = next((c for c in cells if c.startswith("authorised:")), "")
+    chosen = chosen_cells[-1]
     settings = {}
     for token in chosen[len("authorised:"):].split():
         key, sep, value = token.partition("=")
@@ -115,15 +122,36 @@ def _gh(*args):
     return out.stdout
 
 
+def writer(repo, login, known):
+    """True when `login` has write access to `repo`, by GitHub's permission call, read once per login.
+
+    A 404 (not a collaborator) is False; any other failure raises CannotRead naming the login:
+    an unreadable permission is never counted either way."""
+    if login not in known:
+        try:
+            level = _gh("api", f"repos/{repo}/collaborators/{login}/permission", "-q", ".permission").strip()
+        except CannotRead as exc:
+            if "404" not in str(exc) and "Not Found" not in str(exc):
+                raise CannotRead(f"could not read {login}'s permission: {exc}") from None
+            level = "none"
+        known[login] = level in WRITE_PERMISSIONS
+    return known[login]
+
+
 def cmd_list(args):
     sys.path.insert(0, str(Path(__file__).resolve().parent))
     import profile_check
     import tracker
 
     path = Path(args.profile) if args.profile else profile_check.find_profile()
-    settings, _ = profile_check.split_profile(path.read_text(encoding="utf-8"))
-    repo = settings["tracker"]["issues_repo"]
-    column = settings["tracker"]["columns"]["needs_human"]
+    try:
+        tracker.configure(str(path))  # the board, repo and columns the list reads
+    except tracker.ProfileMissing as exc:
+        print(f"could not read the board: {exc}", file=sys.stderr)
+        return 2
+    # As configured, the profile's defaults included: a profile without needs_human hands back to in_progress.
+    repo = tracker.DEFAULT_REPO
+    column = tracker.COLUMNS["needs_human"].name
     try:
         board, _recovered, _total = tracker.list_cards(status=column, open_only=True, issues_only=True,
                                                        repo=repo)
@@ -131,14 +159,19 @@ def cmd_list(args):
         print(f"could not read the board: {exc}", file=sys.stderr)
         return 2
     cards = []
+    known = {}
     for item in sorted(board, key=lambda i: i.get("status_since") or ""):
         try:
             view = json.loads(_gh("issue", "view", str(item["number"]), "--repo", repo, "--json", "comments"))
         except CannotRead as exc:
             print(f"could not read #{item['number']}: {exc}", file=sys.stderr)
             return 2
-        comments = [{"body": c["body"], "url": c["url"], "author": c["author"]["login"],
-                     "association": c.get("authorAssociation")} for c in view["comments"]]
+        try:
+            comments = [{"body": c["body"], "url": c["url"], "author": c["author"]["login"],
+                         "writer": writer(repo, c["author"]["login"], known)} for c in view["comments"]]
+        except CannotRead as exc:
+            print(str(exc), file=sys.stderr)
+            return 2
         cards.append(card(item["number"], item["title"], item["url"], comments, item.get("labels") or []))
     if args.json:
         print(json.dumps(cards, indent=2))

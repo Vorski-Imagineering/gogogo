@@ -284,7 +284,9 @@ spec and a loop that will not settle goes to a person.
 That is how the skills now work
 ([#33](https://github.com/Vorski-Imagineering/gogogo/issues/33)): a finding is
 applied only with evidence, each finding gets three attempts, a fix is never
-undone and redone, and a review past 13 rounds goes to a person.
+undone and redone, and a review past 13 rounds goes to a person. The one
+exception is an issue a person has authorised, through `/gogogo:human-help`,
+to keep going until it is clean: it has no attempt or round limit.
 [docs/when-is-enough-enough.md](docs/when-is-enough-enough.md) has the numbers,
 the sources with the dates we read them, and the rule; `review_stats.py` reads
 the review records back.
@@ -317,7 +319,7 @@ rebased.
 | `/gogogo:spec` | Turns an issue into a spec another agent can build from without asking. Asks the owner in rounds, records the decisions, lints the result. |
 | `/gogogo:human-help` | Works the Human!Help! column: for each card whose question an answer has settled, records the answer and requeues it; asks you one question per card that needs a decision; leaves the rest in the column with a reason. Never a Hard Stop without your answer. |
 | `/gogogo:idea` | Files what the session has found as an un-specced issue (request, findings, open questions), after showing you the draft. No further research; `/gogogo:spec` designs it later. When you name gogogo's own tracker, it files a suspected gogogo fault there, only after `name_check.py` finds none of this repo's names in the title and body. |
-| `/gogogo:dev` | One issue end to end: read, triage, find the cause, change, review, verify on real data, report, move the card. |
+| `/gogogo:dev` | One issue end to end: read, triage, find the cause, change, review, verify on real data, report, move the card. An issue you authorised through `/gogogo:human-help` is reviewed until it is clean, on the model and effort you named. |
 | `/gogogo:auto-dev` | Works the ready queue unattended, one issue after another, each on its own branch. Passes over a card GitHub marks as blocked by an open issue, and takes blockers first. `--triage-only` reads the queue and changes nothing. |
 | `/gogogo:setup` | Opens with the repo's setup and configuration, then onboards it, or checks it is still set up right: plugin settings, profile, Hard Stops, board and columns, ready label, competing local skills. |
 | `/gogogo:wrap-up` | Before you close a session: finds anything uncommitted, unpushed, stranded or still running, saves what the session learned, and says plainly whether it is safe to close. |
@@ -355,6 +357,8 @@ Scripts the skills call, all in `plugins/gogogo/scripts/`:
 - `roadmap_milestones.py`: plans, as JSON, the milestone changes that keep a roadmap's linked sections and GitHub's milestones in step, and applies only the ids it is given. It never deletes a milestone.
 - `session_status.py`: the plugin's session-start hook; prints that one-line status, or nothing outside a repo with a profile.
 - `record_outcome.py`: renders and records an auto-test outcome: comment first, then labels, close and card, then reads the issue back.
+
+Agents the skills start, in `plugins/gogogo/agents/`: `build-high`, `build-xhigh` and `build-max` each run one issue's build at that effort, when the issue's Approvals authorise it.
 
 ## One process, many stacks
 
