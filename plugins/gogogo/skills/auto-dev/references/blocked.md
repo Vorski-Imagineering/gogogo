@@ -36,4 +36,7 @@ them in the same board read §1 already makes.
    every time §1's list is read in this run, and taken as soon as its
    blockers are out of the way: a blocker merged earlier in the same run
    unblocks it. "Not taken again in the same run" (§4) is about real skips,
-   not these.
+   not these. Each read decides from the states it shows, never from what the
+   run expects to merge later: a row whose blocker is `open` at this read is
+   passed over now, even when that blocker is taken first. Triage-only merges
+   nothing, so there every such row is a skip.
