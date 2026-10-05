@@ -172,7 +172,7 @@ folded into: its comments are read as part of the issue's report, and the
 ## 3. Locate the real cause: expect data and state, not just code
 
 Under an authorisation that sets `model` or `effort` (§1), §3 to §6 run in
-one subagent, as `## Claude-specific` says; §7 and §8 stay in this session.
+one subagent, as `## Claude-specific` says; §7 and §8 stay in the session that started it.
 
 `rg` for the literal string first. **A miss is information.** Much of what shows
 on screen is data: user-editable names and labels, configuration records. A
@@ -450,13 +450,13 @@ and integration follow this skill and the repo's merge path. See the profile's
   start the spec check's reader with the same `model`; with
   `review=until-clean`, to review as `references/review.md` says for it; in
   an `/gogogo:auto-dev` run, to follow that skill's §4 differences too (it
-  commits and pushes each round, and every rung is mandatory). It posts no
-  report and moves no card, a stop included: §7 and §8 run in this session.
-  It returns what §7 needs: the change summary, each record's fields, the
-  verification result, and, when §3 to §6 stopped it, the stop's reason and
-  its detail (the items left, the surviving mutants, each attempt and what
-  it got wrong, or the blocking issue as `owner/repo#B` and what it must
-  deliver). Without `model` or `effort`, nothing moves:
+  commits and pushes each round, and every rung is mandatory); to post no
+  report, move no card and hand nothing back, on a stop too, whatever
+  auto-dev §4 says, and to go on to no other issue: the session that started
+  it runs §7 and §8; and to return everything §7 lists for the report, and,
+  when §3 to §6 stopped it, the stop's reason with the detail §7 and §8
+  name for it (for a blocker, `owner/repo#B` and what it must deliver).
+  Without `model` or `effort`, nothing moves:
   `review=until-clean` alone works in this session.
 - In the record and the stop marker, `session` is `$CLAUDE_CODE_SESSION_ID`, the variable
   `require_unattended.sh` also reads, and `unknown` when it is unset.
