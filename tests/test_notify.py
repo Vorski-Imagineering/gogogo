@@ -927,6 +927,12 @@ class Exact(Case):
         self.assertEqual(notify.render(EVENTS["issue_merged"], self.settings(), "S"), RENDERED["issue_merged"],
                          "only run_started and run_closed carry the summary")
 
+    def test_the_issue_line_escapes_its_column_and_reason(self):
+        event = {**EVENTS["needs_you"], "column": "A&B", "reason": "x < y"}
+        html, plain = notify.render(event, self.settings(), None)
+        self.assertEqual(html.splitlines()[0], f"⛔ <b>code</b> {LINK7} needs you → A&amp;B: x &lt; y")
+        self.assertEqual(plain.splitlines()[0], "⛔ code #7 needs you → A&B: x < y")
+
     def test_every_valid_event_parses(self):
         for event in [*EVENTS.values(), *(e for e, _ in MORE.values())]:
             self.assertEqual(notify.parse_event(json.dumps(event)), event)
