@@ -311,7 +311,13 @@ class History:
     def __init__(self, git, repo: str):
         self.versions = []  # (sha, time, {issue: milestone number}, linked numbers)
         for sha, time in git.versions():
-            doc = parse_doc(git.text_at(sha), repo)
+            try:
+                text = git.text_at(sha)
+            except ReadError as exc:
+                if "does not exist" not in str(exc) and "but not in" not in str(exc):
+                    raise
+                text = ""  # the commit that deleted the roadmap: no section in that version
+            doc = parse_doc(text, repo)
             home = {n: s.number for n, s in homes(doc, doc.linked()).items()}
             self.versions.append((sha, time, home, {s.number for s in doc.linked()}))
         if not self.versions:
@@ -363,7 +369,13 @@ def plan(doc: Doc, path: str, repo: str, github, history: History, link: list[st
         if section.number is None:
             asked.append(section)
     offered = [s for s in doc.sections if s.number is None and s.tables] if not doc.linked() else []
-    new = sorted({id(s): s for s in offered + asked}.values(), key=lambda s: s.line)
+    new = []
+    for section in sorted({id(s): s for s in offered + asked}.values(), key=lambda s: s.line):
+        if "[" in section.heading or "]" in section.heading:
+            skipped.append({"line": section.line + 1, "why": "the heading has a square bracket, so a link "
+                                                           "to it could not be read back; link it by hand"})
+        else:
+            new.append(section)
     for section in new:
         items.append(item("link-section", "both", section=section.heading,
                           milestone=ms(by_title.get(section.heading), titles, section.heading),
@@ -384,6 +396,12 @@ def plan(doc: Doc, path: str, repo: str, github, history: History, link: list[st
         if states.get(number) == "open":
             items.append(item("close-milestone", "github", milestone=ms(number, titles), frm="open",
                               expect="open", why="an earlier version of the roadmap linked it; none does now"))
+
+    # A heading whose milestone is gone links nothing an issue could be set to.
+    linked = [s for s in linked if s.number in titles]
+    for section in doc.linked():
+        if section not in linked:
+            section.number = None
 
     # Issues: rows in new sections set their milestone by title.
     home = homes(doc, linked + new)
@@ -562,6 +580,17 @@ def first_table_end(lines: list[str], span: tuple[int, int]) -> tuple[int, rs.Ta
     return None
 
 
+def find_row(lines: list[str], span: tuple[int, int], issue: int, repo: str) -> int | None:
+    """The index of the first row in the section whose issue is `issue`."""
+    pattern = rs.issue_pattern(repo)
+    for first, table in tables_at(lines):
+        if span[0] < first < span[1]:
+            for index, cells in table.rows:
+                if rs.row_issue(table, cells, pattern) == issue:
+                    return index
+    return None
+
+
 def apply_one(entry, repo, lines, github, writer, legend, created) -> str:
     kind = entry["kind"]
     milestone = entry.get("milestone") or {}
@@ -571,9 +600,10 @@ def apply_one(entry, repo, lines, github, writer, legend, created) -> str:
         span = section_span(lines, entry["section"])
         if span is None:
             return f"stale: no heading {entry['section']!r} in the roadmap"
-        number = milestone.get("number")
         current = {m["title"]: m["number"] for m in github.milestones(repo)}
-        number = current.get(entry["section"], number)
+        number = current.get(entry["section"])
+        if number is None and milestone.get("number") is not None:
+            return f"stale: milestone {milestone['number']} is no longer titled {entry['section']!r}"
         if number is None:
             number = writer.create_milestone(repo, entry["section"])
         created[entry["section"]] = number
@@ -607,8 +637,9 @@ def apply_one(entry, repo, lines, github, writer, legend, created) -> str:
         return f"milestone {number}" if number is not None else "milestone cleared"
     # Document kinds.
     if kind in ("move-row", "remove-row"):
+        # By its issue, not its text: the refresh's own steps may have rewritten the row's mark or links.
         span = section_span(lines, entry["from"])
-        index = next((i for i in range(*span) if rs.content(lines[i]) == entry["expect"]), None) if span else None
+        index = find_row(lines, span, entry["issue"], repo) if span else None
         if index is None:
             return f"stale: the row is no longer in {entry['from']!r}"
         if kind == "remove-row":
@@ -638,7 +669,8 @@ def apply_one(entry, repo, lines, github, writer, legend, created) -> str:
             if name == "Issue":
                 cells.append(f"[#{entry['issue']}](https://github.com/{repo}/issues/{entry['issue']})")
             elif name == "State":
-                cells.append(f"{none.mark} {none.state_cell}")
+                cells.append(f"{none.mark} {none.state_cell}" + ("" if "Issue" in table.header else
+                             f" [#{entry['issue']}](https://github.com/{repo}/issues/{entry['issue']})"))
             elif not work and name.lower() not in rs.NOTE_HEADERS:
                 cells.append(title)
                 work = True

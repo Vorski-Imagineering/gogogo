@@ -320,6 +320,71 @@ class Apply(Case):
         self.assertEqual((code, writer.calls), (0, [("set_issue_milestone", 6, 1)]), out)
 
 
+class RoundOne(Case):
+    """Review round 1 of gogogo#184."""
+
+    def test_a_row_the_refresh_rewrote_still_moves(self):
+        self.commit(roadmap((heading("A", 1), [5, 6]), (heading("B", 2), [8])), D1)
+        github = FakeGitHub(TWO, [iss(5, 2, D2), iss(6, 1, D1), iss(8, 2, D1)])
+        _, plan, _ = self.plan(github)
+        (entry,) = self.items(plan, 5)
+        text = self.doc.read_text(encoding="utf-8").replace(row(5), row(5).replace("⚪ —", "🟡 **in progress**"))
+        self.doc.write_text(text, encoding="utf-8")
+        code, out, _ = self.run_main("apply", "--plan", self.save(plan), "--items", str(entry["id"]), github=github)
+        self.assertEqual(code, 0, out)
+        lines = self.doc.read_text(encoding="utf-8").splitlines()
+        self.assertEqual(lines[lines.index(row(8)) + 1], row(5).replace("⚪ —", "🟡 **in progress**"))
+
+    def test_an_added_row_in_a_table_without_an_issue_column_names_its_issue(self):
+        text = roadmap((heading("A", 1), [5])) + "\n" + "\n".join([
+            heading("B", 2), "", "| Work | State |", "|---|---|",
+            f"| w | ⚪ — [#6](https://github.com/{REPO}/issues/6) |", ""])
+        self.commit(text, D1)
+        github = FakeGitHub(TWO, [iss(5, 1, D1), iss(6, 2, D1), iss(7, 2, D2, title="Seven")])
+        _, plan, _ = self.plan(github)
+        (entry,) = self.items(plan, 7)
+        code, _, _ = self.run_main("apply", "--plan", self.save(plan), "--items", str(entry["id"]), github=github)
+        self.assertEqual(code, 0)
+        self.assertIn(f"| Seven | ⚪ — [#7](https://github.com/{REPO}/issues/7) |", self.doc.read_text(encoding="utf-8"))
+        self.git("commit", "-qam", "add #7", date=D3)
+        _, plan, _ = self.plan(github)
+        self.assertEqual(self.items(plan, 7), [], "the added row is #7's home: nothing to add again")
+
+    def test_a_heading_whose_milestone_is_gone_sets_nothing(self):
+        self.commit(roadmap((heading("A", 1), [5]), (heading("Gone", 7), [6])), D1)
+        _, plan, _ = self.plan(FakeGitHub([ms(1, "A")], [iss(5, 1, D1), iss(6)]))
+        self.assertEqual(self.items(plan, 6), [])
+        self.assertIn("no longer exists", plan["skipped"][0]["why"])
+
+    def test_a_heading_with_a_bracket_is_not_linked(self):
+        self.commit(roadmap((heading("[WIP] Auth"), [5]), (heading("B"), [6])), D1)
+        _, plan, _ = self.plan(FakeGitHub([], [iss(5), iss(6)]))
+        self.assertEqual([i["section"] for i in plan["items"] if i["kind"] == "link-section"], ["B"])
+        self.assertEqual(self.items(plan, 5), [])
+        self.assertIn("square bracket", plan["skipped"][0]["why"])
+
+    def test_a_roadmap_once_deleted_still_plans(self):
+        self.commit(roadmap((heading("A", 1), [5])), D1)
+        self.git("rm", "-q", "roadmap.md")
+        self.git("commit", "-qm", "gone", date=D2)
+        self.commit(roadmap((heading("A", 1), [5])), D3)
+        code, plan, err = self.plan(FakeGitHub(TWO, [iss(5, 1, D1)]))
+        self.assertEqual(code, 0, err)
+
+    def test_a_renamed_milestone_is_not_linked(self):
+        self.commit(roadmap((heading("A"), [5])), D1)
+        github = FakeGitHub([ms(7, "A")], [iss(5)])
+        _, plan, _ = self.plan(github)
+        (link_id,) = [i["id"] for i in plan["items"] if i["kind"] == "link-section"]
+        github.list[0]["title"] = "Archive"
+        writer = Writer()
+        code, out, _ = self.run_main("apply", "--plan", self.save(plan), "--items", str(link_id),
+                                     github=github, writer=writer)
+        self.assertEqual((code, writer.calls), (1, []))
+        self.assertIn("SKIPPED stale", out)
+        self.assertNotIn("milestone/7", self.doc.read_text(encoding="utf-8"))
+
+
 class Safety(Case):
     def test_no_milestone_is_ever_deleted(self):  # 15
         source = (SCRIPTS / "roadmap_milestones.py").read_text(encoding="utf-8")
