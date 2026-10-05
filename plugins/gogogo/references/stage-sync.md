@@ -134,6 +134,11 @@ The workflow runs a pinned copy, not the plugin: CI must not follow gogogo's
 3. Keep a test in the repo that fails when a copy no longer matches its pin.
 4. To refresh, copy all four again from one newer commit and rewrite the pin.
 
+A repo gets the formatted deploy message (status mark, bold repo, linked issue
+numbers) when it refreshes its copies and takes the `--json` and `--event`
+lines of the workflow above. Until then its old lines keep working: plain
+`shipped` and plain `notify.py send` are unchanged.
+
 CI needs Python 3.11 or later (`tomllib`).
 
 ### Workflow example
@@ -210,10 +215,10 @@ jobs:
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
         run: |
           python3 <vendored folder>/stage_sync.py --profile .agents/dev-process.md \
-            shipped --tag "$TAG" --titles > message.txt \
-            || printf 'Tag %s pushed (issue list unavailable)\n' "$TAG" > message.txt
+            shipped --tag "$TAG" --titles --json > message.json \
+            || printf '{"event": "deployed", "tag": "%s", "unavailable": true}\n' "$TAG" > message.json
           # A failed send must never turn the release's run red.
-          python3 <vendored folder>/notify.py send --profile .agents/dev-process.md < message.txt \
+          python3 <vendored folder>/notify.py send --event --profile .agents/dev-process.md < message.json \
             || echo "::warning::notify failed: the cards moved; the message did not go"
 ```
 
@@ -221,18 +226,19 @@ Replace `<vendored folder>` with the folder from *Vendoring*.
 
 ### Notification
 
-`shipped` writes plain text (titles are user-written; send it without markup):
+`shipped --json` writes the `deployed` event as data (titles are user-written:
+`notify.py` escapes them when it formats the message; never build markup here):
 
 ```bash
 python3 <vendored folder>/stage_sync.py --profile .agents/dev-process.md \
-  shipped --tag "$TAG" --titles > message.txt \
-  || printf 'Tag %s pushed (issue list unavailable)\n' "$TAG" > message.txt
+  shipped --tag "$TAG" --titles --json > message.json \
+  || printf '{"event": "deployed", "tag": "%s", "unavailable": true}\n' "$TAG" > message.json
 ```
 
 Then send it with the same sender auto-dev uses:
 
 ```bash
-python3 <vendored folder>/notify.py send --profile .agents/dev-process.md < message.txt
+python3 <vendored folder>/notify.py send --event --profile .agents/dev-process.md < message.json
 ```
 
 It sends by the profile's `notify`, with `TELEGRAM_BOT_TOKEN` and

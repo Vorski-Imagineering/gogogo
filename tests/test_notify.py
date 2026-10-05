@@ -102,6 +102,210 @@ class Case(unittest.TestCase):
         return request.full_url, dict(urllib.parse.parse_qsl(request.data.decode()))
 
 
+EVENT_PROFILE = """+++
+profile = 1
+{notify}[tracker]
+issues_repo = "o/issues"
+code_repo = "o/code"
+queue = "Dev Ready"
+columns = {{ in_progress = "In progress", needs_human = "Human!Help!" }}
+
+[[stages]]
+code_is = "merged to main"
+environment = "main"
+column = "Released"
++++
+
+## superpowers boundary
+x
+"""
+
+EVENTS = {
+    "run_started": {"event": "run_started", "host": "box", "count": 3, "queue": "Dev Ready"},
+    "issue_skipped": {"event": "issue_skipped", "issue": 7, "reason": "lint", "title": "T", "column": "Human!Help!"},
+    "issue_started": {"event": "issue_started", "issue": 7, "title": "Fix it"},
+    "issue_merged": {"event": "issue_merged", "issue": 7, "title": "Fix it", "sha": "abc1234", "column": "Released"},
+    "needs_you": {"event": "needs_you", "issue": 7, "title": "Fix it", "reason": "decide", "column": "Human!Help!"},
+    "run_closed": {"event": "run_closed", "merged": 2, "need_you": 1, "skipped": 0},
+    "deployed": {"event": "deployed", "tag": "deploy-9", "environment": "production",
+                 "issues": [{"repo": "o/issues", "issue": 7, "title": "Fix it"},
+                            {"repo": "x/other", "issue": 8, "title": None}], "more": 4, "unlinked_commits": 2},
+    "connected": {"event": "connected", "host": "box", "scope": "every repo on this machine"},
+}
+
+FAKE_TRACKER = """#!/usr/bin/env python3
+import json, os, sys
+if os.environ.get("FAKE_BOARD") == "fail":
+    sys.exit(1)
+print(json.dumps([{"status": s} for s in json.loads(os.environ["FAKE_BOARD"])]))
+"""
+
+
+class Events(Case):
+    def event_profile(self, notify_value="telegram"):
+        line = f'notify = "{notify_value}"\n' if notify_value is not None else ""
+        path = self.tmp / ".agents" / "dev-process.md"
+        path.parent.mkdir(exist_ok=True)
+        path.write_text(EVENT_PROFILE.format(notify=line))
+        return str(path)
+
+    def send(self, event, notify_value="telegram", raw=None, board=None):
+        tracker = self.tmp / "tracker.py"
+        tracker.write_text(FAKE_TRACKER)
+        env = {"FAKE_BOARD": json.dumps(board) if board is not None else "fail"}
+        with mock.patch.object(notify, "TRACKER", tracker), mock.patch.dict(os.environ, env):
+            return self.run_main("send", "--event", "--profile", self.event_profile(notify_value),
+                                 stdin=raw if raw is not None else json.dumps(event))
+
+    def render(self, name, summary=None):
+        settings, _ = notify.profile_check.split_profile(
+            EVENT_PROFILE.format(notify=""))
+        return notify.render(EVENTS[name], settings, summary)
+
+    def test_1_each_event_renders_html_and_plain(self):
+        marks = {"run_started": "▶️", "issue_skipped": "🆘", "issue_started": "🟡", "issue_merged": "🟢",
+                 "needs_you": "🆘", "run_closed": "🏁", "deployed": "🚀", "connected": "✅"}
+        for name in EVENTS:
+            html, plain = self.render(name, "SUMMARY" if name in ("run_started", "run_closed") else None)
+            self.assertIn("<b>code</b>", html, name)
+            self.assertIn(marks[name], html, name)
+            self.assertNotIn("<b>", plain, name)
+            self.assertNotIn("<a ", plain, name)
+            self.assertIn("code", plain, name)
+        for name in ("issue_skipped", "issue_started", "issue_merged", "needs_you"):
+            self.assertIn('<a href="https://github.com/o/issues/issues/7">#7</a>', self.render(name)[0], name)
+        html, plain = self.render("issue_merged")
+        self.assertEqual(plain.splitlines()[0], "🟢 code #7 merged (abc1234) → Released")
+        self.assertEqual(plain.splitlines()[1], "Fix it")
+        html, plain = self.render("run_started", "🔵 3 ready")
+        self.assertEqual(plain, '🔵 3 ready\n▶️ code auto-dev: run started on box, 3 issues in "Dev Ready"')
+        html, plain = self.render("run_closed", "S")
+        self.assertEqual(plain, "S\n🏁 code auto-dev: run closed: 2 merged, 1 need you, 0 skipped")
+        html, plain = self.render("deployed")
+        self.assertIn("🚀 code deployed deploy-9 to production", plain)
+        self.assertIn("• #7 Fix it", plain)
+        self.assertIn("• x/other#8", plain)
+        self.assertIn("… and 4 more", plain)
+        self.assertIn("+ 2 commit(s) with no linked issue", plain)
+        self.assertIn('<a href="https://github.com/x/other/issues/8">x/other#8</a>', html)
+        html, plain = self.render("connected")
+        self.assertEqual(plain, "✅ code is connected on box for every repo on this machine. auto-dev runs there "
+                                "will report here: when a run starts and ends, and when each issue starts, is "
+                                "skipped, merges or needs you.")
+
+    def test_1_the_other_deployed_forms(self):
+        settings, _ = notify.profile_check.split_profile(EVENT_PROFILE.format(notify=""))
+        _, plain = notify.render({"event": "deployed", "tag": "d1", "unavailable": True}, settings, None)
+        self.assertEqual(plain, "🚀 code deployed d1 (issue list unavailable)")
+        _, plain = notify.render({"event": "deployed", "tag": "d1", "environment": "production", "first": True},
+                                 settings, None)
+        self.assertIn("🚀 code deployed d1 to production", plain)
+        self.assertIn("nothing to compare with", plain)
+
+    def test_2_values_are_escaped_in_html_and_kept_in_plain(self):
+        settings, _ = notify.profile_check.split_profile(EVENT_PROFILE.format(notify=""))
+        event = {**EVENTS["issue_merged"], "title": 'a <b>&</b> "q"'}
+        html, plain = notify.render(event, settings, None)
+        self.assertIn('a &lt;b&gt;&amp;&lt;/b&gt; "q"', html)
+        self.assertIn('a <b>&</b> "q"', plain)
+
+    def test_3_the_mark_follows_the_column(self):
+        settings, _ = notify.profile_check.split_profile(EVENT_PROFILE.format(notify=""))
+        for column, mark in (("Released", "🟢"), ("Human!Help!", "🆘"), ("In progress", "🟡"),
+                             ("Dev Ready", "🔵"), ("Elsewhere", "⛔")):
+            _, plain = notify.render({**EVENTS["issue_merged"], "column": column}, settings, None)
+            self.assertTrue(plain.startswith(mark), (column, plain))
+        _, plain = notify.render({"event": "issue_skipped", "issue": 7, "reason": "r"}, settings, None)
+        self.assertTrue(plain.startswith("⛔ code #7 skipped: r"), plain)
+        _, plain = notify.render(EVENTS["issue_started"], settings, None)
+        self.assertTrue(plain.startswith("🟡"), plain)
+
+    def test_4_an_event_posts_html_and_text_still_posts_none(self):
+        self.write_creds()
+        self.urlopen.return_value = ok({"message_id": 1})
+        code, out, _ = self.send(EVENTS["issue_merged"])
+        self.assertEqual((code, out.strip()), (0, "sent"))
+        self.assertEqual(self.urlopen.call_count, 1)
+        _, params = self.posted(self.urlopen.call_args)
+        self.assertEqual(params["parse_mode"], "HTML")
+        self.assertIn("<b>code</b>", params["text"])
+        self.assertEqual(params["disable_web_page_preview"], "true")
+        self.urlopen.reset_mock()
+        self.run_main("send", "--profile", self.event_profile(), "--text", "hello")
+        self.assertNotIn("parse_mode", self.posted(self.urlopen.call_args)[1])
+
+    def test_5_a_refused_html_send_is_retried_once_as_plain_text(self):
+        self.write_creds()
+        refused = Answer({"ok": False, "description": "Bad Request: can't parse entities"})
+        self.urlopen.side_effect = [refused, ok({"message_id": 1})]
+        code, out, err = self.send(EVENTS["issue_merged"])
+        self.assertEqual((code, out.strip()), (0, "sent"))
+        self.assertEqual(self.urlopen.call_count, 2)
+        _, params = self.posted(self.urlopen.call_args)
+        self.assertNotIn("parse_mode", params)
+        self.assertNotIn("<b>", params["text"])
+        self.assertIn("sent as plain text", err)
+        self.assertIn("can't parse entities", err)
+        self.urlopen.reset_mock()
+        self.urlopen.side_effect = [refused, refused]
+        code, _, err = self.send(EVENTS["issue_merged"])
+        self.assertEqual(code, 1)
+        self.assertIn("notify failed", err)
+
+    def test_6_an_html_message_over_the_limit_goes_as_cut_plain_text(self):
+        self.write_creds()
+        self.urlopen.return_value = ok({"message_id": 1})
+        code, _, _ = self.send({**EVENTS["issue_merged"], "title": "x" * 5000})
+        self.assertEqual(code, 0)
+        self.assertEqual(self.urlopen.call_count, 1)
+        _, params = self.posted(self.urlopen.call_args)
+        self.assertNotIn("parse_mode", params)
+        self.assertLessEqual(notify._units(params["text"]), notify.LIMIT)
+        self.assertTrue(params["text"].endswith("…"))
+
+    def test_7_a_bad_event_sends_nothing_and_exits_2(self):
+        self.write_creds()
+        bad = ["not json", json.dumps({"event": "nope"}), json.dumps({k: v for k, v in EVENTS["issue_merged"].items()
+                                                                       if k != "sha"}),
+               json.dumps({**EVENTS["issue_merged"], "issue": "7"}), json.dumps({**EVENTS["issue_merged"], "issue": True}),
+               json.dumps([1]), json.dumps({**EVENTS["deployed"], "more": "4"})]
+        for raw in bad:
+            for value in ("telegram", "none"):
+                code, out, err = self.send(None, notify_value=value, raw=raw)
+                self.assertEqual((code, out), (2, ""), (raw, value))
+                self.assertTrue(err.startswith("notify: "), err)
+        self.urlopen.assert_not_called()
+
+    def test_7_a_valid_event_with_notify_off_says_off(self):
+        self.write_creds()
+        code, out, _ = self.send(EVENTS["issue_merged"], notify_value="none")
+        self.assertEqual((code, out.strip()), (0, "notify: off"))
+        self.urlopen.assert_not_called()
+
+    def test_8_the_summary_counts_the_board_and_a_failed_read_costs_nothing(self):
+        self.write_creds()
+        self.urlopen.return_value = ok({"message_id": 1})
+        board = ["Dev Ready"] * 3 + ["In progress"] + ["Human!Help!"] * 2 + ["Released"] * 4
+        code, _, _ = self.send(EVENTS["run_started"], board=board)
+        self.assertEqual(code, 0)
+        text = self.posted(self.urlopen.call_args)[1]["text"]
+        self.assertTrue(text.startswith("🔵 3 ready · 🟡 1 in progress · 🆘 2 need you\n▶️ <b>code</b>"), text)
+        code, _, _ = self.send(EVENTS["run_closed"], board=board)
+        self.assertTrue(self.posted(self.urlopen.call_args)[1]["text"].startswith("🔵 3 ready"))
+        self.urlopen.reset_mock()
+        code, _, _ = self.send(EVENTS["run_started"], board=None)
+        self.assertEqual(code, 0)
+        self.assertTrue(self.posted(self.urlopen.call_args)[1]["text"].startswith("board: could not be read\n"))
+        self.urlopen.reset_mock()
+        with mock.patch.object(notify, "board_summary", side_effect=AssertionError("read the board")):
+            self.send(EVENTS["issue_merged"], board=board)
+        self.assertEqual(self.urlopen.call_count, 1)
+
+    def test_8_a_missing_setting_leaves_its_count_out(self):
+        settings = {"tracker": {"queue": "Dev Ready"}}
+        self.assertEqual(notify.count_line(settings, ["Dev Ready", "Dev Ready", "In progress"]), "🔵 2 ready")
+
+
 class Send(Case):
     def test_1_sends_once_with_chat_and_text_and_no_parse_mode(self):
         self.write_creds()

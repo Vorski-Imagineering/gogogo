@@ -49,6 +49,10 @@ command's, so `| grep -E 'OK|FAILED'` passes a failed run. The `echo` itself alw
 succeeds, so read the printed `exit=` value before any commit, push or merge;
 never chain one onto the `echo`.
 
+**The full run, once.** The lane's full `run` command runs once, after the last
+correction round, and is the gate before merge. Correction rounds run the
+focused commands of `review.md` rule 1 instead.
+
 **The tests the change touched, compared.** Once every lane is green, check
 that the change did not get there by weakening a test. In order:
 
@@ -118,8 +122,12 @@ opened that holds a resource (a room, a camera, a browser left running).
    back through §5 as a new round on the fix, then through §6 again.
 7. After killing, run the command again. A survivor counts as killed only
    when a run reports it killed. At most three runs that give counts per
-   lane. A survivor that is neither killed nor declined after the third
-   stops the issue for a person (§8), named in the report.
+   lane. After the third run, survivors whose only change is wording a
+   person reads (a message, a label, help text, how much of an id is shown,
+   with no condition or value that code tests) are declined as `text`
+   together, in one batch, each listed by file and line in the report. The
+   issue stops for a person (§8) only on the survivors that change logic,
+   listed under the Needs-you line.
 8. Tests added or tightened here are not reviewed again: their evidence is the
    run that reports the mutant killed. After the last such change, run every
    applicable lane's `run` command once more and see it green.
