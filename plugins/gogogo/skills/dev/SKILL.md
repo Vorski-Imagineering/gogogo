@@ -450,11 +450,13 @@ and integration follow this skill and the repo's merge path. See the profile's
   start the spec check's reader with the same `model`; with
   `review=until-clean`, to review as `references/review.md` says for it; in
   an `/gogogo:auto-dev` run, to follow that skill's §4 differences too (it
-  commits and pushes each round, and every rung is mandatory); and to return
-  the change summary, the review record's fields and the verification
-  result, or, when §3 to §6 stopped it, the stop's reason, with the blocking
-  issue and what it must deliver when another issue blocks it (§8 then hands
-  back in this session). Without `model` or `effort`, nothing moves:
+  commits and pushes each round, and every rung is mandatory). It posts no
+  report and moves no card, a stop included: §7 and §8 run in this session.
+  It returns what §7 needs: the change summary, each record's fields, the
+  verification result, and, when §3 to §6 stopped it, the stop's reason and
+  its detail (the items left, the surviving mutants, each attempt and what
+  it got wrong, or the blocking issue as `owner/repo#B` and what it must
+  deliver). Without `model` or `effort`, nothing moves:
   `review=until-clean` alone works in this session.
 - In the record and the stop marker, `session` is `$CLAUDE_CODE_SESSION_ID`, the variable
   `require_unattended.sh` also reads, and `unknown` when it is unset.
