@@ -1156,6 +1156,15 @@ class BlockedByLinks(unittest.TestCase):
             cards = board.issue_side_cards(board.DEFAULT_REPO)
         self.assertEqual(cards[0]["blocked_by"], [{"number": 9, "repo": "x/y", "state": "OPEN", "state_reason": None}])
         self.assertEqual(cards[0]["blocking"], [])
+        node["blocking"] = {"totalCount": 1, "nodes": [{"number": 3, "state": "OPEN",
+                                                        "repository": {"nameWithOwner": "x/y"}}]}
+        with mock.patch.object(board, "graphql", side_effect=[issue_page([node])]):
+            cards = board.issue_side_cards(board.DEFAULT_REPO)
+        self.assertEqual(cards[0]["blocking"], [{"number": 3, "repo": "x/y", "state": "OPEN"}])
+
+    def test_a_blockers_close_reason_is_carried(self):
+        flat = board.flatten(linked(11, "go-live", "Dev Priority", blocked_by=[(136, "CLOSED", "NOT_PLANNED", None)]))
+        self.assertEqual(flat["blocked_by"][0]["state_reason"], "NOT_PLANNED")
 
     def _show(self, blockers, cards_by_number):
         issue = {"title": "go-live", "state": "OPEN", "url": "u",
@@ -1263,6 +1272,34 @@ class BlockCommand(unittest.TestCase):
             self.assertEqual(gh.calls, [], f"{bad}: nothing is read or written for a ref with no '#' after its repo")
         self.assertEqual(self.run_block(FakeGh(found=1))[0], 1)
         self.assertEqual(self.run_block(FakeGh(database_id="null"))[0], 2)
+
+    def test_each_gh_call_is_exact(self):
+        seen = []
+
+        def gh(cmd, **kw):
+            seen.append((cmd, kw))
+            return FakeGh()(cmd, **kw)
+
+        self.assertEqual(self.run_block(gh)[0], 0)
+        self.assertEqual([cmd for cmd, _ in seen], [
+            ["gh", "api", "repos/acme/issues/issues/136", "--jq", ".id"],
+            ["gh", "api", "-X", "POST", "repos/acme/issues/issues/11/dependencies/blocked_by", "-F", "issue_id=99001"],
+            ["gh", "api", "repos/acme/issues/issues/136/dependencies/blocking?per_page=100"]])
+        self.assertEqual({tuple(sorted(kw.items())) for _, kw in seen},
+                         {(("capture_output", True), ("text", True), ("timeout", board.CALL_TIMEOUT))})
+
+    def test_a_missing_blocker_is_1_and_any_other_read_failure_2(self):
+        for reason, code in (("gh: HTTP 404", 1), ("gh: Not Found", 1), ("gh: Server Error (HTTP 502)", 2)):
+            def gh(cmd, **kw):
+                return subprocess.CompletedProcess(cmd, 1, "", reason)
+            self.assertEqual(self.run_block(gh)[0], code, reason)
+
+    def test_by_is_required(self):
+        with mock.patch.object(board, "configure"), \
+             mock.patch.object(board.sys, "argv", ["tracker.py", "block", "11"]), \
+             redirect_stdout(io.StringIO()), redirect_stderr(io.StringIO()), self.assertRaises(SystemExit) as stop:
+            board.main()
+        self.assertEqual(stop.exception.code, 2)
 
     def test_block_is_a_command(self):
         gh = FakeGh()
