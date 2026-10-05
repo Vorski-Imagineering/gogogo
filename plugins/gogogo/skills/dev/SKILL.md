@@ -454,8 +454,9 @@ and integration follow this skill and the repo's merge path. See the profile's
   report, move no card and hand nothing back, on a stop too, whatever
   auto-dev §4 says, and to go on to no other issue: the session that started
   it runs §7 and §8; and to return everything §7 lists for the report, and,
-  when §3 to §6 stopped it, the stop's reason with the detail §7 and §8
-  name for it (for a blocker, `owner/repo#B` and what it must deliver).
+  when §3 to §6 stopped it, the stop's reason with the detail the step that
+  stopped it puts in the report (for a blocker, `owner/repo#B` and what it
+  must deliver).
   Without `model` or `effort`, nothing moves:
   `review=until-clean` alone works in this session.
 - In the record and the stop marker, `session` is `$CLAUDE_CODE_SESSION_ID`, the variable
