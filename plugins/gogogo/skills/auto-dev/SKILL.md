@@ -160,9 +160,8 @@ means finished work sits unverified while you go and ask.
 A non-zero exit is a **stop**, never an empty column: the tool refuses to print
 a list it could not reconcile. Outside triage-only mode, the first time this
 list is read successfully in a run, send the *run started* message (§8),
-counting every row, labelled or not. Work only rows that are issues. Take them in the
-order the user gave; absent one, live user-facing bugs first, refactors after,
-anything large last so it cannot absorb the run.
+counting every row, labelled or not. Work only rows that are issues. Their order, and the
+rows skipped as blocked by another issue, are in `references/blocked.md` (read it in full).
 
 Each row's `labels` decides its path. A row carrying `tracker.ready_marker`
 (compared without regard to case) goes on to §2. A row without it was put in
@@ -304,6 +303,7 @@ by the run* for §8 and §9.
   and go on to the next issue. One stubborn issue does not end the run. **An issue abandoned or
   skipped in this run is not taken again in the same run**, even when §1 lists
   it again.
+  A row passed over as blocked (`references/blocked.md`) is not skipped in this sense.
 - **A weakened test** that `/gogogo:dev` §6 cannot restore within its bound
   stops **that issue**, as for verification that gave up: commit the attempts
   to its branch, marked stopped in the commit message, push it, leave it
@@ -389,7 +389,8 @@ The script does nothing when the profile's `notify` is off or this machine has
 no credentials, so call it the same way in every repo. The events:
 
 - `run_started`, once preflight has passed and §1 has read the queue: `{"event": "run_started", "host": "<hostname>", "count": <k>, "queue": "<tracker.queue>"}`;
-- `issue_skipped`, the first time an issue is skipped in this run, not on later passes: `{"event": "issue_skipped", "issue": <n>, "title": "<title>", "reason": "<reason>", "column": "<tracker.columns.needs_human>"}`, with `column` only when *Hand back a skip* moved the card (leave it out for the label failure or a failed move);
+- `issue_skipped`, the first time an issue is skipped in this run, not on later passes: `{"event": "issue_skipped", "issue": <n>, "title": "<title>", "reason": "<reason>", "column": "<tracker.columns.needs_human>"}`, with `column` only when *Hand back a skip* moved the card (leave it out for the label failure or a failed move).
+  A row passed over as blocked by another issue sends no `issue_skipped`;
 - `issue_started`: `{"event": "issue_started", "issue": <n>, "title": "<title>"}`;
 - `issue_merged`, after the issue's merge is verified: `{"event": "issue_merged", "issue": <n>, "title": "<title>", "sha": "<short sha>", "column": "<the column the card moved to>"}`;
 - `needs_you`, for an issue taken and then stopped, never for a triage skip (its skip event says it): `{"event": "needs_you", "issue": <n>, "title": "<title>", "reason": "<the Needs-you line>", "column": "<tracker.columns.needs_human>"}`;

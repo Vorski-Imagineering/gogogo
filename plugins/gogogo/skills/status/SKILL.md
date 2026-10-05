@@ -71,7 +71,9 @@ in its place in the report, and the others still run.
    ```
    `fields` gives the column order; `list --json` gives the cards, each with
    `number`, `title`, `state`, `repo`, `status`, `status_since` (when it
-   entered its column) and `kind`. Only when a card
+   entered its column), `kind`, `blocked_by` (each blocker with its
+   `blocker_state`) and `blocking` (each issue it blocks, with its `state`).
+   Only when a card
    is an own-repo pull request (*Shape*), also read the board's URL:
    ```bash
    gh project view <tracker.project_number> --owner <tracker.project_owner> --format json -q .url
@@ -140,6 +142,12 @@ These rules apply, in order.
   is set and not `OPEN`. A card with no
   `number` is a draft or deleted content: it reads `(draft) <title>`, with
   no repo and never `(closed)`.
+- **Links between issues.** In every listed column, a card's line then ends
+  with ` — blocked by <ref>[, <ref>…]`, one ref per `blocked_by` entry whose
+  `blocker_state` is `open`, and then with ` — blocks <ref>[, <ref>…]`, one
+  ref per `blocking` entry whose `state` is `OPEN`. A ref is `#n`, or
+  `<repo>#n` when its repo is not `tracker.issues_repo`. A card with neither
+  ends as before.
 - **Pull-request cards.** When any card's `kind` is `PullRequest` and its
   `repo` is `tracker.issues_repo` or `tracker.code_repo` (compared ignoring
   case), the BOARD block ends with one line:
@@ -186,7 +194,7 @@ independence: <level>
 
 BOARD  <n> cards
   <column> <count> · <column> <count> · … · no status <count>
-  <queue column>:  <card> · <card> · …
+  <queue column>:  <card> · #11 Go live — blocked by #136 · #136 Refresh the runtime — blocks #11 · …
   <in-progress column>:  <card> · …
   <stage column> (<environment>), oldest <age>:  <card> · …
   <N> pull-request card(s) on the board: set Auto-add to project's filter to is:issue is:open at <workflows URL>; /gogogo:setup archives them.

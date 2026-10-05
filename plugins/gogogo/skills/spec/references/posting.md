@@ -10,6 +10,7 @@ Part of `/gogogo:spec`. Read it in full. Section names and § numbers here are `
 - Compose the body file
 - Lint it, then check the open specs that read this issue
 - Re-read the description
+- Set the blocked-by links
 - Apply the ready label
 - Move the card to the queue
 - Correcting a spec you already posted
@@ -47,14 +48,14 @@ order, checking each step before starting the next:
        meanwhile, kept*.
      - replace: the report section follows *Which report to keep* applied to
        the current body (never quote the other spec as the report); the spec
-       below the `---` is this run's. Go on to step 2. When step 7 then
+       below the `---` is this run's. Go on to step 2. When step 8 then
        withholds the label and the other version left it on, remove it
        (`gh issue edit <N> --repo <tracker.issues_repo> --remove-label "<ready_marker>"`):
        the label describes the spec now in the body. When the card is in
-       `tracker.queue` (where the other version's step 8 put it), leave it
+       `tracker.queue` (where the other version's step 9 put it), leave it
        and say so in the reply: a person moves it, since a run would take
        it from there. The final-report line
-       says *replaced a version posted meanwhile*, then the line steps 7 and 8
+       says *replaced a version posted meanwhile*, then the line steps 8 and 9
        would give it.
      - A decline, or no person to ask: as keep, and the line says *skipped:
        changed by someone else meanwhile, nobody to ask*.
@@ -130,7 +131,15 @@ order, checking each step before starting the next:
 5. `gh issue edit <N> --body-file <composed file>`.
 6. **Re-read the description** and confirm both the report and the spec are
    there.
-7. **Apply the ready label**, the profile's `tracker.ready_marker`:
+7. **Set the blocked-by links.** For each ref on the spec's `**Blocked by:**`
+   line in `## Context` (none: skip this step without a word), run
+   `<tracker.tool> block <N> --by <ref>` (for `shared`,
+   `python3 "${CLAUDE_PLUGIN_ROOT}/scripts/tracker.py" block <N> --by <ref>`). It
+   sets GitHub's "blocked by" link and reads it back from the blocker's side.
+   Report each result. A non-zero exit is reported and does not withhold the
+   label: the spec itself is complete. A ref the line no longer names keeps
+   its link: nobody can tell who set it.
+8. **Apply the ready label**, the profile's `tracker.ready_marker`:
    `gh issue edit <N> --add-label "<ready_marker>"`. It is how a person scanning
    the tracker sees which issues an agent can pick up, so it means exactly one
    thing: *the spec is in this issue's body and needs nothing further from
@@ -151,12 +160,12 @@ order, checking each step before starting the next:
    Then take the start snapshot again (*Before you write* § 0): the body and
    labels are now this run's own, so a later pass through Posting in this
    run does not read them as someone else's change.
-8. **Move the card to the queue.** Only when step 7 applied the label, the
+9. **Move the card to the queue.** Only when step 8 applied the label, the
    profile has both `tracker.tool` and `tracker.queue`, and `tracker.queue` is
    one of the board's columns (`<tracker.tool> fields --check` lists them);
    otherwise skip this step without a word. In a run of several issues
    (§ *Several issues in one run*) it runs per issue, right after that
-   issue's step 7. In order:
+   issue's step 8. In order:
    1. Read the card: `<tracker.tool> show <N>` (for `shared`,
       `python3 "${CLAUDE_PLUGIN_ROOT}/scripts/tracker.py" show <N>`, and the
       same for `move` below). Run it as this step's first command,
@@ -173,9 +182,9 @@ order, checking each step before starting the next:
    5. When the issue has no card: for `tracker.tool` `shared`, run
       `move <N> --to "<tracker.queue>" --add-missing`. For any other tool, say
       the issue has no card on the board and leave it.
-   6. Otherwise: `move <N> --from "<the column read in 8.1>" --to "<tracker.queue>"`,
+   6. Otherwise: `move <N> --from "<the column read in 9.1>" --to "<tracker.queue>"`,
       so a card another session moved since that read is not moved back. A
-      card 8.1 read with no column has none to name: move it without `--from`.
+      card 9.1 read with no column has none to name: move it without `--from`.
    7. Report the result. Only a zero exit counts as moved. On exit 3 the card
       moved meanwhile: read it again with `show <N>`, say it moved meanwhile
       and name its column (*already in `<tracker.queue>`* when it is there),
@@ -197,8 +206,8 @@ Which report to keep:
 - **Body is empty** → no report section; the spec starts at `## Verify by hand`.
 
 **Correcting a spec you already posted:** edit the scratchpad file and re-run
-Posting steps 4 to 6 (the lint and the check of open specs that read this
-issue, `gh issue edit --body-file`, the re-read), so the issue carries one accurate
+Posting steps 4 to 7 (the lint and the check of open specs that read this
+issue, `gh issue edit --body-file`, the re-read, the blocked-by links), so the issue carries one accurate
 spec rather than a spec plus errata.
 
 **Never leave a second copy** of the spec or of the report. If an earlier

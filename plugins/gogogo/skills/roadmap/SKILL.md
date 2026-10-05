@@ -14,9 +14,10 @@ reading "approved" or "still open".
 close an issue or move its card. Every mark comes from `roadmap_status.py`, which reads
 the issue's state and its card's column from the tracker.
 
-**This skill reads the tracker and never writes to it**: no card move, no label, no
-comment. Its one write is the roadmap document, and, when the document shares the repo,
-the refresh branch and the PR that carries it (step 7).
+**This skill reads the tracker, and writes to it only milestone changes a person
+approved in this session** (step 6): no card move, no label, no comment. Its other write
+is the roadmap document, and, when the document shares the repo, the refresh branch and
+the PR that carries it (step 8).
 
 ## First: read this repo's profile
 
@@ -123,12 +124,12 @@ git rev-parse --show-toplevel
      otherwise `integration.base` (or the default branch when it is unset). Stop and
      report if this fails, a branch of that name already existing included (name it).
      `W` is that path joined with the session folder's path relative to the repo root.
-     Steps 2 to 7 run with `W` as the working directory, so the script finds the same
+     Steps 2 to 8 run with `W` as the working directory, so the script finds the same
      profile there. The worktree is made from `origin/<B>`: it sees the committed
      document, not an edit in the checkout.
 
-**Stopping early (the same repo).** Any stop between the cut and §7's push (step 2's
-"every mark agrees", its exit 2, or a stop a later step asks for) ends, when
+**Stopping early (the same repo).** Any stop between the cut and §8's push (after step
+6, when the document is unchanged; step 2's exit 2; or a stop a later step asks for) ends, when
 `git -C <W> status --porcelain -- <file>` and `git -C <W> log --oneline origin/<B>..HEAD`
 both print nothing, with these run from the session's own folder, never from inside the
 worktree:
@@ -140,7 +141,7 @@ git branch -D roadmap-refresh-<YYYY-MM-DD-HHMM>
 
 and the report says the worktree and branch were removed; nothing was pushed, so nothing
 is lost. Otherwise (an uncommitted change to the document, or a commit that was not
-pushed, as after a refused push in step 7) leave both, and the report names the worktree
+pushed, as after a refused push in step 8) leave both, and the report names the worktree
 path and the branch and says which holds the change. A temp folder the system cleaned
 leaves a stale entry; `git worktree prune` clears it.
 
@@ -150,7 +151,7 @@ leaves a stale entry; `git worktree prune` clears it.
 python3 "${CLAUDE_PLUGIN_ROOT}/scripts/roadmap_status.py"
 ```
 
-- Exit 0: report "every mark agrees" and stop.
+- Exit 0: report "every mark agrees" and go to step 6.
 - Exit 2: **stop and quote its lines.** The profile or the legend needs a person, or the
   tracker could not be read.
 - Exit 1: go on.
@@ -198,7 +199,11 @@ not checked. A `spec` mark there claims a spec exists: check that it does. A `by
 mark stays only while its note's blocker is still true. When a row gets its own issue,
 put the link in the `Issue` column, or first in the `State` cell when the table has none.
 
-## 6. Rerun until clean
+## 6. Milestones
+
+**REQUIRED REFERENCE:** read `references/milestones.md` (in this skill's folder) in full before anything else in this step. It holds the whole of this step.
+
+## 7. Rerun until clean
 
 ```bash
 python3 "${CLAUDE_PLUGIN_ROOT}/scripts/roadmap_status.py"
@@ -207,7 +212,7 @@ python3 "${CLAUDE_PLUGIN_ROOT}/scripts/roadmap_status.py"
 It must print `0 need attention` and exit 0. Anything else: back to the step its lines
 point at.
 
-## 7. Commit
+## 8. Commit
 
 - **Another repo:**
   ```bash
@@ -230,7 +235,7 @@ point at.
   ```
   Stop and report at the first command that fails, except the one case below; the
   worktree and branch are kept and named, as in "Stopping early", and a pushed branch is
-  a person's to open the PR from. The body file holds step 8's account of what moved,
+  a person's to open the PR from. The body file holds step 9's account of what moved,
   which prose changed and which rows were left for a person; the PR's number comes after
   it. When `gh pr create` says a PR already exists for the branch, read it with
   `gh pr list --head roadmap-refresh-<YYYY-MM-DD-HHMM> --json number,url` and carry on.
@@ -238,9 +243,11 @@ point at.
   the way the repo lands PRs. This skill never merges into the base itself.
   `git branch -d` removes only the local copy; the branch stays on origin inside the PR.
 
-## 8. Report
+## 9. Report
 
 What moved (`#n A → B`), which prose changed, which rows were left for a person and why,
+the milestone items applied, skipped as stale, left unapproved, and still open as
+questions,
 and then: in another repo, the commit; in the same repo, the PR as the thing still to
 do, "merge #N to land the refresh" with its URL, and that the checkout was not switched. A kept worktree is named with
 its path and branch.
