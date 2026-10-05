@@ -1138,9 +1138,16 @@ class ShippedJson(TrackerState):
     def test_without_titles_the_titles_are_null(self):
         code, out, _ = self.run_json(ss.Shipped([ss.IssueLink("acme/issues", 450)], 0))
         self.assertEqual(json.loads(out)["issues"], [{"repo": "acme/issues", "issue": 450, "title": None}])
+        self.assertEqual(json.loads(out)["more"], 0)
+
+    def test_a_title_of_exactly_the_most_is_kept_whole(self):
+        link = ss.IssueLink("acme/issues", 1)
+        _, out, _ = self.run_json(ss.Shipped([link], 0), {link.key: "y" * ss.TITLE_MAX})
+        self.assertEqual(json.loads(out)["issues"][0]["title"], "y" * ss.TITLE_MAX)
 
     def test_the_first_tag_is_a_first_event(self):
         code, out, _ = self.run_json(ss.Shipped([], 0), prev=None)
+        self.assertEqual(code, 0)
         self.assertEqual(json.loads(out), {"event": "deployed", "tag": "deploy-x", "environment": "production",
                                            "first": True})
 

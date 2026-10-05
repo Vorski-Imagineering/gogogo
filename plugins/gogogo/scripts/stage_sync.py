@@ -3,7 +3,7 @@
 
     stage_sync.py [--profile FILE] trailer (--issue ISSUE ... | --branch NAME) [--verify] [--co-authors-from RANGE]
     stage_sync.py [--profile FILE] sync --tag TAG [--main-ref REF] [--dry-run]
-    stage_sync.py [--profile FILE] shipped --tag TAG [--titles]
+    stage_sync.py [--profile FILE] shipped --tag TAG [--titles] [--json]
     stage_sync.py [--profile FILE] reverts [--main-ref REF] [--apply]
 
 `trailer` prints the `Ships-issue` lines a squash commit carries; `sync` moves

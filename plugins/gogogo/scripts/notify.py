@@ -100,7 +100,12 @@ class UsageError(Exception):
 
 
 class SendError(Exception):
-    """A call to the transport failed, or could not be made (a token that cannot be sent)."""
+    """A call to the transport failed, or could not be made (a token that cannot be sent).
+    `refused`: Telegram answered and said no, as it does to HTML it cannot parse."""
+
+    def __init__(self, message, refused=False):
+        super().__init__(message)
+        self.refused = refused
 
 
 def _scrub(text, token):
@@ -189,7 +194,7 @@ def _call(token, method, params=None):
     if not isinstance(body, dict):
         raise SendError("Telegram's answer was not a JSON object")
     if not body.get("ok"):
-        raise SendError(_scrub(body.get("description") or "Telegram refused the call", token))
+        raise SendError(_scrub(body.get("description") or "Telegram refused the call", token), refused=True)
     return body.get("result")
 
 
@@ -320,7 +325,7 @@ def parse_event(text):
     if not isinstance(event, dict):
         raise UsageError("the event must be a JSON object")
     name = event.get("event")
-    if name not in EVENTS:
+    if not isinstance(name, str) or name not in EVENTS:
         raise UsageError(f"unknown event {name!r} (known: {', '.join(EVENTS)})")
     fields = dict(EVENTS[name])
     if name == "deployed":
@@ -345,13 +350,18 @@ def parse_event(text):
     return event
 
 
+def _same(a, b):
+    """Two column names are one column when they differ only in case, as tracker.py matches them."""
+    return isinstance(a, str) and isinstance(b, str) and a.casefold() == b.casefold()
+
+
 def _mark(column, tracker):
     columns = tracker.get("columns") or {}
-    if column == tracker.get("queue"):
+    if _same(column, tracker.get("queue")):
         return MARK_QUEUE
-    if column == columns.get("in_progress"):
+    if _same(column, columns.get("in_progress")):
         return MARK_IN_PROGRESS
-    if column == columns.get("needs_human"):
+    if _same(column, columns.get("needs_human")):
         return MARK_NEEDS_HUMAN
     return MARK_OTHER
 
@@ -368,10 +378,11 @@ def render(event, profile, summary):
 
     def link(repo_name, number):
         text = f"#{number}" if repo_name.lower() == issues_repo.lower() else f"{repo_name}#{number}"
-        return f'<a href="https://github.com/{repo_name}/issues/{number}">{esc(text)}</a>', text
+        url = html.escape(f"https://github.com/{repo_name}/issues/{number}", quote=True)
+        return f'<a href="{url}">{esc(text)}</a>', text
 
     def mark(column):
-        return MARK_RELEASED if column in stage_columns else _mark(column, tracker)
+        return MARK_RELEASED if any(_same(column, s) for s in stage_columns) else _mark(column, tracker)
 
     name = event["event"]
     bold, bare = f"<b>{esc(repo)}</b>", repo
@@ -448,14 +459,14 @@ def count_line(profile, statuses):
                                (MARK_IN_PROGRESS, columns.get("in_progress"), "in progress"),
                                (MARK_NEEDS_HUMAN, columns.get("needs_human"), "need you")):
         if column:
-            parts.append(f"{mark} {sum(1 for s in statuses if s == column)} {word}")
+            parts.append(f"{mark} {sum(1 for s in statuses if _same(s, column))} {word}")
     return " · ".join(parts)
 
 
 def board_summary(profile_path, profile):
     """The summary line, read from the board once; `board: could not be read` when it cannot be."""
     try:
-        out = subprocess.run([sys.executable, str(TRACKER), "--profile", str(profile_path), "list",
+        out = subprocess.run([sys.executable, str(TRACKER), "--profile", str(Path(profile_path).resolve()), "list",
                               "--open-only", "--issues-only", "--json"],
                              capture_output=True, text=True, timeout=120, cwd=HERE)
         if out.returncode != 0:
@@ -503,16 +514,12 @@ def cmd_send(args):
         path, settings = _settings(args.profile)
         if not (settings.get("tracker") or {}).get("code_repo"):
             raise UsageError(f"profile {path}: no tracker.code_repo to name the repo with")
-        summary = board_summary(path, settings) if event["event"] in ("run_started", "run_closed") else None
-        markup, text = render(event, settings, summary)
-        if _units(markup) > LIMIT:
-            markup = None
     else:
         text = args.text if args.text is not None else sys.stdin.read()
-    text = text.strip()
-    if not text:
-        raise UsageError("nothing to send: empty text")
-    text = _fit(text)
+        text = text.strip()
+        if not text:
+            raise UsageError("nothing to send: empty text")
+        text = _fit(text)
     value, _, root = _setting(args.profile)
     token, _, unread = credentials(root)
     if unread:
@@ -526,14 +533,21 @@ def cmd_send(args):
         print(f"notify: {value}, but no bot credentials on this machine "
               f"({' and '.join(missing)} not set): messages off")
         return EXIT_OK
+    if args.event:
+        # Read only now: with messages off or no credentials, nothing reads the board.
+        summary = board_summary(path, settings) if event["event"] in ("run_started", "run_closed") else None
+        markup, text = render(event, settings, summary)
+        if _units(markup) > LIMIT:
+            markup = None
+        text = _fit(text.strip())
     try:
         try:
             transport.send(markup if markup is not None else text, markup=markup is not None)
         except SendError as exc:
-            if markup is None:
+            if markup is None or not exc.refused:
                 raise
-            _say(f"notify: sent as plain text: {exc}", transport.token, sys.stderr)
             transport.send(text)
+            _say(f"notify: sent as plain text: {exc}", transport.token, sys.stderr)
     except SendError as exc:
         _say(f"notify failed: {exc}", transport.token, sys.stderr)
         return EXIT_FAILED
