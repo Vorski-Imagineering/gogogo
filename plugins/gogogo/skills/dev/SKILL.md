@@ -444,7 +444,8 @@ and integration follow this skill and the repo's merge path. See the profile's
   `Agent` call: `subagent_type: "gogogo:build-<effort>"` (`general-purpose`
   when there is no `effort`), with `model: "<m>"`, left out when `m` is
   `inherit` or absent. This session first places the work as §4's first
-  bullet says (asking there when it asks). The prompt names the issue, that
+  bullet says (asking there when it asks); in an `/gogogo:auto-dev` run,
+  auto-dev §3 has placed it, and that place is used. The prompt names the issue, that
   worktree (or this folder), the body file and the authorisation line, and
   tells it to follow `/gogogo:dev` §3 to §6 exactly, in that place, leaving
   out §4's first bullet; to run the review as `/code-review` from
