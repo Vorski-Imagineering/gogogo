@@ -385,6 +385,28 @@ class RoundOne(Case):
         self.assertNotIn("milestone/7", self.doc.read_text(encoding="utf-8"))
 
 
+class RoundTwo(Case):
+    """Review round 2 of gogogo#184."""
+
+    def test_a_renamed_milestone_takes_no_issue_either(self):
+        self.commit(roadmap((heading("A"), [5])), D1)
+        github = FakeGitHub([ms(7, "A")], [iss(5)])
+        _, plan, _ = self.plan(github)
+        self.assertEqual([i["kind"] for i in plan["items"]], ["link-section", "set-milestone"])
+        github.list[0]["title"] = "Archive"
+        writer = Writer()
+        code, out, _ = self.run_main("apply", "--plan", self.save(plan), "--items", "1,2",
+                                     github=github, writer=writer)
+        self.assertEqual((code, writer.calls), (1, []), out)
+        self.assertEqual(out.count("SKIPPED stale"), 2, out)
+
+    def test_a_gone_milestone_keeps_its_rows_home(self):
+        self.commit(roadmap((heading("A", 1), [5]), (heading("Gone", 7), [6]), (heading("B", 2), [6])), D1)
+        _, plan, _ = self.plan(FakeGitHub(TWO, [iss(5, 1, D1), iss(6)]))
+        self.assertEqual(self.items(plan, 6), [], "B's row for #6 is an extra row: it sets nothing")
+        self.assertEqual(plan["unlinked"], [], "the heading still links; --link could not change it")
+
+
 class Safety(Case):
     def test_no_milestone_is_ever_deleted(self):  # 15
         source = (SCRIPTS / "roadmap_milestones.py").read_text(encoding="utf-8")

@@ -397,14 +397,13 @@ def plan(doc: Doc, path: str, repo: str, github, history: History, link: list[st
             items.append(item("close-milestone", "github", milestone=ms(number, titles), frm="open",
                               expect="open", why="an earlier version of the roadmap linked it; none does now"))
 
-    # A heading whose milestone is gone links nothing an issue could be set to.
+    # A heading whose milestone is gone is still linked, so its rows stay their issues' homes,
+    # but an issue whose home it is gets nothing: there is no milestone to set it to.
+    gone = [s for s in linked if s.number not in titles]
     linked = [s for s in linked if s.number in titles]
-    for section in doc.linked():
-        if section not in linked:
-            section.number = None
 
     # Issues: rows in new sections set their milestone by title.
-    home = homes(doc, linked + new)
+    home = homes(doc, linked + gone + new)
     newly = {n: s for n, s in home.items() if s in new}
     for number, section in newly.items():
         info = github.issue(repo, number)
@@ -417,7 +416,8 @@ def plan(doc: Doc, path: str, repo: str, github, history: History, link: list[st
                           why=f"first row in {section.heading!r}, a new milestone"))
 
     # Issues in linked sections, and issues in linked milestones.
-    home = {n: s for n, s in homes(doc, linked).items() if n not in newly}
+    home = {n: s for n, s in homes(doc, linked + gone).items() if n not in newly}
+    home = {n: s for n, s in home.items() if s not in gone}
     anywhere = {n for s in doc.sections for _, _, n in s.rows if n}
     numbers = set(home)
     for section in linked:
@@ -628,7 +628,12 @@ def apply_one(entry, repo, lines, github, writer, legend, created) -> str:
             return f"stale: #{entry['issue']} is now in milestone {now}"
         number = None
         if kind == "set-milestone":
-            number = milestone.get("number") or created.get(milestone.get("title"))
+            planned = milestone.get("number")
+            if planned is not None:
+                title = {m["number"]: m["title"] for m in github.milestones(repo)}.get(planned)
+                if title != milestone.get("title"):
+                    return f"stale: milestone {planned} now reads {title or 'nothing (gone)'!r}"
+            number = planned or created.get(milestone.get("title"))
             if number is None:
                 number = {m["title"]: m["number"] for m in github.milestones(repo)}.get(milestone.get("title"))
             if number is None:
