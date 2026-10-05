@@ -1290,13 +1290,32 @@ class BoardTidiness(unittest.TestCase):
 
     import tracker as real
 
-    def shared(self, views, closed=(), off_board=()):
+    def shared(self, views, closed=(), off_board=(), archive=()):
         fake = mock.Mock()
         fake.DONE_COLUMN, fake.BoardError = "Done", self.real.BoardError
         fake.views_showing_closed = self.real.views_showing_closed
         fake.board_views.return_value = views
-        fake.untidy.return_value = (list(closed), list(off_board))
+        fake.untidy.return_value = (list(closed), list(archive), list(off_board))
         return fake
+
+    def test_the_three_part_untidy_shape_does_not_crash(self):
+        rep = sc.Report()
+        sc.check_board_tidiness(self.shared([{"name": "Board", "filter": "is:open"}],
+                                            closed=[{"number": 7}], off_board=[{"number": 9}],
+                                            archive=[{"number": 5}]), "a/b", rep)
+        cards = [r for r in rep.rows if r["check"] == "tracker: cards"]
+        self.assertEqual([r["level"] for r in cards], ["WARN"])
+        self.assertIn("#7", cards[0]["detail"])
+        self.assertIn("#9", cards[0]["detail"])
+        self.assertNotIn("#5", " ".join(r["detail"] for r in rep.rows))
+
+    def test_closed_as_not_planned_alone_passes(self):
+        rep = sc.Report()
+        sc.check_board_tidiness(self.shared([{"name": "Board", "filter": "is:open"}], archive=[{"number": 5}]),
+                                "a/b", rep)
+        cards = [r for r in rep.rows if r["check"] == "tracker: cards"]
+        self.assertEqual([r["level"] for r in cards], ["PASS"])
+        self.assertNotIn("#5", " ".join(r["detail"] for r in rep.rows))
 
     def test_a_tidy_board_passes(self):
         rep = sc.Report()
