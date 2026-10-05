@@ -141,6 +141,11 @@ def cmd_list(args):
     import tracker
 
     path = Path(args.profile) if args.profile else profile_check.find_profile()
+    try:
+        tracker.configure(str(path))  # the board, repo and columns the list reads
+    except tracker.ProfileMissing as exc:
+        print(f"could not read the board: {exc}", file=sys.stderr)
+        return 2
     settings, _ = profile_check.split_profile(path.read_text(encoding="utf-8"))
     repo = settings["tracker"]["issues_repo"]
     column = settings["tracker"]["columns"]["needs_human"]

@@ -106,6 +106,17 @@ def gh_comment(login, body, association="NONE"):
 class Permissions(unittest.TestCase):
     """Who may answer a card is read from GitHub's permission call, not the comment's association."""
 
+    def setUp(self):
+        # list configures tracker.py from the profile: put its module settings back after each case.
+        import tracker
+        saved = (tracker.ORG, tracker.PROJECT_NUMBER, tracker.DEFAULT_REPO, dict(tracker.COLUMNS))
+
+        def restore():
+            tracker.ORG, tracker.PROJECT_NUMBER, tracker.DEFAULT_REPO = saved[:3]
+            tracker.COLUMNS.clear()
+            tracker.COLUMNS.update(saved[3])
+        self.addCleanup(restore)
+
     def run_list(self, gh):
         with tempfile.TemporaryDirectory() as tmp:
             profile = Path(tmp) / "dev-process.md"
@@ -129,6 +140,22 @@ class Permissions(unittest.TestCase):
         card = json.loads(out)[0]
         self.assertEqual([a["author"] for a in card["answers"]], ["w", "w"])
         self.assertEqual(sorted(gh.asked), ["bot", "m", "w", "x"], "each login is looked up once")
+
+    def test_the_board_is_read_from_the_profile(self):
+        # Live run, 2026-10-05: list read "project /#0" because the tracker was never configured.
+        import tracker
+        seen = {}
+
+        def list_cards(**kw):
+            seen.update(org=tracker.ORG, number=tracker.PROJECT_NUMBER, repo=kw.get("repo"))
+            return [], [], 0
+        with tempfile.TemporaryDirectory() as tmp:
+            profile = Path(tmp) / "dev-process.md"
+            profile.write_text(PROFILE, encoding="utf-8")
+            with mock.patch.object(tracker, "list_cards", side_effect=list_cards), \
+                 redirect_stdout(io.StringIO()):
+                self.assertEqual(hh.main(["--profile", str(profile), "list"]), 0)
+        self.assertEqual(seen, {"org": "o", "number": 1, "repo": "o/r"})
 
     def test_maintain_and_admin_are_writers(self):
         comments = [gh_comment("bot", STOP_REVIEW), gh_comment("a", "one"), gh_comment("k", "two")]
