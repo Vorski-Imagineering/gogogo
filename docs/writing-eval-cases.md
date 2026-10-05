@@ -53,6 +53,15 @@ plugins/gogogo/evals/<skill>-<what-it-checks>/
   node -e 'const re = /branch -D/i; console.log(re.test("run git branch -D x"), re.test("keep it"))'
   ```
   The first should print `true`, the second `false`.
+- When the right answer and a wrong one differ only by a negation ("makes a
+  fourth attempt", "rather than a fourth attempt"), no pattern on the prose
+  holds: each guard against one negation lets another through. Have the
+  prompt ask for a last line with fixed choices (`Next: stop` or
+  `Next: attempt again`), grade that line, and also require wording only the
+  skill gives; see `plugins/gogogo/evals/dev-authorised-until-clean/`.
+- A pattern in single quotes ends at its first lone `'`, and the case then
+  does not load. Write a quote inside it as `\x27` (or `''`);
+  `tests/test_eval_suite.py` refuses a lone one.
 - At least one grader must check something only the plugin knows: a name, a
   step or an order that is in the skill's text and nowhere in the prompt.
 - No `llm` or `baseline` graders; the suite test rejects them.
