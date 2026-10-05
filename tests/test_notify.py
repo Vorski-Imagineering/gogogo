@@ -246,8 +246,7 @@ class Events(Case):
         _, params = self.posted(self.urlopen.call_args)
         self.assertNotIn("parse_mode", params)
         self.assertNotIn("<b>", params["text"])
-        self.assertIn("sent as plain text", err)
-        self.assertIn("can't parse entities", err)
+        self.assertIn("notify: sent as plain text: Bad Request: can't parse entities\n", err)
         self.urlopen.reset_mock()
         self.urlopen.side_effect = [refused, refused]
         code, _, err = self.send(EVENTS["issue_merged"])
@@ -311,6 +310,24 @@ class Events(Case):
         event = {**EVENTS["deployed"], "issues": [{"repo": 'x/"y<z', "issue": 3, "title": None}]}
         html, _ = notify.render(event, settings, None)
         self.assertIn('href="https://github.com/x/&quot;y&lt;z/issues/3"', html)
+
+    def test_review_html_of_exactly_the_limit_goes_as_html(self):
+        self.write_creds()
+        self.urlopen.return_value = ok({"message_id": 1})
+        settings, _ = notify.profile_check.split_profile(EVENT_PROFILE.format(notify=""))
+        base = notify._units(notify.render({**EVENTS["issue_merged"], "title": ""}, settings, None)[0])
+        code, _, _ = self.send({**EVENTS["issue_merged"], "title": "x" * (notify.LIMIT - base)})
+        self.assertEqual(code, 0)
+        self.assertEqual(self.posted(self.urlopen.call_args)[1].get("parse_mode"), "HTML")
+
+    def test_review_the_send_usage_messages(self):
+        code, _, err = self.run_main("send", "--event", "--text", "x", "--profile", self.event_profile(),
+                                     stdin=json.dumps(EVENTS["issue_merged"]))
+        self.assertEqual((code, err.strip()), (2, "notify: --event reads the event from stdin; it takes no --text"))
+        path = self.event_profile()
+        Path(path).write_text(EVENT_PROFILE.format(notify="").replace('code_repo = "o/code"\n', ""))
+        code, _, err = self.run_main("send", "--event", "--profile", path, stdin=json.dumps(EVENTS["issue_merged"]))
+        self.assertEqual((code, err.strip()), (2, f"notify: profile {path}: no tracker.code_repo to name the repo with"))
 
     def test_6_an_html_message_over_the_limit_goes_as_cut_plain_text(self):
         self.write_creds()
@@ -852,6 +869,127 @@ class RepoFileLines(Case):
                     self.assertRaises(SystemExit):
                 notify.main(argv)
             self.assertRegex(out.getvalue(), pattern, argv)
+
+
+LINK7 = '<a href="https://github.com/o/issues/issues/7">#7</a>'
+RENDERED = {
+    "run_started": ('S\n▶️ <b>code</b> auto-dev: run started on box, 3 issues in "Dev Ready"',
+                    'S\n▶️ code auto-dev: run started on box, 3 issues in "Dev Ready"'),
+    "issue_skipped": (f"🆘 <b>code</b> {LINK7} skipped → Human!Help!: lint\nT", "🆘 code #7 skipped → Human!Help!: lint\nT"),
+    "issue_started": (f"🟡 <b>code</b> {LINK7} started\nFix it", "🟡 code #7 started\nFix it"),
+    "issue_merged": (f"🟢 <b>code</b> {LINK7} merged (abc1234) → Released\nFix it",
+                     "🟢 code #7 merged (abc1234) → Released\nFix it"),
+    "needs_you": (f"🆘 <b>code</b> {LINK7} needs you → Human!Help!: decide\nFix it",
+                  "🆘 code #7 needs you → Human!Help!: decide\nFix it"),
+    "run_closed": ("S\n🏁 <b>code</b> auto-dev: run closed: 2 merged, 1 need you, 0 skipped",
+                   "S\n🏁 code auto-dev: run closed: 2 merged, 1 need you, 0 skipped"),
+    "deployed": (f"🚀 <b>code</b> deployed deploy-9 to production\n• {LINK7} Fix it\n"
+                 '• <a href="https://github.com/x/other/issues/8">x/other#8</a>\n… and 4 more\n'
+                 "+ 2 commit(s) with no linked issue",
+                 "🚀 code deployed deploy-9 to production\n• #7 Fix it\n• x/other#8\n… and 4 more\n"
+                 "+ 2 commit(s) with no linked issue"),
+    "connected": ("✅ <b>code</b> is connected on box for every repo on this machine. auto-dev runs there will report "
+                  "here: when a run starts and ends, and when each issue starts, is skipped, merges or needs you.",
+                  "✅ code is connected on box for every repo on this machine. auto-dev runs there will report "
+                  "here: when a run starts and ends, and when each issue starts, is skipped, merges or needs you."),
+}
+MORE = {
+    "skipped, no column or title": ({"event": "issue_skipped", "issue": 7, "reason": "lint"},
+                                    (f"⛔ <b>code</b> {LINK7} skipped: lint", "⛔ code #7 skipped: lint")),
+    "deployed, unavailable": ({"event": "deployed", "tag": "deploy-9", "unavailable": True},
+                              ("🚀 <b>code</b> deployed deploy-9 (issue list unavailable)",
+                               "🚀 code deployed deploy-9 (issue list unavailable)")),
+    "deployed, first": ({"event": "deployed", "tag": "deploy-9", "environment": "production", "first": True},
+                        ("🚀 <b>code</b> deployed deploy-9 to production\n… nothing to compare with",
+                         "🚀 code deployed deploy-9 to production\n… nothing to compare with")),
+    "deployed, one more": ({"event": "deployed", "tag": "deploy-9", "environment": "production", "issues": [],
+                            "more": 1, "unlinked_commits": 1},
+                           ("🚀 <b>code</b> deployed deploy-9 to production\n… and 1 more\n+ 1 commit(s) with no linked issue",
+                            "🚀 code deployed deploy-9 to production\n… and 1 more\n+ 1 commit(s) with no linked issue")),
+    "deployed, none more": ({"event": "deployed", "tag": "deploy-9", "environment": "production", "issues": [],
+                             "more": 0, "unlinked_commits": 0},
+                            ("🚀 <b>code</b> deployed deploy-9 to production", "🚀 code deployed deploy-9 to production")),
+}
+
+
+class Exact(Case):
+    """Mutation run 1's survivors on the #157 merge: each event's text, its checks, and the board read."""
+
+    def settings(self, text=None):
+        return notify.profile_check.split_profile(text or EVENT_PROFILE.format(notify=""))[0]
+
+    def test_every_event_renders_exactly(self):
+        for name, expected in RENDERED.items():
+            summary = "S" if name in ("run_started", "run_closed") else None
+            self.assertEqual(notify.render(EVENTS[name], self.settings(), summary), expected, name)
+        for label, (event, expected) in MORE.items():
+            self.assertEqual(notify.render(event, self.settings(), None), expected, label)
+        self.assertEqual(notify.render(EVENTS["issue_merged"], self.settings(), "S"), RENDERED["issue_merged"],
+                         "only run_started and run_closed carry the summary")
+
+    def test_every_valid_event_parses(self):
+        for event in [*EVENTS.values(), *(e for e, _ in MORE.values())]:
+            self.assertEqual(notify.parse_event(json.dumps(event)), event)
+
+    def test_each_missing_or_mistyped_field_is_named(self):
+        optional = {"issue_skipped": {"title", "column"}}
+        for name, event in EVENTS.items():
+            for field in [k for k in event if k != "event"]:
+                if field in optional.get(name, ()):
+                    continue
+                with self.assertRaises(notify.UsageError) as raised:
+                    notify.parse_event(json.dumps({k: v for k, v in event.items() if k != field}))
+                self.assertEqual(str(raised.exception), f"{name}: missing {field}")
+        with self.assertRaises(notify.UsageError) as raised:
+            notify.parse_event(json.dumps({"event": "issue_skipped", "issue": 7, "reason": "r", "column": 5}))
+        self.assertEqual(str(raised.exception), "issue_skipped: column must be str",
+                         "a missing optional field does not end the checks")
+        with self.assertRaises(notify.UsageError) as raised:
+            notify.parse_event(json.dumps({"event": "deployed", "tag": "t", "first": True}))
+        self.assertEqual(str(raised.exception), "deployed: missing environment")
+
+    def test_deployed_issues_are_each_checked(self):
+        base = {"event": "deployed", "tag": "t", "environment": "e", "more": 0, "unlinked_commits": 0}
+        for issues in ([1], [{"issue": 1, "title": None}], [{"repo": "o/r", "title": None}],
+                       [{"repo": "o/r", "issue": "1", "title": None}], [{"repo": "o/r", "issue": 1, "title": 3}]):
+            with self.assertRaises(notify.UsageError) as raised:
+                notify.parse_event(json.dumps({**base, "issues": issues}))
+            self.assertEqual(str(raised.exception), "deployed: each issue needs repo, issue and a title or null", issues)
+        self.assertEqual(notify.parse_event(json.dumps({**base, "issues": [{"repo": "o/r", "issue": 1}]}))["issues"],
+                         [{"repo": "o/r", "issue": 1}], "a title left out is a null title")
+
+    def test_the_usage_messages(self):
+        for raw, message in (("nope", "the event is not JSON: "), ("[1]", "the event must be a JSON object"),
+                             ('{"event": "x"}', "unknown event 'x' (known: " + ", ".join(notify.EVENTS) + ")")):
+            with self.assertRaises(notify.UsageError) as raised:
+                notify.parse_event(raw)
+            self.assertTrue(str(raised.exception).startswith(message), str(raised.exception))
+
+    def test_the_board_read_is_one_exact_call(self):
+        seen = []
+
+        def run(cmd, **kw):
+            seen.append((cmd, kw))
+            return subprocess.CompletedProcess(cmd, 0, json.dumps([{"status": "Dev Ready"}]), "")
+
+        with mock.patch.object(notify.subprocess, "run", side_effect=run):
+            line = notify.board_summary("x/.agents/dev-process.md", self.settings())
+        self.assertEqual(line, "🔵 1 ready · 🟡 0 in progress · 🆘 0 need you")
+        self.assertEqual(notify.TRACKER, notify.HERE / "tracker.py")
+        self.assertTrue(notify.TRACKER.is_file())
+        (cmd, kw), = seen
+        self.assertEqual(cmd, [sys.executable, str(notify.TRACKER), "--profile",
+                               str(Path("x/.agents/dev-process.md").resolve()), "list", "--open-only",
+                               "--issues-only", "--json"])
+        self.assertEqual(kw, {"capture_output": True, "text": True, "timeout": 120, "cwd": notify.HERE})
+
+    def test_a_board_it_cannot_count_is_said(self):
+        bare = EVENT_PROFILE.format(notify="").replace('queue = "Dev Ready"\n', "").replace(
+            'columns = { in_progress = "In progress", needs_human = "Human!Help!" }\n', "")
+        for stdout, settings in (("[]", self.settings(bare)), ("not json", self.settings())):
+            with mock.patch.object(notify.subprocess, "run",
+                                   return_value=subprocess.CompletedProcess([], 0, stdout, "")):
+                self.assertEqual(notify.board_summary("p", settings), "board: could not be read", stdout)
 
 
 if __name__ == "__main__":
