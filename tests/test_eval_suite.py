@@ -56,6 +56,17 @@ def inline_flag_graders(root):
             if INLINE_FLAGS.search("\n".join(PATTERN.findall(g.read_text(encoding="utf-8"))))]
 
 
+def unclosed_quote_graders(root):
+    """The grader files under `root` whose single-quoted pattern holds a lone `'`: it ends the YAML
+    string early, and the eval runner refuses the whole case. Inside the string `'` is written `''`."""
+    def bad(value):
+        value = value.strip()
+        return value.startswith("'") and (len(value) < 2 or not value.endswith("'")
+                                          or "'" in value[1:-1].replace("''", ""))
+    return [str(g.relative_to(root)) for g in sorted(root.glob("*/graders/*.md"))
+            if any(bad(v) for v in PATTERN.findall(g.read_text(encoding="utf-8")))]
+
+
 def cases():
     return sorted(p.parent for p in EVALS.glob("*/prompt.md"))
 
@@ -98,6 +109,18 @@ class Suite(unittest.TestCase):
                 grader.mkdir(parents=True)
                 (grader / "g.md").write_text(f"---\ntype: regex\npattern: {pattern}\n---\n", encoding="utf-8")
             self.assertEqual(inline_flag_graders(root), ["flag/graders/g.md", "scoped/graders/g.md"])
+
+    def test_no_grader_pattern_ends_its_quotes_early(self):
+        self.assertEqual(unclosed_quote_graders(EVALS), [])
+
+    def test_the_quote_check_rejects_a_lone_quote_and_allows_a_doubled_one(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            for name, pattern in (("lone", "'[\'\"]abc'"), ("doubled", "'it''s'"), ("escaped", "'[\\x27]'")):
+                grader = root / name / "graders"
+                grader.mkdir(parents=True)
+                (grader / "g.md").write_text(f"---\ntype: regex\npattern: {pattern}\n---\n", encoding="utf-8")
+            self.assertEqual(unclosed_quote_graders(root), ["lone/graders/g.md"])
 
     def test_no_grader_calls_a_judge(self):
         judged = [str(g.relative_to(EVALS)) for g in EVALS.glob("*/graders/*.md")

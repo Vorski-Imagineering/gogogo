@@ -412,7 +412,7 @@ def plan(doc: Doc, path: str, repo: str, github, history: History, link: list[st
             continue
         items.append(item("set-milestone", "github", issue=number, section=section.heading,
                           milestone=ms(target, titles, section.heading),
-                          frm=titles.get(info["milestone"]), expect=info["milestone"],
+                          frm=titles.get(info["milestone"]), expect=info["milestone"], by_title=True,
                           why=f"first row in {section.heading!r}, a new milestone"))
 
     # Issues in linked sections, and issues in linked milestones.
@@ -628,12 +628,15 @@ def apply_one(entry, repo, lines, github, writer, legend, created) -> str:
             return f"stale: #{entry['issue']} is now in milestone {now}"
         number = None
         if kind == "set-milestone":
-            planned = milestone.get("number")
-            if planned is not None:
-                title = {m["number"]: m["title"] for m in github.milestones(repo)}.get(planned)
-                if title != milestone.get("title"):
-                    return f"stale: milestone {planned} now reads {title or 'nothing (gone)'!r}"
-            number = planned or created.get(milestone.get("title"))
+            number = milestone.get("number")
+            if entry.get("by_title"):
+                # A new section's milestone was found by its title: take the one its link-section gave in
+                # this apply, else the planned one only while it still has that title.
+                number = created.get(entry["section"], number)
+                if number is not None and entry["section"] not in created:
+                    title = {m["number"]: m["title"] for m in github.milestones(repo)}.get(number)
+                    if title != milestone.get("title"):
+                        return f"stale: milestone {number} now reads {title or 'nothing (gone)'!r}"
             if number is None:
                 number = {m["title"]: m["number"] for m in github.milestones(repo)}.get(milestone.get("title"))
             if number is None:

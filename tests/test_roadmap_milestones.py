@@ -407,6 +407,28 @@ class RoundTwo(Case):
         self.assertEqual(plan["unlinked"], [], "the heading still links; --link could not change it")
 
 
+class RoundThree(Case):
+    """Review round 3 of gogogo#184."""
+
+    def test_a_heading_renamed_with_a_new_row_applies_both(self):
+        self.commit(roadmap((heading("Old", 1), [])), D1)
+        self.commit(roadmap((heading("B", 1), [5])), D3)
+        github = FakeGitHub([ms(1, "Old")], [iss(5)])
+        _, plan, _ = self.plan(github)
+        self.assertEqual([i["kind"] for i in plan["items"]], ["rename-milestone", "set-milestone"])
+
+        def rename(repo, number, **fields):
+            Writer.update_milestone(writer, repo, number, **fields)
+            github.list[0].update(fields)
+
+        writer = Writer()
+        writer.update_milestone = rename
+        code, out, _ = self.run_main("apply", "--plan", self.save(plan), "--items", "1,2",
+                                     github=github, writer=writer)
+        self.assertEqual((code, writer.calls), (0, [("update_milestone", 1, {"title": "B"}),
+                                                    ("set_issue_milestone", 5, 1)]), out)
+
+
 class Safety(Case):
     def test_no_milestone_is_ever_deleted(self):  # 15
         source = (SCRIPTS / "roadmap_milestones.py").read_text(encoding="utf-8")
