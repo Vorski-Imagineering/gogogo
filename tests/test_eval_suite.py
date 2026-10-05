@@ -27,7 +27,7 @@ CASES = {
     "dev-round-checks-focused-tests", "dev-silent-review-restarts", "dev-wording-survivors-declined",
     "auto-dev-label-less-card", "auto-dev-open-decision", "auto-dev-list-fails",
     "auto-dev-review-wait", "auto-dev-late-run-pr", "dev-merge-refused",
-    "dev-deletes-merged-local-branch",
+    "dev-deletes-merged-local-branch", "dev-blocked-goes-to-queue", "auto-dev-skips-blocked",
     "spec-declined-question", "spec-being-built", "spec-nothing-hits-today",
     "spec-no-argument-offers-new", "spec-pr-mentions-only",
     "spec-reverses-tested-behaviour",

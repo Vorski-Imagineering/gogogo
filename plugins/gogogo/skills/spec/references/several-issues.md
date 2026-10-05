@@ -31,7 +31,7 @@ Part of `/gogogo:spec`. Read it in full. Section names and § numbers here are `
    exits 0 with a last line `label: apply`. Any other result means it is
    specced like any other issue.
 4. **One issue at a time.** Each issue goes through this whole skill: *Before
-   you write*, the question rounds, and Posting steps 0 to 8. Only then does
+   you write*, the question rounds, and Posting steps 0 to 9. Only then does
    the next issue start. Ask about one issue only in each question call, and
    name it in every question (`#<n>: …`).
 5. **Research one issue ahead.** When an issue starts, run rule 3 on the
@@ -51,7 +51,7 @@ Part of `/gogogo:spec`. Read it in full. Section names and § numbers here are `
    question tool errors (no person to ask), stop the whole run and report
    every issue not reached.
 7. **The final report** has one line per issue in the list: *specced and
-   labelled*; *posted without the label* (naming Posting step 7's withholding
+   labelled*; *posted without the label* (naming Posting step 8's withholding
    case); *left open* (with the question); *skipped* (closed, a pull request,
    or already ready); *skipped: being built* (with the column or pull
    request); *closed: nothing hits it today*; *not filed: nothing hits it
@@ -60,8 +60,8 @@ Part of `/gogogo:spec`. Read it in full. Section names and § numbers here are `
    Posting step 1); *replaced a version posted meanwhile*; or *not reached*
    (with why the run stopped). Each
    *specced and labelled* line ends with its card's result from Posting step
-   8: moved, already there, left in `<column>`, moved meanwhile to
-   `<column>`, closed, no card, could not be read, the move failed, or step 8
+   9: moved, already there, left in `<column>`, moved meanwhile to
+   `<column>`, closed, no card, could not be read, the move failed, or step 9
    skipped (and which of its conditions was not met). Every line, whatever its
    outcome, also names any dependent Posting step 4 edited or commented on.
    Then each issue filed during the run, with `/gogogo:spec <n>`.

@@ -4,6 +4,7 @@
     tracker.py [--profile FILE] list [--status "<column>"] [--open-only] [--issues-only] [--json]
     tracker.py [--profile FILE] show <issue> [--expect "<column>"]
     tracker.py [--profile FILE] move <issue> [--from "<column>"] --to "<column>" [--add-missing]
+    tracker.py [--profile FILE] block <issue> --by <#B | B | owner/repo#B>
     tracker.py [--profile FILE] fields [--check]
     tracker.py [--profile FILE] views [--hide-closed]
     tracker.py [--profile FILE] tidy [--apply]
@@ -47,10 +48,20 @@ work that was done), and every open issue is on the board.
 GitHub's own board workflows do this going forward once they are on; these
 commands fix what is already there.
 
+`list --json` and `show` carry each issue's GitHub dependency links
+("blocked by", "blocking"). In `list --json` each `blocked_by` entry has its
+`column` on this board (or null) and its `blocker_state`: `open` while it
+still blocks, `merged` once it is closed as completed or its card is in a
+stage column, `dropped` when it closed as not planned or as a duplicate.
+`block` sets one link and confirms it from the blocker's side; it never
+removes one.
+
 Exit codes: 0 ok, 1 usage/not-found, 2 the read or write could not be trusted,
 3 `show --expect` or `move --from`: the card is in a different column,
 4 `move`: a move to the needs-a-person column refused because the newest
-comment says no reason.
+comment says no reason. `block`: 0 linked and seen from the blocker's side
+(also when it was already linked), 1 a bad `--by` or a blocker that does not
+exist, 2 the write or its read-back could not be trusted.
 """
 from __future__ import annotations
 
@@ -330,6 +341,8 @@ query($org: String!, $number: Int!, $size: Int!, $after: String) {
               repository { nameWithOwner }
               assignees(first: 10) { nodes { login } }
               labels(first: 20) { totalCount nodes { name } }
+              blockedBy(first: 20) { totalCount nodes { number state stateReason repository { nameWithOwner } } }
+              blocking(first: 20) { totalCount nodes { number state repository { nameWithOwner } } }
             }
             ... on PullRequest {
               number title state url
@@ -396,12 +409,71 @@ def issue_labels(content: dict) -> list[str]:
     return names
 
 
+def issue_links(content: dict, field: str) -> list[dict]:
+    """An issue's `blockedBy` or `blocking` links. Raises rather than return a
+    short list: a card whose blocker fell off a truncated read would look free."""
+    connection = content.get(field) or {}
+    nodes = connection.get("nodes") or []
+    if connection.get("totalCount", 0) > len(nodes):
+        raise BoardError(f"{field} truncated on #{content.get('number')}: "
+                         f"{connection['totalCount']} links, {len(nodes)} read")
+    links = []
+    for node in nodes:
+        link = {"number": node.get("number"),
+                "repo": (node.get("repository") or {}).get("nameWithOwner"),
+                "state": node.get("state")}
+        if field == "blockedBy":
+            link["state_reason"] = node.get("stateReason")
+        links.append(link)
+    return links
+
+
+def ref_key(repo: str | None, number: int | None) -> str:
+    """`owner/repo#n`, lower-cased: how a blocker is matched to its card."""
+    return f"{repo or ''}#{number}".lower()
+
+
+def stage_columns() -> list[str]:
+    """The profile's stage columns: a blocker whose card is in one has merged."""
+    return [c.name for c in COLUMNS.values() if c.meaning.startswith("stage")]
+
+
+def blocker_state(entry: dict, cards_by_ref: dict, stages: list[str]) -> str:
+    """`dropped`, `merged` or `open`: whether a `blocked_by` entry still blocks.
+
+    Closed as not planned or as a duplicate is `dropped`: whether the blocked
+    work still stands is a person's question. Closed otherwise, or open with its
+    card in a stage column, is `merged`. Everything else, an open blocker not on
+    this board included, is `open`.
+    """
+    if entry.get("state") == "CLOSED":
+        return "dropped" if entry.get("state_reason") in ("NOT_PLANNED", "DUPLICATE") else "merged"
+    card = cards_by_ref.get(ref_key(entry.get("repo"), entry.get("number")))
+    where = _bare((card or {}).get("status") or "")
+    if where and where in {_bare(s) for s in stages}:
+        return "merged"
+    return "open"
+
+
+def annotate_blockers(cards: list[dict]) -> None:
+    """Add each `blocked_by` entry's `column` (its card here, or None) and `blocker_state`."""
+    by_ref = {ref_key(c.get("repo"), c.get("number")): c for c in cards if c.get("number")}
+    stages = stage_columns()
+    for card in cards:
+        for entry in card.get("blocked_by") or []:
+            found = by_ref.get(ref_key(entry.get("repo"), entry.get("number")))
+            entry["column"] = (found or {}).get("status")
+            entry["blocker_state"] = blocker_state(entry, by_ref, stages)
+
+
 def flatten(item: dict) -> dict:
     """One card as flat fields; drafts and deleted content stay representable.
 
     `status_since` is when the card entered its column (the Status value's
     `updatedAt`), so a card moved back and forth starts again; `state_reason`
     is the issue's `stateReason` (`COMPLETED`, `NOT_PLANNED`, ...).
+    `blocked_by` and `blocking` are GitHub's issue dependency links, empty for
+    anything that is not an issue.
     """
     content = item.get("content") or {}
     value = item.get("fieldValueByName") or {}
@@ -419,6 +491,8 @@ def flatten(item: dict) -> dict:
         "state_reason": content.get("stateReason"),
         "assignees": [a["login"] for a in (content.get("assignees") or {}).get("nodes", [])],
         "labels": issue_labels(content),
+        "blocked_by": issue_links(content, "blockedBy"),
+        "blocking": issue_links(content, "blocking"),
     }
 
 
@@ -434,6 +508,8 @@ query($owner: String!, $name: String!, $size: Int!, $after: String) {
         repository { nameWithOwner }
         assignees(first: 10) { nodes { login } }
         labels(first: 20) { totalCount nodes { name } }
+        blockedBy(first: 20) { totalCount nodes { number state stateReason repository { nameWithOwner } } }
+        blocking(first: 20) { totalCount nodes { number state repository { nameWithOwner } } }
         projectItems(first: 10, includeArchived: true) {
           nodes {
             id
@@ -498,6 +574,8 @@ def issue_side_cards(repo: str) -> list[dict]:
                     a["login"] for a in (issue.get("assignees") or {}).get("nodes", [])
                 ],
                 "labels": issue_labels(issue),
+                "blocked_by": issue_links(issue, "blockedBy"),
+                "blocking": issue_links(issue, "blocking"),
             })
     return cards
 
@@ -552,6 +630,9 @@ def list_cards(
     if crosscheck:
         recovered = cards_the_board_did_not_list(cards, repo)
         cards = recovered + cards
+    # Over the whole board, before any filter: a blocker's column is read from
+    # its own card, wherever it sits.
+    annotate_blockers(cards)
 
     if status:
         wanted = column(status).lower()
@@ -623,6 +704,8 @@ query($owner: String!, $name: String!, $number: Int!) {
       title
       url
       state
+      blockedBy(first: 20) { totalCount nodes { number state stateReason repository { nameWithOwner } } }
+      blocking(first: 20) { totalCount nodes { number state repository { nameWithOwner } } }
       projectItems(first: 20, includeArchived: true) {
         nodes {
           id
@@ -708,10 +791,83 @@ def cmd_show(args: argparse.Namespace) -> int:
     status = current or "on board, no status"
     archived = "  (archived)" if card.get("isArchived") else ""
     print(f"column: {status}{archived}")
+    for entry in issue_links(issue, "blockedBy"):
+        blocker = issue_card(entry["number"], entry["repo"])["card"] if entry.get("repo") else None
+        where = ((blocker or {}).get("fieldValueByName") or {}).get("name")
+        by_ref = {ref_key(entry["repo"], entry["number"]): {"status": where}} if where else {}
+        state = blocker_state(entry, by_ref, stage_columns())
+        print(f"blocked by: {short_ref(entry['repo'], entry['number'], args.repo)} "
+              f"({state}, {where or 'not on this board'})")
     if args.expect and (current or "").lower() != column(args.expect).lower():
         # An exit status, not a name for the caller to grep: a grep for a
         # literal column silently matches nothing after a rename.
         return 3
+    return 0
+
+
+def short_ref(repo: str | None, number: int, home: str) -> str:
+    """`#n` for an issue in `home`, `owner/repo#n` for one elsewhere."""
+    return f"#{number}" if (repo or home).lower() == home.lower() else f"{repo}#{number}"
+
+
+BLOCK_REF = re.compile(r"^(?:([\w.-]+/[\w.-]+))?#?(\d+)$")
+
+
+def gh_api(*args: str) -> subprocess.CompletedProcess:
+    """One REST call through `gh api`."""
+    return subprocess.run(["gh", "api", *args], capture_output=True, text=True, timeout=CALL_TIMEOUT)
+
+
+def cmd_block(args: argparse.Namespace) -> int:
+    """Set "<issue> is blocked by <ref>", then confirm it from the blocker's side.
+
+    The POST answers with the *blocked* issue, so its number is never read as
+    the blocker; the claim is checked on the blocker's own `blocking` list.
+    """
+    match = BLOCK_REF.match(args.by.strip())
+    if not match:
+        print(f"tracker.py: --by {args.by!r}: give #B, B or owner/repo#B", file=sys.stderr)
+        return 1
+    blocker_repo, blocker = match.group(1) or args.repo, int(match.group(2))
+    ref = short_ref(blocker_repo, blocker, args.repo)
+
+    found = gh_api(f"repos/{blocker_repo}/issues/{blocker}", "--jq", ".id")
+    if found.returncode != 0:
+        reason = (found.stderr or found.stdout).strip()
+        print(f"tracker.py: could not read {ref}: {reason}", file=sys.stderr)
+        return 1 if "404" in reason or "Not Found" in reason else 2
+    database_id = found.stdout.strip()
+    if not database_id.isdigit():
+        print(f"tracker.py: {ref} has no database id ({database_id!r})", file=sys.stderr)
+        return 2
+
+    wrote = gh_api("-X", "POST", f"repos/{args.repo}/issues/{args.issue}/dependencies/blocked_by",
+                   "-F", f"issue_id={database_id}")
+    already = wrote.returncode != 0 and "already" in (wrote.stderr + wrote.stdout).lower()
+    if wrote.returncode != 0 and not already:
+        print(f"tracker.py: could not set #{args.issue} blocked by {ref}: "
+              f"{(wrote.stderr or wrote.stdout).strip()}", file=sys.stderr)
+        return 2
+
+    seen = gh_api(f"repos/{blocker_repo}/issues/{blocker}/dependencies/blocking?per_page=100")
+    try:
+        blocking = json.loads(seen.stdout) if seen.returncode == 0 else None
+    except json.JSONDecodeError:
+        blocking = None
+    if not isinstance(blocking, list):
+        print(f"tracker.py: wrote the link, but could not read {ref}'s blocking list back: "
+              f"{(seen.stderr or seen.stdout).strip()}", file=sys.stderr)
+        return 2
+    confirmed = any(
+        isinstance(i, dict) and i.get("number") == args.issue
+        and (i.get("repository_url") or "").lower().endswith("/repos/" + args.repo.lower())
+        for i in blocking
+    )
+    if not confirmed:
+        print(f"tracker.py: wrote the link, but {ref}'s blocking list does not name #{args.issue}",
+              file=sys.stderr)
+        return 2
+    print(f"#{args.issue} blocked by {ref}" + (" (already linked)" if already else ""))
     return 0
 
 
@@ -993,6 +1149,13 @@ def main() -> int:
         help="add the issue to the board if it has no card there",
     )
     mover.set_defaults(func=cmd_move)
+
+    blocker = subparsers.add_parser(
+        "block", help="set GitHub's 'blocked by' link on an issue, then read it back from the blocker")
+    blocker.add_argument("issue", type=int)
+    blocker.add_argument("--by", required=True, help="the blocker: #B, B, or owner/repo#B")
+    blocker.add_argument("--repo", default=None, help="the blocked issue's repo (default: tracker.issues_repo)")
+    blocker.set_defaults(func=cmd_block)
 
     fields = subparsers.add_parser("fields", help="the board's Status options, live")
     fields.add_argument("--check", action="store_true",
