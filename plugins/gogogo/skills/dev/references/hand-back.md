@@ -12,6 +12,35 @@ Part of `/gogogo:dev`. Read it in full. Section names and § numbers here are `S
 The card moves to the column of the **stage the code has actually reached**,
 and no further. Take the first case that fits:
 
+- **blocked by another issue**: the next step of this issue cannot begin until
+  an open issue B is merged. B is named in the spec's `**Blocked by:**` line,
+  or found mid-change, as when what is left is a person's step that needs B
+  first. Read B itself, since no link may exist yet:
+  `gh issue view <B> --repo <its repo> --json state,stateReason` and
+  `<tracker.tool> show <B> --repo <its repo>`. B still blocks when it is
+  `OPEN` with its card in no column of the profile's `stages` (or not on this
+  board). Closed any other way than below (`COMPLETED`, or no reason), or its
+  card in a stage column: it has merged, and this case does not apply. Closed as `NOT_PLANNED` or `DUPLICATE`: take "stopped for
+  a person" with `reason=decision`, naming B and how it closed. Not a stop, and not `tracker.columns.needs_human`:
+  nobody can act on it until B lands. In order:
+  1. When there is work: commit and push it, and leave its PR open, opening it
+     as a draft if none exists. In an interactive session with nothing
+     committed, ask first, as the case below does.
+  2. `<tracker.tool> block <n> --by <B>` (`#B`, or `owner/repo#B` for another
+     repo). It sets GitHub's "blocked by" link and reads it back from B's
+     side. On a non-zero exit, take the "stopped for a person" case instead,
+     with `reason=decision` and a Needs-you line naming B, so the dependency
+     is never left only in prose.
+  3. Post the §7 report. Its first line is
+     `**Blocked by <B>:** <what B must deliver>. This returns to <tracker.queue> and is taken once <B> merges.`,
+     then, on its own line, the marker
+     `<!-- gogogo:blocked v=1 by=<owner/repo>#<B> session=<id|unknown> -->`.
+     It carries no stop marker.
+  4. `<tracker.tool> move <n> --from "<the column read before the move>" --to "<tracker.queue>"`,
+     so a person's move meanwhile is not undone (exit 3 is reported, not
+     retried). Keep `tracker.ready_marker`: the spec needs nothing from
+     anyone, and the queue passes the card over until B merges
+     (`/gogogo:auto-dev`).
 - **stopped for a person**: a review that ended for a person (§5 rule 8: a
   defect in a finding's third attempt, a reversal the spec does not settle, a
   finding you could not fix, a defect in the round that reviews a prose file's second-round fix, or the breaker

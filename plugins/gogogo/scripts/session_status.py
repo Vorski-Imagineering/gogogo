@@ -9,12 +9,16 @@ cards in each column the profile names (`tracker.queue`,
 `tracker.columns.in_progress`, `tracker.columns.needs_human`, each
 `stages[].column`), then the open pull requests:
 
-    gogogo · <folder> · independence: <level> · Dev Ready 3 · In progress 1 · … · Released 2 (oldest 5 days) · 2 PRs open — /gogogo:status for detail
+    gogogo · <folder> · independence: <level> · Dev Ready 3 (1 blocked) · In progress 1 · … · Released 2 (oldest 5 days) · 2 PRs open — /gogogo:status for detail
 
 The level is the profile's `independence` (`junior-dev (not set)` when it sets
 none). It is bold and coloured by level only in an interactive terminal session
 (`CLAUDE_CODE_ENTRYPOINT=cli`, `NO_COLOR` unset or empty), plain otherwise. An
 unavailable line ends with it.
+
+The queue's count is followed by `(<k> blocked)` when `k` of its open issues
+have a GitHub "blocked by" link whose `blocker_state` is `open`
+(`Dev Ready 3 (1 blocked)`), and by nothing when none has.
 
 A stage column's count is followed by how long its oldest card has waited
 there (the `status_since` of `tracker.py list --json`, aged as `waiting.py`
@@ -128,8 +132,12 @@ def status_line(profile, settings, run, clock, now=None):
         listing = _read("board", [*tool, "list", "--json"], run, clock, deadline)
         try:
             # Issues only, and any case: as /gogogo:status counts and as tracker.py matches columns.
-            issues = [((card.get("status") or "").lower(), card.get("status_since"))
-                      for card in json.loads(listing) if card.get("kind") != "PullRequest"]
+            cards = [card for card in json.loads(listing) if card.get("kind") != "PullRequest"]
+            issues = [((card.get("status") or "").lower(), card.get("status_since")) for card in cards]
+            blocked = [(card.get("status") or "").lower() for card in cards
+                       if card.get("state") in (None, "OPEN")
+                       and any(isinstance(b, dict) and b.get("blocker_state") == "open"
+                               for b in card.get("blocked_by") or [])]
         except (json.JSONDecodeError, AttributeError, TypeError):
             raise ReadFailed("board unreadable: tracker.py list printed no card list") from None
         stages = {s.get("column").lower() for s in settings.get("stages") or []
@@ -143,6 +151,9 @@ def status_line(profile, settings, run, clock, now=None):
             times = sorted(t for t in times if isinstance(t, str) and t)
             if name.lower() in stages and times:
                 part += f" (oldest {age(times[0], now)})"
+            waiting = blocked.count(name.lower())
+            if name == tracker.get("queue") and waiting:
+                part += f" ({waiting} blocked)"
             parts.append(part)
     repo = tracker.get("code_repo")
     if not repo:

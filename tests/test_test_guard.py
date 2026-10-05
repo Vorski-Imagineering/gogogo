@@ -485,7 +485,8 @@ class Structure(unittest.TestCase):
         six = moved(DEV_VERIFY)
         for name in ("test_guard.py", " list ", " verify "):
             self.assertIn(name, six)
-        first_bullet = moved(DEV_HAND_BACK).split("\n- **")[1]
+        first_bullet = moved(DEV_HAND_BACK).split("\n- **")[2]  # the first stop: "blocked by another issue" is not one
+        self.assertTrue(first_bullet.startswith("stopped for a person"), first_bullet[:40])
         self.assertIn("weakened test", first_bullet)
         four = section((PLUGIN / "skills" / "auto-dev" / "SKILL.md").read_text(encoding="utf-8"), "4.")
         self.assertIn("weakened test", four)

@@ -274,8 +274,8 @@ instead that the step is licensed by Approvals row N, and point at the
 profile's procedure for it. If the user declines the apply row, say so in the
 row and keep the stop in Verification: that is a real answer, not a gap.
 
-A chain across issues (one issue's change depends on another's) states the
-order in each issue's Context and names the issue it waits for.
+A chain across issues names the issues this one waits for in a `**Blocked by:**
+<ref>, <ref>` line in `## Context`; Posting sets GitHub's "blocked by" link for each.
 
 ## Test cases
 
@@ -457,7 +457,7 @@ Then read `## Verify by hand` as the reporter, who has no technical context:
 Then as the tracker:
 
 9. Is the spec in the issue **body**?
-10. Does the issue carry the ready label, and did Posting step 8 move the
+10. Does the issue carry the ready label, and did Posting step 9 move the
     card or say why it did not? Or did I say which withholding case applies?
 11. Were the open specs that read this issue checked (Posting step 4), and
     does each failing step have its narrower form and its outcome decided

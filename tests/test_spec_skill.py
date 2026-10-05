@@ -94,10 +94,10 @@ class Skill(unittest.TestCase):
     def test_move_step_in_posting(self):
         posting = posting_lines()
         steps = {int(m.group(1)): i for i, line in enumerate(posting) if (m := re.match(r"(\d+)\. ", line))}
-        self.assertIn(7, steps)
         self.assertIn(8, steps)
-        seven = "\n".join(posting[steps[7]:steps[8]])
-        eight = "\n".join(posting[steps[8]:])
+        self.assertIn(9, steps)
+        seven = "\n".join(posting[steps[8]:steps[9]])
+        eight = "\n".join(posting[steps[9]:])
         self.assertIn("ready_marker", seven)
         self.assertIn("move", eight)
         self.assertIn("`tracker.queue`", eight)
@@ -228,7 +228,7 @@ class SeveralIssues(unittest.TestCase):
 
     def test_step_eight_deferred_in_run(self):
         lines = posting_lines()
-        start = next(i for i, line in enumerate(lines) if line.startswith("8. "))
+        start = next(i for i, line in enumerate(lines) if line.startswith("9. "))
         end = next((i for i in range(start + 1, len(lines)) if re.match(r"\S", lines[i])), len(lines))
         self.assertIn("Several issues in one run", "\n".join(lines[start:end]))
         self.assertIn(RUN, skill_text().splitlines(), "the section it points at is gone")

@@ -631,5 +631,45 @@ class AsAProcess(unittest.TestCase):
             sys.modules["profile_check"] = saved
 
 
+
+class BlockedInTheQueue(unittest.TestCase):
+    """gogogo#185: the queue's count says how many of its cards wait on another issue."""
+
+    def line_for(self, listing):
+        board = Board(answers={"list": (0, json.dumps(listing), "")})
+        _, out, _ = run_main(repo_with_profile(), board)
+        return message(out)
+
+    def queue(self, *states):
+        cards = [{"number": i, "kind": "Issue", "status": "Dev Ready", "state": "OPEN"} for i in range(3)]
+        for card, state in zip(cards, states):
+            card["blocked_by"] = [{"number": 136, "state": "OPEN", "blocker_state": state}]
+        return cards
+
+    def test_the_queue_count_names_its_blocked_cards(self):
+        self.assertIn("Dev Ready 3 (1 blocked) ·", self.line_for(self.queue("open")))
+        self.assertIn("Dev Ready 3 (2 blocked) ·", self.line_for(self.queue("open", "open")))
+
+    def test_none_blocked_says_nothing(self):
+        line = self.line_for(self.queue())
+        self.assertIn("Dev Ready 3 ·", line)
+        self.assertNotIn("blocked", line)
+
+    def test_a_merged_or_dropped_blocker_does_not_count(self):
+        line = self.line_for(self.queue("merged", "dropped"))
+        self.assertIn("Dev Ready 3 ·", line)
+        self.assertNotIn("blocked", line)
+
+    def test_only_the_queue_and_only_open_issues_count(self):
+        cards = self.queue("open")
+        cards[1]["state"] = "CLOSED"
+        cards[1]["blocked_by"] = [{"number": 136, "blocker_state": "open"}]
+        cards.append({"number": 9, "kind": "Issue", "status": "In progress", "state": "OPEN",
+                      "blocked_by": [{"number": 136, "blocker_state": "open"}]})
+        line = self.line_for(cards)
+        self.assertIn("Dev Ready 3 (1 blocked) ·", line)
+        self.assertIn("In progress 1 ·", line)
+
+
 if __name__ == "__main__":
     unittest.main()

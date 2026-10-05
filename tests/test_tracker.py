@@ -1058,5 +1058,285 @@ class StatusSinceAndArchive(unittest.TestCase):
         self.assertTrue(tidied.call_args.args[0].apply)
 
 
+
+def linked(number, title, status, *, blocked_by=(), blocking=(), repo=None):
+    """A board card whose issue carries GitHub's dependency links (gogogo#185)."""
+    item = card(number, title, status)
+    item["content"]["blockedBy"] = {"totalCount": len(blocked_by), "nodes": [
+        {"number": n, "state": state, "stateReason": reason, "repository": {"nameWithOwner": r or board.DEFAULT_REPO}}
+        for n, state, reason, r in blocked_by]}
+    item["content"]["blocking"] = {"totalCount": len(blocking), "nodes": [
+        {"number": n, "state": "OPEN", "repository": {"nameWithOwner": board.DEFAULT_REPO}} for n in blocking]}
+    if repo:
+        item["content"]["repository"] = {"nameWithOwner": repo}
+    return item
+
+
+class BlockedByLinks(unittest.TestCase):
+    """gogogo#185: every reader sees which issues block which, from the one board read."""
+
+    def test_flatten_carries_the_links_and_defaults_to_none(self):
+        flat = board.flatten(linked(11, "go-live", "Dev Priority", blocked_by=[(136, "OPEN", None, None)],
+                                    blocking=[12]))
+        self.assertEqual(flat["blocked_by"], [{"number": 136, "repo": board.DEFAULT_REPO, "state": "OPEN",
+                                               "state_reason": None}])
+        self.assertEqual(flat["blocking"], [{"number": 12, "repo": board.DEFAULT_REPO, "state": "OPEN"}])
+        plain = board.flatten(card(2, "b", "Dev Priority"))
+        self.assertEqual((plain["blocked_by"], plain["blocking"]), ([], []))
+        self.assertEqual(board.flatten({"id": "X", "type": "ISSUE", "content": None})["blocked_by"], [])
+
+    def test_a_truncated_link_list_refuses_the_read(self):
+        item = linked(11, "go-live", "Dev Priority", blocked_by=[(1, "OPEN", None, None), (2, "OPEN", None, None)])
+        item["content"]["blockedBy"]["totalCount"] = 3
+        with self.assertRaises(board.BoardError) as raised:
+            board.flatten(item)
+        self.assertIn("#11", str(raised.exception))
+        item = linked(11, "go-live", "Dev Priority", blocking=[1])
+        item["content"]["blocking"]["totalCount"] = 2
+        with self.assertRaises(board.BoardError):
+            board.flatten(item)
+
+    def test_blocker_state_for_each_case(self):
+        cards = {"acme/issues#136": {"status": "Dev Priority"}, "acme/issues#137": {"status": "In Production"},
+                 "acme/issues#138": {"status": "in dev"}}
+        stages = board.stage_columns()
+        self.assertEqual(sorted(stages), ["In Dev", "In Production"])
+
+        def state(number, st="OPEN", reason=None, repo=board.DEFAULT_REPO):
+            entry = {"number": number, "repo": repo, "state": st, "state_reason": reason}
+            return board.blocker_state(entry, cards, stages)
+        self.assertEqual(state(136), "open")
+        self.assertEqual(state(137), "merged")
+        self.assertEqual(state(138), "merged", "a stage column is matched without regard to case")
+        self.assertEqual(state(136, "CLOSED", "COMPLETED"), "merged")
+        self.assertEqual(state(136, "CLOSED", None), "merged")
+        self.assertEqual(state(136, "CLOSED", "NOT_PLANNED"), "dropped")
+        self.assertEqual(state(136, "CLOSED", "DUPLICATE"), "dropped")
+        self.assertEqual(state(137, repo="other/repo"), "open", "an open blocker not on this board blocks")
+
+    def test_list_json_gives_each_blocker_its_column_and_state(self):
+        args = Namespace(status=None, open_only=False, issues_only=False,
+                         json=True, repo=board.DEFAULT_REPO, no_crosscheck=True)
+        nodes = [linked(11, "go-live", "Dev Priority", blocked_by=[(136, "OPEN", None, None)]),
+                 linked(136, "runtime", "Dev Priority", blocking=[11]),
+                 linked(12, "after a shipped one", "Dev Priority", blocked_by=[(140, "OPEN", None, None)]),
+                 linked(140, "shipped", "In Production")]
+        with mock.patch.object(board, "graphql", side_effect=[page(nodes, total=len(nodes))]), \
+             mock.patch("builtins.print") as printed:
+            board.cmd_list(args)
+        payload = {c["number"]: c for c in json.loads(printed.call_args_list[0].args[0])}
+        self.assertEqual(payload[11]["blocked_by"], [{"number": 136, "repo": board.DEFAULT_REPO, "state": "OPEN",
+                                                      "state_reason": None, "column": "Dev Priority",
+                                                      "blocker_state": "open"}])
+        self.assertEqual([b["number"] for b in payload[136]["blocking"]], [11])
+        self.assertEqual(payload[136]["blocked_by"], [])
+        self.assertEqual(payload[12]["blocked_by"][0]["column"], "In Production")
+        self.assertEqual(payload[12]["blocked_by"][0]["blocker_state"], "merged")
+
+    def test_a_filtered_list_still_reads_the_blockers_column_from_the_whole_board(self):
+        nodes = [linked(11, "go-live", "Dev Priority", blocked_by=[(140, "OPEN", None, None)]),
+                 linked(140, "shipped", "In Production")]
+        with mock.patch.object(board, "graphql", side_effect=[page(nodes, total=2)]), \
+             mock.patch.object(board, "board_meta", return_value={"options": {"Dev Priority": "a"}}):
+            cards, _, _ = board.list_cards(status="Dev Priority", repo=board.DEFAULT_REPO, crosscheck=False)
+        self.assertEqual([c["number"] for c in cards], [11])
+        self.assertEqual(cards[0]["blocked_by"][0]["blocker_state"], "merged")
+
+    def test_every_issue_query_asks_for_both_links_with_their_counts(self):
+        for query in (board.ITEMS_QUERY, board.REPO_ISSUE_CARDS_QUERY, board.ISSUE_ITEMS_QUERY):
+            self.assertIn("blockedBy(first: 20) { totalCount", query)
+            self.assertIn("blocking(first: 20) { totalCount", query)
+            self.assertIn("stateReason repository { nameWithOwner }", query)
+
+    def test_the_issue_side_cards_carry_the_links(self):
+        node = issue_node(7, "seen", "Dev Priority")
+        node["blockedBy"] = {"totalCount": 1, "nodes": [{"number": 9, "state": "OPEN", "stateReason": None,
+                                                         "repository": {"nameWithOwner": "x/y"}}]}
+        with mock.patch.object(board, "graphql", side_effect=[issue_page([node])]):
+            cards = board.issue_side_cards(board.DEFAULT_REPO)
+        self.assertEqual(cards[0]["blocked_by"], [{"number": 9, "repo": "x/y", "state": "OPEN", "state_reason": None}])
+        self.assertEqual(cards[0]["blocking"], [])
+        node["blocking"] = {"totalCount": 1, "nodes": [{"number": 3, "state": "OPEN",
+                                                        "repository": {"nameWithOwner": "x/y"}}]}
+        with mock.patch.object(board, "graphql", side_effect=[issue_page([node])]):
+            cards = board.issue_side_cards(board.DEFAULT_REPO)
+        self.assertEqual(cards[0]["blocking"], [{"number": 3, "repo": "x/y", "state": "OPEN"}])
+
+    def test_a_blockers_close_reason_is_carried(self):
+        flat = board.flatten(linked(11, "go-live", "Dev Priority", blocked_by=[(136, "CLOSED", "NOT_PLANNED", None)]))
+        self.assertEqual(flat["blocked_by"][0]["state_reason"], "NOT_PLANNED")
+
+    def _show(self, blockers, cards_by_number):
+        issue = {"title": "go-live", "state": "OPEN", "url": "u",
+                 "blockedBy": {"totalCount": len(blockers), "nodes": blockers}}
+        found = {"issue": issue, "card": {"id": "I", "isArchived": False, "fieldValueByName": {"name": "Dev Priority"}}}
+
+        def issue_card(number, repo):
+            if number == 11:
+                return found
+            status = cards_by_number.get((repo, number))
+            return {"issue": {}, "card": {"id": "B", "fieldValueByName": {"name": status}} if status else None}
+        out = io.StringIO()
+        with mock.patch.object(board, "issue_card", side_effect=issue_card), redirect_stdout(out):
+            code = board.cmd_show(Namespace(issue=11, repo=board.DEFAULT_REPO, expect=None))
+        return code, out.getvalue().splitlines()
+
+    def test_show_names_each_blocker_after_the_column_line(self):
+        code, lines = self._show(
+            [{"number": 136, "state": "OPEN", "stateReason": None, "repository": {"nameWithOwner": board.DEFAULT_REPO}},
+             {"number": 4, "state": "OPEN", "stateReason": None, "repository": {"nameWithOwner": "x/y"}},
+             {"number": 140, "state": "OPEN", "stateReason": None, "repository": {"nameWithOwner": board.DEFAULT_REPO}}],
+            {(board.DEFAULT_REPO, 136): "Dev Priority", (board.DEFAULT_REPO, 140): "In Production"})
+        self.assertEqual(code, 0)
+        at = lines.index("column: Dev Priority")
+        self.assertEqual(lines[at + 1:], ["blocked by: #136 (open, Dev Priority)",
+                                          "blocked by: x/y#4 (open, not on this board)",
+                                          "blocked by: #140 (merged, In Production)"])
+
+    def test_the_docstring_names_the_block_command(self):
+        self.assertIn("block <issue> --by", board.__doc__)
+        self.assertRegex(board.__doc__, r"`block`: 0 linked")
+
+
+class FakeGh:
+    """Stands in for subprocess.run on `gh api` calls for `block`."""
+
+    def __init__(self, *, database_id="99001", found=0, post=(0, '{"number": 11}', ""), blocking=None,
+                 read_back=0):
+        self.database_id, self.found, self.post, self.read_back = database_id, found, post, read_back
+        self.blocking = [{"number": 11, "repository_url": "https://api.github.com/repos/acme/issues"}] \
+            if blocking is None else blocking
+        self.calls = []
+
+    def __call__(self, cmd, **kw):
+        self.calls.append(cmd)
+        path = next(a for a in cmd[2:] if a.startswith("repos/"))
+        if path.endswith("/dependencies/blocked_by"):
+            return subprocess.CompletedProcess(cmd, *self.post)
+        if "/dependencies/blocking" in path:
+            if self.read_back:
+                return subprocess.CompletedProcess(cmd, self.read_back, "", "gh: Server Error (HTTP 500)")
+            return subprocess.CompletedProcess(cmd, 0, json.dumps(self.blocking), "")
+        if self.found:
+            return subprocess.CompletedProcess(cmd, 1, "", "gh: Not Found (HTTP 404)")
+        return subprocess.CompletedProcess(cmd, 0, self.database_id + "\n", "")
+
+
+class BlockCommand(unittest.TestCase):
+    """`block` writes one link and believes it only when the blocker's side lists it."""
+
+    def run_block(self, gh, by="136", issue=11):
+        out, err = io.StringIO(), io.StringIO()
+        with mock.patch.object(board.subprocess, "run", side_effect=gh), redirect_stdout(out), redirect_stderr(err):
+            code = board.cmd_block(Namespace(issue=issue, by=by, repo=board.DEFAULT_REPO))
+        return code, out.getvalue(), err.getvalue()
+
+    def test_it_sends_the_database_id_typed_and_confirms_from_the_blockers_side(self):
+        gh = FakeGh()
+        code, out, _ = self.run_block(gh)
+        self.assertEqual(code, 0)
+        post = next(c for c in gh.calls if "POST" in c)
+        self.assertEqual(post[post.index("-F") + 1], "issue_id=99001")
+        self.assertNotIn("issue_id=136", " ".join(post))
+        self.assertIn("repos/acme/issues/issues/11/dependencies/blocked_by", post)
+        self.assertTrue(any("repos/acme/issues/issues/136/dependencies/blocking" in a for c in gh.calls for a in c))
+
+    def test_a_read_back_that_does_not_list_the_issue_exits_2(self):
+        self.assertEqual(self.run_block(FakeGh(blocking=[]))[0], 2)
+        other_repo = [{"number": 11, "repository_url": "https://api.github.com/repos/x/y"}]
+        self.assertEqual(self.run_block(FakeGh(blocking=other_repo))[0], 2)
+        self.assertEqual(self.run_block(FakeGh(read_back=1))[0], 2)
+
+    def test_the_result_names_the_blocker_not_the_posts_answer(self):
+        code, out, _ = self.run_block(FakeGh(post=(0, '{"number": 11, "title": "go-live"}', "")))
+        self.assertEqual((code, out.strip()), (0, "#11 blocked by #136"))
+        self.assertNotIn("#11 blocked by #11", out)
+
+    def test_an_existing_link_is_confirmed_and_said(self):
+        gh = FakeGh(post=(1, "", "gh: Issue is already blocked by this issue (HTTP 422)"))
+        code, out, _ = self.run_block(gh)
+        self.assertEqual(code, 0)
+        self.assertIn("already linked", out)
+        self.assertEqual(self.run_block(FakeGh(post=(1, "", "gh: Server Error (HTTP 500)")))[0], 2)
+
+    def test_refs_in_each_form_and_errors(self):
+        gh = FakeGh(blocking=[{"number": 11, "repository_url": "https://api.github.com/repos/acme/issues"}])
+        code, out, _ = self.run_block(gh, by="x/y#4")
+        self.assertEqual((code, out.strip()), (0, "#11 blocked by x/y#4"))
+        self.assertTrue(any("repos/x/y/issues/4" == a for c in gh.calls for a in c))
+        self.assertEqual(self.run_block(FakeGh(), by="#136")[0], 0)
+        self.assertEqual(self.run_block(FakeGh(), by="nonsense")[0], 1)
+        for bad in ("acme/svc2", "o/r136", "acme/svc#", "#"):
+            gh = FakeGh()
+            self.assertEqual(self.run_block(gh, by=bad)[0], 1, bad)
+            self.assertEqual(gh.calls, [], f"{bad}: nothing is read or written for a ref with no '#' after its repo")
+        self.assertEqual(self.run_block(FakeGh(found=1))[0], 1)
+        self.assertEqual(self.run_block(FakeGh(database_id="null"))[0], 2)
+
+    def test_each_gh_call_is_exact(self):
+        seen = []
+
+        def gh(cmd, **kw):
+            seen.append((cmd, kw))
+            return FakeGh()(cmd, **kw)
+
+        self.assertEqual(self.run_block(gh)[0], 0)
+        self.assertEqual([cmd for cmd, _ in seen], [
+            ["gh", "api", "repos/acme/issues/issues/136", "--jq", ".id"],
+            ["gh", "api", "-X", "POST", "repos/acme/issues/issues/11/dependencies/blocked_by", "-F", "issue_id=99001"],
+            ["gh", "api", "repos/acme/issues/issues/136/dependencies/blocking?per_page=100"]])
+        self.assertEqual({tuple(sorted(kw.items())) for _, kw in seen},
+                         {(("capture_output", True), ("text", True), ("timeout", board.CALL_TIMEOUT))})
+
+    def test_a_missing_blocker_is_1_and_any_other_read_failure_2(self):
+        for reason, code in (("gh: HTTP 404", 1), ("gh: Not Found", 1), ("gh: Server Error (HTTP 502)", 2)):
+            def gh(cmd, **kw):
+                return subprocess.CompletedProcess(cmd, 1, "", reason)
+            self.assertEqual(self.run_block(gh)[0], code, reason)
+
+    def test_by_is_required(self):
+        with mock.patch.object(board, "configure"), \
+             mock.patch.object(board.sys, "argv", ["tracker.py", "block", "11"]), \
+             redirect_stdout(io.StringIO()), redirect_stderr(io.StringIO()), self.assertRaises(SystemExit) as stop:
+            board.main()
+        self.assertEqual(stop.exception.code, 2)
+
+    def test_block_is_a_command(self):
+        gh = FakeGh()
+        with mock.patch.object(board, "configure"), \
+             mock.patch.object(board.subprocess, "run", side_effect=gh), \
+             mock.patch.object(board.sys, "argv", ["tracker.py", "block", "11", "--by", "#136"]), \
+             redirect_stdout(io.StringIO()), redirect_stderr(io.StringIO()):
+            self.assertEqual(board.main(), 0)
+
+
+class BlockedIsNotAStop(unittest.TestCase):
+    def test_the_blocked_marker_is_not_a_stop_reason(self):
+        self.assertEqual(board.STOP_REASONS, ("hard-stop", "decision", "spec", "review", "tests", "mutation",
+                                              "verify", "gate", "ci", "merge", "reverted"))
+        self.assertFalse(board.has_reason("**Blocked by #136:** x.\n<!-- gogogo:blocked v=1 by=o/r#136 session=x -->"))
+
+
+SKILLS = Path(__file__).resolve().parents[1] / "plugins" / "gogogo" / "skills"
+
+
+class BlockedSkillSteps(unittest.TestCase):
+    """The skills keep the steps that use the links (gogogo#185)."""
+
+    def test_auto_dev_reads_its_blocked_reference(self):
+        self.assertIn("references/blocked.md", (SKILLS / "auto-dev" / "SKILL.md").read_text(encoding="utf-8"))
+        text = (SKILLS / "auto-dev" / "references" / "blocked.md").read_text(encoding="utf-8")
+        self.assertIn("blocked_by", text)
+        self.assertIn("blocker_state", text)
+
+    def test_dev_hands_a_blocked_issue_back_with_the_link_and_its_marker(self):
+        text = (SKILLS / "dev" / "references" / "hand-back.md").read_text(encoding="utf-8")
+        self.assertIn("block <n> --by", text)
+        self.assertIn("gogogo:blocked v=1", text)
+
+    def test_spec_posting_sets_the_links(self):
+        self.assertIn("block <N> --by", (SKILLS / "spec" / "references" / "posting.md").read_text(encoding="utf-8"))
+
+
 if __name__ == "__main__":
     unittest.main()
