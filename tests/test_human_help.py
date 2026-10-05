@@ -172,6 +172,20 @@ class Permissions(unittest.TestCase):
                 self.assertEqual(hh.main(["--profile", str(profile), "list"]), 0)
         self.assertEqual(seen, {"status": "In progress", "repo": "o/r"})
 
+    def test_a_404_by_status_or_by_text_is_not_a_writer(self):
+        for message in ("gh: HTTP 404", "gh: Not Found"):
+            with mock.patch.object(hh, "_gh", side_effect=hh.CannotRead(message)):
+                self.assertFalse(hh.writer("o/r", "x", {}), message)
+
+    def test_a_profile_without_a_board_exits_2(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            profile = Path(tmp) / "dev-process.md"
+            profile.write_text('+++\nprofile = 1\n[tracker]\nissues_repo = "o/r"\n+++\n', encoding="utf-8")
+            with redirect_stdout(io.StringIO()) as out, redirect_stderr(io.StringIO()) as err:
+                self.assertEqual(hh.main(["--profile", str(profile), "list"]), 2)
+        self.assertEqual(out.getvalue(), "")
+        self.assertIn("could not read the board", err.getvalue())
+
     def test_maintain_and_admin_are_writers(self):
         comments = [gh_comment("bot", STOP_REVIEW), gh_comment("a", "one"), gh_comment("k", "two")]
         code, out, _ = self.run_list(FakeGh(comments, {"bot": "admin", "a": "admin", "k": "maintain"}))
@@ -217,6 +231,11 @@ class Authorised(unittest.TestCase):
         self.assertEqual(hh.authorised(self.body("approved") + chosen), {"effort": "high"})
         escaped = "| 2026-10-06 | Stopped (third-attempt \\| unfixable). Keep going? | authorised: effort=max | stop |\n"
         self.assertEqual(hh.authorised(self.body("approved") + escaped), {"effort": "max"})
+
+    def test_rows_of_any_width_and_spacing(self):
+        self.assertEqual(hh.authorised("| a | b |\n"), {}, "a two-cell row has no Chosen cell")
+        self.assertEqual(hh.authorised("| 2026-10-06 | q | authorised: effort=high |\n"), {"effort": "high"})
+        self.assertEqual(hh.authorised("|X|q|authorised: effort=max|r|\n"), {"effort": "max"})
 
     def test_an_unknown_model_or_effort_is_refused(self):
         with self.assertRaises(ValueError):
