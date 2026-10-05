@@ -17,6 +17,7 @@ import tempfile
 import unittest
 from contextlib import redirect_stderr, redirect_stdout
 from pathlib import Path
+from unittest import mock
 
 ROOT = Path(__file__).resolve().parents[1]
 SCRIPTS = ROOT / "plugins" / "gogogo" / "scripts"
@@ -24,6 +25,7 @@ sys.path.insert(0, str(SCRIPTS))
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 import roadmap_milestones as rm  # noqa: E402
+from roadmap_status import content as rs_content  # noqa: E402
 from test_roadmap_status import LEGEND_HEADER, LEGEND_ROWS, keep_tracker_globals, profile_text  # noqa: E402
 
 REPO = "acme/issues"
@@ -427,6 +429,370 @@ class RoundThree(Case):
                                      github=github, writer=writer)
         self.assertEqual((code, writer.calls), (0, [("update_milestone", 1, {"title": "B"}),
                                                     ("set_issue_milestone", 5, 1)]), out)
+
+
+def flat(entry):
+    """An item's fields as one tuple, its milestone as (number, title)."""
+    if entry is None:
+        return None
+    m = entry["milestone"]
+    return (entry.get("id"), entry["kind"], entry["side"], entry["issue"], entry["section"],
+            m and (m["number"], m["title"]), entry["from"], entry["expect"], entry.get("by_title"), entry["why"])
+
+
+def rule_branches(version):
+    """A roadmap that reaches every rule: 90 lines of prose first, so homes sit past line 90."""
+    other = ["| Issue | State |", "|---|---|", f"| [#16](https://github.com/{REPO}/issues/16) | ⚪ — |"]
+    lines = ["# Roadmap", "", *LEGEND_HEADER, *LEGEND_ROWS, "", *["Prose."] * 90, ""]
+    for head, rows in ((heading("A", 1), [5, 6, 10, 11, 15] + ([13, 14] if version == 1 else [])),
+                       (heading("X", 1, "x/y"), [20]), (heading("B", 2), [5])):
+        lines += [head, "", *HEADER, *(row(n) for n in rows), ""]
+    lines += [heading("C", 3), "", *other, "", heading("Gone", 7), "", *HEADER, row(17), ""]
+    if version == 1:
+        lines += [heading("D", 4), "", *HEADER, ""]
+    lines += [heading("History"), "", *HEADER, row(3), ""]
+    return "\n".join(lines)
+
+
+class Exact(Case):
+    """What the person is shown and what is written, exactly: the plan, each apply line, each gh call."""
+
+    def sha(self, rev):
+        return subprocess.run(["git", "rev-parse", "--short=7", rev], cwd=self.root, capture_output=True,
+                              text=True, check=True).stdout.strip()
+
+    def test_every_rule_branch(self):
+        self.commit(rule_branches(1), D1)
+        self.commit(rule_branches(2), D3)
+        github = FakeGitHub([ms(1, "Old A"), ms(2, "B"), ms(3, "C"), ms(4, "D"), ms(9, "Elsewhere")], [
+            iss(5, 2, D4), iss(6, None, D4), iss(10, 9, D4), iss(11, 3, D4), iss(15, 2, D1),
+            iss(12, 2, "2026-09-30T10:00:00Z"), iss(13, 1, D2), iss(14, 1, D2, state="CLOSED"),
+            iss(16, 3, D1), iss(17), iss(20), iss(3, 1, D4)])
+        code, plan, _ = self.plan(github)
+        first, second = self.sha("HEAD~1"), self.sha("HEAD")
+        gh = f"GitHub newer: milestone changed 2026-10-04T10:00Z; row placed 2026-10-01T10:00Z ({first})"
+        old = "the roadmap newer: milestone changed 2026-10-01T10:00Z; row placed 2026-10-01T10:00Z"
+        row5, row6 = rs_content(row(5)), rs_content(row(6))
+        self.assertEqual(code, 1)
+        self.assertEqual((plan["repo"], plan["doc"]), (REPO, str(self.doc)))
+        self.assertEqual([flat(i) for i in plan["items"]], [
+            (1, "rename-milestone", "github", None, "A", (1, "A"), "Old A", "Old A", None,
+             "the heading reads 'A'; the milestone 'Old A'"),
+            (2, "close-milestone", "github", None, None, (4, "D"), "open", "open", None,
+             "an earlier version of the roadmap linked it; none does now"),
+            (3, "question", "both", 5, "A", (2, "B"), "A", 2, None, gh + "; 'B' already has a row for it"),
+            (4, "question", "both", 6, "A", None, "A", None, None, gh + "; its milestone was cleared"),
+            (5, "question", "both", 10, "A", (9, "Elsewhere"), "A", 9, None,
+             gh + "; its milestone is not linked from any heading"),
+            (6, "set-milestone", "github", 15, "A", (1, "Old A"), "B", 2, None, f"{old} ({first})"),
+            (7, "add-row", "doc", 12, "B", (2, "B"), None, None, None,
+             "GitHub newer: milestone changed 2026-09-30T10:00Z; row placed never"),
+            (8, "clear-milestone", "github", 13, None, (1, "Old A"), "Old A", 1, None,
+             f"the roadmap newer: milestone changed 2026-10-02T10:00Z; row placed 2026-10-03T10:00Z ({second})"),
+        ])
+        choices = {i["issue"]: [(c["label"], flat(c["item"])) for c in i["choices"]]
+                   for i in plan["items"] if i["kind"] == "question"}
+        self.assertEqual(choices, {
+            5: [("remove the row in 'A'", (None, "remove-row", "doc", 5, "A", None, "A", row5, None, gh)),
+                ("set the milestone back to 'A'", (None, "set-milestone", "github", 5, "A", (1, "Old A"), "B", 2,
+                                                   None, gh)),
+                ("leave both", None)],
+            6: [("remove the row in 'A'", (None, "remove-row", "doc", 6, "A", None, "A", row6, None, gh)),
+                ("set the milestone back to 'A'", (None, "set-milestone", "github", 6, "A", (1, "Old A"), None,
+                                                   None, None, gh)),
+                ("leave both", None)],
+            10: [("set the milestone back to 'A'", (None, "set-milestone", "github", 10, "A", (1, "Old A"),
+                                                    "Elsewhere", 9, None, gh)),
+                 ("leave both", None)],
+        })
+        lines = rule_branches(2).split("\n")
+        self.assertEqual(plan["skipped"], [
+            {"line": lines.index(heading("X", 1, "x/y")) + 1,
+             "why": "the heading links a milestone in x/y, not this tracker; its section is not synced"},
+            {"line": lines.index(heading("Gone", 7)) + 1, "why": "the milestone this heading links no longer exists"},
+            {"line": lines.index(row(11)) + 1, "why": "#11: the tables differ; move it by hand from 'A' to 'C'"},
+        ])
+        self.assertEqual(plan["kept"], [{"issue": 14, "why": "closed; its milestone is never cleared"}])
+        self.assertEqual(plan["unlinked"], ["X", "History"])
+
+    def test_new_sections(self):
+        self.commit(roadmap((heading("A"), [5]), (heading("B"), [6]), (heading("C"), None)), D1)
+        _, plan, _ = self.plan(FakeGitHub([ms(3, "Elsewhere")], [iss(5, 3, D1), iss(6)]), "--link", "C")
+        self.assertEqual([flat(i) for i in plan["items"]], [
+            (1, "link-section", "both", None, "A", (None, "A"), None, None, None, "no heading links a milestone yet"),
+            (2, "link-section", "both", None, "B", (None, "B"), None, None, None, "no heading links a milestone yet"),
+            (3, "link-section", "both", None, "C", (None, "C"), None, None, None, "asked for by name with --link"),
+            (4, "set-milestone", "github", 5, "A", (None, "A"), "Elsewhere", 3, True, "first row in 'A', a new milestone"),
+            (5, "set-milestone", "github", 6, "B", (None, "B"), None, None, True, "first row in 'B', a new milestone"),
+        ])
+        code, _, err = self.plan(FakeGitHub(), "--link", "Nope")
+        self.assertEqual((code, err.strip()), (2, "--link 'Nope': no ## heading with that text in the roadmap"))
+
+    def test_a_section_is_placed_by_its_latest_arrival(self):
+        self.commit(roadmap((heading("A", 1), [5]), (heading("B", 2), [])), D1)
+        self.commit(roadmap((heading("A", 1), []), (heading("B", 2), [5])), D2)
+        self.commit(roadmap((heading("A", 1), [5]), (heading("B", 2), [])), D3)
+        history = rm.History(rm.Git(self.doc), REPO)
+        self.assertEqual(history.placed(5), ("2026-10-03T10:00:00+00:00", self.git_sha("HEAD")))
+        self.assertEqual(history.placed(9), (None, None))
+
+    def git_sha(self, rev):
+        return subprocess.run(["git", "rev-parse", rev], cwd=self.root, capture_output=True, text=True,
+                              check=True).stdout.strip()
+
+    def apply_plan(self, items, github, ids, *choose, writer=None):
+        writer = writer or Writer()
+        path = self.save({"items": items})
+        code, out, err = self.run_main("apply", "--plan", path, "--items", ids, *choose, github=github, writer=writer)
+        return code, out.splitlines(), err, writer.calls
+
+    def test_apply_runs_every_kind_in_order(self):
+        self.commit(roadmap((heading("A", 1), [5, 6, 7]), (heading("B", 2), [8]), (heading("New"), [9])), D1)
+        github = FakeGitHub([ms(1, "Old A"), ms(2, "B"), ms(4, "D")], [iss(9), iss(13, 1), iss(12, 2)])
+        doc_item = dict(issue=None, section=None, milestone=None, expect=None, why="")
+        items = [
+            dict(doc_item, id=1, kind="add-row", side="doc", issue=12, section="B"),
+            dict(doc_item, id=2, kind="move-row", side="doc", issue=5, section="B", **{"from": "A"}),
+            dict(doc_item, id=3, kind="question", side="both", issue=6, choices=[
+                {"label": "remove", "item": dict(doc_item, kind="remove-row", side="doc", issue=6, **{"from": "A"})},
+                {"label": "leave both", "item": None}]),
+            dict(doc_item, id=4, kind="question", side="both", issue=7, choices=[
+                {"label": "remove", "item": dict(doc_item, kind="remove-row", side="doc", issue=7, **{"from": "A"})},
+                {"label": "leave both", "item": None}]),
+            dict(doc_item, id=5, kind="clear-milestone", side="github", issue=13, expect=1),
+            dict(doc_item, id=6, kind="close-milestone", side="github", milestone={"number": 4, "title": "D"},
+                 expect="open"),
+            dict(doc_item, id=7, kind="set-milestone", side="github", issue=9, section="New", by_title=True,
+                 milestone={"number": None, "title": "New"}),
+            dict(doc_item, id=8, kind="rename-milestone", side="github", section="A",
+                 milestone={"number": 1, "title": "A"}, expect="Old A"),
+            dict(doc_item, id=9, kind="link-section", side="both", section="New",
+                 milestone={"number": None, "title": "New"}),
+        ]
+        code, out, _, calls = self.apply_plan(items, github, "1,2,3,4,5,6,7,8,9", "--choose", "3=1",
+                                              "--choose", "4=2")
+        self.assertEqual(code, 0)
+        self.assertEqual(out, [
+            "APPLIED 9 link-section: milestone 99",
+            "APPLIED 8 rename-milestone: 'Old A' -> 'A'",
+            "APPLIED 7 set-milestone #9: milestone 99",
+            "APPLIED 5 clear-milestone #13: milestone cleared",
+            "APPLIED 6 close-milestone: milestone 4 closed",
+            "APPLIED 2 move-row #5: row moved to 'B'",
+            "APPLIED 1 add-row #12: row added to 'B'",
+            "APPLIED 3 remove-row #6: row removed from 'A'",
+            "APPLIED 4 leave: left both as they are",
+        ])
+        self.assertEqual(calls, [("create_milestone", "New"), ("update_milestone", 1, {"title": "A"}),
+                                 ("set_issue_milestone", 9, 99), ("set_issue_milestone", 13, None),
+                                 ("update_milestone", 4, {"state": "closed"})])
+        added = f"| [#12](https://github.com/{REPO}/issues/12) | Issue 12 | ⚪ — | |"
+        self.assertEqual(self.doc.read_text(encoding="utf-8"), roadmap(
+            (heading("A", 1), [7]), (heading("B", 2), [8, 5]), (heading("New", 99), [9])).replace(
+            row(5), row(5) + "\n" + added))
+
+    def test_apply_says_why_each_item_was_skipped(self):
+        self.commit(roadmap((heading("A", 1), [5]), (heading("C"), None)), D1)
+        github = FakeGitHub([ms(1, "Other"), ms(4, "D", "closed")], [iss(5, 2), iss(6)])
+        base = dict(issue=None, section=None, milestone=None, expect=None, why="")
+        items = [
+            dict(base, id=1, kind="link-section", section="Nope", milestone={"number": None, "title": "Nope"}),
+            dict(base, id=2, kind="rename-milestone", milestone={"number": 1, "title": "A"}, expect="Old A"),
+            dict(base, id=3, kind="rename-milestone", milestone={"number": 8, "title": "A"}, expect="Old A"),
+            dict(base, id=4, kind="close-milestone", milestone={"number": 4, "title": "D"}, expect="open"),
+            dict(base, id=5, kind="close-milestone", milestone={"number": 8, "title": "D"}, expect="open"),
+            dict(base, id=6, kind="set-milestone", issue=5, section="A", milestone={"number": 1, "title": "A"},
+                 expect=1),
+            dict(base, id=7, kind="set-milestone", issue=6, section="Zed", by_title=True,
+                 milestone={"number": None, "title": "Zed"}),
+            dict(base, id=8, kind="move-row", issue=9, section="C", **{"from": "A"}),
+            dict(base, id=9, kind="move-row", issue=5, section="C", **{"from": "A"}),
+            dict(base, id=10, kind="add-row", issue=6, section="C"),
+        ]
+        for entry in items:
+            entry.setdefault("from", None)
+        code, out, _, calls = self.apply_plan(items, github, ",".join(str(i["id"]) for i in items))
+        self.assertEqual((code, calls), (1, []))
+        self.assertEqual(out, [
+            "SKIPPED stale 1 link-section: no heading 'Nope' in the roadmap",
+            "SKIPPED stale 2 rename-milestone: the milestone now reads 'Other'",
+            "SKIPPED stale 3 rename-milestone: the milestone now reads 'nothing (gone)'",
+            "SKIPPED stale 6 set-milestone #5: #5 is now in milestone 2",
+            "SKIPPED stale 7 set-milestone #6: no milestone titled 'Zed' (link its section first)",
+            "SKIPPED stale 4 close-milestone: the milestone is now closed",
+            "SKIPPED stale 5 close-milestone: the milestone is now gone",
+            "SKIPPED stale 8 move-row #9: the row is no longer in 'A'",
+            "SKIPPED stale 9 move-row #5: 'C' has no table",
+            "SKIPPED stale 10 add-row #6: 'C' has no table",
+        ])
+
+    def test_a_failed_item_does_not_stop_the_rest(self):
+        self.commit(roadmap((heading("A", 1), [5]), (heading("B", 2), [])), D1)
+        github = FakeGitHub(TWO, [iss(6, 1)], errors={7: rm.ReadError("#7: HTTP 502")})
+        base = dict(section=None, milestone=None, expect=None, why="", **{"from": None})
+        items = [dict(base, id=1, kind="set-milestone", issue=7, milestone={"number": 2, "title": "B"}),
+                 dict(base, id=2, kind="clear-milestone", issue=6, expect=1),
+                 dict(base, id=3, kind="bogus", issue=None)]
+        code, out, _, calls = self.apply_plan(items, github, "1,2,3")
+        self.assertEqual(code, 1)
+        self.assertEqual(out, ["FAILED 1 set-milestone #7: #7: HTTP 502",
+                               "APPLIED 2 clear-milestone #6: milestone cleared",
+                               "FAILED 3 bogus: unknown kind 'bogus'"])
+        self.assertEqual(calls, [("set_issue_milestone", 6, None)])
+        code, out, _, _ = self.apply_plan(items[:1], github, "1")
+        self.assertEqual((code, len(out)), (1, 1))
+
+    def test_ids_and_choices_are_checked(self):
+        self.commit(roadmap((heading("A", 1), [5])), D1)
+        question = {"id": 3, "kind": "question", "issue": 5, "choices": [
+            {"label": "x", "item": None}, {"label": "y", "item": None}, {"label": "z", "item": None}]}
+        for choose, code in (("3=0", 2), ("3=1", 0), ("3=3", 0), ("3=4", 2)):
+            got, out, err, _ = self.apply_plan([question], FakeGitHub(), "3", "--choose", choose)
+            self.assertEqual(got, code, choose)
+            if code == 2:
+                self.assertEqual(err.strip(), "--items: id 3 is a question; give --choose 3=<1..3>")
+            else:
+                self.assertEqual(out, ["APPLIED 3 leave: left both as they are"])
+        self.assertEqual(self.apply_plan([question], FakeGitHub(), "42")[2].strip(),
+                         "--items: id 42 is not in the plan")
+        self.assertEqual(self.apply_plan([question], FakeGitHub(), "x")[2].strip(),
+                         "--items is a comma list of ids, --choose is ID=CHOICE")
+        code, _, err = self.run_main("apply", "--plan", str(self.root / "none.json"), "--items", "1")
+        self.assertEqual(code, 2)
+        self.assertTrue(err.startswith(f"--plan {self.root / 'none.json'}: cannot be read ("), err)
+
+    def test_every_problem_line_is_printed(self):
+        text = roadmap((heading("A", 1), [5])).replace(LEGEND_ROWS[0] + "\n", "").replace(LEGEND_ROWS[-2] + "\n", "")
+        self.commit(text, D1)
+        code, _, err = self.run_main("apply", "--plan", self.save({"items": []}), "--items", "")
+        self.assertEqual(code, 2)
+        self.assertGreaterEqual(len(err.splitlines()), 2, err)
+
+    def test_the_command_and_its_arguments_are_required(self):
+        for argv in ([], ["apply", "--items", "1"], ["apply", "--plan", "p.json"]):
+            with redirect_stderr(io.StringIO()), self.assertRaises(SystemExit) as stop:
+                rm.main(["--profile", str(self.profile), *argv], github=FakeGitHub(), writer=Writer())
+            self.assertEqual(stop.exception.code, 2, argv)
+
+
+class Edges(Case):
+    """Tables at the edges of the file, sections at the edges of the document."""
+
+    def test_tables_at_the_edges(self):
+        self.assertEqual([i for i, _ in rm.tables_at(["| Issue | State |\n", "|---|---|\n", "| #1 | ⚪ — |\n"])], [0])
+        self.assertEqual(rm.tables_at(["text\n", "| stray |"]), [])
+        self.assertEqual(rm.tables_at(["| Issue | Work |\n", "|---|---|\n", "| #1 | w |\n"]), [])
+
+    def test_a_table_before_the_first_heading_belongs_to_no_section(self):
+        text = roadmap((heading("A", 1), [5])).replace("# Roadmap\n", "# Roadmap\n\n" + "\n".join(
+            [*HEADER, row(6)]) + "\n\n")
+        doc = rm.parse_doc(text, REPO)
+        self.assertEqual([(s.heading, [n for _, _, n in s.rows]) for s in doc.sections], [("A", [5])])
+
+    def test_rows_move_between_middle_and_last_sections(self):
+        self.commit(roadmap((heading("A", 1), [5]), (heading("B", 2), [6]), (heading("C"), None),
+                            (heading("D", 4), [7])), D1)
+        base = dict(milestone=None, expect=None, why="", side="doc")
+        items = [dict(base, id=1, kind="move-row", issue=6, section="D", **{"from": "B"}),
+                 dict(base, id=2, kind="move-row", issue=5, section="C", **{"from": "A"})]
+        code, out, _, _ = Exact.apply_plan(self, items, FakeGitHub(), "1,2")
+        self.assertEqual(out, ["APPLIED 1 move-row #6: row moved to 'D'", "SKIPPED stale 2 move-row #5: 'C' has no table"])
+        self.assertEqual(self.doc.read_text(encoding="utf-8"), roadmap(
+            (heading("A", 1), [5]), (heading("B", 2), []), (heading("C"), None), (heading("D", 4), [7, 6])))
+
+    def test_a_row_lands_in_an_empty_table_and_at_a_file_end_with_no_newline(self):
+        text = roadmap((heading("A", 1), [5, 6]), (heading("B", 2), [])) + "\n" + "\n".join(
+            [heading("C", 3), "", *HEADER, row(8)])
+        self.commit(text, D1)
+        base = dict(milestone=None, expect=None, why="", side="doc")
+        items = [dict(base, id=1, kind="move-row", issue=5, section="B", **{"from": "A"}),
+                 dict(base, id=2, kind="move-row", issue=6, section="C", **{"from": "A"}),
+                 dict(base, id=3, kind="add-row", issue=9, section="C", **{"from": None})]
+        code, out, _, _ = Exact.apply_plan(self, items, FakeGitHub([], [iss(9, title="Nine")]), "1,2,3")
+        self.assertEqual(code, 0, out)
+        nine = f"| [#9](https://github.com/{REPO}/issues/9) | Nine | ⚪ — | |"
+        self.assertEqual(self.doc.read_text(encoding="utf-8"), roadmap((heading("A", 1), []), (heading("B", 2), [5]))
+                         + "\n" + "\n".join([heading("C", 3), "", *HEADER, row(8), row(6), nine]) + "\n")
+
+    def test_an_added_row_names_its_issue_once_and_fills_the_first_work_column(self):
+        text = roadmap((heading("A", 1), [5])) + "\n" + "\n".join([
+            heading("B", 2), "", "| Issue | Work | Owner | State | Note |", "|---|---|---|---|---|", ""])
+        self.commit(text, D1)
+        item = dict(id=1, kind="add-row", side="doc", issue=9, section="B", milestone=None, expect=None, why="",
+                    **{"from": None})
+        code, _, _, _ = Exact.apply_plan(self, [item], FakeGitHub([], [iss(9, title="Nine")]), "1")
+        self.assertEqual(code, 0)
+        self.assertIn(f"\n| [#9](https://github.com/{REPO}/issues/9) | Nine | | ⚪ — | |\n",
+                      self.doc.read_text(encoding="utf-8"))
+
+
+class GhCalls(unittest.TestCase):
+    """The exact gh calls behind each read and write; nothing here reaches GitHub."""
+
+    def calls(self, method, *args, out="", **kwargs):
+        seen = []
+
+        def fake(*argv):
+            seen.append(argv)
+            return out
+
+        with mock.patch.object(rm, "_gh", fake):
+            result = method(*args, **kwargs)
+        return seen, result
+
+    def test_writes(self):
+        writer = rm.GhWriter()
+        self.assertEqual(self.calls(writer.create_milestone, REPO, "Now", out="12\n"), (
+            [("api", "-X", "POST", f"repos/{REPO}/milestones", "-f", "title=Now", "--jq", ".number")], 12))
+        self.assertEqual(self.calls(writer.update_milestone, REPO, 4, state="closed")[0], [
+            ("api", "-X", "PATCH", f"repos/{REPO}/milestones/4", "-f", "state=closed", "--jq", ".number")])
+        for number, value in ((None, "null"), (3, "3")):
+            self.assertEqual(self.calls(writer.set_issue_milestone, REPO, 5, number)[0], [
+                ("api", "-X", "PATCH", f"repos/{REPO}/issues/5", "-F", f"milestone={value}", "--jq", ".number")])
+
+    def test_reads(self):
+        github = rm.GitHub()
+        self.assertEqual(self.calls(github.milestones, REPO, out='{"number":1,"title":"A","state":"open"}\n\n'), (
+            [("api", "--paginate", f"repos/{REPO}/milestones?state=all&per_page=100",
+              "--jq", ".[] | {number, title, state}")], [{"number": 1, "title": "A", "state": "open"}]))
+        self.assertEqual(self.calls(github.milestone_issues, REPO, 3, out="5\n6\n"), (
+            [("api", "--paginate", f"repos/{REPO}/issues?milestone=3&state=all&per_page=100",
+              "--jq", ".[] | select(.pull_request == null) | .number")], [5, 6]))
+        self.assertEqual(self.calls(github.visibility, REPO, out="PUBLIC\n"), (
+            [("repo", "view", REPO, "--json", "visibility", "-q", ".visibility")], "PUBLIC"))
+
+    def test_an_issue(self):
+        github = rm.GitHub()
+        node = {"number": 5, "state": "OPEN", "title": "T", "milestone": {"number": 2, "title": "B"},
+                "timelineItems": {"nodes": [{"createdAt": D1}, {}, {"createdAt": D2}]}}
+        with mock.patch.object(rm.tracker, "graphql", return_value={"repository": {"issue": node}}) as query:
+            self.assertEqual(github.issue("acme/issues", 5), {"number": 5, "state": "OPEN", "title": "T",
+                                                              "milestone": 2, "last_event": D2})
+        self.assertEqual(query.call_args.kwargs, {"owner": "acme", "name": "issues", "number": 5})
+        node.update(milestone=None, timelineItems={"nodes": [None]})
+        with mock.patch.object(rm.tracker, "graphql", return_value={"repository": {"issue": node}}):
+            self.assertEqual(github.issue(REPO, 5)["milestone"], None)
+            self.assertEqual(github.issue(REPO, 5)["last_event"], None)
+        with mock.patch.object(rm.tracker, "graphql", return_value={"repository": {"issue": None}}):
+            with self.assertRaisesRegex(rm.ReadError, "^#5: no such issue in acme/issues$"):
+                github.issue(REPO, 5)
+        with mock.patch.object(rm.tracker, "graphql", side_effect=rm.tracker.BoardError("HTTP 502\nmore")):
+            with self.assertRaisesRegex(rm.ReadError, "^#5: HTTP 502$"):
+                github.issue(REPO, 5)
+
+    def test_gh_itself(self):
+        done = subprocess.CompletedProcess([], 0, stdout="out", stderr="")
+        with mock.patch.object(rm.subprocess, "run", return_value=done) as run:
+            self.assertEqual(rm._gh("api", "x"), "out")
+        self.assertEqual(run.call_args, mock.call(["gh", "api", "x"], capture_output=True, text=True))
+        for code, out, err, message in ((1, "", "HTTP 404\nmore", "^HTTP 404$"), (2, "only out", "", "^only out$")):
+            failed = subprocess.CompletedProcess([], code, stdout=out, stderr=err)
+            with mock.patch.object(rm.subprocess, "run", return_value=failed), \
+                    self.assertRaisesRegex(rm.ReadError, message):
+                rm._gh("api")
+        with mock.patch.object(rm.subprocess, "run", side_effect=FileNotFoundError("no gh")), \
+                self.assertRaisesRegex(rm.ReadError, "^gh: no gh$"):
+            rm._gh("api")
 
 
 class Safety(Case):
