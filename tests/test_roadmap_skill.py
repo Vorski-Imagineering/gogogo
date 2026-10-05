@@ -64,6 +64,14 @@ class Skill(unittest.TestCase):
     def test_runs_the_script(self):
         self.assertIn('scripts/roadmap_status.py"', skill_text())
 
+    def test_runs_the_milestones_script(self):
+        text = skill_text()
+        self.assertIn("references/milestones.md", text)
+        self.assertIn("\n## 6. Milestones\n", text)
+        reference = (SKILL.parent / "references" / "milestones.md").read_text(encoding="utf-8")
+        self.assertIn('roadmap_milestones.py" plan', reference)
+        self.assertIn("apply --plan", reference)
+
     def test_same_repo_path_opens_the_pr(self):
         self.assertIn("gh pr create --base <B>", skill_text())
 
@@ -75,7 +83,7 @@ class Skill(unittest.TestCase):
 
     def test_never_switches_the_checkout(self):
         text = skill_text()
-        for heading in ("## 1.", "## 7."):
+        for heading in ("## 1.", "## 8."):  # step 1 cuts the worktree, step 8 commits (gogogo#184)
             section = text.split(heading, 1)[1].split("\n## ", 1)[0]
             self.assertNotIn("git switch", section, heading)
             self.assertNotIn("git checkout", section, heading)

@@ -323,7 +323,7 @@ rebased.
 | `/gogogo:wrap-up` | Before you close a session: finds anything uncommitted, unpushed, stranded or still running, saves what the session learned, and says plainly whether it is safe to close. |
 | `/gogogo:tech-eval` | Evaluates a library, service or tool against the repo before anyone adopts it, and records the verdict in the repo's decisions register. |
 | `/gogogo:status` | Where things stand in this repo: cards per board column, what is queued, in progress and released, open pull requests, and branches and worktrees holding work. Reads only; gives no verdicts. |
-| `/gogogo:roadmap` | Keeps a roadmap document's status marks in step with the board: re-derives every row's mark from the issue's state and column, fixes the notes the change made stale, and commits the document, opening a PR for it when the roadmap shares the repo. |
+| `/gogogo:roadmap` | Keeps a roadmap document's status marks in step with the board: re-derives every row's mark from the issue's state and column, fixes the notes the change made stale, and commits the document, opening a PR for it when the roadmap shares the repo. A section whose heading links a GitHub milestone is kept in step with it: it proposes the milestone changes, and applies only the ones you approve. |
 | `/gogogo:auto-test` | Tests each shipped issue on the environment where a person confirms fixes, and records PASS, FAIL or NEEDS HUMAN on the issue. `--triage-only` lists what it would test or skip and changes nothing. |
 
 A session started or resumed in a repo with a profile opens with a one-line
@@ -352,6 +352,7 @@ Scripts the skills call, all in `plugins/gogogo/scripts/`:
 - `require_unattended.sh`: refuses to start the loop unless the session can run without prompts.
 - `setup_check.py`: the read-only check behind `/gogogo:setup`.
 - `roadmap_status.py`: compares a roadmap document's marks with the tracker, and rewrites the ones that disagree with `--write`.
+- `roadmap_milestones.py`: plans, as JSON, the milestone changes that keep a roadmap's linked sections and GitHub's milestones in step, and applies only the ids it is given. It never deletes a milestone.
 - `session_status.py`: the plugin's session-start hook; prints that one-line status, or nothing outside a repo with a profile.
 - `record_outcome.py`: renders and records an auto-test outcome: comment first, then labels, close and card, then reads the issue back.
 

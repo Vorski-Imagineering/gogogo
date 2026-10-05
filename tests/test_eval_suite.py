@@ -31,7 +31,7 @@ CASES = {
     "spec-declined-question", "spec-being-built", "spec-nothing-hits-today",
     "spec-no-argument-offers-new", "spec-pr-mentions-only",
     "spec-reverses-tested-behaviour",
-    "roadmap-shared-checkout",
+    "roadmap-shared-checkout", "roadmap-milestones-ask-first",
     "status-sweep-lists-only", "status-shows-independence",
     "wrap-up-asks-before-removing", "wrap-up-reviews-memories",
     "dev-suspected-fault", "auto-dev-fault-in-close-report",
