@@ -2,9 +2,7 @@
 
 # gogogo
 
-**Let Claude work on its own for hours, not minutes: through a queue of
-issues, from a report to verified code on a real environment, stopping only
-where a person has to decide.**
+**Focus your attention, in one session give Claude all the answers it needs to work on its own for hours.**
 
 ## Why it exists
 
