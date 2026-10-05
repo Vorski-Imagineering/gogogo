@@ -41,7 +41,8 @@ TECH = "tech-eval"
 ROADMAP = "roadmap"
 STATUS = "status"
 IDEA = "idea"
-SKILLS = (SPEC, ONE, LOOP, TEST, TECH, ROADMAP, STATUS, IDEA)
+HUMAN = "human-help"
+SKILLS = (SPEC, ONE, LOOP, TEST, TECH, ROADMAP, STATUS, IDEA, HUMAN)
 
 # Dotted path -> (type, skills that require it, one-line meaning).
 # `references/profile-schema.md` documents the same paths; a test keeps the two
@@ -52,11 +53,11 @@ FIELDS = {
     "tracker.issues_repo": (str, SKILLS, "owner/repo that holds the issues."),
     "tracker.code_repo": (str, SKILLS, "owner/repo that holds the code."),
     "tracker.public": (bool, SKILLS, "True if the tracker is readable by the public."),
-    "tracker.ready_marker": (str, (SPEC, LOOP), "Label that marks an issue as specced and pickable."),
-    "tracker.tool": (str, (ONE, LOOP, TEST, ROADMAP), "'shared' for the plugin's tracker.py, or a command for the repo's own tool meeting references/tracker-contract.md."),
+    "tracker.ready_marker": (str, (SPEC, LOOP, HUMAN), "Label that marks an issue as specced and pickable."),
+    "tracker.tool": (str, (ONE, LOOP, TEST, ROADMAP, HUMAN), "'shared' for the plugin's tracker.py, or a command for the repo's own tool meeting references/tracker-contract.md."),
     "tracker.project_owner": (str, (), "Owner of the GitHub project board."),
     "tracker.project_number": (int, (), "Number of the GitHub project board."),
-    "tracker.queue": (str, (LOOP,), "Board column the loop works."),
+    "tracker.queue": (str, (LOOP, HUMAN), "Board column the loop works."),
     "tracker.columns.in_progress": (str, (ONE, LOOP), "Column of an issue being worked now."),
     "tracker.columns.needs_human": (str, (), "Column of an issue stopped for a person: an unreviewed fix, "
                                     "a decision or Hard Stop found mid-change, or verification that gave up. "
@@ -157,9 +158,9 @@ REQUIRED_V1 = frozenset({
     ("tracker.issues_repo", SKILLS),
     ("tracker.code_repo", SKILLS),
     ("tracker.public", SKILLS),
-    ("tracker.ready_marker", (SPEC, LOOP)),
-    ("tracker.tool", (ONE, LOOP, TEST, ROADMAP)),
-    ("tracker.queue", (LOOP,)),
+    ("tracker.ready_marker", (SPEC, LOOP, HUMAN)),
+    ("tracker.tool", (ONE, LOOP, TEST, ROADMAP, HUMAN)),
+    ("tracker.queue", (LOOP, HUMAN)),
     ("tracker.columns.in_progress", (ONE, LOOP)),
     ("environments", SKILLS),
     ("stages", (ONE, LOOP, TEST)),

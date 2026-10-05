@@ -87,11 +87,11 @@ no skill requires it; a skill that finds it uses it.
 | `tracker.issues_repo` | str | all | owner/repo that holds the issues. |
 | `tracker.code_repo` | str | all | owner/repo that holds the code. |
 | `tracker.public` | bool | all | True if the tracker is readable by the public. |
-| `tracker.ready_marker` | str | `spec`, `auto-dev` | Label that marks an issue as specced and pickable. |
-| `tracker.tool` | str | `dev`, `auto-dev`, `auto-test`, `roadmap` | 'shared' for the plugin's tracker.py, or a command for the repo's own tool meeting references/tracker-contract.md. |
+| `tracker.ready_marker` | str | `spec`, `auto-dev`, `human-help` | Label that marks an issue as specced and pickable. |
+| `tracker.tool` | str | `dev`, `auto-dev`, `auto-test`, `roadmap`, `human-help` | 'shared' for the plugin's tracker.py, or a command for the repo's own tool meeting references/tracker-contract.md. |
 | `tracker.project_owner` | str | optional | Owner of the GitHub project board. |
 | `tracker.project_number` | int | optional | Number of the GitHub project board. |
-| `tracker.queue` | str | `auto-dev` | Board column the loop works. |
+| `tracker.queue` | str | `auto-dev`, `human-help` | Board column the loop works. |
 | `tracker.columns.in_progress` | str | `dev`, `auto-dev` | Column of an issue being worked now. |
 | `tracker.columns.needs_human` | str | optional | Column of an issue stopped for a person: an unreviewed fix, a decision or Hard Stop found mid-change, or verification that gave up. Optional; absent means the `in_progress` column. |
 | `environments` | list | all | Where code runs: name, roles, and url/serves/reached_by/data/writes. |
