@@ -109,5 +109,26 @@ class ExitStatus(unittest.TestCase):
             self.assertIsNone(re.search(PROJECT_NAMES, path.read_text(encoding="utf-8"), re.I), path)
 
 
+
+DEV_REVIEW = SKILLS / "dev" / "references" / "review.md"
+
+
+class Authorisation(unittest.TestCase):
+    """An authorisation from /gogogo:human-help is read and obeyed (gogogo#159)."""
+
+    def test_reads_the_authorisation(self):
+        text = DEV.read_text(encoding="utf-8")
+        self.assertIn('human_help.py" authorised', section(text, "1. "))
+        self.assertIn("gogogo:build-", text)
+        self.assertIn("Authorised:", section(text, "7. "))
+
+    def test_until_clean_at_each_limit(self):
+        text = DEV_REVIEW.read_text(encoding="utf-8")
+        rule = {n: text.split(f"\n{n}. **")[1].split(f"\n{n + 1}. **")[0] for n in (3, 4, 7, 8)}
+        for n in (3, 7, 8):
+            self.assertIn("review=until-clean", rule[n], f"rule {n}")
+        self.assertNotIn("review=until-clean", rule[4], "a reversal still stops an authorised review")
+
+
 if __name__ == "__main__":
     unittest.main()

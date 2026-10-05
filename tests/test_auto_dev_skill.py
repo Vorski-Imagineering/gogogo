@@ -255,5 +255,13 @@ class LateRunPr(unittest.TestCase):
         self.assertIn("After merging", close)
 
 
+
+class Authorisation(unittest.TestCase):
+    def test_obeys_the_authorisation(self):
+        four = SKILL.read_text(encoding="utf-8").split("\n## 4. ")[1].split("\n## ")[0]
+        self.assertIn("authoris", four)
+        self.assertIn("/gogogo:dev` §1", four)
+
+
 if __name__ == "__main__":
     unittest.main()
