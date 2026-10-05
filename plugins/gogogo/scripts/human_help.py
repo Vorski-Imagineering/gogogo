@@ -93,7 +93,8 @@ def authorised(body):
 
     Raises ValueError on an unknown key or value in that row."""
     # Only the Chosen cell (an Approvals row's third) authorises: one in Rejected was turned down.
-    chosen_cells = [cells[2] for cells in ([c.strip() for c in line.strip().strip("|").split("|")]
+    # A table splits on unescaped pipes only: `\\|` inside a cell is text, and must not shift the columns.
+    chosen_cells = [cells[2] for cells in ([c.strip() for c in re.split(r"(?<!\\)\|", line.strip().strip("|"))]
                                            for line in body.splitlines() if line.lstrip().startswith("|"))
                     if len(cells) > 2 and cells[2].startswith("authorised:")]
     if not chosen_cells:

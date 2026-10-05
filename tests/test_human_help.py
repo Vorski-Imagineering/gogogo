@@ -215,6 +215,8 @@ class Authorised(unittest.TestCase):
         self.assertEqual(hh.authorised(self.body("approved") + refused), {})
         chosen = "| 2026-10-06 | Keep going? | authorised: effort=high | send it back |\n"
         self.assertEqual(hh.authorised(self.body("approved") + chosen), {"effort": "high"})
+        escaped = "| 2026-10-06 | Stopped (third-attempt \\| unfixable). Keep going? | authorised: effort=max | stop |\n"
+        self.assertEqual(hh.authorised(self.body("approved") + escaped), {"effort": "max"})
 
     def test_an_unknown_model_or_effort_is_refused(self):
         with self.assertRaises(ValueError):
