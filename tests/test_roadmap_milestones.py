@@ -809,6 +809,36 @@ class RunTwo(Case):
             self.assertEqual(handle.read(), roadmap((heading("A", 1), [6]), (heading("B", 2), [8, 5]),
                                                     newline="\r").replace(row(5) + "\r", row(5) + "\r" + nine + "\r"))
 
+    def mixed_endings(self):
+        """B's last row ends LF; the lines around it end CRLF; A's row is the file's last line, with no ending."""
+        head = roadmap((heading("C", 3), [7])).rstrip("\n") + "\n"
+        text = head + "".join([heading("B", 2) + "\r\n", "\r\n", HEADER[0] + "\r\n", HEADER[1] + "\r\n",
+                               row(8) + "\r\n", row(9) + "\n", "\r\n", heading("A", 1) + "\r\n", "\r\n",
+                               HEADER[0] + "\r\n", HEADER[1] + "\r\n", row(5)])
+        self.commit(text, D1)
+        return text
+
+    def read_raw(self):
+        with open(self.doc, encoding="utf-8", newline="") as handle:
+            return handle.read()
+
+    def test_a_moved_row_with_no_ending_takes_the_ending_of_the_row_above(self):
+        text = self.mixed_endings()
+        item = dict(id=1, kind="move-row", side="doc", issue=5, section="B", milestone=None, expect=None, why="",
+                    **{"from": "A"})
+        code, out, _, _ = Exact.apply_plan(self, [item], FakeGitHub(), "1")
+        self.assertEqual(code, 0, out)
+        self.assertEqual(self.read_raw(), text.replace(row(9) + "\n", row(9) + "\n" + row(5) + "\n")[:-len(row(5))])
+
+    def test_an_added_row_takes_the_ending_of_the_row_above(self):
+        text = self.mixed_endings()
+        item = dict(id=1, kind="add-row", side="doc", issue=12, section="B", milestone=None, expect=None, why="",
+                    **{"from": None})
+        code, out, _, _ = Exact.apply_plan(self, [item], FakeGitHub([], [iss(12, title="Twelve")]), "1")
+        self.assertEqual(code, 0, out)
+        added = f"| [#12](https://github.com/{REPO}/issues/12) | Twelve | ⚪ — | |\n"
+        self.assertEqual(self.read_raw(), text.replace(row(9) + "\n", row(9) + "\n" + added))
+
     def test_only_a_version_without_the_roadmap_reads_as_empty(self):
         class FakeGit:
             rel = "roadmap.md"
