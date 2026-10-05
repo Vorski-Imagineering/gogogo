@@ -726,6 +726,111 @@ class Edges(Case):
                       self.doc.read_text(encoding="utf-8"))
 
 
+class RunTwo(Case):
+    """Mutation run 2's survivors that a real roadmap reaches."""
+
+    def test_headings_with_one_bracket_are_skipped_on_their_line(self):
+        self.commit(roadmap((heading("[WIP Auth"), [5]), (heading("Auth] two"), [6]), (heading("B"), [7])), D1)
+        _, plan, _ = self.plan(FakeGitHub([], [iss(5), iss(6), iss(7)]))
+        lines = self.doc.read_text(encoding="utf-8").split("\n")
+        why = "the heading has a square bracket, so a link to it could not be read back; link it by hand"
+        self.assertEqual(plan["skipped"], [{"line": lines.index(heading("[WIP Auth")) + 1, "why": why},
+                                           {"line": lines.index(heading("Auth] two")) + 1, "why": why}])
+
+    def test_new_sections_skip_issues_already_in_place_and_sections_without_tables(self):
+        self.commit(roadmap((heading("A"), [5, 6]), (heading("C"), None)), D1)
+        _, plan, _ = self.plan(FakeGitHub([ms(7, "A")], [iss(5, 7, D1), iss(6)]))
+        self.assertEqual([(i["kind"], i["section"], i["issue"]) for i in plan["items"]],
+                         [("link-section", "A", None), ("set-milestone", "A", 6)])
+
+    def test_a_milestone_never_set_says_so(self):
+        self.commit(roadmap((heading("A", 1), [5])), D1)
+        _, plan, _ = self.plan(FakeGitHub(TWO, [iss(5)]))
+        self.assertEqual([(i["kind"], i["why"]) for i in plan["items"]], [
+            ("set-milestone", f"the roadmap newer: milestone never set; row placed 2026-10-01T10:00Z "
+                              f"({Exact.sha(self, 'HEAD')})")])
+
+    def test_a_moved_row_is_the_documents_side(self):
+        self.commit(roadmap((heading("A", 1), [5]), (heading("B", 2), [])), D1)
+        _, plan, _ = self.plan(FakeGitHub(TWO, [iss(5, 2, D2)]))
+        self.assertEqual([(i["kind"], i["side"]) for i in plan["items"]], [("move-row", "doc")])
+
+    def set_by_title(self, milestones, number):
+        self.commit(roadmap((heading("A", 1), [5]), (heading("New"), [6])), D1)
+        item = dict(id=1, kind="set-milestone", side="github", issue=6, section="New", by_title=True,
+                    milestone={"number": number, "title": "New"}, expect=None, why="", **{"from": None})
+        code, out, _, calls = Exact.apply_plan(self, [item], FakeGitHub(milestones, [iss(6)]), "1")
+        return code, out, calls
+
+    def test_a_new_sections_milestone_found_by_title_is_used_while_it_keeps_it(self):
+        self.assertEqual(self.set_by_title([ms(7, "New")], 7), (0, ["APPLIED 1 set-milestone #6: milestone 7"],
+                                                                [("set_issue_milestone", 6, 7)]))
+
+    def test_a_new_sections_milestone_made_since_the_plan_is_found_by_title(self):
+        self.assertEqual(self.set_by_title([ms(12, "New")], None)[2], [("set_issue_milestone", 6, 12)])
+
+    def test_a_new_sections_milestone_renamed_or_gone_is_stale(self):
+        self.assertEqual(self.set_by_title([ms(7, "Archive")], 7)[:2],
+                         (1, ["SKIPPED stale 1 set-milestone #6: milestone 7 now reads 'Archive'"]))
+        self.assertEqual(self.set_by_title([], 7)[:2],
+                         (1, ["SKIPPED stale 1 set-milestone #6: milestone 7 now reads 'nothing (gone)'"]))
+
+    def test_a_link_on_the_last_line_ends_it(self):
+        self.commit(roadmap((heading("A", 1), [5])) + "\n## New", D1)
+        item = dict(id=1, kind="link-section", side="both", issue=None, section="New",
+                    milestone={"number": None, "title": "New"}, expect=None, why="", **{"from": None})
+        Exact.apply_plan(self, [item], FakeGitHub(), "1")
+        self.assertTrue(self.doc.read_text(encoding="utf-8").endswith(f"\n## [New]({link(99)})\n"))
+
+    def test_the_files_last_row_moves_and_a_row_is_added_after_it(self):
+        text = roadmap((heading("A", 1), [5]), (heading("B", 2), [6]))
+        self.commit(text.rstrip("\n"), D1)
+        base = dict(side="doc", milestone=None, expect=None, why="")
+        moved = [dict(base, id=1, kind="move-row", issue=6, section="A", **{"from": "B"})]
+        Exact.apply_plan(self, moved, FakeGitHub(), "1")
+        self.assertEqual(self.doc.read_text(encoding="utf-8"),
+                         roadmap((heading("A", 1), [5, 6]), (heading("B", 2), [])).rstrip("\n") + "\n")
+        self.commit(text.rstrip("\n"), D2)
+        added = [dict(base, id=1, kind="add-row", issue=9, section="B", **{"from": None})]
+        Exact.apply_plan(self, added, FakeGitHub([], [iss(9, title="Nine")]), "1")
+        self.assertEqual(self.doc.read_text(encoding="utf-8"), text.rstrip("\n") + "\n"
+                         + f"| [#9](https://github.com/{REPO}/issues/9) | Nine | ⚪ — | |\n")
+
+    def test_a_file_with_carriage_returns_only_keeps_them(self):
+        text = roadmap((heading("A", 1), [5, 6]), (heading("B", 2), [8]), newline="\r")
+        self.commit(text, D1)
+        base = dict(side="doc", milestone=None, expect=None, why="")
+        items = [dict(base, id=1, kind="move-row", issue=5, section="B", **{"from": "A"}),
+                 dict(base, id=2, kind="add-row", issue=9, section="B", **{"from": None})]
+        code, out, _, _ = Exact.apply_plan(self, items, FakeGitHub([], [iss(9, title="Nine")]), "1,2")
+        self.assertEqual(code, 0, out)
+        nine = f"| [#9](https://github.com/{REPO}/issues/9) | Nine | ⚪ — | |"
+        with open(self.doc, encoding="utf-8", newline="") as handle:
+            self.assertEqual(handle.read(), roadmap((heading("A", 1), [6]), (heading("B", 2), [8, 5]),
+                                                    newline="\r").replace(row(5) + "\r", row(5) + "\r" + nine + "\r"))
+
+    def test_only_a_version_without_the_roadmap_reads_as_empty(self):
+        class FakeGit:
+            rel = "roadmap.md"
+
+            def __init__(self, error):
+                self.error = error
+
+            def versions(self):
+                return [("b", D2), ("a", D1)]
+
+            def text_at(self, sha):
+                if sha == "b":
+                    return roadmap((heading("A", 1), [5]))
+                raise rm.ReadError(self.error)
+
+        for error in ("fatal: path 'roadmap.md' does not exist in 'a'",
+                      "fatal: path 'roadmap.md' exists on disk, but not in 'a'"):
+            self.assertEqual(rm.History(FakeGit(error), REPO).placed(5), (D2, "b"), error)
+        with self.assertRaisesRegex(rm.ReadError, "bad object"):
+            rm.History(FakeGit("fatal: bad object a"), REPO)
+
+
 class GhCalls(unittest.TestCase):
     """The exact gh calls behind each read and write; nothing here reaches GitHub."""
 
