@@ -810,7 +810,9 @@ def short_ref(repo: str | None, number: int, home: str) -> str:
     return f"#{number}" if (repo or home).lower() == home.lower() else f"{repo}#{number}"
 
 
-BLOCK_REF = re.compile(r"^(?:([\w.-]+/[\w.-]+))?#?(\d+)$")
+#: `#B`, `B` or `owner/repo#B`: a repo is always followed by `#`, so `acme/svc2` is refused,
+#: never read as `acme/svc#2`.
+BLOCK_REF = re.compile(r"^(?:([\w.-]+/[\w.-]+)#|#)?(\d+)$")
 
 
 def gh_api(*args: str) -> subprocess.CompletedProcess:

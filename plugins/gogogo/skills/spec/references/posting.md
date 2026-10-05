@@ -206,8 +206,8 @@ Which report to keep:
 - **Body is empty** → no report section; the spec starts at `## Verify by hand`.
 
 **Correcting a spec you already posted:** edit the scratchpad file and re-run
-Posting steps 4 to 6 (the lint and the check of open specs that read this
-issue, `gh issue edit --body-file`, the re-read), so the issue carries one accurate
+Posting steps 4 to 7 (the lint and the check of open specs that read this
+issue, `gh issue edit --body-file`, the re-read, the blocked-by links), so the issue carries one accurate
 spec rather than a spec plus errata.
 
 **Never leave a second copy** of the spec or of the report. If an earlier

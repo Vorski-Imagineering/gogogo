@@ -631,9 +631,6 @@ class AsAProcess(unittest.TestCase):
             sys.modules["profile_check"] = saved
 
 
-if __name__ == "__main__":
-    unittest.main()
-
 
 class BlockedInTheQueue(unittest.TestCase):
     """gogogo#185: the queue's count says how many of its cards wait on another issue."""
@@ -672,3 +669,7 @@ class BlockedInTheQueue(unittest.TestCase):
         line = self.line_for(cards)
         self.assertIn("Dev Ready 3 (1 blocked) ·", line)
         self.assertIn("In progress 1 ·", line)
+
+
+if __name__ == "__main__":
+    unittest.main()

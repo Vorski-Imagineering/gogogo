@@ -1058,9 +1058,6 @@ class StatusSinceAndArchive(unittest.TestCase):
         self.assertTrue(tidied.call_args.args[0].apply)
 
 
-if __name__ == "__main__":
-    unittest.main()
-
 
 def linked(number, title, status, *, blocked_by=(), blocking=(), repo=None):
     """A board card whose issue carries GitHub's dependency links (gogogo#185)."""
@@ -1260,6 +1257,10 @@ class BlockCommand(unittest.TestCase):
         self.assertTrue(any("repos/x/y/issues/4" == a for c in gh.calls for a in c))
         self.assertEqual(self.run_block(FakeGh(), by="#136")[0], 0)
         self.assertEqual(self.run_block(FakeGh(), by="nonsense")[0], 1)
+        for bad in ("acme/svc2", "o/r136", "acme/svc#", "#"):
+            gh = FakeGh()
+            self.assertEqual(self.run_block(gh, by=bad)[0], 1, bad)
+            self.assertEqual(gh.calls, [], f"{bad}: nothing is read or written for a ref with no '#' after its repo")
         self.assertEqual(self.run_block(FakeGh(found=1))[0], 1)
         self.assertEqual(self.run_block(FakeGh(database_id="null"))[0], 2)
 
@@ -1298,3 +1299,7 @@ class BlockedSkillSteps(unittest.TestCase):
 
     def test_spec_posting_sets_the_links(self):
         self.assertIn("block <N> --by", (SKILLS / "spec" / "references" / "posting.md").read_text(encoding="utf-8"))
+
+
+if __name__ == "__main__":
+    unittest.main()

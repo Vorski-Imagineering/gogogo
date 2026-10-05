@@ -15,9 +15,11 @@ and no further. Take the first case that fits:
 - **blocked by another issue**: the next step of this issue cannot begin until
   an open issue B is merged. B is named in the spec's `**Blocked by:**` line,
   or found mid-change, as when what is left is a person's step that needs B
-  first. B's state, from `<tracker.tool> show <n>` (its `blocked by:` lines)
-  or `list --json` (`blocker_state`), must be `open`; when it is `merged`,
-  this case does not apply. Not a stop, and not `tracker.columns.needs_human`:
+  first. B must still block, read from B itself, since no link may exist
+  yet: `<tracker.tool> show <B>` reads it open, with its card in no column
+  of the profile's `stages` (or not on this board). When B is closed, or its
+  card is in a stage column, it has merged and this case does not apply.
+  Not a stop, and not `tracker.columns.needs_human`:
   nobody can act on it until B lands. In order:
   1. When there is work: commit and push it, and leave its PR open, opening it
      as a draft if none exists. In an interactive session with nothing
