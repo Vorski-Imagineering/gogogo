@@ -646,7 +646,7 @@ def check_board_tidiness(shared, repo, rep):
     tool = '"${CLAUDE_PLUGIN_ROOT}/scripts/tracker.py"'
     try:
         showing = shared.views_showing_closed(shared.board_views())
-        closed, off_board = shared.untidy(repo)
+        closed, _archive, off_board = shared.untidy(repo)
     except (shared.BoardError, KeyError, TypeError, AttributeError) as exc:
         rep.info("tracker: views and cards", f"could not be read ({exc!r})")
         return
