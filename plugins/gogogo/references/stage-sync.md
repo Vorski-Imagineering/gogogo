@@ -59,7 +59,7 @@ Co-Authored-By: Someone <someone@example.org>
 ```
 stage_sync.py [--profile FILE] trailer (--issue ISSUE ... | --branch NAME) [--verify] [--co-authors-from RANGE]
 stage_sync.py [--profile FILE] sync --tag TAG [--main-ref REF] [--dry-run]
-stage_sync.py [--profile FILE] shipped --tag TAG [--titles]
+stage_sync.py [--profile FILE] shipped --tag TAG [--titles] [--json]
 stage_sync.py [--profile FILE] reverts [--main-ref REF] [--apply]
 ```
 
@@ -83,7 +83,8 @@ explicitly in CI.
   `origin/main`).
 - **`shipped --tag T`** lists the issues linked from the commits between the
   previous tag matching the same glob and `T`, for a release notification.
-  `--titles` looks the titles up with `gh`.
+  `--titles` looks the titles up with `gh`. `--json` prints the same list as
+  a `deployed` event for `notify.py send --event`.
 - **`reverts`** reads each open issue card in any stage's column and names
   each one a commit on `--main-ref` (default `origin/<integration.base>`)
   reverts: a commit whose message says `This reverts commit <sha>` (at least
@@ -136,7 +137,7 @@ The workflow runs a pinned copy, not the plugin: CI must not follow gogogo's
 
 A repo gets the formatted deploy message (status mark, bold repo, linked issue
 numbers) when it refreshes its copies and takes the `--json` and `--event`
-lines of the workflow above. Until then its old lines keep working: plain
+lines of the workflow below. Until then its old lines keep working: plain
 `shipped` and plain `notify.py send` are unchanged.
 
 CI needs Python 3.11 or later (`tomllib`).

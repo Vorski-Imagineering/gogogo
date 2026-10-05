@@ -338,7 +338,13 @@ What each fix involves:
        and where it applies: `<scope>` is `every repo on this machine` when the
        credentials went in the per-user file, and `<repo>` (the name part of
        `tracker.code_repo`) when they went in the repo's own file:
-       the `connected` event, with `host` from `uname -n` filled in before it is written (a quoted heredoc expands nothing): `python3 "${CLAUDE_PLUGIN_ROOT}/scripts/notify.py" send --event <<'MSG'` and the line `{"event": "connected", "host": "<hostname>", "scope": "<scope>"}`. The person sees ✅, the repo's name in bold and "is connected on <hostname> for <scope>. auto-dev runs there will report here: when a run starts and ends, and when each issue starts, is skipped, merges or needs you.",
+       the `connected` event, with `host` from `uname -n` filled in before it is written (a quoted heredoc expands nothing), the closing `MSG` on its own line:
+       ```bash
+       python3 "${CLAUDE_PLUGIN_ROOT}/scripts/notify.py" send --event <<'MSG'
+       {"event": "connected", "host": "<hostname>", "scope": "<scope>"}
+       MSG
+       ```
+       The person sees ✅, the repo's name in bold and "is connected on <hostname> for <scope>. auto-dev runs there will report here: when a run starts and ends, and when each issue starts, is skipped, merges or needs you.",
        and re-run the check: the row must be `PASS notify: telegram (by default): bot @… -> …`
        (`PASS notify: telegram: …` when the profile names the transport).
   - `WARN notify: telegram: <reason>`: show the reason. The usual causes are a

@@ -137,6 +137,8 @@ FAKE_TRACKER = """#!/usr/bin/env python3
 import json, os, sys
 if os.environ.get("FAKE_BOARD") == "fail":
     sys.exit(1)
+if not os.path.isfile(sys.argv[sys.argv.index("--profile") + 1]):
+    sys.exit(2)  # as tracker.py does for a profile it cannot find from its folder
 print(json.dumps([{"status": s} for s in json.loads(os.environ["FAKE_BOARD"])]))
 """
 
@@ -251,6 +253,64 @@ class Events(Case):
         code, _, err = self.send(EVENTS["issue_merged"])
         self.assertEqual(code, 1)
         self.assertIn("notify failed", err)
+
+    def test_review_board_is_not_read_when_nothing_will_send(self):
+        with mock.patch.object(notify, "board_summary", side_effect=AssertionError("read the board")):
+            code, out, _ = self.send(EVENTS["run_started"], notify_value="none")
+            self.assertEqual((code, out.strip()), (0, "notify: off"))
+            code, out, _ = self.send(EVENTS["run_closed"])  # no credentials written
+            self.assertEqual(code, 0)
+            self.assertIn("no bot credentials", out)
+
+    def test_review_a_relative_profile_still_reads_the_board(self):
+        self.write_creds()
+        self.urlopen.return_value = ok({"message_id": 1})
+        self.event_profile()
+        tracker = self.tmp / "tracker.py"
+        tracker.write_text(FAKE_TRACKER)
+        here = os.getcwd()
+        os.chdir(self.tmp)
+        self.addCleanup(os.chdir, here)
+        with mock.patch.object(notify, "TRACKER", tracker), mock.patch.dict(os.environ, {"FAKE_BOARD": '["Dev Ready"]'}):
+            code, _, _ = self.run_main("send", "--event", "--profile", ".agents/dev-process.md",
+                                       stdin=json.dumps(EVENTS["run_started"]))
+        self.assertEqual(code, 0)
+        self.assertTrue(self.posted(self.urlopen.call_args)[1]["text"].startswith("🔵 1 ready"))
+
+    def test_review_only_a_refusal_is_retried_and_said_after_it_lands(self):
+        self.write_creds()
+        self.urlopen.side_effect = [urllib.error.URLError("timed out")]
+        code, _, err = self.send(EVENTS["issue_merged"])
+        self.assertEqual((code, self.urlopen.call_count), (1, 1))
+        self.assertNotIn("sent as plain text", err)
+        self.urlopen.reset_mock()
+        refused = Answer({"ok": False, "description": "Bad Request: can't parse entities"})
+        self.urlopen.side_effect = [refused, urllib.error.URLError("timed out")]
+        code, _, err = self.send(EVENTS["issue_merged"])
+        self.assertEqual((code, self.urlopen.call_count), (1, 2))
+        self.assertNotIn("sent as plain text", err)
+        self.assertIn("notify failed", err)
+
+    def test_review_an_event_name_that_is_not_a_string_is_a_usage_error(self):
+        for raw in ('{"event": []}', '{"event": {}}'):
+            code, out, err = self.send(None, raw=raw)
+            self.assertEqual((code, out), (2, ""), raw)
+            self.assertTrue(err.startswith("notify: unknown event"), err)
+
+    def test_review_columns_match_without_regard_to_case(self):
+        settings, _ = notify.profile_check.split_profile(EVENT_PROFILE.format(notify=""))
+        html, _ = notify.render({**EVENTS["issue_merged"], "column": "released"}, settings, None)
+        self.assertTrue(html.startswith("🟢"), html)
+        html, _ = notify.render({**EVENTS["needs_you"], "column": "human!help!"}, settings, None)
+        self.assertTrue(html.startswith("🆘"), html)
+        self.assertEqual(notify.count_line(settings, ["dev ready", "DEV READY", "in progress"]),
+                         "🔵 2 ready · 🟡 1 in progress · 🆘 0 need you")
+
+    def test_review_a_deployed_issue_repo_is_escaped_in_its_link(self):
+        settings, _ = notify.profile_check.split_profile(EVENT_PROFILE.format(notify=""))
+        event = {**EVENTS["deployed"], "issues": [{"repo": 'x/"y<z', "issue": 3, "title": None}]}
+        html, _ = notify.render(event, settings, None)
+        self.assertIn('href="https://github.com/x/&quot;y&lt;z/issues/3"', html)
 
     def test_6_an_html_message_over_the_limit_goes_as_cut_plain_text(self):
         self.write_creds()
