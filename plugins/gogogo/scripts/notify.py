@@ -2,6 +2,7 @@
 """Send a run's state changes to a person, by the transport the profile names.
 
     notify.py [--profile FILE] send [--text TEXT]      (text from stdin when --text is absent)
+    notify.py [--profile FILE] send --event            (one JSON event on stdin, formatted here)
     notify.py [--profile FILE] status
     notify.py [--profile FILE] init [--repo]
     notify.py [--profile FILE] chat-id [--save [ID]] [--repo]
@@ -24,13 +25,27 @@ that is not git-ignored is never read: `status` fails on it, and `send` goes on
 with the other sources and says so on stderr. Every line this script prints
 has the token scrubbed out.
 
+`send --event` takes one JSON object on stdin, `{"event": "<name>", …}`, and builds the
+message itself: the sender says what happened, this script says how it looks. The
+events are run_started, issue_skipped, issue_started, issue_merged, needs_you,
+run_closed, deployed and connected (the fields of each are in `EVENTS` below). A
+message starts with a status mark (the roadmap's), the repo in bold, and each issue
+number links to the issue; run_started and run_closed open with a line counting the
+board's queue, in progress and need-you columns, read once with tracker.py. It is
+sent as Telegram HTML, with every value from the event escaped. When Telegram
+refuses the HTML it is sent once as plain text, and `notify: sent as plain text:
+<why>` goes to stderr; a message too long for Telegram goes as its plain text, cut.
+A bad event (not JSON, an unknown name, a missing or mistyped field) is exit 2 and
+sends nothing, whatever the `notify` setting. `send --text` and plain stdin send the
+text as it is, with no markup.
+
 `init` and `chat-id --save` write the per-user file; with `--repo` they write
 the repo file instead, and refuse (exit 2, writing nothing) unless it is
 git-ignored in a git repo.
 
 Exit codes:
   send     0 sent, off, or no credentials; 1 the send failed, or the token cannot be sent;
-           2 usage (empty text, no profile, an unknown `notify` value)
+           2 usage (empty text, no profile, an unknown `notify` value, a bad event)
   status   0 off or ready; 1 failed (a call, a token that cannot be sent, or a repo file that is
            not git-ignored); 3 no credentials; 2 usage
   init     0 created or already there; 2 --repo and the repo file is not git-ignored
@@ -44,6 +59,7 @@ copy works when the files sit side by side.
 from __future__ import annotations
 
 import argparse
+import html
 import json
 import os
 import re
@@ -65,6 +81,7 @@ TOKEN_KEY, CHAT_KEY = "TELEGRAM_BOT_TOKEN", "TELEGRAM_CHAT_ID"
 API = "https://api.telegram.org/bot{token}/{method}"
 LIMIT = 4096  # Telegram counts UTF-16 code units
 TIMEOUT = 10
+TRACKER = HERE / "tracker.py"
 
 OFF, READY, NO_CREDENTIALS, FAILED = "off", "ready", "no-credentials", "failed"
 EXIT_OK, EXIT_FAILED, EXIT_USAGE, EXIT_NO_CREDENTIALS = 0, 1, 2, 3
@@ -186,9 +203,12 @@ class Telegram:
         return [key for key, value in ((TOKEN_KEY, self.token), (CHAT_KEY, self.chat)) if not value]
 
 
-    def send(self, text):
-        _call(self.token, "sendMessage", {"chat_id": self.chat, "text": text,
-                                          "disable_web_page_preview": "true"})
+    def send(self, text, markup=False):
+        """Send `text`; as Telegram HTML when `markup`, else exactly as it is."""
+        params = {"chat_id": self.chat, "text": text, "disable_web_page_preview": "true"}
+        if markup:
+            params["parse_mode"] = "HTML"
+        _call(self.token, "sendMessage", params)
 
     def describe(self):
         me = _call(self.token, "getMe")
@@ -267,6 +287,193 @@ def machine_bot(profile_path=None):
         return False, str(exc)
 
 
+# --- events ----------------------------------------------------------------
+
+# Event name -> {field: type}; a field in OPTIONAL may be left out. `deployed` is checked apart.
+EVENTS = {
+    "run_started": {"host": str, "count": int, "queue": str},
+    "issue_skipped": {"issue": int, "reason": str, "title": str, "column": str},
+    "issue_started": {"issue": int, "title": str},
+    "issue_merged": {"issue": int, "title": str, "sha": str, "column": str},
+    "needs_you": {"issue": int, "title": str, "reason": str, "column": str},
+    "run_closed": {"merged": int, "need_you": int, "skipped": int},
+    "deployed": {"tag": str},
+    "connected": {"host": str, "scope": str},
+}
+OPTIONAL = {"issue_skipped": {"title", "column"}}
+DEPLOYED_FULL = {"environment": str, "issues": list, "more": int, "unlinked_commits": int}
+
+# The roadmap legend's marks, by the column an issue is in.
+MARK_QUEUE, MARK_IN_PROGRESS, MARK_NEEDS_HUMAN, MARK_RELEASED, MARK_OTHER = "🔵", "🟡", "🆘", "🟢", "⛔"
+
+
+def _typed(value, kind):
+    return isinstance(value, kind) and not (kind is int and isinstance(value, bool))
+
+
+def parse_event(text):
+    """The event dict from the JSON on stdin; UsageError, saying what is wrong, when it is not one."""
+    try:
+        event = json.loads(text)
+    except ValueError as exc:
+        raise UsageError(f"the event is not JSON: {exc}") from None
+    if not isinstance(event, dict):
+        raise UsageError("the event must be a JSON object")
+    name = event.get("event")
+    if name not in EVENTS:
+        raise UsageError(f"unknown event {name!r} (known: {', '.join(EVENTS)})")
+    fields = dict(EVENTS[name])
+    if name == "deployed":
+        if event.get("unavailable") is True:
+            pass
+        elif event.get("first") is True:
+            fields["environment"] = str
+        else:
+            fields.update(DEPLOYED_FULL)
+    for field, kind in fields.items():
+        if field not in event:
+            if field in OPTIONAL.get(name, ()):
+                continue
+            raise UsageError(f"{name}: missing {field}")
+        if not _typed(event[field], kind):
+            raise UsageError(f"{name}: {field} must be {kind.__name__}")
+    if name == "deployed" and "issues" in fields:
+        for item in event["issues"]:
+            if not (isinstance(item, dict) and _typed(item.get("repo"), str) and _typed(item.get("issue"), int)
+                    and (item.get("title") is None or _typed(item["title"], str))):
+                raise UsageError("deployed: each issue needs repo, issue and a title or null")
+    return event
+
+
+def _mark(column, tracker):
+    columns = tracker.get("columns") or {}
+    if column == tracker.get("queue"):
+        return MARK_QUEUE
+    if column == columns.get("in_progress"):
+        return MARK_IN_PROGRESS
+    if column == columns.get("needs_human"):
+        return MARK_NEEDS_HUMAN
+    return MARK_OTHER
+
+
+def render(event, profile, summary):
+    """(html, plain) for one validated event. `profile` is the settings dict, `summary` the board line
+    (run_started and run_closed) or None. Every value from the event is escaped in the HTML."""
+    tracker = profile.get("tracker") or {}
+    issues_repo, repo = tracker.get("issues_repo") or "", (tracker.get("code_repo") or "").split("/")[-1]
+    stage_columns = {s.get("column") for s in profile.get("stages") or [] if isinstance(s, dict)}
+
+    def esc(value):
+        return html.escape(str(value), quote=False)
+
+    def link(repo_name, number):
+        text = f"#{number}" if repo_name.lower() == issues_repo.lower() else f"{repo_name}#{number}"
+        return f'<a href="https://github.com/{repo_name}/issues/{number}">{esc(text)}</a>', text
+
+    def mark(column):
+        return MARK_RELEASED if column in stage_columns else _mark(column, tracker)
+
+    name = event["event"]
+    bold, bare = f"<b>{esc(repo)}</b>", repo
+    pieces = []  # (html, plain) per line
+
+    def line(h, p):
+        pieces.append((h, p))
+
+    def with_number(prefix, rest, number):
+        a, text = link(issues_repo, number)
+        line(f"{prefix} {bold} {a} {rest[0]}", f"{prefix} {bare} {text} {rest[1]}")
+
+    if name in ("run_started", "run_closed") and summary:
+        line(esc(summary), summary)
+    if name == "run_started":
+        tail = f'auto-dev: run started on {{host}}, {event["count"]} issues in "{{queue}}"'
+        line(f"▶️ {bold} " + tail.format(host=esc(event["host"]), queue=esc(event["queue"])),
+             f"▶️ {bare} " + tail.format(host=event["host"], queue=event["queue"]))
+    elif name == "run_closed":
+        tail = f'auto-dev: run closed: {event["merged"]} merged, {event["need_you"]} need you, {event["skipped"]} skipped'
+        line(f"🏁 {bold} {tail}", f"🏁 {bare} {tail}")
+    elif name == "issue_skipped":
+        column = event.get("column")
+        arrow_h = f" → {esc(column)}" if column else ""
+        arrow_p = f" → {column}" if column else ""
+        with_number(mark(column) if column else MARK_OTHER,
+                    (f"skipped{arrow_h}: {esc(event['reason'])}", f"skipped{arrow_p}: {event['reason']}"), event["issue"])
+        if event.get("title"):
+            line(esc(event["title"]), event["title"])
+    elif name == "issue_started":
+        with_number(MARK_IN_PROGRESS, ("started", "started"), event["issue"])
+        line(esc(event["title"]), event["title"])
+    elif name == "issue_merged":
+        with_number(mark(event["column"]), (f"merged ({esc(event['sha'])}) → {esc(event['column'])}",
+                                            f"merged ({event['sha']}) → {event['column']}"), event["issue"])
+        line(esc(event["title"]), event["title"])
+    elif name == "needs_you":
+        with_number(mark(event["column"]), (f"needs you → {esc(event['column'])}: {esc(event['reason'])}",
+                                            f"needs you → {event['column']}: {event['reason']}"), event["issue"])
+        line(esc(event["title"]), event["title"])
+    elif name == "deployed":
+        tag = event["tag"]
+        if event.get("unavailable") is True:
+            line(f"🚀 {bold} deployed {esc(tag)} (issue list unavailable)", f"🚀 {bare} deployed {tag} (issue list unavailable)")
+        else:
+            env = event["environment"]
+            line(f"🚀 {bold} deployed {esc(tag)} to {esc(env)}", f"🚀 {bare} deployed {tag} to {env}")
+            if event.get("first") is True:
+                line("… nothing to compare with", "… nothing to compare with")
+            else:
+                for item in event["issues"]:
+                    a, text = link(item["repo"], item["issue"])
+                    title = item.get("title")
+                    line(f"• {a}" + (f" {esc(title)}" if title else ""), f"• {text}" + (f" {title}" if title else ""))
+                if event["more"] > 0:
+                    line(f"… and {event['more']} more", f"… and {event['more']} more")
+                if event["unlinked_commits"] > 0:
+                    text = f"+ {event['unlinked_commits']} commit(s) with no linked issue"
+                    line(text, text)
+    elif name == "connected":
+        tail = ("auto-dev runs there will report here: when a run starts and ends, and when each issue "
+                "starts, is skipped, merges or needs you.")
+        line(f"✅ {bold} is connected on {esc(event['host'])} for {esc(event['scope'])}. {tail}",
+             f"✅ {bare} is connected on {event['host']} for {event['scope']}. {tail}")
+    return "\n".join(h for h, _ in pieces), "\n".join(p for _, p in pieces)
+
+
+def count_line(profile, statuses):
+    """`🔵 <a> ready · 🟡 <b> in progress · 🆘 <c> need you` for the columns the profile names."""
+    tracker = profile.get("tracker") or {}
+    columns = tracker.get("columns") or {}
+    parts = []
+    for mark, column, word in ((MARK_QUEUE, tracker.get("queue"), "ready"),
+                               (MARK_IN_PROGRESS, columns.get("in_progress"), "in progress"),
+                               (MARK_NEEDS_HUMAN, columns.get("needs_human"), "need you")):
+        if column:
+            parts.append(f"{mark} {sum(1 for s in statuses if s == column)} {word}")
+    return " · ".join(parts)
+
+
+def board_summary(profile_path, profile):
+    """The summary line, read from the board once; `board: could not be read` when it cannot be."""
+    try:
+        out = subprocess.run([sys.executable, str(TRACKER), "--profile", str(profile_path), "list",
+                              "--open-only", "--issues-only", "--json"],
+                             capture_output=True, text=True, timeout=120, cwd=HERE)
+        if out.returncode != 0:
+            return "board: could not be read"
+        cards = json.loads(out.stdout)
+        return count_line(profile, [c.get("status") for c in cards]) or "board: could not be read"
+    except (OSError, ValueError, subprocess.SubprocessError, AttributeError):
+        return "board: could not be read"
+
+
+def _settings(profile_path):
+    path = _profile(profile_path)
+    try:
+        return path, profile_check.split_profile(path.read_text(encoding="utf-8"))[0]
+    except (OSError, profile_check.ProfileError) as exc:
+        raise UsageError(f"profile {path}: {exc}") from None
+
+
 # --- commands --------------------------------------------------------------
 
 def _units(text):
@@ -287,7 +494,21 @@ def _fit(text):
 
 
 def cmd_send(args):
-    text = args.text if args.text is not None else sys.stdin.read()
+    markup = None
+    if args.event:
+        if args.text is not None:
+            raise UsageError("--event reads the event from stdin; it takes no --text")
+        event = parse_event(sys.stdin.read())
+        _setting(args.profile)  # a missing profile or an unknown `notify` is a usage error first
+        path, settings = _settings(args.profile)
+        if not (settings.get("tracker") or {}).get("code_repo"):
+            raise UsageError(f"profile {path}: no tracker.code_repo to name the repo with")
+        summary = board_summary(path, settings) if event["event"] in ("run_started", "run_closed") else None
+        markup, text = render(event, settings, summary)
+        if _units(markup) > LIMIT:
+            markup = None
+    else:
+        text = args.text if args.text is not None else sys.stdin.read()
     text = text.strip()
     if not text:
         raise UsageError("nothing to send: empty text")
@@ -306,7 +527,13 @@ def cmd_send(args):
               f"({' and '.join(missing)} not set): messages off")
         return EXIT_OK
     try:
-        transport.send(text)
+        try:
+            transport.send(markup if markup is not None else text, markup=markup is not None)
+        except SendError as exc:
+            if markup is None:
+                raise
+            _say(f"notify: sent as plain text: {exc}", transport.token, sys.stderr)
+            transport.send(text)
     except SendError as exc:
         _say(f"notify failed: {exc}", transport.token, sys.stderr)
         return EXIT_FAILED
@@ -425,6 +652,7 @@ def main(argv=None):
     sub = parser.add_subparsers(dest="command", required=True)
     send = sub.add_parser("send", help="send one message (from --text, else stdin)")
     send.add_argument("--text")
+    send.add_argument("--event", action="store_true", help="one JSON event on stdin, formatted by this script")
     send.add_argument("--profile", dest="profile_sub", help=argparse.SUPPRESS)
     st = sub.add_parser("status", help="say whether messages would send, without sending")
     st.add_argument("--profile", dest="profile_sub", help=argparse.SUPPRESS)

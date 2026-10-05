@@ -11,6 +11,7 @@ outcome the order exists to prevent.
 """
 
 import io
+import json
 import os
 import re
 import subprocess
@@ -1109,6 +1110,49 @@ class RenderShipped(TrackerState):
             code, out, _ = run_main("--profile", profile, "shipped", "--tag", "deploy-x", "--titles")
         self.assertEqual(code, 0)
         self.assertIn("• issues#450\n", out)
+
+
+class ShippedJson(TrackerState):
+    """`shipped --json` prints the deployed event for the notification script (gogogo#157)."""
+
+    def run_json(self, result, titles=None, prev="deploy-0"):
+        profile = self.write_profile()
+        with mock.patch.object(ss, "resolve_tag", return_value="abc"), \
+             mock.patch.object(ss, "previous_tag", return_value=prev), \
+             mock.patch.object(ss, "shipped", return_value=result), \
+             mock.patch.object(ss, "fetch_titles", return_value=titles or {}):
+            args = ["--profile", profile, "shipped", "--tag", "deploy-x", "--json"]
+            return run_main(*args, *(["--titles"] if titles is not None else []))
+
+    def test_the_event_lists_the_issues_with_titles_and_counts_the_rest(self):
+        links = [ss.IssueLink("acme/issues", n) for n in range(1, 31)]
+        titles = {link.key: "x" * 200 for link in links[:25]}
+        code, out, _ = self.run_json(ss.Shipped(links, 2), titles)
+        event = json.loads(out)
+        self.assertEqual(code, 0)
+        self.assertEqual((event["event"], event["tag"], event["environment"]), ("deployed", "deploy-x", "production"))
+        self.assertEqual(len(event["issues"]), 25)
+        self.assertEqual(event["issues"][0], {"repo": "acme/issues", "issue": 1, "title": "x" * 119 + "…"})
+        self.assertEqual((event["more"], event["unlinked_commits"]), (5, 2))
+
+    def test_without_titles_the_titles_are_null(self):
+        code, out, _ = self.run_json(ss.Shipped([ss.IssueLink("acme/issues", 450)], 0))
+        self.assertEqual(json.loads(out)["issues"], [{"repo": "acme/issues", "issue": 450, "title": None}])
+
+    def test_the_first_tag_is_a_first_event(self):
+        code, out, _ = self.run_json(ss.Shipped([], 0), prev=None)
+        self.assertEqual(json.loads(out), {"event": "deployed", "tag": "deploy-x", "environment": "production",
+                                           "first": True})
+
+    def test_without_json_the_output_is_the_old_text(self):
+        profile = self.write_profile()
+        result = ss.Shipped([ss.IssueLink("acme/issues", 450)], 2)
+        with mock.patch.object(ss, "resolve_tag", return_value="abc"), \
+             mock.patch.object(ss, "previous_tag", return_value="deploy-0"), \
+             mock.patch.object(ss, "shipped", return_value=result):
+            code, out, _ = run_main("--profile", profile, "shipped", "--tag", "deploy-x")
+        self.assertTrue(out.startswith("Deployed deploy-x to production\n"))
+        self.assertNotIn("{", out)
 
 
 # --------------------------------------------------------------------------

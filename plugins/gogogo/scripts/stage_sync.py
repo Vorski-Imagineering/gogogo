@@ -38,6 +38,7 @@ from __future__ import annotations
 
 import argparse
 import fnmatch
+import json
 import re
 import subprocess
 import sys
@@ -763,6 +764,25 @@ def render_shipped(
     return "\n".join(lines) + "\n"
 
 
+def shipped_event(
+    tag: str,
+    environment: str,
+    s: Shipped,
+    titles: dict[tuple[str, int], str] | None,
+    limit: int = SHIPPED_LIMIT,
+) -> dict:
+    """The `deployed` event `notify.py send --event` formats: the same issues, limit and title cut as
+    `render_shipped`, as data."""
+    issues = []
+    for link in s.links[:limit]:
+        title = (titles or {}).get(link.key)
+        if title and len(title) > TITLE_MAX:
+            title = title[: TITLE_MAX - 1].rstrip() + "…"
+        issues.append({"repo": link.repo, "issue": link.number, "title": title or None})
+    return {"event": "deployed", "tag": tag, "environment": environment, "issues": issues,
+            "more": max(0, len(s.links) - limit), "unlinked_commits": s.unlinked_commits}
+
+
 def fetch_titles(links: list[IssueLink]) -> dict[tuple[str, int], str]:
     """Titles where `gh` can read them; a failed lookup just leaves the reference."""
     titles = {}
@@ -788,12 +808,18 @@ def cmd_shipped(args: argparse.Namespace, profile: Profile) -> int:
     environment, _ = profile.environment(stage)
     resolve_tag(args.tag)
     prev = previous_tag(args.tag, stage["tag"])
+    if prev is None and args.json:
+        print(json.dumps({"event": "deployed", "tag": args.tag, "environment": environment, "first": True}))
+        return 0
     if prev is None:
         print(f"Deployed {args.tag} to {environment}\n\n"
               f"first tag matching {stage['tag']}; nothing to compare with")
         return 0
     result = shipped(args.tag, prev, profile.known, profile.issues_repo)
     titles = fetch_titles(result.links) if args.titles else None
+    if args.json:
+        print(json.dumps(shipped_event(args.tag, environment, result, titles)))
+        return 0
     sys.stdout.write(render_shipped(args.tag, environment, result, titles))
     return 0
 
@@ -984,6 +1010,8 @@ def main(argv: list[str] | None = None) -> int:
     ship = sub.add_parser("shipped", help="list what a tag ships since the previous matching tag")
     ship.add_argument("--tag", required=True)
     ship.add_argument("--titles", action="store_true", help="look titles up with gh")
+    ship.add_argument("--json", action="store_true",
+                      help="print the `deployed` event for `notify.py send --event`, not text")
     ship.set_defaults(func=cmd_shipped)
 
     rev = sub.add_parser("reverts", help="name, and with --apply hand back, cards whose shipped fix was reverted")

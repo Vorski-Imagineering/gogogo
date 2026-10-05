@@ -368,29 +368,30 @@ commit, the card's new column, and *label added by the run* when §2 added it. T
 how they stay able to stop you. Then return to §1: the board may have moved.
 
 Send one short message per change of state, only **after** the thing is true.
-Pass the text on stdin through a quoted heredoc, never inside a quoted
-argument: titles are user-written, and `$(…)` or a stray `"` in one must stay
-text. The heredoc expands nothing, so fill in every value (the hostname from
-`hostname`, the counts, the titles) before writing it.
+Each is one JSON event on stdin through a quoted heredoc; `notify.py` formats it
+(status mark, the repo in bold, issue numbers as links, the board's counts on the
+first line of *run started* and *run closed*), so write no markup. The heredoc
+expands nothing: fill in every value (the hostname from `hostname`, the counts,
+the titles) before writing it, and write each as JSON text (a `"` or `\` in a
+title is escaped).
 
 ```bash
-python3 "${CLAUDE_PLUGIN_ROOT}/scripts/notify.py" send <<'MSG'
-<message>
+python3 "${CLAUDE_PLUGIN_ROOT}/scripts/notify.py" send --event <<'MSG'
+{"event": "issue_merged", "issue": <n>, "title": "<title>", "sha": "<short sha>", "column": "<column>"}
 MSG
 ```
 
 The script does nothing when the profile's `notify` is off or this machine has
-no credentials, so call it the same way in every repo. One plain-text line
-each, `<repo>` being the name part of `tracker.code_repo`:
+no credentials, so call it the same way in every repo. The events:
 
-- once preflight has passed and §1 has read the queue: `<repo> auto-dev: run started on <hostname>, <k> issues in "<tracker.queue>"`;
-- the first time an issue is skipped in this run, not on later passes: `<repo> #<n> skipped -> <tracker.columns.needs_human>: <reason>` when *Hand back a skip* moved the card, else `<repo> #<n> skipped: <reason>` (the label failure, or a failed move);
-- `<repo> #<n> started: <title>`;
-- after the issue's merge is verified: `<repo> #<n> merged (<short sha>) -> <column>`;
-- `<repo> #<n> needs you -> <tracker.columns.needs_human>: <the Needs-you line>`, for an issue taken and then stopped, never for a triage skip (its skip line says it);
-- *run closed*, from §9 only: `<repo> auto-dev: run closed: <a> merged, <b> need you, <c> skipped`, where `<b>` counts issues taken and stopped, and `<c>` the triage skips and §3's skips, each issue once.
+- `run_started`, once preflight has passed and §1 has read the queue: `{"event": "run_started", "host": "<hostname>", "count": <k>, "queue": "<tracker.queue>"}`;
+- `issue_skipped`, the first time an issue is skipped in this run, not on later passes: `{"event": "issue_skipped", "issue": <n>, "title": "<title>", "reason": "<reason>", "column": "<tracker.columns.needs_human>"}`, with `column` only when *Hand back a skip* moved the card (leave it out for the label failure or a failed move);
+- `issue_started`: `{"event": "issue_started", "issue": <n>, "title": "<title>"}`;
+- `issue_merged`, after the issue's merge is verified: `{"event": "issue_merged", "issue": <n>, "title": "<title>", "sha": "<short sha>", "column": "<the column the card moved to>"}`;
+- `needs_you`, for an issue taken and then stopped, never for a triage skip (its skip event says it): `{"event": "needs_you", "issue": <n>, "title": "<title>", "reason": "<the Needs-you line>", "column": "<tracker.columns.needs_human>"}`;
+- `run_closed`, from §9 only: `{"event": "run_closed", "merged": <a>, "need_you": <b>, "skipped": <c>}`, where `<b>` counts issues taken and stopped, and `<c>` the triage skips and §3's skips, each issue once.
 
-A `send` that exits non-zero is a `notify failed: <its line>`, and the run
+A `send` that exits non-zero (exit 2 is an event the script refused) is a `notify failed: <its line>`, and the run
 goes on. Each is given once, in the next report to the person in this session
 (a between-issues report, §9's report, or a stop's question), never in a
 tracker comment. Never put a token on a command line or in a report.
