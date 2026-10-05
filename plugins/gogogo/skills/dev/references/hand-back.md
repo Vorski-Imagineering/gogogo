@@ -58,7 +58,7 @@ report does (the reopen line below is not a stop), except a triage skip from
 | `merge` | the merge was refused or could not complete: draft, review required, branch rule, merge queue, permission, or the base kept moving (*Merging a PR*, below) |
 | `reverted` | a shipped fix was reverted on the base (`stage_sync.py reverts --apply`, run by `/gogogo:auto-dev` preflight) |
 
-Nothing sweeps cards out of `tracker.columns.needs_human`, and no run takes an
+`/gogogo:human-help` works that column: it settles each card's question, asks the person about the rest, and requeues or moves the card with a comment. A person may still move a card on by hand. Nothing else sweeps cards out of `tracker.columns.needs_human`, and no run takes an
 issue from there: a person moves it on once they have done what it asked, or
 starts `/gogogo:dev` on it, which then moves the card as for any issue. Also
 remove `tracker.ready_marker` from an issue you move to `needs_human`
