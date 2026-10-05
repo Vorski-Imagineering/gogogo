@@ -368,7 +368,7 @@ cards where they are.
 
 Report before starting the next one, a few lines: issue, what changed, how many
 new tests went red, what review found, what the real run showed, the merge
-commit, the card's new column, and *label added by the run* when §2 added it. The user is not watching every step; this log is
+commit, the card's new column, the authorisation it ran under (§4), and *label added by the run* when §2 added it. The user is not watching every step; this log is
 how they stay able to stop you. Then return to §1: the board may have moved.
 
 Send one short message per change of state, only **after** the thing is true.

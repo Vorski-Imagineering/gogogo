@@ -452,7 +452,9 @@ and integration follow this skill and the repo's merge path. See the profile's
   an `/gogogo:auto-dev` run, to follow that skill's §4 differences too (it
   commits and pushes each round, and every rung is mandatory); and to return
   the change summary, the review record's fields and the verification
-  result. Without `model` or `effort`, nothing moves:
+  result, or, when §3 to §6 stopped it, the stop's reason, with the blocking
+  issue and what it must deliver when another issue blocks it (§8 then hands
+  back in this session). Without `model` or `effort`, nothing moves:
   `review=until-clean` alone works in this session.
 - In the record and the stop marker, `session` is `$CLAUDE_CODE_SESSION_ID`, the variable
   `require_unattended.sh` also reads, and `unknown` when it is unset.
