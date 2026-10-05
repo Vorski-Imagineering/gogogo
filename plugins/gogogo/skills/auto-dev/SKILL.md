@@ -251,11 +251,13 @@ by the run* for §8 and §9.
 `/gogogo:dev` §3–6, with these differences because nobody is watching:
 
 - **Every rung in `verify.rungs` is mandatory** for every issue.
-- The regression test must be seen failing, then the whole suite green (by
-  exit status, `/gogogo:dev` §6). Record how many new tests went red.
+- The regression test must be seen failing, then the whole suite green once,
+  on the final commit (by exit status, `/gogogo:dev` §6). Each correction
+  round runs the focused commands `/gogogo:dev` review rule 1 names. Record
+  how many new tests went red.
 - **Mutation testing** as `/gogogo:dev` §6 says, for every lane with a `mutate`
   command, to its end, in the foreground or polled. When it stops the issue (a
-  run that failed twice, or survivors left after the third run): commit
+  run that failed twice, or logic survivors left after the third run): commit
   everything the change produced, and nothing else, to its branch and push it,
   leave it unmerged, hand the card back to `tracker.columns.needs_human` as
   `/gogogo:dev` §8 says with the failed run or the surviving mutants under the
