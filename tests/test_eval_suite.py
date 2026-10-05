@@ -28,6 +28,8 @@ CASES = {
     "auto-dev-label-less-card", "auto-dev-open-decision", "auto-dev-list-fails",
     "auto-dev-review-wait", "auto-dev-late-run-pr", "dev-merge-refused",
     "dev-deletes-merged-local-branch",
+    "human-help-review-stop", "human-help-hard-stop-asks", "human-help-requeued-twice",
+    "dev-authorised-until-clean", "dev-authorised-model",
     "spec-declined-question", "spec-being-built", "spec-nothing-hits-today",
     "spec-no-argument-offers-new", "spec-pr-mentions-only",
     "spec-reverses-tested-behaviour",

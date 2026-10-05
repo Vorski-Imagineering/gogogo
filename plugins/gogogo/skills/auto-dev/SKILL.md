@@ -251,6 +251,8 @@ by the run* for §8 and §9.
 `/gogogo:dev` §3–6, with these differences because nobody is watching:
 
 - **Every rung in `verify.rungs` is mandatory** for every issue.
+- **An authorisation** (`/gogogo:dev` §1) is read for every issue and obeyed;
+  §8's between-issues report names it.
 - The regression test must be seen failing, then the whole suite green once,
   on the final commit (by exit status, `/gogogo:dev` §6). Each correction
   round runs the focused commands `/gogogo:dev` review rule 1 names. Record

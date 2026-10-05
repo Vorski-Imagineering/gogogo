@@ -48,6 +48,27 @@ gh api graphql -f query='{repository(owner:"<owner>",name:"<name>"){issue(number
 read gives the description's last edit (`lastEditedAt`, null when never
 edited) and each comment's link, time, author and text.
 
+**Is the work authorised?** A person can authorise more for an issue through
+`/gogogo:human-help`: a review that keeps going until it is clean, a stronger
+model, or a higher effort. Read it from the description:
+
+```bash
+gh issue view <n> --repo <tracker.issues_repo> --json body -q .body > <scratch>/issue-<n>-body.md
+python3 "${CLAUDE_PLUGIN_ROOT}/scripts/human_help.py" authorised <scratch>/issue-<n>-body.md
+```
+
+- Exit 0 and nothing printed: no authorisation; nothing in this skill about
+  one applies.
+- Exit 0 and a line: the issue is authorised with those settings
+  (`review=until-clean`, `model=<m>`, `effort=<e>`, each only when given),
+  from the newest `authorised:` row of `## Approvals`. Note that row's number
+  for §7. `review=until-clean` changes the review's limits
+  (`references/review.md`); `model` or `effort` moves §3 to §6 into a
+  subagent (`## Claude-specific`).
+- Exit 2: the `authorised:` row cannot be read. Hand the issue back by §8
+  with `reason=spec`, the Needs-you line naming that row and the script's
+  message. Never ignore or guess an authorisation.
+
 Read the whole issue: the description and every comment. §2 says which comments count.
 
 Reporters describe what they *saw*, in their own words. The words in the title
@@ -145,6 +166,9 @@ folded into: its comments are read as part of the issue's report, and the
 4. Then apply the stops and the ready-case rules above to the folded body.
 
 ## 3. Locate the real cause: expect data and state, not just code
+
+Under an authorisation that sets `model` or `effort` (§1), §3 to §6 run in
+one subagent, as `## Claude-specific` says; §7 and §8 stay in this session.
 
 `rg` for the literal string first. **A miss is information.** Much of what shows
 on screen is data: user-editable names and labels, configuration records. A
@@ -245,6 +269,8 @@ The profile's `## Recon traps` lists what this codebase specifically hides.
 
 Comment in the reporter's language, not the codebase's:
 
+- **Authorised**, when §1 found an authorisation: directly after the
+  report's first line, `Authorised: <the settings> (Approvals row <k>)`.
 - **What was happening**: the mechanism, one short paragraph, in their terms.
 - **What changed**: user-visible effects, as bullets.
 - **Comments read** (§2, *Fold in comments the description does not hold
@@ -407,6 +433,21 @@ and integration follow this skill and the repo's merge path. See the profile's
   *Claude-specific* says; in an auto-dev run never end the turn to wait for it.
 - In the record, `impl` is the session's model id; `reviewer` is
   `$CLAUDE_CODE_SUBAGENT_MODEL` when it is set, else the same as `impl`.
+  Under an authorisation with `model`, `impl` and `reviewer` are that
+  model's id as the subagent reports it. With `effort` and no `model`,
+  `impl` is the session's model, and §7's `Authorised:` line names the effort.
+- **An authorisation with `model` or `effort`** (§1) runs §3 to §6 in one
+  `Agent` call: `subagent_type: "gogogo:build-<effort>"` (`general-purpose`
+  when there is no `effort`), with `model: "<m>"`, left out when `m` is
+  `inherit` or absent. Its prompt names the issue, the worktree (or this
+  folder), the body file and the authorisation line, and tells it to follow
+  `/gogogo:dev` §3 to §6 exactly; to run the review as `/code-review` from
+  inside the subagent, so the review uses the same model and effort; to
+  start the spec check's reader with the same `model`; with
+  `review=until-clean`, to review as `references/review.md` says for it; and
+  to return the change summary, the review record's fields and the
+  verification result. Without `model` or `effort`, nothing moves:
+  `review=until-clean` alone works in this session.
 - In the record and the stop marker, `session` is `$CLAUDE_CODE_SESSION_ID`, the variable
   `require_unattended.sh` also reads, and `unknown` when it is unset.
 - Browser checks use the `claude-in-chrome` tools; load the ones you need in one

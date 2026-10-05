@@ -4,17 +4,21 @@
     python3 -m unittest tests.test_human_help
 """
 
+import io
+import json
 import sys
 import tempfile
 import unittest
+from contextlib import redirect_stderr, redirect_stdout
 from pathlib import Path
+from unittest import mock
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "plugins" / "gogogo" / "scripts"))
 import human_help as hh  # noqa: E402
 
 
-def comment(body, association="OWNER", author="victor", url="https://example/c"):
-    return {"body": body, "url": url, "author": author, "association": association}
+def comment(body, writer=True, author="victor", url="https://example/c"):
+    return {"body": body, "url": url, "author": author, "writer": writer}
 
 
 STOP_REVIEW = ("**Needs you:** read commit abc1234 and merge it, or send it back. "
@@ -31,12 +35,18 @@ class Card(unittest.TestCase):
         self.assertEqual(c["branch"], "fix/140-x")
 
     def test_a_writer_comment_after_the_stop_is_an_answer(self):
-        c = hh.card(1, "t", "u", [comment(STOP_REVIEW), comment("merge it", "MEMBER", "v2", "https://example/a")], [])
+        # gogogo#159 Design 7: write access decides, whatever the comment's association.
+        answer = dict(comment("merge it", True, "v2", "https://example/a"), association="NONE")
+        c = hh.card(1, "t", "u", [comment(STOP_REVIEW), answer], [])
         self.assertEqual([a["body"] for a in c["answers"]], ["merge it"])
 
     def test_a_reader_comment_after_the_stop_is_not_an_answer(self):
-        c = hh.card(1, "t", "u", [comment(STOP_REVIEW), comment("merge it", "NONE")], [])
+        # An org member with no write access is not a writer: association MEMBER does not count.
+        member = dict(comment("merge it", False, "m"), association="MEMBER")
+        c = hh.card(1, "t", "u", [comment(STOP_REVIEW), member], [])
         self.assertEqual(c["answers"], [])
+        unread = {k: v for k, v in comment("merge it").items() if k != "writer"}
+        self.assertEqual(hh.card(1, "t", "u", [comment(STOP_REVIEW), unread], [])["answers"], [])
 
     def test_a_comment_before_the_stop_is_not_an_answer(self):
         c = hh.card(1, "t", "u", [comment("merge it"), comment(STOP_REVIEW)], [])
@@ -58,6 +68,87 @@ class Card(unittest.TestCase):
     def test_a_skip_marker_is_reason_skip(self):
         body = "**Needs you:** re-spec\n\n<!-- gogogo:skip v=1 reason=lint session=unknown -->"
         self.assertEqual(hh.card(1, "t", "u", [comment(body)], [])["reason"], "skip")
+
+
+PROFILE = """+++
+profile = 1
+[tracker]
+issues_repo = "o/r"
+project_owner = "o"
+project_number = 1
+columns = { in_progress = "In progress", needs_human = "Human!Help!" }
++++
+"""
+
+
+class FakeGh:
+    """Stands in for human_help._gh: one issue's comments, and each author's permission."""
+
+    def __init__(self, comments, permissions):
+        self.comments, self.permissions, self.asked = comments, permissions, []
+
+    def __call__(self, *args):
+        if args[:2] == ("issue", "view"):
+            return json.dumps({"comments": self.comments})
+        login = args[1].split("/")[-2]
+        self.asked.append(login)
+        answer = self.permissions[login]
+        if isinstance(answer, Exception):
+            raise answer
+        return answer + "\n"
+
+
+def gh_comment(login, body, association="NONE"):
+    return {"body": body, "url": f"https://example/{login}", "author": {"login": login},
+            "authorAssociation": association}
+
+
+class Permissions(unittest.TestCase):
+    """Who may answer a card is read from GitHub's permission call, not the comment's association."""
+
+    def run_list(self, gh):
+        with tempfile.TemporaryDirectory() as tmp:
+            profile = Path(tmp) / "dev-process.md"
+            profile.write_text(PROFILE, encoding="utf-8")
+            board = [{"number": 7, "title": "t", "url": "u", "status_since": "2026-10-05T00:00:00Z", "labels": []}]
+            out, err = io.StringIO(), io.StringIO()
+            import tracker
+            with mock.patch.object(tracker, "list_cards", return_value=(board, [], 1)), \
+                 mock.patch.object(hh, "_gh", side_effect=gh), redirect_stdout(out), redirect_stderr(err):
+                code = hh.main(["--profile", str(profile), "list", "--json"])
+        return code, out.getvalue(), err.getvalue()
+
+    def test_permission_decides_who_answers(self):
+        comments = [gh_comment("bot", STOP_REVIEW, "OWNER"), gh_comment("w", "merge it"),
+                    gh_comment("m", "send it back", "MEMBER"), gh_comment("x", "drop it", "MEMBER"),
+                    gh_comment("w", "and then requeue")]
+        gh = FakeGh(comments, {"bot": "admin", "w": "write", "m": "read",
+                               "x": hh.CannotRead("gh: Not Found (HTTP 404)")})
+        code, out, _ = self.run_list(gh)
+        self.assertEqual(code, 0)
+        card = json.loads(out)[0]
+        self.assertEqual([a["author"] for a in card["answers"]], ["w", "w"])
+        self.assertEqual(sorted(gh.asked), ["bot", "m", "w", "x"], "each login is looked up once")
+
+    def test_maintain_and_admin_are_writers(self):
+        comments = [gh_comment("bot", STOP_REVIEW), gh_comment("a", "one"), gh_comment("k", "two")]
+        code, out, _ = self.run_list(FakeGh(comments, {"bot": "admin", "a": "admin", "k": "maintain"}))
+        self.assertEqual([a["author"] for a in json.loads(out)[0]["answers"]], ["a", "k"])
+
+    def test_an_unreadable_permission_exits_2(self):
+        comments = [gh_comment("bot", STOP_REVIEW), gh_comment("w", "merge it")]
+        gh = FakeGh(comments, {"bot": "admin", "w": hh.CannotRead("gh: Server Error (HTTP 500)")})
+        code, out, err = self.run_list(gh)
+        self.assertEqual(code, 2)
+        self.assertEqual(out, "")
+        self.assertIn("could not read w's permission", err)
+
+    def test_the_permission_call_is_the_collaborator_endpoint(self):
+        gh = FakeGh([gh_comment("w", "hi")], {"w": "write"})
+        self.run_list(gh)
+        with mock.patch.object(hh, "_gh", return_value="write\n") as called:
+            self.assertTrue(hh.writer("o/r", "w", {}))
+        self.assertEqual(called.call_args.args, ("api", "repos/o/r/collaborators/w/permission", "-q", ".permission"))
 
 
 class Authorised(unittest.TestCase):
