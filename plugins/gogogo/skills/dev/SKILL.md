@@ -443,9 +443,11 @@ and integration follow this skill and the repo's merge path. See the profile's
 - **An authorisation with `model` or `effort`** (§1) runs §3 to §6 in one
   `Agent` call: `subagent_type: "gogogo:build-<effort>"` (`general-purpose`
   when there is no `effort`), with `model: "<m>"`, left out when `m` is
-  `inherit` or absent. Its prompt names the issue, the worktree (or this
-  folder), the body file and the authorisation line, and tells it to follow
-  `/gogogo:dev` §3 to §6 exactly; to run the review as `/code-review` from
+  `inherit` or absent. This session first places the work as §4's first
+  bullet says (asking there when it asks). The prompt names the issue, that
+  worktree (or this folder), the body file and the authorisation line, and
+  tells it to follow `/gogogo:dev` §3 to §6 exactly, in that place, leaving
+  out §4's first bullet; to run the review as `/code-review` from
   inside the subagent, so the review uses the same model and effort; to
   start the spec check's reader with the same `model`; with
   `review=until-clean`, to review as `references/review.md` says for it; in
@@ -455,8 +457,8 @@ and integration follow this skill and the repo's merge path. See the profile's
   auto-dev §4 says, and to go on to no other issue: the session that started
   it runs §7 and §8; and to return everything §7 lists for the report, and,
   when §3 to §6 stopped it, the stop's reason with the detail the step that
-  stopped it puts in the report (for a blocker, `owner/repo#B` and what it
-  must deliver).
+  stopped it puts in the report or presents (a proposal; for a blocker,
+  `owner/repo#B` and what it must deliver).
   Without `model` or `effort`, nothing moves:
   `review=until-clean` alone works in this session.
 - In the record and the stop marker, `session` is `$CLAUDE_CODE_SESSION_ID`, the variable
