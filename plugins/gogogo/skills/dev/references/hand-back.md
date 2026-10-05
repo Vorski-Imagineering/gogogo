@@ -17,10 +17,10 @@ and no further. Take the first case that fits:
   or found mid-change, as when what is left is a person's step that needs B
   first. Read B itself, since no link may exist yet:
   `gh issue view <B> --repo <its repo> --json state,stateReason` and
-  `<tracker.tool> show <B>`. B still blocks when it is `OPEN` with its card
-  in no column of the profile's `stages` (or not on this board). Closed as
-  `COMPLETED`, or its card in a stage column: it has merged, and this case
-  does not apply. Closed as `NOT_PLANNED` or `DUPLICATE`: take "stopped for
+  `<tracker.tool> show <B> --repo <its repo>`. B still blocks when it is
+  `OPEN` with its card in no column of the profile's `stages` (or not on this
+  board). Closed any other way than below (`COMPLETED`, or no reason), or its
+  card in a stage column: it has merged, and this case does not apply. Closed as `NOT_PLANNED` or `DUPLICATE`: take "stopped for
   a person" with `reason=decision`, naming B and how it closed. Not a stop, and not `tracker.columns.needs_human`:
   nobody can act on it until B lands. In order:
   1. When there is work: commit and push it, and leave its PR open, opening it
