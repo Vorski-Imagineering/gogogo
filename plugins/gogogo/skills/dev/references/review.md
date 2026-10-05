@@ -124,7 +124,8 @@ Then the review, by these rules:
 
    Test 4 is read by consequence, not by file: a finding on a file a Hard
    Stop covers is not test 4 unless its consequence is. A finding that meets
-   tests 1 to 4 and cannot be fixed stops the issue for a person (§8).
+   tests 1 to 4 and cannot be fixed stops the issue for a person (§8), except
+   under `review=until-clean` (rule 8).
 3. **Three attempts per finding.** From round 2, a finding that meets tests 1
    to 4 means a correction was wrong; it belongs to the finding that
    correction was for. The second attempt says what the first got wrong and

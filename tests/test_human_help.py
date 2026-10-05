@@ -157,6 +157,21 @@ class Permissions(unittest.TestCase):
                 self.assertEqual(hh.main(["--profile", str(profile), "list"]), 0)
         self.assertEqual(seen, {"org": "o", "number": 1, "repo": "o/r"})
 
+    def test_a_defaulted_needs_human_column_is_read(self):
+        import tracker
+        seen = {}
+
+        def list_cards(**kw):
+            seen.update(status=kw.get("status"), repo=kw.get("repo"))
+            return [], [], 0
+        with tempfile.TemporaryDirectory() as tmp:
+            profile = Path(tmp) / "dev-process.md"
+            profile.write_text(PROFILE.replace(', needs_human = "Human!Help!"', ""), encoding="utf-8")
+            with mock.patch.object(tracker, "list_cards", side_effect=list_cards), \
+                 redirect_stdout(io.StringIO()), redirect_stderr(io.StringIO()):
+                self.assertEqual(hh.main(["--profile", str(profile), "list"]), 0)
+        self.assertEqual(seen, {"status": "In progress", "repo": "o/r"})
+
     def test_maintain_and_admin_are_writers(self):
         comments = [gh_comment("bot", STOP_REVIEW), gh_comment("a", "one"), gh_comment("k", "two")]
         code, out, _ = self.run_list(FakeGh(comments, {"bot": "admin", "a": "admin", "k": "maintain"}))
@@ -194,6 +209,12 @@ class Authorised(unittest.TestCase):
 
     def test_no_row_is_empty(self):
         self.assertEqual(hh.authorised(self.body("approved; named the skill")), {})
+
+    def test_only_the_chosen_cell_authorises(self):
+        refused = "| 2026-10-06 | Keep going? | send it back | authorised: review=until-clean model=fable |\n"
+        self.assertEqual(hh.authorised(self.body("approved") + refused), {})
+        chosen = "| 2026-10-06 | Keep going? | authorised: effort=high | send it back |\n"
+        self.assertEqual(hh.authorised(self.body("approved") + chosen), {"effort": "high"})
 
     def test_an_unknown_model_or_effort_is_refused(self):
         with self.assertRaises(ValueError):

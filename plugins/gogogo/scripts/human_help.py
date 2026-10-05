@@ -16,7 +16,7 @@ writer). Exit 0 when listed (also when empty), 2 when the board, an issue or an
 author's permission cannot be read, with the reason on stderr and nothing on
 stdout.
 
-`authorised` prints the newest `authorised:` row of an Approvals table as
+`authorised` prints the newest Approvals row whose Chosen cell starts `authorised:` as
 `review=until-clean model=<m> effort=<e>` (only the keys present), or nothing.
 Exit 0 either way, 2 on an unreadable file or a row with an unknown key or value.
 """
@@ -92,11 +92,13 @@ def authorised(body):
     """The settings of the newest `authorised:` Approvals row, as a dict; {} when there is none.
 
     Raises ValueError on an unknown key or value in that row."""
-    rows = [line for line in body.splitlines() if re.search(r"\|\s*authorised:", line)]
-    if not rows:
+    # Only the Chosen cell (an Approvals row's third) authorises: one in Rejected was turned down.
+    chosen_cells = [cells[2] for cells in ([c.strip() for c in line.strip().strip("|").split("|")]
+                                           for line in body.splitlines() if line.lstrip().startswith("|"))
+                    if len(cells) > 2 and cells[2].startswith("authorised:")]
+    if not chosen_cells:
         return {}
-    cells = [c.strip() for c in rows[-1].strip().strip("|").split("|")]
-    chosen = next((c for c in cells if c.startswith("authorised:")), "")
+    chosen = chosen_cells[-1]
     settings = {}
     for token in chosen[len("authorised:"):].split():
         key, sep, value = token.partition("=")
@@ -146,9 +148,9 @@ def cmd_list(args):
     except tracker.ProfileMissing as exc:
         print(f"could not read the board: {exc}", file=sys.stderr)
         return 2
-    settings, _ = profile_check.split_profile(path.read_text(encoding="utf-8"))
-    repo = settings["tracker"]["issues_repo"]
-    column = settings["tracker"]["columns"]["needs_human"]
+    # As configured, the profile's defaults included: a profile without needs_human hands back to in_progress.
+    repo = tracker.DEFAULT_REPO
+    column = tracker.COLUMNS["needs_human"].name
     try:
         board, _recovered, _total = tracker.list_cards(status=column, open_only=True, issues_only=True,
                                                        repo=repo)

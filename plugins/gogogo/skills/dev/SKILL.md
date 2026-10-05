@@ -444,9 +444,11 @@ and integration follow this skill and the repo's merge path. See the profile's
   `/gogogo:dev` §3 to §6 exactly; to run the review as `/code-review` from
   inside the subagent, so the review uses the same model and effort; to
   start the spec check's reader with the same `model`; with
-  `review=until-clean`, to review as `references/review.md` says for it; and
-  to return the change summary, the review record's fields and the
-  verification result. Without `model` or `effort`, nothing moves:
+  `review=until-clean`, to review as `references/review.md` says for it; in
+  an `/gogogo:auto-dev` run, to follow that skill's §4 differences too (it
+  commits and pushes each round, and every rung is mandatory); and to return
+  the change summary, the review record's fields and the verification
+  result. Without `model` or `effort`, nothing moves:
   `review=until-clean` alone works in this session.
 - In the record and the stop marker, `session` is `$CLAUDE_CODE_SESSION_ID`, the variable
   `require_unattended.sh` also reads, and `unknown` when it is unset.
