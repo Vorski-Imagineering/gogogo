@@ -101,7 +101,10 @@ Then the review, by these rules:
    are all prose is reviewed at `precise`. Every later round reviews only what
    the previous round's corrections changed, at `precise`: in a run that
    commits, the correction commits' range; otherwise name the changed files
-   and what each correction changed. Every round, tell the review where the
+   and what each correction changed. A correction round's own check is the
+   lane's `focused` command for each test module that covers a file the
+   correction changed (the lane's `tests` pattern); the lane's full `run` is
+   not run per round (§6 runs it once, after the last round). Every round, tell the review where the
    spec is (the issue number) and to report only where the change fails the
    spec or a rule in `CLAUDE.md`, breaks something that worked, or has a bug
    with a concrete triggering case. From round 2, also give it the findings
@@ -159,6 +162,12 @@ Then the review, by these rules:
    And `breaker`: when round 13 ends and the review has not, the issue stops
    for a person and the report says the loop itself misbehaved. There is no
    other limit on rounds.
+9. **A silent review.** A review whose transcript has not been written for 20
+   minutes is stopped and started again once, on the same range; the issue's
+   review section names the restart. A restart does not count toward round 13
+   of rule 8. A second silence ends the review with `silent`, which stops the
+   issue for a person. The transcript is the review fork's file under the
+   session's `subagents` folder; its last write time is the check.
 
 When the spec moves content unchanged, findings about that content are not
 part of the move: list them in the report as follow-ups. A finding there that

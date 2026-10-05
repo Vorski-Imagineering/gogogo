@@ -19,7 +19,7 @@ and no further. Take the first case that fits:
   disagree, a difference that is not small, a piece that could not be built,
   or items left after the third reading), a weakened test the change could
   not pass without (§6), mutation testing that stopped (§6: a run that failed
-  twice, or survivors left after the third run), a decision or Hard Stop found
+  twice, or logic survivors left after the third run), a decision or Hard Stop found
   mid-change (§4), a gate you could not make pass, or verification that gave up →
   `tracker.columns.needs_human`, whether or not
   the work sits on a branch or PR. The §7 report's first line is
@@ -51,6 +51,7 @@ report does (the reopen line below is not a stop), except a triage skip from
 | `review` | the review ended for a person (§5 rule 8; the record's `end` says which ending) |
 | `tests` | a weakened test the change could not pass without (§6, after the third restore attempt) |
 | `mutation` | mutation testing stopped (§6: a run that failed twice, or survivors left after the third run) |
+| `silent` | a review went silent twice (`review.md` rule 9) |
 | `verify` | verification gave up (`/gogogo:auto-dev` §4's bound) |
 | `gate` | a gate that could not be made to pass (`/gogogo:auto-dev` §5) |
 | `ci` | the PR's checks failed or could not be read (*Merging a PR*, below) |
