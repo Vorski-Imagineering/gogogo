@@ -169,6 +169,38 @@ rule, a merge queue, a permission check): the card goes to the needs-a-person
 column with the reason and the PR link, and the loop goes on. It never merges
 with `--admin` or `--auto`. The loop never hand-rolls a merge around a failed step.
 
+## Adopting a new gate on a repo with pre-existing, ungated code
+
+A profile's `gates.always`/`gates.when` can name a check that was never
+really run on this repo before — a linter whose config drifted out of sync
+with the language the repo actually writes, a formatter nobody wired into
+CI, a build step that only ran on demand. Turning it on as a blocking,
+whole-tree gate the same day breaks every open PR and the next ordinary
+push, for reasons that have nothing to do with what that PR changed.
+
+**Scope the new gate to the files the push or PR actually touched, not the
+whole tree, until a separate cleanup closes the gap.** Diff against the
+merge base (`git diff --name-only --diff-filter=ACMR <base>`, falling back
+to the empty tree when there is no real base — a first push to a new
+branch, or a force-push whose `before` sha is all zeros) and run the check
+only on that file list. New and touched code is held to the standard
+immediately; a file nobody is editing doesn't block someone else's
+unrelated PR for a problem that predates both of them.
+
+Done this way, `gates.when` still names the whole tree to the profile — the
+scoping lives in the command it runs, not in the profile setting, so
+nothing about the mechanism in `## Before a PR merges` step 5 changes.
+
+A worked example: one adopting repo found its lint config had silently
+never parsed its own source files — the parser hadn't kept up with a
+JS→TypeScript migration, so every file would have failed to even parse,
+not just the ones with real findings. The fix was two steps: fix the
+parser config itself, then gate the newly-correct linter and a formatter
+check on the diff only, via a small script invoked from CI with the PR's
+base sha. The same script runs with no arguments, or over the whole tree,
+for a person doing a one-time cleanup pass later — it differs only in
+which files it's given, not in the check it runs.
+
 ## Three ways to merge
 
 `integration.strategy` picks one.
