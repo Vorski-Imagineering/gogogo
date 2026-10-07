@@ -17,7 +17,7 @@ columns = { in_progress = "In progress", needs_human = "Human!Help!" }
 [hard_stops]
 source = "CLAUDE.md § Hard Stops: ask before changing"
 form = "categories"
-items = ["Skill behaviour", "Profile format", "Executable scripts"]
+items = ["Skill behaviour", "Profile format", "Executable scripts", "Run time"]
 
 [design]
 placement_rule = "CLAUDE.md § What a change here does"
