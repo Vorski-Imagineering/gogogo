@@ -30,6 +30,14 @@ No approval = do not proceed.
 - **Executable scripts**: any change to `plugins/gogogo/scripts/` that changes
   what a script does to a repo, a board or the tracker (reading is fine;
   writing, merging and moving are not).
+- **Run time**: anything that makes a test run, a build, a gate, a review, a
+  merge or a run of a skill take longer in an adopting repo: a new check or
+  gate, a tool run on every change, a retry, a wait or poll, another review
+  round, a larger default. gogogo sets the run time of every adopting repo, so
+  minutes added here are paid again on every issue in each of them. The
+  approval question names the time it adds, **measured on a real run**, in
+  which repos, and whether it is off by default. Mutation testing was added
+  without one and ran for hours.
 
 ## Tests
 
