@@ -473,6 +473,19 @@ class Verify(unittest.TestCase):
         out, code = self.verify(self.answers(D1=f"D1 | met | app/views.py::{COMMA_NAME}, app/views.py:1 | "))
         self.assertEqual(code, 0, out)
 
+    def test_a_name_reference_after_a_comma_name_starts_a_new_reference(self):
+        # Guards that a following `path::name` is read by its path, not taken into the name.
+        (self.dir / "app" / "views.py").write_text(f"def test():\n    '{COMMA_NAME}'\n    listed\n")
+        out, code = self.verify(self.answers(D1=f"D1 | met | app/views.py::{COMMA_NAME}, app/views.py::listed | "))
+        self.assertEqual(code, 0, out)
+
+    def test_a_line_reference_whose_path_holds_a_colon_starts_a_new_reference(self):
+        # Guards that only the last `:<line>` is cut off a following `path:line`.
+        (self.dir / "app" / "views.py").write_text(f"def test():\n    '{COMMA_NAME}'\n")
+        (self.dir / "app" / "a:b.py").write_text("x\n")
+        out, code = self.verify(self.answers(D1=f"D1 | met | app/views.py::{COMMA_NAME}, app/a:b.py:1 | "))
+        self.assertEqual(code, 0, out)
+
     def test_a_comma_name_not_in_the_file_is_refused_whole(self):
         # Guards that no evidence still fails: the refusal names the whole name.
         # Built in two pieces, so this file never holds the missing name (Verify by hand 3).
