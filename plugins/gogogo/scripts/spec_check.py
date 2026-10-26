@@ -217,11 +217,18 @@ def _references(evidence: str) -> list[str]:
     """The evidence cut at `, `, keeping a comma inside a `::name` whole.
 
     A piece after a `::name` reference continues that name unless it names an
-    existing file; any other piece starts a new reference.
+    existing file, or is empty or outside the working tree, so `_resolves`
+    still refuses those; any other piece starts a new reference.
     """
+    def continues(piece: str) -> bool:
+        path = _path_of(piece)
+        file = Path(path)
+        return (bool(path) and not file.is_absolute()
+                and file.resolve().is_relative_to(Path.cwd().resolve()) and not file.is_file())
+
     refs: list[str] = []
     for piece in (p.strip() for p in evidence.split(", ")):
-        if refs and "::" in refs[-1] and not Path(_path_of(piece)).is_file():
+        if refs and "::" in refs[-1] and continues(piece):
             refs[-1] += ", " + piece
         else:
             refs.append(piece)

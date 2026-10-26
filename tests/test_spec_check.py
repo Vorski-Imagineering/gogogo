@@ -11,6 +11,7 @@ temp-repo case, so the item and answer rules are tested without a repo
 import contextlib
 import io
 import json
+import os
 import subprocess
 import sys
 import tempfile
@@ -486,6 +487,20 @@ class Verify(unittest.TestCase):
         out, code = self.verify(self.answers(D1=f"D1 | met | app/views.py::{COMMA_NAME}, app/a:b.py:1 | "))
         self.assertEqual(code, 0, out)
 
+    def test_an_outside_piece_after_a_name_is_refused_as_outside(self):
+        # Guards the spec's trap: a `..` or absolute piece still reaches the outside refusal.
+        for piece in ("../gone.txt", "/no/such/file"):
+            out, code = self.verify(self.answers(D1=f"D1 | met | app/views.py::listed, {piece} | "))
+            self.assertEqual(code, 2, piece + "\n" + out)
+            self.assertIn(f"{piece}: not a path inside the working tree", out)
+
+    def test_an_empty_piece_after_a_name_is_refused(self):
+        # Guards a stray double comma: it was refused before, and is not taken into the name.
+        (self.dir / "app" / "views.py").write_text("def listed():\n    'listed, '\n")
+        out, code = self.verify(self.answers(D1="D1 | met | app/views.py::listed, , app/views.py | "))
+        self.assertEqual(code, 2, out)
+        self.assertIn("not a path inside the working tree", out)
+
     def test_a_comma_name_not_in_the_file_is_refused_whole(self):
         # Guards that no evidence still fails: the refusal names the whole name.
         # Built in two pieces, so this file never holds the missing name (Verify by hand 3).
@@ -531,10 +546,13 @@ class Verify(unittest.TestCase):
             self.assertIn("not in the file", out)
 
     def test_evidence_outside_the_working_tree_is_refused(self):
-        outside = self.dir.parent / "elsewhere.txt"
+        # A unique name: parallel runs (tools/mutate.py --jobs) share this parent.
+        handle, name = tempfile.mkstemp(suffix=".txt", dir=self.dir.parent)
+        os.close(handle)
+        outside = Path(name)
         outside.write_text("x\n")
         self.addCleanup(outside.unlink)
-        for evidence in (str(outside), "../elsewhere.txt", str(self.dir / "app" / "views.py")):
+        for evidence in (str(outside), f"../{outside.name}", str(self.dir / "app" / "views.py")):
             out, code = self.verify(self.answers(D1=f"D1 | met | {evidence} | "))
             self.assertEqual(code, 2, evidence + "\n" + out)
 
