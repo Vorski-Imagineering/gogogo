@@ -1,6 +1,6 @@
 +++
 profile = 1
-independence = "product-owner"
+independence = "tech-lead"
 
 [tracker]
 kind = "github-project"
