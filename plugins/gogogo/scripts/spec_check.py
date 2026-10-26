@@ -27,7 +27,8 @@ no list to be outside of).
 item: `<id> | <met|missing|differs|na> | <evidence> | <note>`. Evidence is
 `path`, `path:line`, `path::name`, or for a test inside a class
 `path::Class.name` or `path::Class::name` (each part found in the file after
-the one before), several separated by `, `, or `-`; every
+the one before), several separated by `, `, or `-`. A test name may contain
+`, `: it is kept whole unless what follows names an existing file. Every
 one must resolve to a file in the working tree, by a path relative to it. It refuses an answer list that skips an
 item, answers one twice, names an unknown id, gives `met` or `differs` on a
 `D`, `T` or `A` item with no evidence, or leaves a note empty where one is
@@ -203,9 +204,33 @@ def _in_order(name: str, text: str) -> bool:
     return True
 
 
+def _path_of(piece: str) -> str:
+    """The file a reference names: before `::`, else before a trailing `:<line>`."""
+    if "::" in piece:
+        return piece.split("::", 1)[0]
+    if re.search(r":\d+$", piece):
+        return piece.rsplit(":", 1)[0]
+    return piece
+
+
+def _references(evidence: str) -> list[str]:
+    """The evidence cut at `, `, keeping a comma inside a `::name` whole.
+
+    A piece after a `::name` reference continues that name unless it names an
+    existing file; any other piece starts a new reference.
+    """
+    refs: list[str] = []
+    for piece in (p.strip() for p in evidence.split(", ")):
+        if refs and "::" in refs[-1] and not Path(_path_of(piece)).is_file():
+            refs[-1] += ", " + piece
+        else:
+            refs.append(piece)
+    return refs
+
+
 def _resolves(evidence: str) -> str | None:
     """None when every part of the evidence resolves, else what does not."""
-    for part in (p.strip() for p in evidence.split(", ")):
+    for part in _references(evidence):
         path, line, name = part, None, None
         if "::" in part:
             path, name = part.split("::", 1)

@@ -412,6 +412,10 @@ def call(*argv, body=BODY, answers=None, changed=None, cwd=None, git=None):
         return out.getvalue(), code
 
 
+# A test name holding ", ", as test names written as sentences do (#198).
+COMMA_NAME = "it opens the form, and takes focus"
+
+
 class Verify(unittest.TestCase):
     def setUp(self):
         tmp = tempfile.TemporaryDirectory()
@@ -455,6 +459,39 @@ class Verify(unittest.TestCase):
             out, code = self.verify(self.answers(D1=f"D1 | met | {evidence} | "))
             self.assertEqual(code, 2, evidence + "\n" + out)
         out, code = self.verify(self.answers(D1="D1 | met | app/views.py::listed, app/views.py | "))
+        self.assertEqual(code, 0, out)
+
+    def test_a_test_name_with_a_comma_resolves(self):
+        # Guards #198: a test name holding ", " was cut at the comma and refused.
+        (self.dir / "app" / "views.py").write_text(f"def test():\n    '{COMMA_NAME}'\n")
+        out, code = self.verify(self.answers(D1=f"D1 | met | app/views.py::{COMMA_NAME} | "))
+        self.assertEqual(code, 0, out)
+
+    def test_a_comma_name_followed_by_a_second_reference_resolves(self):
+        # Guards that the continuation stops at the next real file.
+        (self.dir / "app" / "views.py").write_text(f"def test():\n    '{COMMA_NAME}'\n")
+        out, code = self.verify(self.answers(D1=f"D1 | met | app/views.py::{COMMA_NAME}, app/views.py:1 | "))
+        self.assertEqual(code, 0, out)
+
+    def test_a_comma_name_not_in_the_file_is_refused_whole(self):
+        # Guards that no evidence still fails: the refusal names the whole name.
+        (self.dir / "app" / "views.py").write_text(f"def test():\n    '{COMMA_NAME}'\n")
+        out, code = self.verify(self.answers(
+            D1="D1 | met | app/views.py::it opens the form, and has no such name | "))
+        self.assertEqual(code, 2, out)
+        self.assertIn("app/views.py::it opens the form, and has no such name: not in the file", out)
+
+    def test_a_fragment_after_a_path_reference_is_not_a_continuation(self):
+        # Guards that only a ::name reference takes a continuation.
+        out, code = self.verify(self.answers(D1="D1 | met | app/views.py, and takes focus | "))
+        self.assertEqual(code, 2, out)
+        self.assertIn("and takes focus: no such file", out)
+
+    def test_a_next_reference_with_a_space_in_its_path_still_resolves(self):
+        # Guards the old split for a path that holds a space.
+        (self.dir / "docs").mkdir()
+        (self.dir / "docs" / "my notes.md").write_text("notes\n")
+        out, code = self.verify(self.answers(D1="D1 | met | app/views.py::listed, docs/my notes.md | "))
         self.assertEqual(code, 0, out)
 
     def test_class_form_evidence_resolves(self):
