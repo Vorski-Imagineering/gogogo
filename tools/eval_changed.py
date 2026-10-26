@@ -1,12 +1,13 @@
 #!/usr/bin/env python3
 """Run the eval cases of each skill a change touched, and pass on the result.
 
-    tools/eval_changed.py [--base <ref>] [--skill <name> ...] [--baseline]
+    tools/eval_changed.py [--base <ref>] [--skill <name> ...]... [--baseline]
 
 This repo's `run` command for its `evals` lane (`.agents/dev-process.md`).
 It is not part of the plugin, so the plugin names no tool (gogogo#131).
 
-The skills are the names given with --skill, or else those the change touched
+The skills are the names given with --skill (it may be repeated, and the names
+add up: `--skill a --skill b c` is a, b and c), or else those the change touched
 since it left <base> (`git merge-base <base> HEAD`, default origin/main),
 uncommitted and untracked files included: a file under
 plugins/gogogo/skills/<s>/ adds <s>, and a file under plugins/gogogo/evals/<case>/
@@ -107,7 +108,7 @@ def skills_touched(files: list[str], *case_maps: dict[str, list[str]]) -> set[st
 def main(argv=None, root: Path = ROOT) -> int:
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     ap.add_argument("--base", default="origin/main")
-    ap.add_argument("--skill", nargs="+", default=None)
+    ap.add_argument("--skill", nargs="+", action="extend", default=None)
     ap.add_argument("--baseline", action="store_true")
     a = ap.parse_args(argv)
 
