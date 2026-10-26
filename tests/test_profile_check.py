@@ -779,6 +779,12 @@ class SchemaDoc(unittest.TestCase):
         row = next(line for line in doc.splitlines() if line.startswith("| `notify` |"))
         self.assertEqual(row.split("|")[4].strip(), pc.FIELDS["notify"][2])
 
+    def test_doc_and_checker_describe_the_sentry_settings_the_same(self):
+        doc = (PLUGIN / "references" / "profile-schema.md").read_text()
+        for path in (p for p in pc.FIELDS if p.startswith("sentry.")):
+            row = next(line for line in doc.splitlines() if line.startswith(f"| `{path}` |"))
+            self.assertEqual(row.split("|")[4].strip(), pc.FIELDS[path][2], path)
+
     def test_doc_and_checker_describe_independence_the_same(self):
         doc = (PLUGIN / "references" / "profile-schema.md").read_text()
         row = next(line for line in doc.splitlines() if line.startswith("| `independence` |"))
