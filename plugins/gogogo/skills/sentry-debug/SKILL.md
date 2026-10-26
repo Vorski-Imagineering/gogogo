@@ -48,10 +48,12 @@ are measurements, and where each is captured. Use `sentry.org`,
    context. A report with no event behind it usually points at a UX or data
    problem, not a throw, which narrows the search.
 2. **Resolve each release to a commit.** Read the release string as
-   `sentry.release_format` says, then
-   `git merge-base --is-ancestor <commit> origin/<base> && echo shipped`, where
-   `<base>` is `integration.base`, else `main`. A report can come from a tab
-   still running a bundle older than the fix.
+   `sentry.release_format` says, then, after `git fetch origin`,
+   `git merge-base --is-ancestor <commit> origin/<base>; echo $?`, where
+   `<base>` is `integration.base`, else `main`: 0 is shipped, 1 is not, and
+   anything else (a commit this clone does not have) is unknown, never "not
+   shipped". A report can come from a tab still running a bundle older than
+   the fix.
 3. **Level is not severity.** Before calling an `info` or `warning` event
    noise, read its capture site. A high-volume issue with a fixed fingerprint
    is often a measurement, such as a session outcome that serves as a
@@ -82,7 +84,7 @@ issues by frequency, and the dropped-events check. The report has:
 - **Carried items.** Every item of the previous report gets exactly one
   verdict: **Fixed** (the commit, and a release in the window that carries
   it), **Still open** (the search that shows it), or **Unverifiable** (the
-  signal that is missing). Nothing is carried forward word for word.
+  signal that is missing).
 - **Stale unresolved issues** (no events in the window), listed, not resolved.
 
 Every sentence about the state of the code names a commit. Before recommending

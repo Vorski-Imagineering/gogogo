@@ -9,8 +9,9 @@ point at). A skill runs this before doing anything else, so a missing setting
 is a named error instead of a guess.
 
 With no --for it checks what every skill needs, except that each opt-in skill
-(`OPT_IN`: `auto-test` and one more) is checked only when the profile has that
-skill's table, such as [auto_test]: a repo that never adopted one still passes.
+in `OPT_IN` is checked only when the profile has that skill's table: `auto-test`
+with [auto_test], and SENTRY (sentry-debug) with [sentry]. A repo that never
+adopted one still passes.
 
 Exit codes: 0 ok (warnings allowed), 2 no profile file, 3 profile unreadable or
 incomplete. Problems go to stderr, one per line, each naming the field.

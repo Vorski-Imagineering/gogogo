@@ -1,6 +1,6 @@
 ---
 type: regex
-pattern: '\byes\b[^.\n]{0,40}healthy'
+pattern: '(?:^|[.!?\n])(?![^.!?\n]*\b(?:not|never|cannot|can.t|until|before|unless|only|whether|if|after|yet)\b)[^.!?\n]*\bhealthy\b'
 flags: i
 match: not_contains
 ---

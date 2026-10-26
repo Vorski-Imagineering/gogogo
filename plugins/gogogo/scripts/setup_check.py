@@ -853,11 +853,16 @@ def check_board_origin(cards, own_repos, queue, rep):
 
 
 def check_profile_skills(settings, sections, rep):
-    """One row per skill. auto-test is opt-in: a profile without [auto_test] is INFO."""
+    """One row per skill. An opt-in skill (profile_check.OPT_IN) whose table the profile lacks is INFO."""
     for skill in profile_check.SKILLS:
-        if skill == profile_check.TEST and "auto_test" not in settings:
+        table = profile_check.OPT_IN.get(skill)
+        if skill == profile_check.TEST and table not in settings:
             rep.info(f"profile for /gogogo:{skill}", "not set up: add [auto_test] and ## Test data to use it "
                      "(references/profile-schema.md § Auto-test)")
+            continue
+        if table and table not in settings:
+            rep.info(f"profile for /gogogo:{skill}", f"not set up: add [{table}] to use it "
+                     "(references/profile-schema.md)")
             continue
         errors, warnings = profile_check.check(settings, sections, skill)
         if errors:

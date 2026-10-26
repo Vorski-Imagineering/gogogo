@@ -11,8 +11,8 @@ marketplace (`.claude-plugin/marketplace.json`). How it came about is in `docs/h
 - **Skills hold only what is the same in every repo.** Anything that names a
   project, host, repo or command belongs in that repo's
   `.agents/dev-process.md`. These two must print nothing:
-  `grep -rniE 'manage\.py|npm |firebase|django|htmx' plugins/gogogo/skills plugins/gogogo/scripts plugins/gogogo/evals`
-  and `grep -rniE 'sentry' plugins/gogogo/skills plugins/gogogo/scripts plugins/gogogo/evals --exclude-dir=sentry-debug --exclude-dir='sentry-debug-*' | grep -vE '^plugins/gogogo/scripts/profile_check\.py:[0-9]+:.*("sentry\.|SENTRY)'`.
+  `grep -rniE 'manage\.py|npm |firebase|django|htmx' plugins/gogogo/skills plugins/gogogo/scripts plugins/gogogo/evals --exclude-dir=results`
+  and `grep -rniE 'sentry' plugins/gogogo/skills plugins/gogogo/scripts plugins/gogogo/evals --exclude-dir=sentry-debug --exclude-dir='sentry-debug-*' --exclude-dir=results | grep -vE '^plugins/gogogo/scripts/profile_check\.py:[0-9]+:.*("sentry\.|SENTRY)'`.
   Sentry is allowed only in `plugins/gogogo/skills/sentry-debug/`, its
   `sentry-debug-*` eval cases, and the `[sentry]` setting definitions in
   `profile_check.py`. CI runs the same check on every PR.

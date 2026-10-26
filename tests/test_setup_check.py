@@ -144,6 +144,17 @@ class ProfileSkills(unittest.TestCase):
         self.assertEqual([r["level"] for r in rows if r["check"] == "profile for /gogogo:auto-test"], ["INFO"])
         self.assertNotIn("FAIL", [r["level"] for r in rows])
 
+    def test_a_profile_without_sentry_is_info_not_fail(self):
+        # Guards gogogo#204: sentry-debug is opt-in by its [sentry] table, as auto-test is.
+        import profile_check
+        from test_profile_check import COMPLETE
+        settings, sections = profile_check.split_profile(COMPLETE)
+        del settings["sentry"]
+        del sections["Sentry"]
+        rows = self.rows(settings, sections)
+        self.assertEqual([r["level"] for r in rows if r["check"] == "profile for /gogogo:sentry-debug"], ["INFO"])
+        self.assertNotIn("FAIL", [r["level"] for r in rows])
+
     def test_a_profile_with_auto_test_is_checked(self):
         import profile_check
         from test_profile_check import COMPLETE
