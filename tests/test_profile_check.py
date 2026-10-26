@@ -128,6 +128,14 @@ fail_column = "New"
 fail_label = "test fail"
 human_label = "test needs human"
 pass_closes = true
+
+[sentry]
+org = "my-org"
+region_url = "https://sentry.io"
+projects = ["my-project"]
+release_format = "the full commit SHA"
+report_dir = "reports"
+evidence_command = "make evidence"
 +++
 
 # Process profile
@@ -154,6 +162,9 @@ None.
 None.
 ### Never call
 None.
+
+## Sentry
+Failures are the events tagged outcome:failed.
 """
 
 
@@ -551,6 +562,8 @@ class Environments(unittest.TestCase):
         for skill in (None, *pc.SKILLS):
             if skill == pc.TEST and "auto_test" not in settings:
                 continue  # auto-test is opt-in; this repo has not opted in
+            if skill == pc.SENTRY and "sentry" not in settings:
+                continue  # so is sentry-debug, by a [sentry] table (gogogo#204)
             self.assertEqual(pc.check(settings, sections, skill), ([], []), skill)
 
 
@@ -630,6 +643,29 @@ class AutoTest(unittest.TestCase):
         self.assertEqual(code, pc.EXIT_OK, err)
         errors, _ = pc.check(drop(settings, "auto_test.pass_column"), sections)
         self.assertTrue(any(e.startswith("auto_test.pass_column: missing") for e in errors), errors)
+
+
+class Sentry(unittest.TestCase):
+    """/gogogo:sentry-debug's [sentry] table is checked only where a repo has one (gogogo#204)."""
+
+    def bare(self):
+        settings, sections = parse()
+        return drop(settings, "sentry"), {k: v for k, v in sections.items() if k != "Sentry"}
+
+    def test_no_sentry_table_passes_every_check(self):
+        bare, rest = self.bare()
+        self.assertEqual(pc.check(bare, rest), ([], []))
+
+    def test_for_sentry_debug_without_the_table_names_sentry_org(self):
+        bare, rest = self.bare()
+        errors, _ = pc.check(bare, rest, pc.SENTRY)
+        self.assertTrue(errors and errors[0].startswith("sentry.org: missing"), errors)
+
+    def test_table_without_section_is_an_error(self):
+        settings, sections = parse()
+        rest = {k: v for k, v in sections.items() if k != "Sentry"}
+        self.assertIn("section '## Sentry': missing", pc.check(settings, rest)[0])
+        self.assertIn("section '## Sentry': missing", pc.check(settings, rest, pc.SENTRY)[0])
 
 
 class FrontMatter(unittest.TestCase):

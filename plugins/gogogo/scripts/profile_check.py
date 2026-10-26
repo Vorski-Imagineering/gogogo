@@ -8,9 +8,9 @@ lines (the settings), followed by `## ` sections (project knowledge the skills
 point at). A skill runs this before doing anything else, so a missing setting
 is a named error instead of a guess.
 
-With no --for it checks what every skill needs, except that `auto-test` is
-checked only when the profile has an [auto_test] table: a repo that never
-adopted auto-test still passes.
+With no --for it checks what every skill needs, except that each opt-in skill
+(`OPT_IN`: `auto-test` and one more) is checked only when the profile has that
+skill's table, such as [auto_test]: a repo that never adopted one still passes.
 
 Exit codes: 0 ok (warnings allowed), 2 no profile file, 3 profile unreadable or
 incomplete. Problems go to stderr, one per line, each naming the field.
@@ -42,7 +42,11 @@ ROADMAP = "roadmap"
 STATUS = "status"
 IDEA = "idea"
 HUMAN = "human-help"
-SKILLS = (SPEC, ONE, LOOP, TEST, TECH, ROADMAP, STATUS, IDEA, HUMAN)
+SENTRY = "sentry-debug"
+SKILLS = (SPEC, ONE, LOOP, TEST, TECH, ROADMAP, STATUS, IDEA, HUMAN, SENTRY)
+# Skills a repo adopts by adding a table: checked with no --for only when the
+# profile has it.
+OPT_IN = {TEST: "auto_test", SENTRY: "sentry"}
 
 # Dotted path -> (type, skills that require it, one-line meaning).
 # `references/profile-schema.md` documents the same paths; a test keeps the two
@@ -111,6 +115,13 @@ FIELDS = {
     "auto_test.fail_label": (str, (TEST,), "Label added on FAIL."),
     "auto_test.human_label": (str, (TEST,), "Label added on NEEDS HUMAN."),
     "auto_test.pass_closes": (bool, (TEST,), "True if PASS closes the issue."),
+    "sentry.org": (str, (SENTRY,), "Sentry organisation slug."),
+    "sentry.region_url": (str, (SENTRY,), "Sentry region URL: https://sentry.io, or the regional host the org lives on."),
+    "sentry.projects": (list, (SENTRY,), "Sentry project slugs this repo reports to."),
+    "sentry.release_format": (str, (SENTRY,), "How a release string maps to a commit, such as 'the full commit SHA' "
+                              "or 'name@version+sha'."),
+    "sentry.report_dir": (str, (), "Folder for the weekly report. Optional; absent means the skill asks."),
+    "sentry.evidence_command": (str, (), "Command that writes the repo's own evidence brief. Optional."),
 }
 
 # Body sections (## headings) a skill reads, by skill.
@@ -119,6 +130,7 @@ SECTIONS = {
     "Lane constraints": (SPEC, ONE),
     "superpowers boundary": SKILLS,
     "Test data": (TEST,),
+    "Sentry": (SENTRY,),
 }
 
 # The `### ` headings `## Test data` must have; each may say "None".
@@ -181,6 +193,10 @@ REQUIRED_V1 = frozenset({
     ("auto_test.fail_label", (TEST,)),
     ("auto_test.human_label", (TEST,)),
     ("auto_test.pass_closes", (TEST,)),
+    ("sentry.org", (SENTRY,)),
+    ("sentry.region_url", (SENTRY,)),
+    ("sentry.projects", (SENTRY,)),
+    ("sentry.release_format", (SENTRY,)),
 })
 
 # The `tracker.columns` roles the profile format defines, from FIELDS.
@@ -397,15 +413,15 @@ def _check_auto_test(settings, sections):
 def check(settings, sections, skill=None, root=None):
     """Return (errors, warnings); each entry starts with the field it is about.
 
-    With no skill, every skill's needs are checked, and auto-test's only when the
-    settings have an [auto_test] table (a repo that never adopted it must pass).
+    With no skill, every skill's needs are checked, and an `OPT_IN` skill's only
+    when the settings have its table (a repo that never adopted it must pass).
     `root`: the repo root, for checking that a merge script exists; None skips it.
     """
     errors, warnings = [], []
     if skill:
         wanted = (skill,)
     else:
-        wanted = tuple(s for s in SKILLS if s != TEST or "auto_test" in settings)
+        wanted = tuple(s for s in SKILLS if s not in OPT_IN or OPT_IN[s] in settings)
 
     raw, settings = settings, effective(settings)
     for path, (_, issue) in DEFAULTS.items():
@@ -517,8 +533,9 @@ def find_profile(start=None):
 def main(argv=None):
     parser = argparse.ArgumentParser(description="Check a repo's process profile.")
     parser.add_argument("--for", dest="skill", choices=SKILLS,
-                        help="check only what this skill needs (default: every skill, and auto-test "
-                             "only when the profile has [auto_test])")
+                        help="check only what this skill needs (default: every skill, and "
+                             + ", ".join(f"{s} only when the profile has [{t}]" for s, t in OPT_IN.items())
+                             + ")")
     parser.add_argument("--path", help=f"profile file (default: the nearest {DEFAULT_PATH} at or "
                                        "above this folder, within the repo)")
     parser.add_argument("--show", action="store_true", help="print the settings as JSON on stdout")
