@@ -475,11 +475,12 @@ class Verify(unittest.TestCase):
 
     def test_a_comma_name_not_in_the_file_is_refused_whole(self):
         # Guards that no evidence still fails: the refusal names the whole name.
+        # Built in two pieces, so this file never holds the missing name (Verify by hand 3).
+        missing = "it opens the form, and has " + "no such name"
         (self.dir / "app" / "views.py").write_text(f"def test():\n    '{COMMA_NAME}'\n")
-        out, code = self.verify(self.answers(
-            D1="D1 | met | app/views.py::it opens the form, and has no such name | "))
+        out, code = self.verify(self.answers(D1=f"D1 | met | app/views.py::{missing} | "))
         self.assertEqual(code, 2, out)
-        self.assertIn("app/views.py::it opens the form, and has no such name: not in the file", out)
+        self.assertIn(f"app/views.py::{missing}: not in the file", out)
 
     def test_a_fragment_after_a_path_reference_is_not_a_continuation(self):
         # Guards that only a ::name reference takes a continuation.
