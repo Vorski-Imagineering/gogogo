@@ -1,5 +1,5 @@
 ---
 type: regex
-pattern: 'worktree'
+pattern: 'roadmap-refresh-'
 flags: i
 ---
