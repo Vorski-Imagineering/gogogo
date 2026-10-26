@@ -42,6 +42,7 @@ CASES = {
     "setup-machine-has-bot",
     "idea-files-upstream-checked",
     "auto-dev-sends-event-json",
+    "spec-approval-lists-edge-cases", "human-help-approval-lists-edge-cases",
 }
 TAGS = re.compile(r"^tags:\s*\[([^\]]*)\]\s*$", re.M)
 TYPE = re.compile(r"^type:\s*(\S+)\s*$", re.M)

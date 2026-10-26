@@ -3,6 +3,23 @@
 Part of `/gogogo:human-help`. Read it in full before a card's reason decides
 anything. Section names here are `SKILL.md`'s.
 
+## Contents
+
+- Before any reason's rule
+- `review`
+- `ci`
+- `gate`
+- `verify`
+- `mutation`
+- `tests`
+- `decision`
+- `spec`
+- `hard-stop`
+- `skip`
+- `none`
+- `merge`
+- `reverted`
+
 Every reason in `tracker.py`'s `STOP_REASONS`, plus `skip` (an auto-dev triage
 skip) and `none` (no marker at all), has a rule below. A new stop reason with no
 rule here is a failing test, not a silent gap.
@@ -76,6 +93,13 @@ in this session, then a requeue.
 
 A Hard Stop approval is needed. **Always a question**, at every `independence`
 level. The question names the approval and recommends an answer.
+
+Under the recommendation, the question lists the change's edge cases, headed
+`Edge cases:`, one line each: what happens, how the change handles it, and
+what stays unfixed (or "nothing"). At most four lines, the ones most able to
+surprise a person who approves only the change as described. With no real edge
+case, one line: `Edge cases: none found (<what was checked>)`. In plain words,
+like the rest of the question: no file names, flags or exit codes.
 
 ## `skip`
 

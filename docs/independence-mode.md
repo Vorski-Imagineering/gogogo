@@ -44,6 +44,9 @@ more.
 - **Questions are put in plain words.** Each question opens with the real
   case in one sentence, and each option says what changes for people. A
   question does not name files, flags or exit codes.
+- **A question asking for your approval lists its edge cases.** Under the
+  recommendation, at most four lines, each saying what could happen, how the
+  change handles it, and what stays unfixed.
 - **A `tech-lead` or `product-owner` asks at most one round of questions per
   issue.** When you answer against Claude's recommendation, Claude works out
   what follows from your answer itself, rather than asking another round.
