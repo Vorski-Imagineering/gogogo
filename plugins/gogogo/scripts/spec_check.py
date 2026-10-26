@@ -28,7 +28,8 @@ item: `<id> | <met|missing|differs|na> | <evidence> | <note>`. Evidence is
 `path`, `path:line`, `path::name`, or for a test inside a class
 `path::Class.name` or `path::Class::name` (each part found in the file after
 the one before), several separated by `, `, or `-`. A test name may contain
-`, `: it is kept whole unless what follows names an existing file. Every
+`, `: it is kept whole unless what follows names an existing file or a path
+outside the working tree. Every
 one must resolve to a file in the working tree, by a path relative to it. It refuses an answer list that skips an
 item, answers one twice, names an unknown id, gives `met` or `differs` on a
 `D`, `T` or `A` item with no evidence, or leaves a note empty where one is
@@ -217,14 +218,17 @@ def _references(evidence: str) -> list[str]:
     """The evidence cut at `, `, keeping a comma inside a `::name` whole.
 
     A piece after a `::name` reference continues that name unless it names an
-    existing file, or is empty or outside the working tree, so `_resolves`
-    still refuses those; any other piece starts a new reference.
+    existing file, or a path outside the working tree, so `_resolves` still
+    refuses that; any other piece starts a new reference. A piece that cannot
+    be a path at all (too long, a NUL) continues the name.
     """
     def continues(piece: str) -> bool:
-        path = _path_of(piece)
-        file = Path(path)
-        return (bool(path) and not file.is_absolute()
-                and file.resolve().is_relative_to(Path.cwd().resolve()) and not file.is_file())
+        file = Path(_path_of(piece))
+        try:
+            return (not file.is_absolute()
+                    and file.resolve().is_relative_to(Path.cwd().resolve()) and not file.is_file())
+        except (OSError, ValueError):
+            return True
 
     refs: list[str] = []
     for piece in (p.strip() for p in evidence.split(", ")):

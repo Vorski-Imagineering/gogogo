@@ -494,12 +494,23 @@ class Verify(unittest.TestCase):
             self.assertEqual(code, 2, piece + "\n" + out)
             self.assertIn(f"{piece}: not a path inside the working tree", out)
 
-    def test_an_empty_piece_after_a_name_is_refused(self):
-        # Guards a stray double comma: it was refused before, and is not taken into the name.
-        (self.dir / "app" / "views.py").write_text("def listed():\n    'listed, '\n")
-        out, code = self.verify(self.answers(D1="D1 | met | app/views.py::listed, , app/views.py | "))
+    def test_a_name_holding_an_empty_piece_resolves(self):
+        # Guards Design 1: an empty piece is not an existing file, so it continues the name.
+        (self.dir / "app" / "views.py").write_text("def test():\n    'a, , b'\n")
+        out, code = self.verify(self.answers(D1="D1 | met | app/views.py::a, , b | "))
+        self.assertEqual(code, 0, out)
+
+    def test_a_long_clause_after_a_name_is_kept_in_the_name(self):
+        # Guards a clause too long to be a file name: it is read as part of the name, not a crash.
+        name = "it opens the form, " + "and " * 80 + "takes focus"
+        (self.dir / "app" / "views.py").write_text(f"def test():\n    '{name}'\n")
+        out, code = self.verify(self.answers(D1=f"D1 | met | app/views.py::{name} | "))
+        self.assertEqual(code, 0, out)
+
+    def test_a_nul_after_a_name_is_refused_not_a_crash(self):
+        out, code = self.verify(self.answers(D1="D1 | met | app/views.py::listed, x\0y | "))
         self.assertEqual(code, 2, out)
-        self.assertIn("not a path inside the working tree", out)
+        self.assertIn("not in the file", out)
 
     def test_a_comma_name_not_in_the_file_is_refused_whole(self):
         # Guards that no evidence still fails: the refusal names the whole name.
