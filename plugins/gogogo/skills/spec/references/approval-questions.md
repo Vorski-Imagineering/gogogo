@@ -23,3 +23,5 @@ before they answer.
    repo.
 6. **In the issue too.** The same list goes into that Approvals row's question
    cell, so what stays unfixed is in the issue body and not only in the chat.
+   A table row is one line: write it there as `Edge cases: <case>; <case>`,
+   with no line break and no `|`.

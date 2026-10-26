@@ -105,7 +105,7 @@ like the rest of the question: no file names, flags or exit codes.
 
 An auto-dev triage skip: the issue was not workable at triage (a missing
 decision, a lint failure, or a Hard Stop with no approval row). Always a
-question.
+question. For a Hard Stop, it lists the change's edge cases as `hard-stop` says.
 
 ## `none`
 
