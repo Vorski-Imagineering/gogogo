@@ -856,13 +856,13 @@ def check_profile_skills(settings, sections, rep):
     """One row per skill. An opt-in skill (profile_check.OPT_IN) whose table the profile lacks is INFO."""
     for skill in profile_check.SKILLS:
         table = profile_check.OPT_IN.get(skill)
-        if skill == profile_check.TEST and table not in settings:
-            rep.info(f"profile for /gogogo:{skill}", "not set up: add [auto_test] and ## Test data to use it "
-                     "(references/profile-schema.md § Auto-test)")
-            continue
         if table and table not in settings:
-            rep.info(f"profile for /gogogo:{skill}", f"not set up: add [{table}] to use it "
-                     "(references/profile-schema.md)")
+            # The skill's own sections: the table alone still fails its check.
+            own = [t for t, needed_by in profile_check.SECTIONS.items() if needed_by == (skill,)]
+            anchor = "Auto-test" if skill == profile_check.TEST else own[0]
+            rep.info(f"profile for /gogogo:{skill}",
+                     f"not set up: add [{table}] and {' and '.join(f'## {t}' for t in own)} to use it "
+                     f"(references/profile-schema.md § {anchor})")
             continue
         errors, warnings = profile_check.check(settings, sections, skill)
         if errors:

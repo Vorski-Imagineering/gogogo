@@ -48,7 +48,8 @@ are measurements, and where each is captured. Use `sentry.org`,
    context. A report with no event behind it usually points at a UX or data
    problem, not a throw, which narrows the search.
 2. **Resolve each release to a commit.** Read the release string as
-   `sentry.release_format` says, then, after `git fetch origin`,
+   `sentry.release_format` says, then, after `git fetch origin` (when the fetch
+   fails, say the base may be stale),
    `git merge-base --is-ancestor <commit> origin/<base>; echo $?`, where
    `<base>` is `integration.base`, else `main`: 0 is shipped, 1 is not, and
    anything else (a commit this clone does not have) is unknown, never "not

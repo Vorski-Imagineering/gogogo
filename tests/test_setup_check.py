@@ -143,6 +143,9 @@ class ProfileSkills(unittest.TestCase):
         rows = self.rows(settings, sections)
         self.assertEqual([r["level"] for r in rows if r["check"] == "profile for /gogogo:auto-test"], ["INFO"])
         self.assertNotIn("FAIL", [r["level"] for r in rows])
+        # A skipped skill is skipped alone: every skill after it still gets its row.
+        self.assertEqual({r["check"] for r in rows if r["check"].startswith("profile for ")},
+                         {f"profile for /gogogo:{s}" for s in profile_check.SKILLS})
 
     def test_a_profile_without_sentry_is_info_not_fail(self):
         # Guards gogogo#204: sentry-debug is opt-in by its [sentry] table, as auto-test is.
@@ -154,6 +157,10 @@ class ProfileSkills(unittest.TestCase):
         rows = self.rows(settings, sections)
         self.assertEqual([r["level"] for r in rows if r["check"] == "profile for /gogogo:sentry-debug"], ["INFO"])
         self.assertNotIn("FAIL", [r["level"] for r in rows])
+        hint = next(r for r in rows if r["check"] == "profile for /gogogo:sentry-debug")["detail"]
+        # The table alone fails the profile check: the hint names the section it also needs.
+        for word in ("[sentry]", "## Sentry", "§ Sentry"):
+            self.assertIn(word, hint)
 
     def test_a_profile_with_auto_test_is_checked(self):
         import profile_check
