@@ -108,6 +108,7 @@ means finished work sits unverified while you go and ask.
    ```bash
    python3 "${CLAUDE_PLUGIN_ROOT}/scripts/stage_sync.py" --profile <profile> reverts --apply
    ```
+   `<profile>` is the path `profile_check.py` printed at the top of this preflight.
    Each card it names gets a comment with a `reverted` stop marker and goes to
    `tracker.columns.needs_human`. Put its lines at the top of the run report.
    Exit 2: put its last line there and go on; it never stops the run. With

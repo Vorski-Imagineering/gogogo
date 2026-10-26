@@ -207,6 +207,15 @@ class Workspace(unittest.TestCase):
         preflight = section(SKILL.read_text(encoding="utf-8"), "Before anything: preflight")
         self.assertIn("integration.workspace", preflight)
 
+    def test_a_profile_placeholder_says_where_it_comes_from(self):
+        # Guards gogogo#192: a preflight step ran `--profile <profile>` without saying which file.
+        preflight = section(SKILL.read_text(encoding="utf-8"), "Before anything: preflight")
+        items = re.split(r"^\d+\. ", preflight, flags=re.M)[1:]
+        self.assertTrue(any("<profile>" in item for item in items))
+        for item in items:
+            if "<profile>" in item:
+                self.assertIn("profile_check.py", item, item.split("\n")[0])
+
     def test_setup_asks_with_both_options(self):
         setup = (SKILL.parents[1] / "setup" / "SKILL.md").read_text(encoding="utf-8")
         for word in ("integration.workspace", "The checkout", "A worktree per issue"):
