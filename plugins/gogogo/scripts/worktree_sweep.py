@@ -52,8 +52,10 @@ branch <name>: PR #<m> merged at its tip; confirm with worktree_sweep.py
 `gogogo-sweep-merged-confirmed` in the clone's git folder (`git rev-parse
 --git-common-dir`, shared by all its worktrees), then sweeps as normal; every
 later `--apply` sweep removes without holding. When the file cannot be
-written, it says so on stderr and holds. `--only`, a closed issue (rule 7) and
-a sweep without `--apply` are never held. `--confirm-merged` without
+written, it says so on stderr and holds. `--only`, a closed issue (rule 7,
+also when a merged pull request is held: the worktree is removed and its
+branch kept) and a sweep without `--apply` are never held; `--only` with
+`--confirm-merged` still writes the confirmation. `--confirm-merged` without
 `--apply` is a usage error (exit 2).
 
 With `--apply`, each `remove` runs `git worktree remove <path>` (never
@@ -270,7 +272,7 @@ def main(argv=None):
     kept = False
     # The first whole sweep in a clone holds what a merged PR alone would remove, until confirmed (gogogo#214).
     hold = False
-    if args.apply and not args.only:
+    if args.apply:
         confirmed = confirmation_file()
         if args.confirm_merged:
             try:
@@ -279,17 +281,22 @@ def main(argv=None):
                 confirmed.write_text(datetime.date.today().isoformat() + "\n")
             except OSError as exc:
                 print(f"worktree_sweep: cannot record the confirmation: {exc}", file=sys.stderr)
-                hold = kept = True
-        else:
+                hold = kept = not args.only
+        elif not args.only:
             hold = confirmed is None or not confirmed.is_file()
     for tree in candidates:
         verdict, reason = decide(tree, issues_repo, code_repo)
         label = f"{tree['path']} ({tree['branch'] or 'detached'})"
         if hold and verdict == REMOVE_WITH_BRANCH:
-            print(f"hold {label}: {reason}; the first sweep in this clone removes nothing on a merged PR "
-                  f"until confirmed: {CONFIRM}")
-            kept = True
-            continue
+            # A closed issue removed the worktree before merged PRs were seen (rule 7): that is not held.
+            issue = issue_view(issues_repo, issue_in_branch(tree["branch"])) if issues_repo else None
+            if issue and issue.get("state") != "OPEN":
+                verdict, reason = REMOVE, f"issue #{issue_in_branch(tree['branch'])} closed"
+            else:
+                print(f"hold {label}: {reason}; the first sweep in this clone removes nothing on a merged PR "
+                      f"until confirmed: {CONFIRM}")
+                kept = True
+                continue
         word = KEEP if verdict == KEEP else REMOVE
         print(f"{word} {label}: {reason}")
         if verdict == KEEP:
