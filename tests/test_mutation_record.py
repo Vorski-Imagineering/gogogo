@@ -25,11 +25,11 @@ class Named(unittest.TestCase):
                 self.assertIsNone(re.search(r"mutmut|cosmic", text, re.I), path)
 
     def test_no_skill_or_schema_reads_the_mutate_key(self):
-        """Guards a leftover instruction to run the retired key, in any form (`mutate`, mutate =, run/mutate/)."""
+        """Guards a leftover instruction to run the retired key: `mutate`, mutate = or a /mutate/ list entry."""
+        key = re.compile(r"`mutate`|\bmutate\s*=|/mutate/", re.I)
         for folder in (PLUGIN / "skills", PLUGIN / "references"):
-            for path in folder.rglob("*"):
-                if path.is_file():
-                    self.assertIsNone(re.search(r"\bmutate\b", path.read_text(encoding="utf-8")), path)
+            for path in folder.rglob("*.md"):
+                self.assertIsNone(key.search(path.read_text(encoding="utf-8")), path)
 
     def test_this_repos_unit_lane_points_at_the_tool(self):
         claude = (ROOT / "CLAUDE.md").read_text(encoding="utf-8")

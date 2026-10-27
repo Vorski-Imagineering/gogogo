@@ -24,8 +24,8 @@ touches such a file names this run as the last step of its `## Verification`.
 ## What to do with the result
 
 1. A run whose output has no `mutants:` line is a failed run, never a pass. Run
-   it once more. A second failed run stops the issue for a person, handed back
-   as verification that gave up (stop reason `verify`).
+   it once more. A second failed run stops the issue for a person, with stop
+   reason `mutation`.
 2. `mutants: 0` means nothing on the changed lines can be mutated. It is
    reported and is not a failure.
 3. Each survivor is handled by the first of these that applies, and nothing
@@ -54,7 +54,7 @@ touches such a file names this run as the last step of its `## Verification`.
    message, a label, help text, how much of an id is shown, with no condition
    or value that code tests) are declined as `text` together, each listed by
    file and line in the report. The issue stops for a person (stop reason
-   `verify`) only on the survivors that change logic, listed under the
+   `mutation`) only on the survivors that change logic, listed under the
    Needs-you line.
 6. Tests added or tightened here are not reviewed again: their evidence is the
    run that reports the mutant killed. After the last such change, run every
