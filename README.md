@@ -391,7 +391,9 @@ claude plugin install gogogo@vorski-skills --scope project
 
 This writes `.claude/settings.json`. Set `"autoUpdate": true` on the
 `vorski-skills` marketplace entry and commit the file: everyone who opens the
-repo then gets the plugin.
+repo is then offered the plugin. The install itself is recorded per folder, so
+each new checkout accepts that prompt, or runs the install command above from
+its root, once.
 
 **2. Run `/gogogo:setup`.** It checks everything and fixes what is missing,
 one step at a time, asking before anything is written:
