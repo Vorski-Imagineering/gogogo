@@ -487,6 +487,13 @@ class Retired(unittest.TestCase):
         self.assertEqual(code, 0, err)
         self.assertIn("warning: lanes[0] (automated): mutate is no longer read", err)
 
+    def test_a_lane_without_a_name_still_warns_about_mutate(self):
+        settings, sections = parse()
+        settings["lanes"][0] = {"run": "make test", "mutate": "x"}
+        errors, warnings = pc.check(settings, sections)
+        self.assertIn("lanes[0]: each lane needs a name", errors)
+        self.assertIn("lanes[0]: mutate is no longer read (mutation testing left the plugin); remove it", warnings)
+
 
 class Environments(unittest.TestCase):
     def check(self, mutate):

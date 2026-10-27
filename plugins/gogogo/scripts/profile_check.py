@@ -468,9 +468,9 @@ def check(settings, sections, skill=None, root=None):
     lanes, present = _lookup(settings, "lanes")
     if present and isinstance(lanes, list):
         for i, lane in enumerate(lanes):
-            if isinstance(lane, dict) and lane.get("name") and "mutate" in lane:
-                warnings.append(f"lanes[{i}] ({lane['name']}): mutate is no longer read "
-                                "(mutation testing left the plugin); remove it")
+            if isinstance(lane, dict) and "mutate" in lane:
+                where = f"lanes[{i}] ({lane['name']})" if lane.get("name") else f"lanes[{i}]"
+                warnings.append(f"{where}: mutate is no longer read (mutation testing left the plugin); remove it")
             if not isinstance(lane, dict) or not lane.get("name"):
                 errors.append(f"lanes[{i}]: each lane needs a name")
             elif not (lane.get("run") or lane.get("env")):
