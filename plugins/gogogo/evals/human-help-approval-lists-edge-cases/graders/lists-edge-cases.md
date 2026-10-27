@@ -1,5 +1,5 @@
 ---
 type: regex
-pattern: 'worktree'
+pattern: 'edge cases?'
 flags: i
 ---

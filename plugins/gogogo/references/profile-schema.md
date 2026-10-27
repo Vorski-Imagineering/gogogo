@@ -44,8 +44,9 @@ python3 "${CLAUDE_PLUGIN_ROOT}/scripts/profile_check.py" --show                 
 
 Exit 0 is ok, 2 means there is no profile, 3 means it is unreadable or
 incomplete. Each problem is one line on stderr that starts with the field.
-With no `--for` it checks every skill, and `auto-test` only when the profile
-has an `[auto_test]` table, so a repo that never adopted it still passes.
+With no `--for` it checks every skill, `auto-test` only when the profile has
+an `[auto_test]` table, and `sentry-debug` only when it has a `[sentry]` table,
+so a repo that never adopted either still passes.
 
 ## Versions and defaults
 
@@ -133,6 +134,12 @@ no skill requires it; a skill that finds it uses it.
 | `auto_test.fail_label` | str | `auto-test` | Label added on FAIL. |
 | `auto_test.human_label` | str | `auto-test` | Label added on NEEDS HUMAN. |
 | `auto_test.pass_closes` | bool | `auto-test` | True if PASS closes the issue. |
+| `sentry.org` | str | `sentry-debug` | Sentry organisation slug. |
+| `sentry.region_url` | str | `sentry-debug` | Sentry region URL: https://sentry.io, or the regional host the org lives on. |
+| `sentry.projects` | list | `sentry-debug` | Sentry project slugs this repo reports to. |
+| `sentry.release_format` | str | `sentry-debug` | How a release string maps to a commit, such as 'the full commit SHA' or 'name@version+sha'. |
+| `sentry.report_dir` | str | optional | Folder for the weekly report. Optional; absent means the skill asks. |
+| `sentry.evidence_command` | str | optional | Command that writes the repo's own evidence brief. Optional. |
 
 ### Lanes
 
@@ -343,6 +350,25 @@ when `profile_check.py` runs with no `--for`, and `/gogogo:setup` reports it
 as not set up rather than as a failure. A profile with it also needs a
 `## Test data` section (below).
 
+### Sentry
+
+`/gogogo:sentry-debug` debugs and reports on a repo's Sentry errors through the
+Sentry MCP, read-only. The `[sentry]` table holds the values it needs:
+
+```toml
+[sentry]
+org = "my-org"
+region_url = "https://sentry.io"
+projects = ["my-project"]
+release_format = "the full commit SHA"
+report_dir = "reports"                 # optional; absent means the skill asks
+evidence_command = "make evidence"     # optional
+```
+
+The table is the opt-in, as `[auto_test]` is: a profile without it is not
+checked for `sentry-debug` when `profile_check.py` runs with no `--for`. A
+profile with it also needs a `## Sentry` section (below).
+
 ### Roadmap
 
 `roadmap.file` is read only by `/gogogo:roadmap`, which keeps a roadmap
@@ -412,6 +438,7 @@ independence = "tech-lead"
 | `## Technology evaluation` | `tech-eval` (optional) |
 | `## Wrap-up checks` | `wrap-up` (optional) |
 | `## Test data` | `auto-test` |
+| `## Sentry` | `sentry-debug` |
 
 - **Recon traps**: what this codebase hides. The table of traps and the worked
   examples.
@@ -439,6 +466,10 @@ independence = "tech-lead"
     each is READY.
   - **Extra step rules**: exceptions to the default step classes.
   - **Never call**: routes and actions never used, on any lane.
+- **Sentry**: what this repo's Sentry signals mean, for `/gogogo:sentry-debug`:
+  which events are failures (the tags that mark one), which `info` or
+  `warning` events are measurements such as a session denominator, where each
+  is captured, and anything the weekly report carries in this repo's own form.
 
 A profile may add more sections (for example a procedure that
 `two_licence.procedure` names). Unknown sections are fine; unknown settings

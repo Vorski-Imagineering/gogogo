@@ -157,6 +157,26 @@ class Lane(unittest.TestCase):
         self.assertEqual(self.calls[0][-2:], ["--tag", "spec"])
         self.assertEqual(rc, 0)
 
+    def test_a_repeated_skill_flag_adds_up(self):
+        # Guards #194: a second --skill replaced the first, so its skills never ran.
+        self.run_lane(["--skill", "dev", "--skill", "spec"], result=doc())
+        self.assertEqual(self.calls[0][-3:], ["--tag", "dev", "spec"])
+
+    def test_a_repeat_and_a_list_mix(self):
+        self.run_lane(["--skill", "dev", "spec", "--skill", "auto-dev"], result=doc())
+        self.assertEqual(self.calls[0][-4:], ["--tag", "auto-dev", "dev", "spec"])
+
+    def test_a_repeated_name_is_tagged_once(self):
+        self.run_lane(["--skill", "dev", "--skill", "dev"], result=doc())
+        self.assertEqual(self.calls[0][-2:], ["--tag", "dev"])
+
+    def test_a_skill_with_no_case_is_reported_even_if_not_last(self):
+        # A skill named and not run is a failure, not a pass.
+        rc, out = self.run_lane(["--skill", "idea", "--skill", "dev"], result=doc())
+        self.assertIn("evals: no case for idea", out)
+        self.assertEqual(rc, 1)
+        self.assertEqual(self.calls, [])
+
     def test_baseline_fails_a_case_that_does_as_well_without_the_plugin(self):
         rc, out = self.run_lane(["--skill", "dev", "--baseline"],
                                 result=doc(total=2, passed=2, deltas={"dev-reversal": 1.0, "dev-third-attempt": 0.0}))
