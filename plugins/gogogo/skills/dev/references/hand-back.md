@@ -78,7 +78,7 @@ report does (the reopen line below is not a stop), except a triage skip from
 | `spec` | a fold that failed the lint (§2), or the spec check stopped (§5: two parts of the spec disagree, a difference that is not small, a piece that could not be built, or items left after the third reading) |
 | `review` | the review ended for a person (§5 rule 8; the record's `end` says which ending) |
 | `tests` | a weakened test the change could not pass without (§6, after the third restore attempt) |
-| `mutation` | mutation testing stopped: a run that failed twice, or survivors that change logic left after the third run. The plugin's own steps no longer write it; only a repo whose own docs still run mutation testing does |
+| `mutation` | mutation testing stopped: a run that failed twice, or survivors that change logic left after the third run that gives counts. The plugin no longer runs mutation testing; only the plugin's own source repo, for its own scripts, stops this way, and adopting repos never do |
 | `silent` | a review went silent twice (`review.md` rule 9) |
 | `verify` | verification gave up (`/gogogo:auto-dev` §4's bound) |
 | `gate` | a gate that could not be made to pass (`/gogogo:auto-dev` §5) |
