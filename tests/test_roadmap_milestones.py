@@ -1054,8 +1054,22 @@ class Safety(Case):
         self.assertEqual([i.get("publishes") for i in plan["items"] if i["kind"] == "link-section"], ["A"])
         ident = str(next(i["id"] for i in plan["items"] if i["kind"] == "link-section"))
         code, out, err, writer, _ = self.apply_private(plan, "--items", ident, github=down)
+        self.assertEqual(code, 1, out + err)
         self.assertIn("SKIPPED unapproved", out)
         self.assertEqual(writer.calls, [])
+
+    def test_apply_on_a_non_public_tracker_reads_no_git(self):
+        self.commit(roadmap((heading("A"), [5])), D1)
+        _, plan, _ = self.plan(FakeGitHub([], [iss(5)]))
+        ident = str(next(i["id"] for i in plan["items"] if i["kind"] == "link-section"))
+
+        def no_git(path):
+            raise AssertionError("apply read the roadmap's git on a tracker that is not public")
+        out, err = io.StringIO(), io.StringIO()
+        with redirect_stdout(out), redirect_stderr(err):
+            code = rm.main(["--profile", str(self.profile), "apply", "--plan", self.save(plan), "--items", ident],
+                           github=FakeGitHub([], [iss(5)]), history=no_git, writer=Writer())
+        self.assertEqual(code, 0, out.getvalue() + err.getvalue())
 
     def test_a_public_roadmap_marks_nothing(self):
         self.private_roadmap()

@@ -2,7 +2,7 @@
 """Plan, and apply only what a person approved, the GitHub milestones a roadmap's sections stand for.
 
     roadmap_milestones.py [--profile FILE] [--file PATH] plan [--link HEADING]...
-    roadmap_milestones.py [--profile FILE] [--file PATH] apply --plan PLAN.json --items 1,3,4 [--choose ID=CHOICE]...
+    roadmap_milestones.py [--profile FILE] [--file PATH] apply --plan PLAN.json --items 1,3,4 [--choose ID=CHOICE]... [--publish ID]...
 
 A section of the roadmap (a `##` heading and the lines up to the next one) is a
 milestone when its heading links to one:
@@ -50,7 +50,7 @@ unapproved` and changes nothing. Before each GitHub write it re-reads what the
 item expected and skips it (`SKIPPED stale`) when someone changed it. It
 writes by milestone number, and it never deletes a milestone. Document edits
 are made in the working file, keeping every other byte. One line per item:
-`APPLIED`, `SKIPPED stale` or `FAILED`. Exit 0: every item applied. 1: any
+`APPLIED`, `SKIPPED stale`, `SKIPPED unapproved` or `FAILED`. Exit 0: every item applied. 1: any
 skipped or failed. 2: the plan, an id or a choice cannot be used.
 """
 from __future__ import annotations
@@ -711,11 +711,12 @@ def apply_one(entry, repo, lines, github, writer, legend, created) -> str:
 PUBLISHES = ("link-section", "rename-milestone")  # the kinds that write heading text to the tracker
 
 
-def private_roadmap(settings, repo, github, git) -> bool:
-    """True when the tracker is public and the roadmap's repo is not known to be public (gogogo#202)."""
+def private_roadmap(settings, repo, github, git_of) -> bool:
+    """True when the tracker is public and the roadmap's repo is not known to be public (gogogo#202).
+    git_of() gives the roadmap's Git, read only when the tracker is public."""
     if not (settings.get("tracker") or {}).get("public"):
         return False
-    source = git.remote_repo()
+    source = git_of().remote_repo()
     if source is None:
         return True
     if source.lower() == repo.lower():
@@ -733,12 +734,12 @@ def run(args, github, history, writer) -> int:
         entries = load_plan(args.plan, args.items, args.choose or [])
         lines = roadmap.read_text(encoding="utf-8").splitlines(keepends=True)
         legend = rs.read_legend(rs.find_tables(lines), settings)
-        gated = private_roadmap(settings, repo, github, history(roadmap))
+        gated = private_roadmap(settings, repo, github, lambda: history(roadmap))
         return apply(entries, repo, roadmap, github, writer, legend,
                      unapproved=PUBLISHES if gated else (), publish=set(args.publish or []))
 
     git = history(roadmap)
-    private = private_roadmap(settings, repo, github, git)
+    private = private_roadmap(settings, repo, github, lambda: git)
     doc = parse_doc(git.text_at("HEAD"), repo)
     found = plan(doc, str(roadmap), repo, github, History(git, repo), args.link or [])
     if private:
