@@ -62,7 +62,8 @@ Part of `/gogogo:spec`. Read it in full. Section names and § numbers here are `
    or *stopped: cannot be acted on yet, no answer* (*Before you write* § 6,
    item 4);
    *skipped: changed by someone else meanwhile* (kept, or nobody to ask;
-   Posting step 1); *replaced a version posted meanwhile*; or *not reached*
+   Posting step 1); *replaced a version posted meanwhile*; *stopped: the
+   public-tracker re-read removed what the lint needs* (Posting step 2); or *not reached*
    (with why the run stopped). Each
    *specced and labelled* line ends with its card's result from Posting step
    9: moved, already there, left in `<column>`, moved meanwhile to
