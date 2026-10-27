@@ -449,6 +449,36 @@ class StopSignal(FakeToolCase):
         self.assertTrue(all(gone(pid) for pid in pids), pids)
 
 
+class TempFolder(FakeToolCase):
+    """Each part's tests get their own temp folder inside its copy (gogogo#217)."""
+
+    def run_in(self, name, code):
+        copy = self.tmp / name
+        copy.mkdir()
+        env = {"FAKE_PIDS": str(self.tmp / f"pids-{name}"), "FAKE_RUNS": "1", "FAKE_PAUSE": "0", "FAKE_STALL": "0"}
+        mutate.STOPPING.clear()  # an earlier failed run in this process leaves it set
+        with mock.patch.dict(os.environ, env):
+            mutate._run_mutmut([str(self.tool), "run", "--runner", f'{sys.executable} -c "{code}"'], cwd=str(copy))
+        return copy
+
+    def test_each_part_has_its_own_temp_folder_inside_its_copy(self):
+        code = "import tempfile; open('seen', 'w').write(tempfile.gettempdir())"
+        copies = [self.run_in(name, code) for name in ("a", "b")]
+        seen = []
+        for copy in copies:
+            self.assertTrue((copy / "seen").is_file(), "the runner never ran")
+            seen.append(os.path.realpath((copy / "seen").read_text()))
+            self.assertEqual(seen[-1], os.path.realpath(copy / ".gogogo-tmp"))
+        self.assertNotEqual(seen[0], seen[1])
+
+    def test_a_fixed_name_in_the_temp_folder_does_not_meet_another_parts_file(self):
+        code = ("import os, tempfile; open(os.path.join(tempfile.gettempdir(), 'elsewhere.txt'), 'w')"
+                ".write(os.path.basename(os.getcwd()))")
+        copies = [self.run_in(name, code) for name in ("a", "b")]
+        for copy in copies:
+            self.assertEqual((copy / ".gogogo-tmp" / "elsewhere.txt").read_text(), copy.name)
+
+
 class TwoScripts(unittest.TestCase):
     def setUp(self):
         self.r = Repo()

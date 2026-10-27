@@ -14,9 +14,11 @@ each mutant. Any other changed file there is printed as `not covered:`.
 
 The changed lines are cut into parts that run at once, `--jobs` of them at a
 time (half the processors unless given), each in its own throwaway copy and
-each against its own script's test module only. A test run stops at its first
-failure: one failed test already decides the mutant. When one part cannot
-finish, the others are stopped and the run exits 2.
+each against its own script's test module only. Each part's tests run with
+TMPDIR set to a `.gogogo-tmp` folder inside that part's copy, so a test that
+writes a fixed name in the temp folder does not meet another part's file. A
+test run stops at its first failure: one failed test already decides the
+mutant. When one part cannot finish, the others are stopped and the run exits 2.
 
 The mutation tool (mutmut 2.5.1, pinned: later versions cannot import this
 repo's tests) writes each mutant over the source file, so it runs only in a
@@ -76,6 +78,7 @@ HUNK_COUNTS = re.compile(r"^@@ -\d+(?:,(\d+))? \+(\d+)(?:,(\d+))? @@")
 PLAIN_DIFF = ["--src-prefix=a/", "--dst-prefix=b/", "--no-color", "--no-ext-diff"]
 WRAPPER = ".gogogo-run.py"
 HEARTBEAT = ".gogogo-heartbeat"
+TEMP = ".gogogo-tmp"
 RUNNER = ".gogogo-unittest.py"
 # The stall window is max(STALL_MIN, STALL_TIMES x the first test run's seconds),
 # checked every STALL_POLL seconds; an ended tool gets KILL_AFTER seconds before SIGKILL.
@@ -194,9 +197,11 @@ def _run_mutmut(args: list[str], cwd=None) -> subprocess.CompletedProcess:
     """The tool's run in its own process group, ended as `stalled:` when it stops starting test runs."""
     copy = Path(cwd)
     beat = copy / HEARTBEAT
+    # Each part's own temp folder: parts run at once, and a test may write a fixed name there.
+    (copy / TEMP).mkdir(exist_ok=True)
     with open(copy / ".gogogo-mutmut.out", "wb") as out, open(copy / ".gogogo-mutmut.err", "wb") as err:
         proc = subprocess.Popen(args, cwd=cwd, stdout=out, stderr=err, stdin=subprocess.DEVNULL,
-                                start_new_session=True)
+                                start_new_session=True, env={**os.environ, "TMPDIR": str(copy / TEMP)})
         seen, last, window = None, time.monotonic(), None
         try:
             while True:
