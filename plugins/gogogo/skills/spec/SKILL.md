@@ -360,10 +360,10 @@ has no card and no pull request.
 6. **Does anything hit it today?** After steps 1 to 3, name the case that hits
    it today, with a link or `file:line`: a person asked for it, or a record (an
    issue report, a run report, an error) or a real path in a repo shows it. A
-   person's request always hits today; this check is for follow-ups an agent
+   person's request always hits today; items 1 to 3 are for follow-ups an agent
    filed (a review finding, a "what if", or one filed "for later" during
-   another issue's questions). Items 1 to 3 are for when recon finds none;
-   item 4 holds whatever recon found, a person's request included:
+   another issue's questions) when recon finds none. Item 4 holds whatever
+   recon found, a person's request included:
    1. For an issue: ask **close it as not planned** or **spec it anyway**. On
       close: `gh issue close <N> --repo <tracker.issues_repo> --reason "not planned" --comment "Not specced: nothing hits this today. Reopen when <the case that would make it real>."`,
       and end this issue.
