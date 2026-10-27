@@ -35,9 +35,14 @@ yet. It holds whatever recon found, a person's request included. In order:
    Unpark when: <what would make it actionable>.
    Cheapest fallback if the need comes first: <one line, or "none found">.
    ```
-6. **On park:** read the card with `<tracker.tool> show <N>` (for `shared`,
+6. **On park:** first read the issue with
+   `gh issue view <N> --repo <tracker.issues_repo> --json state,labels`. A
+   non-zero exit: say the issue could not be read, move nothing, post nothing,
+   and end this issue. A `state` other than `OPEN`: the issue is closed; do
+   not move it, say so, post nothing, and end this issue. Then read the card
+   with `<tracker.tool> show <N>` (for `shared`,
    `python3 "${CLAUDE_PLUGIN_ROOT}/scripts/tracker.py"`, and the same for
-   `move` below), as the first command, immediately before the move.
+   `move` below), immediately before the move.
    - A read that exits non-zero: say the card could not be read, move
      nothing, post nothing, and end this issue.
    - A card in `tracker.columns.in_progress`, `tracker.columns.needs_human`
@@ -55,9 +60,12 @@ yet. It holds whatever recon found, a person's request included. In order:
      moved meanwhile; say to where, and post nothing. Any other case: say the
      move may have failed, with its message, and post nothing.
 
-   Once parked, post the three lines with
+   Once parked, when the labels the issue read showed include
+   `tracker.ready_marker` (compared ignoring case), remove it with
+   `gh issue edit <N> --repo <tracker.issues_repo> --remove-label "<ready_marker>"`:
+   a parked issue needs something further. Then post the three lines with
    `gh issue comment <N> --repo <tracker.issues_repo> --body-file <scratch>/park-<N>.md`.
-   No label and no spec. End this issue.
+   No label added and no spec. End this issue.
 7. **On close as not planned:** when the profile has `tracker.tool`, first
    read the card as rule 6 does; a failed read, or a card in one of rule 6's
    protected columns, closes nothing and posts nothing (say so). With no
