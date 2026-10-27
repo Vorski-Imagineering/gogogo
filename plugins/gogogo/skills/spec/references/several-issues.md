@@ -55,7 +55,9 @@ Part of `/gogogo:spec`. Read it in full. Section names and § numbers here are `
    case); *left open* (with the question); *skipped* (closed, a pull request,
    or already ready); *skipped: being built* (with the column or pull
    request); *closed: nothing hits it today*; *not filed: nothing hits it
-   today*; *stopped: nothing hits it today, no answer*;
+   today*; *stopped: nothing hits it today, no answer*; *parked in
+   <column>* or *closed: cannot be acted on yet* (*Before you write* § 6,
+   item 4);
    *skipped: changed by someone else meanwhile* (kept, or nobody to ask;
    Posting step 1); *replaced a version posted meanwhile*; or *not reached*
    (with why the run stopped). Each

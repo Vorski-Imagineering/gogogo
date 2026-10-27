@@ -63,8 +63,7 @@ by what the choice changes, never by how sure you are:
 A choice that could be two kinds counts as the one that asks more: approval
 over product, product over engineering.
 
-The profile's `independence` sets which kinds you ask about. Absent means
-`junior-dev`.
+The profile's `independence` sets which kinds you ask about. Absent means `junior-dev`.
 
 | Level | You ask about | You decide |
 |---|---|---|
@@ -148,8 +147,7 @@ stop it assuming approval nobody gave.
   (§ *Who decides*)**, not into your rationale. Catching yourself writing
   "Rationale for the split" about such a decision means you approved something
   on their behalf. Ask instead.
-- A Hard Stop the user approved is a row, and that row is what licenses
-  implementation.
+- A Hard Stop the user approved is a row, and that row is what licenses implementation.
 - No approvals needed? Then the row is literally *"None — every Hard Stop item
   is no, implement directly."* An empty section is ambiguous between "nothing
   needed" and "nobody asked"; those have opposite consequences.
@@ -245,8 +243,7 @@ the table:
 - `**Verdict: implement directly.**` when every item is **no**. The commands in
   `## Verification` are the gate; the implementing agent does not ask.
 - `**Verdict: approved — <item> by Approvals row N.**` when an item is **yes**
-  and an Approvals row approves that specific change. Name every yes item and
-  its row.
+  and an Approvals row approves that specific change. Name every yes item and its row.
 - `**Verdict: proposal — <item> awaits approval.**` when an item is **yes** and
   no row approves it. The spec stops at that gate. Put the proposal elements
   the repo's rules ask for (what changes, what it touches, impact, rollout,
@@ -292,8 +289,7 @@ Five rules hold in all of them:
 2. **Include a step that proves the test fails**: pin a value, name which tests
    go red, revert.
 3. **What a second reader sees needs a test from a second reader.** A test that
-   only re-reads what the actor itself just wrote passes against the broken
-   code.
+   only re-reads what the actor itself just wrote passes against the broken code.
 4. **A lane you call impossible costs the same proof as a lane you write.**
 5. **Another issue's body as test data is asserted in its narrowest form**,
    and that issue is named in `## Context` as a dependency.
@@ -366,7 +362,8 @@ has no card and no pull request.
    it today, with a link or `file:line`: a person asked for it, or a record (an
    issue report, a run report, an error) or a real path in a repo shows it. A
    person's request always hits today; this check is for follow-ups an agent
-   filed (a review finding, a "what if"). When recon finds none:
+   filed (a review finding, a "what if", or one filed "for later" during
+   another issue's questions). When recon finds none:
    1. For an issue: ask **close it as not planned** or **spec it anyway**. On
       close: `gh issue close <N> --repo <tracker.issues_repo> --reason "not planned" --comment "Not specced: nothing hits this today. Reopen when <the case that would make it real>."`,
       and end this issue.
@@ -376,6 +373,9 @@ has no card and no pull request.
       nothing, and end this issue, saying what recon found (in a run of
       several, no person to ask stops the run, as rule 6 says). The
       four-choice menu for a declined question is not used here.
+   4. **It hits today but cannot be acted on yet**: its own text says it waits for something recon finds
+      has not arrived, or every working design needs a part the issue did not name and the repo does not
+      have. **REQUIRED REFERENCE:** read `references/park.md` before any question.
 7. **A new mechanism: look for prior work first.** When the design would add
    something the repo does not have (a setting, a script, a kind of check, a
    state, a process step), search the web before the first question: how
