@@ -38,7 +38,7 @@ the issue already has work:
   rebase or a force push.
   Resolve a conflict as a code change. Push to that branch, and merge its
   open PR when it has one rather than opening another. The whole process
-  (spec check, review, tests compared, mutation, verify, gates, merge) runs
+  (spec check, review, tests compared, verify, gates, merge) runs
   on the updated branch, and the run report and the issue's report name the
   branch continued and its PR. A conflict you cannot resolve: hand the card
   back to `tracker.columns.needs_human` as `/gogogo:dev` §8 says, stop

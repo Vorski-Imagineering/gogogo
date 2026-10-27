@@ -47,8 +47,7 @@ and no further. Take the first case that fits:
   at round 13), a spec check that stopped (§5: two parts of the spec
   disagree, a difference that is not small, a piece that could not be built,
   or items left after the third reading), a weakened test the change could
-  not pass without (§6), mutation testing that stopped (§6: a run that failed
-  twice, or logic survivors left after the third run), a decision or Hard Stop found
+  not pass without (§6), a decision or Hard Stop found
   mid-change (§4), a gate you could not make pass, or verification that gave up →
   `tracker.columns.needs_human`, whether or not
   the work sits on a branch or PR. The §7 report's first line is
@@ -79,7 +78,7 @@ report does (the reopen line below is not a stop), except a triage skip from
 | `spec` | a fold that failed the lint (§2), or the spec check stopped (§5: two parts of the spec disagree, a difference that is not small, a piece that could not be built, or items left after the third reading) |
 | `review` | the review ended for a person (§5 rule 8; the record's `end` says which ending) |
 | `tests` | a weakened test the change could not pass without (§6, after the third restore attempt) |
-| `mutation` | mutation testing stopped (§6: a run that failed twice, or survivors left after the third run) |
+| `mutation` | mutation testing stopped: a run that failed twice, or survivors that change logic left after the third run that gives counts. The plugin no longer runs mutation testing; only the plugin's own source repo, for its own scripts, stops this way, and adopting repos never do |
 | `silent` | a review went silent twice (`review.md` rule 9) |
 | `verify` | verification gave up (`/gogogo:auto-dev` §4's bound) |
 | `gate` | a gate that could not be made to pass (`/gogogo:auto-dev` §5) |
@@ -257,7 +256,7 @@ repo's own command merges instead, and its own checks stand. In order:
      merge the pushed commits in with `git merge origin/<headRefName>` (no
      rebase, no force push) and push the result (`git push origin HEAD`), so the
      PR's head is the commit you verify. Re-run every lane's `run` command and the gates
-     (and review, mutation and verification, as *The base moved* does), then
+     (and review and verification, as *The base moved* does), then
      go back to step 2, which records the local HEAD, now including those
      commits. A conflict you cannot resolve, or work you cannot re-verify, is
      stop reason `merge`, detail "the head changed after verification". When
@@ -305,7 +304,7 @@ origin/<base>`: no rebase, no force push), resolving a conflict as a code
 change, and push. Re-run every lane's `run` command and the gates. When
 `git diff --name-only <verified base> origin/<base>` shares a path with the
 files this issue changed (`git diff --name-only <verified base>...HEAD`, read
-before the update), also run review, mutation and verification again. Then go
+before the update), also run review and verification again. Then go
 back to step 2. At most 3 updates per issue: a fourth, or a conflict you
 cannot resolve, is stop reason `merge` (detail: the base keeps moving, or the
 conflicting files).
