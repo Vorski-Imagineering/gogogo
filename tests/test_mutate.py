@@ -455,6 +455,7 @@ class TempFolder(FakeToolCase):
     def run_in(self, name, code):
         copy = self.tmp / name
         copy.mkdir()
+        mutate.write_wrapper(copy)
         env = {"FAKE_PIDS": str(self.tmp / f"pids-{name}"), "FAKE_RUNS": "1", "FAKE_PAUSE": "0", "FAKE_STALL": "0"}
         mutate.STOPPING.clear()  # an earlier failed run in this process leaves it set
         with mock.patch.dict(os.environ, env):
