@@ -456,12 +456,12 @@ class TempFolder(FakeToolCase):
         copy = self.tmp / name
         copy.mkdir()
         mutate.write_wrapper(copy)
-        # The temp folder the tool would inherit without the fix: inside this test's own folder,
-        # so a broken run leaves nothing in the real one.
+        # Every variable tempfile reads before its platform default points inside this test's own
+        # folder, so a broken run (no TMPDIR, or one naming a missing folder) leaves nothing in the real one.
         shared = self.tmp / "shared"
         shared.mkdir(exist_ok=True)
         env = {"FAKE_PIDS": str(self.tmp / f"pids-{name}"), "FAKE_RUNS": "1", "FAKE_PAUSE": "0", "FAKE_STALL": "0",
-               "TMPDIR": str(shared)}
+               "TMPDIR": str(shared), "TEMP": str(shared), "TMP": str(shared)}
         mutate.STOPPING.clear()  # an earlier failed run in this process leaves it set
         with mock.patch.dict(os.environ, env):
             mutate._run_mutmut([str(self.tool), "run", "--runner", f'{sys.executable} -c "{code}"'], cwd=str(copy))
