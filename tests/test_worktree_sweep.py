@@ -60,9 +60,11 @@ exec {git} "$@"
 """
 
 
-def pr(number, state, repo="o/code", oid="0" * 40):
-    return {"number": number, "state": state, "headRefOid": oid,
-            "headRepository": {"name": repo.split("/")[1], "nameWithOwner": repo}}
+def pr(number, state, repo="o/code", oid="0" * 40, cross=False, name_with_owner=None):
+    """A PR as `gh pr list --json` prints it; gh 2.87.3 leaves nameWithOwner empty (name_with_owner="")."""
+    return {"number": number, "state": state, "headRefOid": oid, "isCrossRepository": cross,
+            "headRepository": {"name": repo.split("/")[1],
+                               "nameWithOwner": repo if name_with_owner is None else name_with_owner}}
 
 
 class Sweep(unittest.TestCase):
@@ -93,6 +95,9 @@ class Sweep(unittest.TestCase):
         self.gh_log = self.tmp / "gh.log"
         self.env = {**ENV, "PATH": f"{bin_dir}{os.pathsep}{ENV['PATH']}", "FAKE_GH": str(self.fixture),
                     "FAKE_GH_LOG": str(self.gh_log)}
+        # The first-sweep hold (gogogo#214) is confirmed here; the hold tests remove this file.
+        self.confirmed = self.clone / ".git" / "gogogo-sweep-merged-confirmed"
+        self.confirmed.write_text("2026-10-27\n")
 
     def run_git(self, cwd, *args):
         return subprocess.run(["git", *args], cwd=cwd, env=ENV, check=True, capture_output=True, text=True)
@@ -374,6 +379,68 @@ class Sweep(unittest.TestCase):
         code, lines = self.sweep("--apply", "--only", str(here), fixture=fixture)
         self.assertEqual(lines, [f"remove {here} (fix/14-z): issue #14 closed"])
         self.assertIn("fix/12-x", self.branches())
+
+    HOLD = ("; the first sweep in this clone removes nothing on a merged PR until confirmed: "
+            "worktree_sweep.py --apply --confirm-merged")
+
+    def test_12_a_first_whole_sweep_holds_a_merged_prs_worktree(self):
+        self.confirmed.unlink()
+        path = self.worktree("fix/12-x")
+        fixture = {"pr": {"fix/12-x": [pr(3, "MERGED", oid=self.tip("fix/12-x"), name_with_owner="")]}}
+        self.assertEqual(self.sweep("--apply", fixture=fixture),
+                         (1, [f"hold {path} (fix/12-x): PR #3 merged{self.HOLD}"]))
+        self.assertTrue(path.exists())
+        self.assertIn("fix/12-x", self.branches())
+
+    def test_12_a_first_whole_sweep_holds_a_merged_branch(self):
+        self.confirmed.unlink()
+        tip = self.local_branch("fix/12-x")
+        fixture = {"pr": {"fix/12-x": [pr(3, "MERGED", oid=tip)]}}
+        self.assertEqual(self.sweep("--apply", fixture=fixture),
+                         (1, ["hold branch fix/12-x: PR #3 merged at its tip; "
+                              "confirm with worktree_sweep.py --apply --confirm-merged"]))
+        self.assertIn("fix/12-x", self.branches())
+
+    def test_12_confirm_merged_records_and_removes(self):
+        self.confirmed.unlink()
+        path = self.worktree("fix/12-x")
+        self.assertEqual(self.sweep("--apply", "--confirm-merged", fixture=self.merged("fix/12-x")),
+                         (0, [f"remove {path} (fix/12-x): PR #3 merged"]))
+        self.assertFalse(path.exists())
+        self.assertTrue(self.confirmed.is_file())
+        # A later sweep, without --confirm-merged, reads the confirmation back.
+        second = self.worktree("fix/14-z")
+        self.assertEqual(self.sweep("--apply", fixture=self.merged("fix/14-z")),
+                         (0, [f"remove {second} (fix/14-z): PR #3 merged"]))
+        self.assertFalse(second.exists())
+
+    def test_12_a_closed_issue_is_not_held(self):
+        self.confirmed.unlink()
+        path = self.worktree("fix/12-x")
+        fixture = {"issue": {"12": {"state": "CLOSED", "comments": []}}}
+        self.assertEqual(self.sweep("--apply", fixture=fixture), (0, [f"remove {path} (fix/12-x): issue #12 closed"]))
+        self.assertFalse(path.exists())
+
+    def test_12_only_is_not_held(self):
+        self.confirmed.unlink()
+        path = self.worktree("fix/12-x")
+        self.assertEqual(self.sweep("--apply", "--only", str(path), fixture=self.merged("fix/12-x")),
+                         (0, [f"remove {path} (fix/12-x): PR #3 merged"]))
+        self.assertFalse(path.exists())
+
+    def test_12_confirm_merged_without_apply_is_a_usage_error(self):
+        self.confirmed.unlink()
+        code, lines = self.sweep("--confirm-merged")
+        self.assertEqual((code, lines), (2, []))
+        self.assertFalse(self.confirmed.exists())
+
+    def test_12_a_forks_merged_pr_keeps_the_worktree(self):
+        path = self.worktree("fix/12-x")
+        fixture = {"pr": {"fix/12-x": [pr(3, "MERGED", oid=self.tip("fix/12-x"), cross=True)]},
+                   "issue": {"12": {"state": "OPEN", "comments": []}}}
+        self.assertEqual(self.sweep("--apply", fixture=fixture),
+                         (1, [f"keep {path} (fix/12-x): issue #12 open, work not merged"]))
+        self.assertTrue(path.exists())
 
     def test_10_a_folder_deleted_by_hand_is_pruned(self):
         path = self.worktree("fix/12-x")

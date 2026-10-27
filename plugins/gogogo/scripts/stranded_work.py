@@ -20,7 +20,10 @@ not stranded; a branch only on `origin` is never such a copy), and one of:
     (as `.../tree/<branch>`).
 
 An open pull request in the profile's `tracker.code_repo` claims its branch,
-unless the branch has commits on no remote. Pull requests in the checkout's
+unless the branch has commits on no remote. A pull request counts as this
+repo's only when gh says it is not from another repository
+(`isCrossRepository` false) and its `nameWithOwner`, when gh fills it in, is
+this repo; a fork's branch of the same name never counts. Pull requests in the checkout's
 other GitHub remotes, and closed or merged ones, only add to the line: what
 became of the branch's pull request. A branch that shares no history with the
 base says so in place of a commit count, which would be its whole history.
@@ -136,16 +139,18 @@ def github_repos(code_repo):
 def pull_requests(repo, branch):
     """(this repo's PRs from `branch`, None), or (None, why the lookup failed)."""
     out = gh("pr", "list", "--repo", repo, "--head", branch, "--state", "all",
-             "--json", "number,state,headRefOid,headRepository", "--limit", "20")
+             "--json", "number,state,headRefOid,headRepository,isCrossRepository", "--limit", "20")
     if out.returncode != 0:
         return None, (out.stderr.strip().splitlines() or [f"gh exited {out.returncode}"])[0]
     try:
         prs = json.loads(out.stdout)
     except json.JSONDecodeError:
         return None, "gh printed something that is not JSON"
-    # A fork's branch of the same name is someone else's PR.
-    return [p for p in prs if ((p.get("headRepository") or {}).get("nameWithOwner") or "").lower()
-            == repo.lower()], None
+    # A fork's branch of the same name is someone else's PR: one from another repository. gh's
+    # `--json headRepository` leaves nameWithOwner empty, so isCrossRepository decides; a PR
+    # without it does not count, and a nameWithOwner that is filled in must still be this repo.
+    return [p for p in prs if p.get("isCrossRepository") is False
+            and ((p.get("headRepository") or {}).get("nameWithOwner") or "").lower() in ("", repo.lower())], None
 
 
 def chosen(prs):

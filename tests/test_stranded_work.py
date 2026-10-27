@@ -220,9 +220,11 @@ print(json.dumps(answer))
 """
 
 
-def pr(number, state, oid, repo="o/code"):
-    return {"number": number, "state": state, "headRefOid": oid,
-            "headRepository": {"name": repo.split("/")[1], "nameWithOwner": repo}}
+def pr(number, state, oid, repo="o/code", cross=False, name_with_owner=None):
+    """A PR as `gh pr list --json` prints it; gh 2.87.3 leaves nameWithOwner empty (name_with_owner="")."""
+    return {"number": number, "state": state, "headRefOid": oid, "isCrossRepository": cross,
+            "headRepository": {"name": repo.split("/")[1],
+                               "nameWithOwner": repo if name_with_owner is None else name_with_owner}}
 
 
 class PullRequests(Repos):
@@ -323,8 +325,32 @@ class PullRequests(Repos):
         self.branch_with("claimed", 1)
         self.git("push", "-q", "origin", "claimed")
         self.git("worktree", "add", "-q", str(self.tmp / "wt"), "claimed")
-        fixture = {"pr": {"o/code claimed": [pr(5, "OPEN", self.tip("claimed"), "stranger/code")]}}
+        fixture = {"pr": {"o/code claimed": [pr(5, "OPEN", self.tip("claimed"), "stranger/code", cross=True)]}}
         code, lines = self.run_with(fixture)
+        self.assertEqual(code, 1)
+        self.assertNotIn("PR #", lines[0])
+
+    def claimed_by(self, the_pr):
+        self.branch_with("claimed", 1)
+        self.git("push", "-q", "origin", "claimed")
+        self.git("worktree", "add", "-q", str(self.tmp / "wt"), "claimed")
+        return self.run_with({"pr": {"o/code claimed": [the_pr(self.tip("claimed"))]}})
+
+    def test_a_pr_gh_prints_with_an_empty_name_with_owner_claims_its_branch(self):
+        """gh 2.87.3's `pr list --json headRepository` fills only id and name (gogogo#214)."""
+        self.assertEqual(self.claimed_by(lambda tip: pr(5, "OPEN", tip, name_with_owner="")), (0, []))
+
+    def test_a_pr_without_the_cross_repository_field_does_not_count(self):
+        def without(tip):
+            found = pr(5, "OPEN", tip)
+            del found["isCrossRepository"]
+            return found
+        code, lines = self.claimed_by(without)
+        self.assertEqual(code, 1)
+        self.assertNotIn("PR #", lines[0])
+
+    def test_a_filled_name_with_owner_that_differs_does_not_count(self):
+        code, lines = self.claimed_by(lambda tip: pr(5, "OPEN", tip, name_with_owner="stranger/code"))
         self.assertEqual(code, 1)
         self.assertNotIn("PR #", lines[0])
 
