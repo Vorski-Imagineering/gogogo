@@ -82,6 +82,8 @@ order, checking each step before starting the next:
    - anything else not known to be safe to publish.
 
    When unsure, remove it. Re-read the whole file again after each change.
+   Any later change to the spec before step 5 (a lint fix in step 4) is made
+   in this file, re-read the same way, and composed again (step 3).
    The reply after posting carries one line: `Removed before posting: none`,
    or `Removed before posting:` and each item as its kind and where it was
    (*a path, in Context*), never the removed text. Nothing removed is put
@@ -230,10 +232,12 @@ Which report to keep:
   so in your reply; do not invent one.
 - **Body is empty** → no report section; the spec starts at `## Verify by hand`.
 
-**Correcting a spec you already posted:** edit the scratchpad file, run step
-2's re-read again, then re-run Posting steps 4 to 7 (the lint and the check of open specs that read this
-issue, `gh issue edit --body-file`, the re-read, the blocked-by links), so the issue carries one accurate
-spec rather than a spec plus errata.
+**Correcting a spec you already posted:** edit the scratchpad spec file, run
+step 2's public-tracker check again, compose the body again (step 3), then
+re-run Posting steps 4 to 7 (the lint and the check of open specs that read this
+issue, `gh issue edit --body-file`, step 6's re-read of the description, the
+blocked-by links), so the issue carries one accurate spec rather than a spec
+plus errata.
 
 **Never leave a second copy** of the spec or of the report. If an earlier
 version is sitting in a comment (including a spec you just rescued into the
