@@ -1002,6 +1002,7 @@ class Safety(Case):
         for entry in plan["items"]:
             by_kind.setdefault(entry["kind"], []).append(entry)
         self.assertEqual([i.get("publishes") for i in by_kind["link-section"]], ["A"])
+        self.assertIs(plan.get("private_roadmap"), True)
         self.assertTrue(by_kind.get("set-milestone"), plan["items"])
         self.assertFalse([i for i in by_kind["set-milestone"] if "publishes" in i])
 
