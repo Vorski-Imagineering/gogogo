@@ -58,11 +58,12 @@ yet. It holds whatever recon found, a person's request included. In order:
    Once parked, post the three lines with
    `gh issue comment <N> --repo <tracker.issues_repo> --body-file <scratch>/park-<N>.md`.
    No label and no spec. End this issue.
-7. **On close as not planned:** first read the card as rule 6 does; a failed
-   read, or a card in one of rule 6's protected columns, closes nothing and
-   posts nothing (say so). Otherwise, § 6's close command with the three
-   lines as its comment, read from the file so nothing in them is run by the
-   shell:
+7. **On close as not planned:** when the profile has `tracker.tool`, first
+   read the card as rule 6 does; a failed read, or a card in one of rule 6's
+   protected columns, closes nothing and posts nothing (say so). With no
+   `tracker.tool` there is no card to read, and the read is skipped. When
+   nothing above stopped it, run § 6's close command with the three lines as
+   its comment, read from the file so nothing in them is run by the shell:
    `gh issue close <N> --repo <tracker.issues_repo> --reason "not planned" --comment "$(cat "<scratch>/park-<N>.md")"`.
    End this issue.
 8. **On spec it anyway:** carry on to *Before you write* § 7. The trigger and
