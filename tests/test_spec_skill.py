@@ -359,6 +359,17 @@ class BeforeYouWrite(unittest.TestCase):
         self.assertIn('--reason "not planned"', close.group(0))
         self.assertIn("--comment", close.group(0))
 
+    def test_step_six_names_the_park_reference(self):
+        """Guards the pointer to the park rules being dropped, so they are never read (gogogo#203)."""
+        self.assertIn("references/park.md", self.before_steps()[6][1])
+
+    def test_park_reference_moves_comments_and_labels_nothing(self):
+        """Guards park losing its card move or its comment, or applying the ready label (gogogo#203)."""
+        park = (SKILL.parent / "references" / "park.md").read_text(encoding="utf-8")
+        for part in ("move <N> --from", "gh issue comment <N>", "Unpark when:"):
+            self.assertIn(part, park)
+        self.assertNotIn("--add-label", park)
+
     def test_claude_specific_names_web_search(self):
         self.assertIn("WebSearch", "\n".join(section(skill_text(), "## Claude-specific")))
 
