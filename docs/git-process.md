@@ -88,7 +88,10 @@ feature alike. The number is what ties the branch back to the tracker:
   at the start of each run. It also deletes a local branch whose merged pull
   request's head is exactly the branch's tip (never the base, the current
   branch, one checked out in a worktree, or a remote branch), and dev deletes
-  the branch of work done in the checkout once its merge is verified;
+  the branch of work done in the checkout once its merge is verified. The
+  first whole sweep in a clone only lists, as `hold`, what a merged pull
+  request alone would remove, until a person runs it once with
+  `--apply --confirm-merged`; after that, sweeps remove it;
 - `stage_sync.py trailer --branch fix/<n>-<slug>` reads the issue from it.
 
 A branch whose name has no issue number is, to the process, work nobody owns.
