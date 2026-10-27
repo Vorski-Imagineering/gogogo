@@ -82,7 +82,7 @@ class DocsInStep(unittest.TestCase):
             if not line.startswith("|"):
                 break
             cell = line.split("|")[1].strip()
-            if cell.startswith("`"):  # "a lane's `mutate`" names a part of a setting, not one
+            if cell.startswith("`"):  # a cell such as "a lane's `run`" names a part of a setting, not one
                 names += [n for n in SPAN.findall(cell) if "." not in n]
         self.assertIn("stages", names)
         for name in names:

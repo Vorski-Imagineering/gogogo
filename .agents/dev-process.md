@@ -26,7 +26,6 @@ placement_rule = "CLAUDE.md § What a change here does"
 name = "unit"
 run = "python3 -m unittest discover -s tests"
 focused = "python3 -m unittest tests.<module>"
-mutate = "python3 tools/mutate.py <base>"
 tests = ["tests/*"]
 ci = true
 
@@ -104,9 +103,11 @@ major = 1
 
 - **unit**: `python3 -m unittest discover -s tests`. Each test names what it
   guards; each new one is seen failing first (break the code, run, restore).
-  Its `mutate` command covers the `.py` files directly in
-  `plugins/gogogo/scripts`, each against its own `tests/test_<name>.py`, takes
-  minutes, and downloads its tool into the user's cache on first use.
+  Mutation testing is not a lane key: a spec whose change touches a `.py` file
+  directly in `plugins/gogogo/scripts` puts `python3 tools/mutate.py origin/main`
+  last in its `## Verification`, following `docs/mutation.md`. The run covers
+  those files, each against its own `tests/test_<name>.py`, takes minutes,
+  and downloads its tool into the user's cache on first use.
   Under load the tool marks slow kills "suspicious"; `tools/mutate.py` counts
   them as killed (#75), so a busy machine changes how long the run takes, not
   its counts.

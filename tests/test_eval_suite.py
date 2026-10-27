@@ -24,7 +24,7 @@ import profile_check as pc  # noqa: E402
 
 CASES = {
     "dev-third-attempt", "dev-reversal", "dev-unlicensed-weaker-test",
-    "dev-round-checks-focused-tests", "dev-silent-review-restarts", "dev-wording-survivors-declined",
+    "dev-round-checks-focused-tests", "dev-silent-review-restarts", "dev-mutate-key-not-read",
     "auto-dev-label-less-card", "auto-dev-open-decision", "auto-dev-list-fails",
     "auto-dev-review-wait", "auto-dev-late-run-pr", "dev-merge-refused",
     "dev-deletes-merged-local-branch", "dev-blocked-goes-to-queue", "auto-dev-skips-blocked",

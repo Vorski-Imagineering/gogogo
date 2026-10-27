@@ -292,8 +292,8 @@ Comment in the reporter's language, not the codebase's:
   why, and any *Verify by hand* step that now reads differently, written out
   as it now reads (or "Differs from the spec: nothing."); each `outside` file
   kept, with the item it serves; each `na` item with its reason. A stop names
-  the items left. Put this record on its own line before the review record
-  and before any mutation record, with no spaces inside a value:
+  the items left. Put this record on its own line before the review record,
+  with no spaces inside a value:
   `<!-- gogogo:spec-check v=1 items=<n> met=<n> missing=<n> differs=<n> na=<n> outside=<n> runs=<n> fixed=<n> declared=<n> reader=<fresh|self|none> end=<clean|declared|stopped|nospec> -->`
   - `items`, `met`, `missing`, `differs`, `na` and `outside` are the first
     valid `spec-check:` line `verify` printed. `items` is the sum of the four
@@ -307,27 +307,6 @@ Comment in the reporter's language, not the codebase's:
     (then every count is 0 and `reader=none`).
 - **How it was verified**: which rungs ran, how many new tests went red, what
   the real run showed.
-- **How the tests were tested** (§6's mutation step). When no lane has a
-  `mutate` command, the one sentence "No lane in this repo's profile has a
-  mutation command." and no record. Otherwise, per lane that has one: how many
-  mutants ran, how many the tests caught, how many timed out and how many
-  survived on the first run; how many survivors were then killed by added or
-  tightened tests; and **Declined survivors**, one line each with the file and
-  line, the change in a few words and its reason word, inside a `<details>`
-  block when there are more than five. A stop names what is left. Then the
-  record, one line per lane that has a `mutate` command, on its own line
-  after any spec-check record and directly before the review record, with no
-  spaces inside a value (a space in the lane's name is written as `-`):
-  `<!-- gogogo:mutation v=1 lane=<name> mutants=<n> killed=<n> survived=<n> timeout=<n> runs=<n> added=<n> declined_as=equivalent:<n>,text:<n>,outside:<n> end=<clean|survivors|failed> -->`
-  - `mutants`, `killed`, `survived` and `timeout` are the first run's counts:
-    what the tests caught as the change was written. `mutants` is the sum of
-    the other three.
-  - `runs` is the number of runs that gave counts.
-  - `added` is the number of survivors killed by tests added or tightened
-    afterwards. `declined_as` is the number declined, by reason.
-  - `end` is `clean` when every survivor was killed or declined (then `added`
-    plus the `declined_as` total equals `survived`), `survivors` when rule 7
-    stopped the issue, and `failed` when rule 3 did (all counts 0).
 - **How it was reviewed**: the kind (code, prose, or mixed: code with prose
   files, §5 rule 7) and the coverage. One line per round: how many findings
   were applied and how many declined, and the most important applied finding
@@ -432,9 +411,6 @@ and integration follow this skill and the repo's merge path. See the profile's
   run the prompt also tells it to create `<answers file>.done` as its last
   action, and it is waited on as `/gogogo:auto-dev`'s *Claude-specific* says,
   never by ending the turn.
-- A mutation run (§6) can outlast the shell tool's foreground limit: start it
-  with `run_in_background` and poll it as `/gogogo:auto-dev`'s
-  *Claude-specific* says; in an auto-dev run never end the turn to wait for it.
 - In the record, `impl` is the session's model id; `reviewer` is
   `$CLAUDE_CODE_SUBAGENT_MODEL` when it is set, else the same as `impl`.
   Under an authorisation with `model`, `impl` and `reviewer` are that

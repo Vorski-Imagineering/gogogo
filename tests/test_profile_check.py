@@ -436,17 +436,15 @@ class WrongValues(unittest.TestCase):
         self.assertTrue(any(e.startswith("lanes[1] (browser): needs run") for e in errors))
 
     def test_lane_mutate_must_name_base(self):
-        settings, sections = parse()
-        settings["lanes"][0]["mutate"] = "x <base>"
-        self.assertFalse([e for e in pc.check(settings, sections)[0] if "mutate" in e])
-        for bad in ("x", "", 5):
+        """A lane's mutate is retired (gogogo#199): any value warns and none is an error."""
+        for value in ("x <base>", "x", "", 5):
             settings, sections = parse()
-            settings["lanes"][0]["mutate"] = bad
-            errors = [e for e in pc.check(settings, sections)[0] if "mutate" in e]
-            self.assertEqual(len(errors), 1, bad)
-            self.assertTrue(errors[0].startswith("lanes[0] ("), errors)
-            self.assertTrue(errors[0].endswith("): mutate must be a command containing <base>, the branch the "
-                                               "change merges into"), errors[0])
+            settings["lanes"][0]["mutate"] = value
+            errors, warnings = pc.check(settings, sections)
+            self.assertFalse([e for e in errors if "mutate" in e], value)
+            mutate = [w for w in warnings if "mutate" in w]
+            self.assertEqual(mutate, ["lanes[0] (automated): mutate is no longer read (mutation testing left "
+                                      "the plugin); remove it"], value)
 
     def test_lane_tests_must_be_a_list_of_patterns(self):
         for good in (["tests/*"], None):
@@ -475,6 +473,19 @@ class WrongValues(unittest.TestCase):
         errors, warnings = pc.check(settings, sections)
         self.assertEqual(errors, [])
         self.assertTrue(any(w.startswith("tracker.redy_marker: unknown setting") for w in warnings))
+
+
+class Retired(unittest.TestCase):
+    def test_a_mutate_key_warns_and_loads(self):
+        """Guards old profiles failing to load once the plugin stops reading mutate (gogogo#199)."""
+        text = COMPLETE.replace('name = "automated"\nrun = "make test"\n',
+                                'name = "automated"\nrun = "make test"\nmutate = "x"\n', 1)
+        self.assertIn('mutate = "x"', text)
+        with tempfile.TemporaryDirectory() as tmp:
+            path = write_profile(text, tmp)
+            code, _, err = run_main("--path", str(path), "--for", "dev", "--show")
+        self.assertEqual(code, 0, err)
+        self.assertIn("warning: lanes[0] (automated): mutate is no longer read", err)
 
 
 class Environments(unittest.TestCase):
