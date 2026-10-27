@@ -337,6 +337,120 @@ class ChangedFiles(unittest.TestCase):
         self.assertEqual(out.returncode, 0, out.stderr)
         self.assertIn("F:old.py", [ln.split("\t")[0] for ln in out.stdout.splitlines()])
 
+    def renamed_repo(self, tmp, create_line, edit_line, renames="true"):
+        """old.py (ten lines) at the base, then moved to new.py with one line changed: git pairs them (gogogo#215)."""
+        repo = Path(tmp)
+        git(repo, "init", "-q", "-b", "main")
+        git(repo, "config", "user.email", "t@example.org")
+        git(repo, "config", "user.name", "t")
+        git(repo, "config", "diff.renames", renames)
+        (repo / "old.py").write_text("".join(f"line_{i} = {i}\n" for i in range(10)))
+        (repo / "README.md").write_text("one\n")
+        git(repo, "add", "-A")
+        git(repo, "commit", "-q", "-m", "base")
+        git(repo, "switch", "-q", "-c", "change")
+        git(repo, "mv", "old.py", "new.py")
+        (repo / "new.py").write_text((repo / "new.py").read_text().replace("line_9 = 9", "line_9 = 99"))
+        git(repo, "commit", "-qam", "rename old.py")
+        status = subprocess.run(["git", "diff", "-M", "--name-status", "main"], cwd=repo,
+                                capture_output=True, text=True, check=True).stdout
+        self.assertRegex(status, r"(?m)^R\d*\told\.py\tnew\.py$", "git did not pair the files as a rename")
+        body = BODY.replace("**Create:** `tests/test_list.py`.", create_line)
+        body = body.replace(BODY[BODY.index("**Edit:**"):BODY.index("\n", BODY.index("**Edit:**"))], edit_line)
+        (repo / "body.md").write_text(body)
+        (repo / ".gitignore").write_text("body.md\n.gitignore\n")
+        out = subprocess.run([sys.executable, str(SCRIPT), "items", "body.md", "--base", "main"],
+                             cwd=repo, capture_output=True, text=True)
+        self.assertEqual(out.returncode, 0, out.stderr)
+        return out.stdout.splitlines()
+
+    def test_an_edit_file_renamed_away_is_met(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            lines = self.renamed_repo(tmp, "**Create:** `new.py`.", "**Edit:** `old.py`.")
+        self.assertIn("F:old.py\told.py\tmet", lines)
+        self.assertIn("F:new.py\tnew.py\tmet", lines)
+        self.assertFalse([ln for ln in lines if ln.startswith("outside:")], lines)
+
+    def test_a_renamed_away_path_the_spec_does_not_list_is_not_outside(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            lines = self.renamed_repo(tmp, "**Create:** `new.py`.", "**Edit:** `README.md`.")
+        self.assertNotIn("outside: old.py", lines)
+        self.assertIn("F:new.py\tnew.py\tmet", lines)
+
+    def test_a_renamed_away_path_is_met_whatever_the_git_config(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            lines = self.renamed_repo(tmp, "**Create:** `new.py`.", "**Edit:** `old.py`.", renames="false")
+        self.assertIn("F:old.py\told.py\tmet", lines)
+        self.assertIn("F:new.py\tnew.py\tmet", lines)
+        self.assertFalse([ln for ln in lines if ln.startswith("outside:")], lines)
+        # Without -M, diff.renames=false reads the old path as a deletion, so an unlisted one is outside.
+        with tempfile.TemporaryDirectory() as tmp:
+            lines = self.renamed_repo(tmp, "**Create:** `new.py`.", "**Edit:** `README.md`.", renames="false")
+        self.assertNotIn("outside: old.py", lines)
+
+    def test_records_around_a_rename_are_each_read(self):
+        """Modified files sort before and after the rename, so each -z record is read from its own start."""
+        with tempfile.TemporaryDirectory() as tmp:
+            repo = Path(tmp)
+            git(repo, "init", "-q", "-b", "main")
+            git(repo, "config", "user.email", "t@example.org")
+            git(repo, "config", "user.name", "t")
+            for name in ("a1.md", "a2.md", "zeta.md"):
+                (repo / name).write_text("one\n")
+            (repo / "old.py").write_text("".join(f"line_{i} = {i}\n" for i in range(10)))
+            git(repo, "add", "-A")
+            git(repo, "commit", "-q", "-m", "base")
+            git(repo, "switch", "-q", "-c", "change")
+            git(repo, "mv", "old.py", "new.py")
+            for name in ("a1.md", "a2.md", "zeta.md"):
+                (repo / name).write_text("two\n")
+            git(repo, "commit", "-qam", "change")
+            body = BODY.replace("**Create:** `tests/test_list.py`.", "**Create:** `new.py`.")
+            body = body.replace(BODY[BODY.index("**Edit:**"):BODY.index("\n", BODY.index("**Edit:**"))],
+                                "**Edit:** `a1.md`, `a2.md`, `old.py`, `zeta.md`.")
+            (repo / "body.md").write_text(body)
+            (repo / ".gitignore").write_text("body.md\n.gitignore\n")
+            out = subprocess.run([sys.executable, str(SCRIPT), "items", "body.md", "--base", "main"],
+                                 cwd=repo, capture_output=True, text=True)
+        self.assertEqual(out.returncode, 0, out.stderr)
+        lines = out.stdout.splitlines()
+        for name in ("a1.md", "a2.md", "old.py", "new.py", "zeta.md"):
+            self.assertIn(f"F:{name}\t{name}\tmet", lines)
+        self.assertFalse([ln for ln in lines if ln.startswith("outside:")], lines)
+
+    def test_an_untracked_file_with_an_unusual_name_is_met(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            repo = self.slashless_repo(tmp, "**Edit:** `README.md`.")
+            body = (repo / "body.md").read_text().replace("**Create:** `tests/test_list.py`.", "**Create:** `naïve.md`.")
+            (repo / "body.md").write_text(body)
+            git(repo, "switch", "-q", "-c", "change")
+            (repo / "naïve.md").write_text("new\n")
+            (repo / "README.md").write_text("two\n")
+            out = subprocess.run([sys.executable, str(SCRIPT), "items", "body.md", "--base", "main"],
+                                 cwd=repo, capture_output=True, text=True)
+        self.assertEqual(out.returncode, 0, out.stderr)
+        lines = out.stdout.splitlines()
+        self.assertIn("F:naïve.md\tnaïve.md\tmet", lines)
+        self.assertFalse([ln for ln in lines if ln.startswith("outside:")], lines)
+
+    def test_untracked_files_are_read_from_the_repo_top_in_a_subfolder(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            repo = self.slashless_repo(tmp, "**Edit:** `README.md`.")
+            body = (repo / "body.md").read_text().replace("**Create:** `tests/test_list.py`.",
+                                                          "**Create:** `top.md`, `sub/y.md`.")
+            (repo / "body.md").write_text(body)
+            git(repo, "switch", "-q", "-c", "change")
+            (repo / "top.md").write_text("new\n")
+            (repo / "sub" / "y.md").write_text("new\n")
+            (repo / "README.md").write_text("two\n")
+            out = subprocess.run([sys.executable, str(SCRIPT), "items", "../body.md", "--base", "main"],
+                                 cwd=repo / "sub", capture_output=True, text=True)
+        self.assertEqual(out.returncode, 0, out.stderr)
+        lines = out.stdout.splitlines()
+        self.assertIn("F:top.md\ttop.md\tmet", lines)
+        self.assertIn("F:sub/y.md\tsub/y.md\tmet", lines)
+        self.assertFalse([ln for ln in lines if ln.startswith("outside:")], lines)
+
     def test_slashless_edit_names_are_read_from_the_repo_top_in_a_subfolder(self):
         with tempfile.TemporaryDirectory() as tmp:
             repo = self.slashless_repo(tmp, "**Edit:** `README.md`, `x.py`.")
@@ -402,8 +516,8 @@ def call(*argv, body=BODY, answers=None, changed=None, cwd=None, git=None):
                 return git(a)
             if a[0] == "merge-base":
                 return "abc\n"
-            if a[0] == "diff":
-                return "".join(f"{p}\n" for p in (changed or []))
+            if a[0] == "diff":  # git diff -M --name-status -z: each changed path as a modification
+                return "".join(f"M\0{p}\0" for p in (changed or []))
             return ""
 
         out = io.StringIO()

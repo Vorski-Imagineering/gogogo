@@ -21,7 +21,8 @@ and is printed as `unlisted:`; so is Files when it is missing or has no Create
 or Edit group naming a path. With `--base`, each `F:` item is `met` when the change
 touches that file and `missing` when it does not, and each changed file no
 `F:` item names is printed as `outside:` (not when Files is unlisted: there is
-no list to be outside of).
+no list to be outside of). A file the change renames away counts as touched
+under its old path too, and only its new path is checked for `outside:`.
 
 `verify` reads a reader's answers, one line per `V`, `A`, `D`, `T` and `N`
 item: `<id> | <met|missing|differs|na> | <evidence> | <note>`. Evidence is
@@ -121,7 +122,7 @@ def _paths(lines: list[str], tree=None) -> list[str]:
     return list(dict.fromkeys(found))
 
 
-def list_items(body: str, changed: list[str] | None = None, tree=None) -> dict | None:
+def list_items(body: str, changed: list[str] | None = None, tree=None, renamed_away=()) -> dict | None:
     """{items: [{id, text, status?}], unlisted: [...], outside: [...]}, or None when there is no spec."""
     _, sections = split_sections(body)
     by_title = {title: lines for title, _, lines in reversed(sections)}
@@ -165,7 +166,8 @@ def list_items(body: str, changed: list[str] | None = None, tree=None) -> dict |
         add(f"F:{path}", path)
     if changed is not None:
         def touches(path):
-            return [f for f in changed if f == path or f.endswith("/" + path)]
+            # A file renamed away is touched under its old path too; only `changed` is checked for outside.
+            return [f for f in [*changed, *renamed_away] if f == path or f.endswith("/" + path)]
         for item in items:
             if item["id"].startswith("F:"):
                 item["status"] = "met" if touches(item["text"]) else "missing"
@@ -183,11 +185,26 @@ def _tree_at(rev: str) -> list[str]:
     return [p for p in _git(["ls-tree", "-r", "-z", "--name-only", "--full-tree", rev]).split("\0") if p]
 
 
-def changed_files(base: str) -> list[str]:
-    fork = _fork(base)
-    names = _git(["diff", "--name-only", fork]).splitlines()
-    names += _git(["ls-files", "--others", "--exclude-standard"]).splitlines()
-    return list(dict.fromkeys(n for n in names if n))
+def changed_files(base: str) -> tuple[list[str], list[str]]:
+    """(the paths the change has, the old path of each file it renamed away).
+
+    Renames are paired explicitly (-M), so the result does not depend on the
+    user's diff.renames. A copy's source is not touched, so only its new path counts."""
+    fields = _git(["diff", "-M", "--name-status", "-z", _fork(base)]).split("\0")
+    names, renamed_away, i = [], [], 0
+    while i < len(fields) and fields[i]:
+        status = fields[i]
+        if status[0] in "RC":
+            if status[0] == "R":
+                renamed_away.append(fields[i + 1])
+            names.append(fields[i + 2])
+            i += 3
+        else:
+            names.append(fields[i + 1])
+            i += 2
+    # Read like the diff: unquoted (-z) and from the repo top, wherever this runs.
+    names += _git(["ls-files", "-z", "--full-name", "--others", "--exclude-standard", "--", ":/"]).split("\0")
+    return list(dict.fromkeys(n for n in names if n)), list(dict.fromkeys(renamed_away))
 
 
 def _in_order(name: str, text: str) -> bool:
@@ -312,10 +329,11 @@ def main(argv=None) -> int:
     try:
         body = sys.stdin.read() if args.body == "-" else Path(args.body).read_text(encoding="utf-8")
         answers = Path(args.answers).read_text(encoding="utf-8") if args.command == "verify" else ""
-        changed = changed_files(args.base) if args.base else None
+        changed, renamed_away = changed_files(args.base) if args.base else (None, [])
         # An Edit file exists before the change: with a base, the tree at the fork
         # counts too, so a file the change deletes or renames is still found.
-        listed = list_items(body, changed, (lambda: _tree() + _tree_at(_fork(args.base))) if args.base else _tree)
+        listed = list_items(body, changed, (lambda: _tree() + _tree_at(_fork(args.base))) if args.base else _tree,
+                            renamed_away)
     except (OSError, UnicodeDecodeError, GitError) as exc:
         print(exc, file=sys.stderr)
         return 2
