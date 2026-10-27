@@ -49,11 +49,13 @@ changed last wins. Nothing in GitHub changes until the person says yes.
    `--publish <id>`; the script writes no such title without it. Report each line it prints. `SKIPPED stale` means someone changed
    it meanwhile; the next refresh plans it again. `FAILED` gives GitHub's
    message. A `WARNING the milestones could not be read` line means the script
-   could not tell which titles are on the tracker already, so each
-   `SKIPPED unapproved` line after it whose title was not answered **Publish**
-   may be held back only because the tracker could not be read, not because
-   of an answer. Say so, without saying the person declined it, and that the
-   next refresh plans them again. Skip this step when nothing was approved.
+   could not tell which titles are on the tracker already. Sort each
+   `SKIPPED unapproved` line after it by its item id in the plan: when that
+   item, or the item whose milestone it needs, was answered **Don't publish**,
+   report it as declined, as step 3 does; when no Publish question was ever put
+   for its title, report it as held back because the tracker could not be read,
+   not because of an answer, and say the next refresh plans it again. Name
+   these items by id only, never by a title that was not published. Skip this step when nothing was approved.
 6. **The document.** Changes to it (a heading linked, a row moved, added or
    removed) stay in the working file, for step 8's commit. When the document
    is still unchanged (step 2 found every mark agrees and nothing here changed
