@@ -202,7 +202,8 @@ def changed_files(base: str) -> tuple[list[str], list[str]]:
         else:
             names.append(fields[i + 1])
             i += 2
-    names += _git(["ls-files", "--others", "--exclude-standard"]).splitlines()
+    # -z here too, so an unusual name reads the same unquoted way in both halves.
+    names += _git(["ls-files", "-z", "--others", "--exclude-standard"]).split("\0")
     return list(dict.fromkeys(n for n in names if n)), list(dict.fromkeys(renamed_away))
 
 

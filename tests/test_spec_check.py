@@ -383,6 +383,25 @@ class ChangedFiles(unittest.TestCase):
         self.assertIn("F:old.py\told.py\tmet", lines)
         self.assertIn("F:new.py\tnew.py\tmet", lines)
         self.assertFalse([ln for ln in lines if ln.startswith("outside:")], lines)
+        # Without -M, diff.renames=false reads the old path as a deletion, so an unlisted one is outside.
+        with tempfile.TemporaryDirectory() as tmp:
+            lines = self.renamed_repo(tmp, "**Create:** `new.py`.", "**Edit:** `README.md`.", renames="false")
+        self.assertNotIn("outside: old.py", lines)
+
+    def test_an_untracked_file_with_an_unusual_name_is_met(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            repo = self.slashless_repo(tmp, "**Edit:** `README.md`.")
+            body = (repo / "body.md").read_text().replace("**Create:** `tests/test_list.py`.", "**Create:** `naïve.md`.")
+            (repo / "body.md").write_text(body)
+            git(repo, "switch", "-q", "-c", "change")
+            (repo / "naïve.md").write_text("new\n")
+            (repo / "README.md").write_text("two\n")
+            out = subprocess.run([sys.executable, str(SCRIPT), "items", "body.md", "--base", "main"],
+                                 cwd=repo, capture_output=True, text=True)
+        self.assertEqual(out.returncode, 0, out.stderr)
+        lines = out.stdout.splitlines()
+        self.assertIn("F:naïve.md\tnaïve.md\tmet", lines)
+        self.assertFalse([ln for ln in lines if ln.startswith("outside:")], lines)
 
     def test_slashless_edit_names_are_read_from_the_repo_top_in_a_subfolder(self):
         with tempfile.TemporaryDirectory() as tmp:
