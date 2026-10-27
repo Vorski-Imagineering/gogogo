@@ -40,10 +40,9 @@ What each fix involves:
 - **Plugin settings.** `claude plugin marketplace add Vorski-Imagineering/gogogo --scope project`,
   then `claude plugin install gogogo@vorski-skills --scope project`, then set
   `"autoUpdate": true` on the marketplace entry. Commit `.claude/settings.json`
-  (with `git add -f` if the repo ignores `.claude/`). The install is recorded
-  for this folder only: every new checkout of the repo runs
-  `claude plugin install gogogo@vorski-skills --scope project` from its root
-  once, and the skills appear after a session restart.
+  (with `git add -f` if the repo ignores `.claude/`). The install is recorded for
+  this folder only: every new checkout runs `claude plugin install gogogo@vorski-skills --scope project`
+  from its root once, and the skills appear after a session restart.
 - **No profile.** Draft `.agents/dev-process.md` from
   `references/profile-schema.md`, reading the repo rather than guessing:
   - **Release shape: ask first.** Before reading any deploy script, ask with
