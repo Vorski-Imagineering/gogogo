@@ -1058,6 +1058,34 @@ class Safety(Case):
         self.assertIn("SKIPPED unapproved", out)
         self.assertEqual(writer.calls, [])
 
+    def test_linking_to_a_milestone_that_already_has_the_title_publishes_nothing(self):
+        """Milestones made by hand with the headings' titles are public already (the #202 report)."""
+        self.private_roadmap()
+        code, plan, err = self.plan(FakeGitHub([ms(7, "A")], [iss(5)], visibility="PRIVATE"), "--link", "A")
+        self.assertEqual(code, 1, err)
+        link = [i for i in plan["items"] if i["kind"] == "link-section"]
+        self.assertEqual(len(link), 1, plan["items"])
+        self.assertNotIn("publishes", link[0])
+
+    def test_a_declined_titles_issues_are_skipped_without_the_title(self):
+        self.private_roadmap(roadmap((heading("Secret plan"), [5])))
+        github = FakeGitHub([], [iss(5)], visibility="PRIVATE")
+        _, plan, _ = self.plan(github)
+        ids = ",".join(str(i["id"]) for i in plan["items"] if i["kind"] in ("link-section", "set-milestone"))
+        self.assertIn(",", ids, plan["items"])
+        code, out, err, writer, _ = self.apply_private(plan, "--items", ids, github=github)
+        self.assertEqual(code, 1, out + err)
+        self.assertEqual(writer.calls, [])
+        self.assertNotIn("Secret plan", out)
+        self.assertEqual(out.count("SKIPPED unapproved"), 2, out)
+        # The title's own item left out of --items: its issue is still skipped without the title.
+        only = ",".join(str(i["id"]) for i in plan["items"] if i["kind"] == "set-milestone")
+        code, out, err, writer, _ = self.apply_private(plan, "--items", only, github=github)
+        self.assertEqual(code, 1, out + err)
+        self.assertEqual(writer.calls, [])
+        self.assertNotIn("Secret plan", out)
+        self.assertIn("SKIPPED unapproved", out)
+
     def test_apply_on_a_non_public_tracker_reads_no_git(self):
         self.commit(roadmap((heading("A"), [5])), D1)
         _, plan, _ = self.plan(FakeGitHub([], [iss(5)]))

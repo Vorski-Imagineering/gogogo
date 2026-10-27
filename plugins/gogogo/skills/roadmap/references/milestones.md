@@ -26,16 +26,17 @@ changed last wins. Nothing in GitHub changes until the person says yes.
    on a public tracker) go only in a fourth group, *Titles to publish from a
    private roadmap*, each with its title word for word. Then each `skipped` line, each `kept` issue, and the
    `unlinked` headings.
-3. **Ask once** with `AskUserQuestion`: **Apply all <k>** or **Apply none**,
-   where `<k>` counts the items that are not questions and carry no
-   `publishes`. A typed answer lists the ids to apply. Then ask each question
-   item in its own question, at most four per call, its `choices` as the
-   options, in order. Then, unless the answer was **Apply none**, each item
-   carrying `publishes` in its own question, at most four per call:
-   **Publish "<title>"** or **Don't publish**. For a title not published,
-   leave out every item whose `milestone` is that title (the issues of that
-   section), and name it in the report by its item id only, never its text,
-   when `tracker.public` is true.
+3. **Ask.** First, each item carrying `publishes` in its own question, at
+   most four per call: **Publish "<title>"** or **Don't publish**; only that
+   answer approves it. A title not published takes with it every item whose
+   `milestone.number` is null and `milestone.title` is that title (the issues
+   of that section; the script also skips them), and the report names it by
+   its item id only, never its text, when `tracker.public` is true. Then ask
+   once with `AskUserQuestion`: **Apply all <k>** or **Apply none**, where
+   `<k>` counts the items left that are not questions and carry no
+   `publishes`; ask nothing when `<k>` is 0. A typed answer lists the ids to
+   apply among those. Then ask each question item in its own question, at
+   most four per call, its `choices` as the options, in order.
 4. **Nobody to answer.** A refused or failed question, or no person (`claude
    -p`): apply nothing, and list every item as not applied. Do not show the
    four-choice decline menu. Nothing is applied without an answer.

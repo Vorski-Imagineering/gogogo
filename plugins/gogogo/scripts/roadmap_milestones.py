@@ -543,10 +543,20 @@ def apply(entries: list[dict], repo: str, roadmap: Path, github, writer, legend,
     lines = text.splitlines(keepends=True)
     created: dict[str, int] = {}
     worst = EXIT_OK
+    # On a private roadmap, a title reaches the tracker only when its own item was approved with --publish;
+    # an item that needs a milestone not yet created under some other title is skipped without naming it.
+    approved = {e["section"] for e in entries if e["kind"] in unapproved and e["id"] in publish}
     for entry in entries:
         tag = f"{entry['id']} {entry['kind']}" + (f" #{entry['issue']}" if entry.get("issue") else "")
-        if entry["kind"] in unapproved and entry["id"] not in publish:
+        milestone = entry.get("milestone") or {}
+        existing = entry["kind"] == "link-section" and milestone.get("number") is not None
+        if entry["kind"] in unapproved and entry["id"] not in publish and not existing:
             print(f"SKIPPED unapproved {tag}: publishing this title was not approved")
+            worst = EXIT_ATTENTION
+            continue
+        if (unapproved and entry["kind"] not in unapproved and milestone.get("number") is None
+                and milestone.get("title") is not None and milestone["title"] not in approved):
+            print(f"SKIPPED unapproved {tag}: its milestone's title was not approved for publishing")
             worst = EXIT_ATTENTION
             continue
         try:
@@ -745,7 +755,9 @@ def run(args, github, history, writer) -> int:
     if private:
         found["private_roadmap"] = True
         for entry in found["items"]:
-            if entry["kind"] in PUBLISHES:
+            # Linking a heading to a milestone that already has its title publishes nothing new.
+            already = entry["kind"] == "link-section" and (entry.get("milestone") or {}).get("number") is not None
+            if entry["kind"] in PUBLISHES and not already:
                 entry["publishes"] = entry["section"]
     print(json.dumps(found, indent=2, ensure_ascii=False))
     return EXIT_ATTENTION if found["items"] or found["skipped"] else EXIT_OK
