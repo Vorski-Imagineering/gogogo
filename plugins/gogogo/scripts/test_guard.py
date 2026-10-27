@@ -30,7 +30,9 @@ licensed when a line of the body's `## Test cases` or `## Design` holds a
 backticked token and says "remove" or "rewrit": a token `path` licenses every
 item in that test file, and `path::name` the hunks whose enclosing lines,
 function context or removed lines contain `name` as a whole word; `name` may
-hold further `::`-separated parts, each of which must occur. It prints each
+hold further `::`-separated parts, each of which must occur. For a file
+renamed since the base, a token naming its old path covers it as one naming
+its new path does. It prints each
 `weaker` item as `licensed` or `NOT LICENSED`, then `test-guard: hunks=<n> same=<n> stronger=<n> weaker=<n>
 licensed=<n> unlicensed=<n>`.
 
@@ -216,15 +218,17 @@ def _has_word(text: str, word: str) -> bool:
 
 
 def licensed(item: dict, tokens: list[str]) -> bool:
+    # A renamed file is named by its old path or its new one.
+    paths = [item["path"]] + ([item["renamed_from"]] if item.get("renamed_from") else [])
     for token in tokens:
         if "::" in token:
             named, rest = token.split("::", 1)
             segments = [part for part in rest.split("::") if part]
             texts = [item["context"], *item["enclosing"], *item["minus"]]
-            if item["kind"] == "changed" and _same_file(item["path"], named) and segments and all(
+            if item["kind"] == "changed" and any(_same_file(p, named) for p in paths) and segments and all(
                     any(_has_word(t, part) for t in texts) for part in segments):
                 return True
-        elif _same_file(item["path"], token):
+        elif any(_same_file(p, token) for p in paths):
             return True
     return False
 

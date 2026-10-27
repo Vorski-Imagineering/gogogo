@@ -468,6 +468,39 @@ class Verify(unittest.TestCase):
         out = self.verify(answers, cases="1. `tests/test_a.py` gains a case")
         self.assertEqual(out.returncode, 1, out.stdout)
 
+    def renamed(self):
+        """test_a.py moved to test_moved.py with one assert dropped: git pairs them as a rename (gogogo#216)."""
+        git(self.r.repo, "mv", "tests/test_a.py", "tests/test_moved.py")
+        self.r.write("tests/test_moved.py", TEST_A.replace("    assert two() == 2\n", ""))
+        self.r.commit("move and loosen")
+        listed = self.r.run("list")
+        self.assertIn("(renamed from tests/test_a.py)", listed.stdout, "git did not pair the files as a rename")
+
+    def test_a_licence_on_the_old_path_covers_a_renamed_file(self):
+        self.renamed()
+        out = self.verify("H1\tweaker\tdropped\n", cases="1. `tests/test_a.py` removed with the old parser")
+        self.assertEqual(out.returncode, 0, out.stdout + out.stderr)
+        self.assertIn("H1  licensed", out.stdout)
+        self.assertIn("unlicensed=0", out.stdout)
+
+    def test_a_named_licence_on_the_old_path_covers_its_test_in_a_renamed_file(self):
+        self.renamed()
+        out = self.verify("H1\tweaker\tdropped\n", cases="1. `tests/test_a.py::test_a` rewritten")
+        self.assertEqual(out.returncode, 0, out.stdout + out.stderr)
+        self.assertIn("H1  licensed", out.stdout)
+
+    def test_a_licence_on_another_old_path_does_not_cover_a_renamed_file(self):
+        self.renamed()
+        out = self.verify("H1\tweaker\tdropped\n", cases="1. `tests/test_b.py` removed")
+        self.assertEqual(out.returncode, 1, out.stdout + out.stderr)
+        self.assertIn("H1  NOT LICENSED", out.stdout)
+
+    def test_a_licence_on_the_new_path_still_covers_a_renamed_file(self):
+        self.renamed()
+        out = self.verify("H1\tweaker\tdropped\n", cases="1. `tests/test_moved.py` rewritten")
+        self.assertEqual(out.returncode, 0, out.stdout + out.stderr)
+        self.assertIn("H1  licensed", out.stdout)
+
     def test_a_deleted_file_licensed_by_its_path(self):
         (self.r.repo / "tests/test_a.py").unlink()
         self.r.commit("drop")
