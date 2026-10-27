@@ -250,7 +250,8 @@ Which report to keep:
 **Correcting a spec you already posted:** edit the composed body file in the
 scratchpad (when it is gone, write the issue's current body to a new one),
 run step 2's public-tracker check on all of it but the `## Original report`
-section above its `---` rule, and again after each change, and leave that
+section above its `---` rule (all of that section when it has no such
+rule, as the lint reads it), and again after each change, and leave that
 part as it is. A body without that section is re-read whole. It is not composed again (step 3). Then re-run Posting steps 4 to 7 (the lint and the check of open specs that read this
 issue, `gh issue edit --body-file`, step 6's re-read of the description, the
 blocked-by links), so the issue carries one accurate spec rather than a spec
