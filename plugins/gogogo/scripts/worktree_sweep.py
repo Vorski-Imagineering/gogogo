@@ -66,8 +66,9 @@ merged, `git branch -D <branch>` (a squash merge leaves the branch's commits
 off the base, so `-d` would refuse). A failure is printed and the worktree
 counts as kept. Then `git worktree prune` clears entries whose folder is gone.
 
-Exit 0 when no worktree is kept, 1 when any is, 2 when the worktree list
-cannot be read or `--only` names no worktree. The pull request and issue repos are the profile's
+Exit 0 when no worktree is kept, 1 when any is or the confirmation could not
+be recorded, 2 when the worktree list cannot be read or `--only` names no
+worktree. The pull request and issue repos are the profile's
 `tracker.code_repo` and `tracker.issues_repo`.
 """
 import argparse

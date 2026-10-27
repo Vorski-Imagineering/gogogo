@@ -454,10 +454,11 @@ class Sweep(unittest.TestCase):
         self.confirmed.unlink()
         path = self.worktree("fix/12-x")
         (self.clone / ".git" / "gogogo-sweep-merged-confirmed").mkdir()  # a folder: the write fails
-        code, _ = self.sweep("--apply", "--confirm-merged", "--only", str(path),
-                             fixture=self.merged_as_gh_prints_it("fix/12-x"))
-        self.assertEqual(code, 1)
+        code, lines = self.sweep("--apply", "--confirm-merged", "--only", str(path),
+                                 fixture=self.merged_as_gh_prints_it("fix/12-x"))
+        self.assertEqual((code, lines), (1, [f"remove {path} (fix/12-x): PR #3 merged"]))
         self.assertIn("cannot record the confirmation", self.stderr)
+        self.assertFalse(path.exists(), "--only is never held, even when the confirmation fails")
 
     def test_12_confirm_merged_with_only_records_the_confirmation(self):
         self.confirmed.unlink()
