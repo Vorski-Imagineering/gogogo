@@ -51,9 +51,8 @@ changed last wins. Nothing in GitHub changes until the person says yes.
    message. A `WARNING the milestones could not be read` line means the script
    could not tell which titles are on the tracker already, so an item that
    needs a title nobody approved with **Publish** printed `SKIPPED unapproved`
-   even when that title may already be there. Say so, and run the same `apply`
-   command again once the tracker answers; it asks nothing new. Skip this step
-   when nothing was approved.
+   even when that title may already be there. Say so, and that the next
+   refresh plans them again. Skip this step when nothing was approved.
 6. **The document.** Changes to it (a heading linked, a row moved, added or
    removed) stay in the working file, for step 8's commit. When the document
    is still unchanged (step 2 found every mark agrees and nothing here changed

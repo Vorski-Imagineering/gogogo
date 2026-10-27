@@ -54,8 +54,8 @@ writes by milestone number, and it never deletes a milestone. Document edits
 are made in the working file, keeping every other byte. One line per item:
 `APPLIED`, `SKIPPED stale`, `SKIPPED unapproved` or `FAILED`, after a
 `WARNING` line when a private roadmap's milestones were needed and could not
-be read: no title then counts as on the tracker already, so every item that
-needs a title not approved with `--publish` is skipped. Exit 0: every item
+be read: every title then counts as not yet on the tracker, so every item
+that needs a title not approved with `--publish` is skipped. Exit 0: every item
 applied. 1: any skipped or failed. 2: the plan, an id or a choice cannot be used.
 """
 from __future__ import annotations
@@ -567,12 +567,12 @@ def apply(entries: list[dict], repo: str, roadmap: Path, github, writer, legend,
         try:
             public_titles = {m["title"] for m in github.milestones(repo)}
         except ReadError as exc:
-            print(f"WARNING the milestones could not be read ({exc}): no title counts as on the tracker"
-                  " already, so the items below that need a title not approved with --publish are held back")
+            print(f"WARNING the milestones could not be read ({exc}): every title counts as not yet on the"
+                  " tracker, so the items below that need a title not approved with --publish are held back")
     for entry in entries:
         tag = f"{entry['id']} {entry['kind']}" + (f" #{entry['issue']}" if entry.get("issue") else "")
         milestone = entry.get("milestone") or {}
-        existing = entry["kind"] == "link-section" and entry.get("section") in public_titles
+        existing = unapproved_link(entry) and entry.get("section") in public_titles
         if entry["kind"] in unapproved and entry["id"] not in publish and not existing:
             print(f"SKIPPED unapproved {tag}: publishing this title was not approved")
             worst = EXIT_ATTENTION

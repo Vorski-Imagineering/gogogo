@@ -68,6 +68,7 @@ class FakeGitHub:
         self.vis = visibility
 
     def milestones(self, repo):
+        self.milestone_reads = getattr(self, "milestone_reads", 0) + 1
         if getattr(self, "milestones_error", None):
             raise self.milestones_error
         return [dict(m) for m in self.list]
@@ -1084,6 +1085,17 @@ class Safety(Case):
         self.assertNotIn("SKIPPED", out)
         self.assertIn(("set_issue_milestone", 5, 7), writer.calls)
 
+    def test_an_issue_alone_goes_to_a_milestone_that_already_has_the_title(self):
+        """With no link in --items, the issue's own gate still reads the milestones."""
+        self.private_roadmap()
+        _, plan, _ = self.plan(FakeGitHub([], [iss(5)], visibility="PRIVATE"))
+        target = next(i["id"] for i in plan["items"] if i["kind"] == "set-milestone")
+        code, out, err, writer, _ = self.apply_private(plan, "--items", str(target),
+                                                       github=FakeGitHub([ms(7, "A")], [iss(5)], visibility="PRIVATE"))
+        self.assertEqual(code, 0, out + err)
+        self.assertNotIn("SKIPPED", out)
+        self.assertIn(("set_issue_milestone", 5, 7), writer.calls)
+
     def test_a_failed_milestone_read_does_not_stop_the_other_items(self):
         self.private_roadmap(roadmap((heading("A"), [5]), (heading("B", 2), [6])))
         github = FakeGitHub([ms(2, "B")], [iss(5), iss(6)], visibility="PRIVATE")
@@ -1099,15 +1111,17 @@ class Safety(Case):
         self.assertIn(("set_issue_milestone", 6, 2), writer.calls)
 
     def test_the_milestones_are_not_read_when_no_gate_needs_them(self):
-        """A numbered milestone needs no title check, so a failed read is never made and warns nothing."""
+        """A numbered milestone needs no title check, so the milestones are not read and nothing warns."""
         self.private_roadmap(roadmap((heading("A"), [5]), (heading("B", 2), [6])))
         github = FakeGitHub([ms(2, "B")], [iss(5), iss(6)], visibility="PRIVATE")
         _, plan, _ = self.plan(github, "--link", "A")
         numbered = next(i["id"] for i in plan["items"]
                         if i["kind"] == "set-milestone" and (i["milestone"] or {}).get("number") == 2)
         github.milestones_error = rm.ReadError("milestones: HTTP 502")
+        github.milestone_reads = 0
         code, out, err, writer, _ = self.apply_private(plan, "--items", str(numbered), github=github)
         self.assertEqual(code, 0, out + err)
+        self.assertEqual(github.milestone_reads, 0)
         self.assertNotIn("WARNING", out)
         self.assertNotIn("SKIPPED", out)
         self.assertIn(("set_issue_milestone", 6, 2), writer.calls)
