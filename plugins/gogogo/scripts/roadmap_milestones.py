@@ -52,7 +52,8 @@ unapproved` without the title and changes nothing. Before each GitHub write it r
 item expected and skips it (`SKIPPED stale`) when someone changed it. It
 writes by milestone number, and it never deletes a milestone. Document edits
 are made in the working file, keeping every other byte. One line per item:
-`APPLIED`, `SKIPPED stale`, `SKIPPED unapproved` or `FAILED`. Exit 0: every item applied. 1: any
+`APPLIED`, `SKIPPED stale`, `SKIPPED unapproved` or `FAILED`, after a
+`WARNING` line when a private roadmap's milestones could not be read. Exit 0: every item applied. 1: any
 skipped or failed. 2: the plan, an id or a choice cannot be used.
 """
 from __future__ import annotations
@@ -554,8 +555,9 @@ def apply(entries: list[dict], repo: str, roadmap: Path, github, writer, legend,
     if unapproved:
         try:
             public_titles = {m["title"] for m in github.milestones(repo)}
-        except ReadError:
-            pass
+        except ReadError as exc:
+            print(f"WARNING the milestones could not be read ({exc}): every title counts as unapproved")
+            worst = EXIT_ATTENTION
     for entry in entries:
         tag = f"{entry['id']} {entry['kind']}" + (f" #{entry['issue']}" if entry.get("issue") else "")
         milestone = entry.get("milestone") or {}
