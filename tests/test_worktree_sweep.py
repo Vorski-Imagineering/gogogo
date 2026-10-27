@@ -475,6 +475,30 @@ class Sweep(unittest.TestCase):
                          (0, [f"remove {path} (fix/12-x): PR #3 merged"]))
         self.assertTrue(path.exists())
 
+    def test_12_a_confirmation_that_cannot_be_written_holds(self):
+        self.confirmed.unlink()
+        self.confirmed.mkdir()  # a folder: the write fails
+        path = self.worktree("fix/12-x")
+        code, lines = self.sweep("--apply", "--confirm-merged", fixture=self.merged_as_gh_prints_it("fix/12-x"))
+        self.assertEqual((code, lines), (1, [f"hold {path} (fix/12-x): PR #3 merged{self.HOLD}"]))
+        self.assertIn("cannot record the confirmation", self.stderr)
+        self.assertTrue(path.exists())
+
+    def test_12_every_held_worktree_and_branch_is_listed(self):
+        self.confirmed.unlink()
+        first, second = self.worktree("fix/12-x"), self.worktree("fix/14-z")
+        tips = {name: self.local_branch(name) for name in ("fix/15-a", "fix/16-b")}
+        fixture = {"pr": {**{b: [pr(3, "MERGED", oid=self.tip(b), name_with_owner="")] for b in ("fix/12-x", "fix/14-z")},
+                          **{b: [pr(4, "MERGED", oid=t, name_with_owner="")] for b, t in tips.items()}}}
+        code, lines = self.sweep("--apply", fixture=fixture)
+        self.assertEqual(code, 1)
+        self.assertEqual(sorted(lines), sorted([
+            f"hold {first} (fix/12-x): PR #3 merged{self.HOLD}",
+            f"hold {second} (fix/14-z): PR #3 merged{self.HOLD}",
+            "hold branch fix/15-a: PR #4 merged at its tip; confirm with worktree_sweep.py --apply --confirm-merged",
+            "hold branch fix/16-b: PR #4 merged at its tip; confirm with worktree_sweep.py --apply --confirm-merged"]))
+        self.assertTrue(first.exists() and second.exists())
+
     def test_12_confirm_merged_without_apply_is_a_usage_error(self):
         self.confirmed.unlink()
         code, lines = self.sweep("--confirm-merged")
