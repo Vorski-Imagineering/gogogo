@@ -52,9 +52,9 @@ are measurements, and where each is captured. Use `sentry.org`,
    `git merge-base --is-ancestor <commit> origin/<base>; echo $?`, where
    `<base>` is `integration.base`, else `main`: 0 is shipped, 1 is not, and
    anything else (a commit this clone does not have) is unknown, never "not
-   shipped". When the fetch failed, say so in the report, and a 1 is unknown
-   too: the base may be stale. A report can come from a tab still running a bundle older than the
-   fix.
+   shipped". When the fetch failed, a 1 is unknown too, and the answer says
+   the base may be stale (in a weekly report, under *Releases seen*). A report
+   can come from a tab still running a bundle older than the fix.
 3. **Level is not severity.** Before calling an `info` or `warning` event
    noise, read its capture site. A high-volume issue with a fixed fingerprint
    is often a measurement, such as a session outcome that serves as a
