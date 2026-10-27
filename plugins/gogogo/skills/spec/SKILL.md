@@ -166,8 +166,7 @@ asking until pre-post check question 1 answers *"none"*.
   person answers against the recommendation, work out what follows from the
   answer yourself.
 - Every question opens with the real case in one plain sentence, and each
-  option says what changes for people. Name no files, flags or exit codes in a
-  question.
+  option says what changes for people. Name no files, flags or exit codes in a question.
 - An approval question also lists its edge cases and what stays unfixed.
   **REQUIRED REFERENCE:** read `references/approval-questions.md` (in this
   skill's folder) before asking one.
@@ -363,7 +362,8 @@ has no card and no pull request.
    issue report, a run report, an error) or a real path in a repo shows it. A
    person's request always hits today; this check is for follow-ups an agent
    filed (a review finding, a "what if", or one filed "for later" during
-   another issue's questions). When recon finds none:
+   another issue's questions). Items 1 to 3 are for when recon finds none;
+   item 4 holds whatever recon found, a person's request included:
    1. For an issue: ask **close it as not planned** or **spec it anyway**. On
       close: `gh issue close <N> --repo <tracker.issues_repo> --reason "not planned" --comment "Not specced: nothing hits this today. Reopen when <the case that would make it real>."`,
       and end this issue.

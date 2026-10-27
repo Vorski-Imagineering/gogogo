@@ -3,7 +3,7 @@
 Part of `/gogogo:spec`. Read it in full. Section names and § numbers here are `SKILL.md`'s. `${CLAUDE_PLUGIN_ROOT}` below is not filled in for you: it is the plugin's folder, the one whose `scripts/` `SKILL.md` names in full.
 
 *Before you write* § 6, item 4: the issue hits today, but cannot be acted on
-yet. In order:
+yet. It holds whatever recon found, a person's request included. In order:
 
 1. **The two triggers**, each named with its evidence:
    - its own text says it waits for something (another issue's result,
@@ -14,34 +14,54 @@ yet. In order:
      parts, a hand-written wire format, a dependency that does not cover the
      path): the part that is missing, and where recon found it missing. A
      hard design the issue did foresee is not a trigger.
-2. **The question**, one `AskUserQuestion` before any design question: **park
+2. **An idea not yet filed** has no card to park: ask **don't file it** (file
+   nothing, and give the three lines of rule 5 in the reply) or **file and
+   spec it**, and skip rules 3 to 6.
+3. **Finding the column:** the single column from `<tracker.tool> fields`
+   whose name contains `backlog`, ignoring case and emoji. A non-zero exit
+   from `fields` is said as such, and this issue ends with nothing posted: a
+   failed read is not a missing column. With none, several, or no
+   `tracker.tool`, the first choice in rule 4 is **close it as not planned**
+   instead.
+4. **The question**, one `AskUserQuestion` before any design question: **park
    it until <the precondition, in one line>** (first, marked recommended) or
    **spec it anyway**. It opens with the real case in one plain sentence and
    names the evidence.
-3. **Finding the column:** the single column from `<tracker.tool> fields`
-   whose name contains `backlog`, ignoring case and emoji. With none, several,
-   or no `tracker.tool`, the first choice is **close it as not planned**
-   instead, with the same comment (rule 5).
-4. **On park:** read the card with `<tracker.tool> show <N>`, then
-   `<tracker.tool> move <N> --from "<the column read>" --to "<the backlog column>"`.
-   For `shared` the tool is `python3 "${CLAUDE_PLUGIN_ROOT}/scripts/tracker.py"`.
-   A card in `tracker.columns.in_progress` or `tracker.columns.needs_human`
-   is not moved: say so. Then write three lines to `<scratch>/park-<N>.md`:
+5. **The three lines**, written to `<scratch>/park-<N>.md`:
    ```
    Parked before speccing: <the trigger and its evidence>.
    Unpark when: <what would make it actionable>.
    Cheapest fallback if the need comes first: <one line, or "none found">.
    ```
-   and post them with
+6. **On park:** read the card with `<tracker.tool> show <N>` (for `shared`,
+   `python3 "${CLAUDE_PLUGIN_ROOT}/scripts/tracker.py"`, and the same for
+   `move` below), as the first command, immediately before the move.
+   - A read that exits non-zero: say the card could not be read, move
+     nothing, post nothing, and end this issue.
+   - A card in `tracker.columns.in_progress`, `tracker.columns.needs_human`
+     or any `stages` entry's column: do not move it. Say which column it is in
+     and that it was left there, post nothing, and end this issue.
+   - No card: for `shared`,
+     `move <N> --to "<the backlog column>" --add-missing`; for any other tool,
+     say the issue has no card and post nothing.
+   - Otherwise:
+     `move <N> --from "<the column read>" --to "<the backlog column>"`. A card
+     the read showed with no column is moved without `--from`.
+   - Only a zero exit counts as parked. Exit 3: the card moved meanwhile; say
+     to where, and post nothing. Any other exit: say the move failed, with its
+     message, and post nothing.
+
+   Once parked, post the three lines with
    `gh issue comment <N> --repo <tracker.issues_repo> --body-file <scratch>/park-<N>.md`.
    No label and no spec. End this issue.
-5. **On close as not planned:** § 6's close command, with the same three
-   lines as its `--comment`. End this issue.
-6. **On spec it anyway:** carry on to *Before you write* § 7. The trigger and
+7. **On close as not planned:** `gh issue close <N> --repo <tracker.issues_repo> --reason "not planned" --comment "Not specced: it cannot be acted on yet."`,
+   then post the three lines with the `gh issue comment` command of rule 6.
+   End this issue.
+8. **On spec it anyway:** carry on to *Before you write* § 7. The trigger and
    its evidence go into `## Context` as a trap.
-7. **A decline, or no person to ask:** post nothing, move nothing, comment
+9. **A decline, or no person to ask:** post nothing, move nothing, comment
    nothing, and end this issue, saying what recon found. In a run of several,
    no person to ask stops the run, as *Several issues in one run* rule 6
    says. The four-choice menu for a declined question is not used here.
-8. **When `tracker.public` is true**, the comment names no path, repo, host or
-   person from outside this repo.
+10. **When `tracker.public` is true**, the three lines name no path, repo,
+    host or person from outside this repo.
