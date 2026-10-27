@@ -87,7 +87,8 @@ order, checking each step before starting the next:
    in this file, re-read the same way, and composed again (step 3); then
    step 4 runs again. A correction (below) is never composed again: every
    change to it, a lint fix included, is made in place in the composed body
-   file, all of it but the report is re-read, and then step 4 runs again.
+   file, all of it but its `## Original report` section is re-read, and then
+   step 4 runs again.
    When the re-read removes what the lint needs and no rewrite meets both,
    stop this issue: post nothing, add no label, and report the lint error and
    the removal (its kind and where it was, never the text). In a correction
@@ -248,11 +249,9 @@ Which report to keep:
 
 **Correcting a spec you already posted:** edit the composed body file in the
 scratchpad (when it is gone, write the issue's current body to a new one),
-run step 2's public-tracker check on all of it but the report, and again
-after each change, and leave the report as it is. The report is the
-`## Original report` section down to its `---` rule; a body that starts at
-`## Verify by hand` has none; in any other body it is what *Which report to
-keep* finds. It is not composed again (step 3). Then re-run Posting steps 4 to 7 (the lint and the check of open specs that read this
+run step 2's public-tracker check on all of it but the `## Original report`
+section, and again after each change, and leave that section as it is. A
+body without that section is re-read whole. It is not composed again (step 3). Then re-run Posting steps 4 to 7 (the lint and the check of open specs that read this
 issue, `gh issue edit --body-file`, step 6's re-read of the description, the
 blocked-by links), so the issue carries one accurate spec rather than a spec
 plus errata.
