@@ -68,6 +68,8 @@ class FakeGitHub:
         self.vis = visibility
 
     def milestones(self, repo):
+        if getattr(self, "milestones_error", None):
+            raise self.milestones_error
         return [dict(m) for m in self.list]
 
     def milestone_issues(self, repo, number):
@@ -1071,6 +1073,27 @@ class Safety(Case):
         self.assertEqual(code, 0, out + err)
         self.assertNotIn("SKIPPED", out)
         self.assertIn("/milestone/7", self.doc.read_text(encoding="utf-8"))
+
+    def test_issues_go_to_a_milestone_that_already_has_the_title(self):
+        self.private_roadmap()
+        _, plan, _ = self.plan(FakeGitHub([], [iss(5)], visibility="PRIVATE"))
+        ids = ",".join(str(i["id"]) for i in plan["items"] if i["kind"] in ("link-section", "set-milestone"))
+        code, out, err, writer, _ = self.apply_private(plan, "--items", ids,
+                                                       github=FakeGitHub([ms(7, "A")], [iss(5)], visibility="PRIVATE"))
+        self.assertEqual(code, 0, out + err)
+        self.assertNotIn("SKIPPED", out)
+        self.assertIn(("set_issue_milestone", 5, 7), writer.calls)
+
+    def test_a_failed_milestone_read_does_not_stop_the_other_items(self):
+        self.private_roadmap()
+        github = FakeGitHub([], [iss(5)], visibility="PRIVATE")
+        _, plan, _ = self.plan(github)
+        ident = str(next(i["id"] for i in plan["items"] if i["kind"] == "link-section"))
+        github.milestones_error = rm.ReadError("milestones: HTTP 502")
+        code, out, err, writer, _ = self.apply_private(plan, "--items", ident, github=github)
+        self.assertEqual(code, 1, out + err)
+        self.assertIn("SKIPPED unapproved", out)
+        self.assertEqual(writer.calls, [])
 
     def test_a_hand_edited_milestone_number_does_not_pass_the_gate(self):
         self.private_roadmap(roadmap((heading("Secret plan"), [5])))

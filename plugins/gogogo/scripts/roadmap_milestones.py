@@ -548,8 +548,14 @@ def apply(entries: list[dict], repo: str, roadmap: Path, github, writer, legend,
     # On a private roadmap, a title reaches the tracker only when its own item was approved with --publish;
     # an item that needs a milestone not yet created under some other title is skipped without naming it.
     approved = {e["section"] for e in entries if e["kind"] in unapproved and e["id"] in publish}
-    # Read live, not from the plan: a title a milestone already has is public already.
-    public_titles = {m["title"] for m in github.milestones(repo)} if unapproved else set()
+    # Read live, not from the plan: a title a milestone already has is public already. A failed
+    # read counts no title as public, so it only holds more back.
+    public_titles = set()
+    if unapproved:
+        try:
+            public_titles = {m["title"] for m in github.milestones(repo)}
+        except ReadError:
+            pass
     for entry in entries:
         tag = f"{entry['id']} {entry['kind']}" + (f" #{entry['issue']}" if entry.get("issue") else "")
         milestone = entry.get("milestone") or {}
@@ -559,7 +565,8 @@ def apply(entries: list[dict], repo: str, roadmap: Path, github, writer, legend,
             worst = EXIT_ATTENTION
             continue
         if (unapproved and entry["kind"] not in unapproved and milestone.get("number") is None
-                and milestone.get("title") is not None and milestone["title"] not in approved):
+                and milestone.get("title") is not None and milestone["title"] not in approved
+                and milestone["title"] not in public_titles):
             print(f"SKIPPED unapproved {tag}: its milestone's title was not approved for publishing")
             worst = EXIT_ATTENTION
             continue
