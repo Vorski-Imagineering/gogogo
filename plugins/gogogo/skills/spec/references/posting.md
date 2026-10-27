@@ -61,6 +61,47 @@ order, checking each step before starting the next:
        changed by someone else meanwhile, nobody to ask*.
 2. **Write the spec to the scratchpad**, so a failed call is re-postable.
    Inline `--body` mangles markdown; always use a file.
+
+   When `tracker.public` is true, re-read that file (everything this run
+   wrote, never the report) before composing, and remove from it, editing
+   the file, anything not known to be safe to publish:
+   - any path outside this checkout: absolute (`/Users/`, `/home/`, `/tmp/`,
+     `/private/`, `C:\`), home-relative (`~/`), or into another checkout
+     (`../<folder>`). A path inside the checkout, relative to its root, and a
+     placeholder such as `<scratch>` are kept;
+   - every repo, project, client, product or folder name from outside this
+     checkout, except `tracker.issues_repo`, `tracker.code_repo`, and tools
+     and products anyone would know as public;
+   - hostnames and IP addresses, except inside a link the next rule keeps;
+   - links, except into `tracker.issues_repo` or `tracker.code_repo`, under
+     an `environments` entry's `url` in the profile, or to a public product's
+     documentation or public project page. A shared, preview, signed or
+     secret link is removed wherever it points;
+   - anything that looks like a token or key, and email addresses;
+   - people's names (use their role);
+   - anything else not known to be safe to publish.
+
+   When unsure, remove it. Re-read the whole file again after each change.
+   Like the list, the rest of this step applies only when `tracker.public`
+   is true. Any later change to the spec before step 5 (a lint fix in step 4) is made
+   in this file, re-read the same way, and composed again (step 3); then
+   step 4 runs again. A correction (below) is never composed again: every
+   change to it, a lint fix included, is made in place in the composed body
+   file, re-read as the correction says, and then step 4 runs again.
+   When the re-read removes what the lint needs and no rewrite meets both,
+   stop this issue: post nothing, add no label, and report the lint error and
+   the removal (its kind and where it was, never the text). In a correction
+   the report also says that the spec already posted is not corrected and
+   keeps its label and its card where they are, and which removals were of
+   text already posted, which stays published, so a person decides whether
+   it may still be built. In a run of
+   several issues this ends that issue only, never the run, and its
+   final-report line is *stopped: the public-tracker re-read removed what the
+   lint needs*.
+   The reply after posting carries one line: `Removed before posting: none`,
+   or `Removed before posting:` and each item as its kind and where it was
+   (*a path, in Context*), never the removed text. Nothing removed is put
+   back.
 3. **Compose the body file**: the report section, a `---` rule, then the spec.
    ```
    ## Original report
@@ -205,10 +246,15 @@ Which report to keep:
   so in your reply; do not invent one.
 - **Body is empty** → no report section; the spec starts at `## Verify by hand`.
 
-**Correcting a spec you already posted:** edit the scratchpad file and re-run
-Posting steps 4 to 7 (the lint and the check of open specs that read this
-issue, `gh issue edit --body-file`, the re-read, the blocked-by links), so the issue carries one accurate
-spec rather than a spec plus errata.
+**Correcting a spec you already posted:** edit the composed body file in the
+scratchpad (when it is gone, write the issue's current body to a new one),
+run step 2's public-tracker check on all of it but the `## Original report`
+section above its `---` rule, and again after each change, and leave that
+part as it is. A body without that section, or whose section has no `---`
+rule, is re-read whole. It is not composed again (step 3). Then re-run Posting steps 4 to 7 (the lint and the check of open specs that read this
+issue, `gh issue edit --body-file`, step 6's re-read of the description, the
+blocked-by links), so the issue carries one accurate spec rather than a spec
+plus errata.
 
 **Never leave a second copy** of the spec or of the report. If an earlier
 version is sitting in a comment (including a spec you just rescued into the
