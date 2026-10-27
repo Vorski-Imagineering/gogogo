@@ -25,7 +25,7 @@ touches such a file names this run as the last step of its `## Verification`.
 
 1. A run whose output has no `mutants:` line is a failed run, never a pass. Run
    it once more. A second failed run stops the issue for a person (stop reason
-   `mutation`), with both runs' last lines under the Needs-you line.
+   `mutation`).
 2. `mutants: 0` means nothing on the changed lines can be mutated. It is
    reported and is not a failure.
 3. Each survivor is handled by the first of these that applies, and nothing
