@@ -83,7 +83,8 @@ order, checking each step before starting the next:
 
    When unsure, remove it. Re-read the whole file again after each change.
    Any later change to the spec before step 5 (a lint fix in step 4) is made
-   in this file, re-read the same way, and composed again (step 3).
+   in this file, re-read the same way, and composed again (step 3); then
+   step 4 runs again.
    The reply after posting carries one line: `Removed before posting: none`,
    or `Removed before posting:` and each item as its kind and where it was
    (*a path, in Context*), never the removed text. Nothing removed is put
@@ -232,9 +233,11 @@ Which report to keep:
   so in your reply; do not invent one.
 - **Body is empty** → no report section; the spec starts at `## Verify by hand`.
 
-**Correcting a spec you already posted:** edit the scratchpad spec file, run
-step 2's public-tracker check again, compose the body again (step 3), then
-re-run Posting steps 4 to 7 (the lint and the check of open specs that read this
+**Correcting a spec you already posted:** edit the scratchpad spec file (when
+it is gone, save the issue's current body as step 1 does and take the spec
+below its `---` rule), run step 2's public-tracker check again, and put the
+spec in place of the one below the `---` rule of the body as posted, leaving
+the report section above it unchanged. Then re-run Posting steps 4 to 7 (the lint and the check of open specs that read this
 issue, `gh issue edit --body-file`, step 6's re-read of the description, the
 blocked-by links), so the issue carries one accurate spec rather than a spec
 plus errata.
