@@ -388,6 +388,36 @@ class ChangedFiles(unittest.TestCase):
             lines = self.renamed_repo(tmp, "**Create:** `new.py`.", "**Edit:** `README.md`.", renames="false")
         self.assertNotIn("outside: old.py", lines)
 
+    def test_records_around_a_rename_are_each_read(self):
+        """Modified files sort before and after the rename, so each -z record is read from its own start."""
+        with tempfile.TemporaryDirectory() as tmp:
+            repo = Path(tmp)
+            git(repo, "init", "-q", "-b", "main")
+            git(repo, "config", "user.email", "t@example.org")
+            git(repo, "config", "user.name", "t")
+            for name in ("a1.md", "a2.md", "zeta.md"):
+                (repo / name).write_text("one\n")
+            (repo / "old.py").write_text("".join(f"line_{i} = {i}\n" for i in range(10)))
+            git(repo, "add", "-A")
+            git(repo, "commit", "-q", "-m", "base")
+            git(repo, "switch", "-q", "-c", "change")
+            git(repo, "mv", "old.py", "new.py")
+            for name in ("a1.md", "a2.md", "zeta.md"):
+                (repo / name).write_text("two\n")
+            git(repo, "commit", "-qam", "change")
+            body = BODY.replace("**Create:** `tests/test_list.py`.", "**Create:** `new.py`.")
+            body = body.replace(BODY[BODY.index("**Edit:**"):BODY.index("\n", BODY.index("**Edit:**"))],
+                                "**Edit:** `a1.md`, `a2.md`, `old.py`, `zeta.md`.")
+            (repo / "body.md").write_text(body)
+            (repo / ".gitignore").write_text("body.md\n.gitignore\n")
+            out = subprocess.run([sys.executable, str(SCRIPT), "items", "body.md", "--base", "main"],
+                                 cwd=repo, capture_output=True, text=True)
+        self.assertEqual(out.returncode, 0, out.stderr)
+        lines = out.stdout.splitlines()
+        for name in ("a1.md", "a2.md", "old.py", "new.py", "zeta.md"):
+            self.assertIn(f"F:{name}\t{name}\tmet", lines)
+        self.assertFalse([ln for ln in lines if ln.startswith("outside:")], lines)
+
     def test_an_untracked_file_with_an_unusual_name_is_met(self):
         with tempfile.TemporaryDirectory() as tmp:
             repo = self.slashless_repo(tmp, "**Edit:** `README.md`.")
