@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Remove the worktrees whose issue's work is finished, and keep the rest.
 
-    worktree_sweep.py [--apply] [--only PATH]
+    worktree_sweep.py [--apply [--confirm-merged]] [--only PATH]
 
 For every worktree in `git worktree list --porcelain` except the main one (the
 first entry) and the one holding the current directory, or only `--only PATH`,
@@ -41,17 +41,38 @@ the current directory is inside it; run this from <main worktree>`; PATH that
 is no worktree of this repo prints `worktree_sweep: <path> is not a worktree of
 this repo` on stderr. Nothing is removed in any of the three.
 
+The first whole sweep with `--apply` in a clone holds what a merged pull
+request alone would remove (rule 6, and a merged branch), until a person
+confirms once: each such worktree prints `hold <path> (<branch>): PR #<m>
+merged; the first sweep in this clone removes nothing on a merged PR until
+confirmed: worktree_sweep.py --apply --confirm-merged`, each such branch `hold
+branch <name>: PR #<m> merged at its tip; confirm with worktree_sweep.py
+--apply --confirm-merged`, and a hold counts as kept. `--apply
+--confirm-merged` writes the confirmation, the file
+`gogogo-sweep-merged-confirmed` in the clone's git folder (`git rev-parse
+--git-common-dir`, shared by all its worktrees), then sweeps as normal; every
+later `--apply` sweep removes without holding. When the file cannot be
+written, it says so on stderr, holds (except with `--only`) and exits 1.
+While held, a worktree is judged as if no merged pull request counted, so a
+closed issue still removes it (rule 7, branch kept) and commits on no remote
+still keep it (rule 5, printed as `hold`). `--only` and a sweep without
+`--apply` are never held; `--only` with `--confirm-merged` still writes the
+confirmation. `--confirm-merged` without
+`--apply` is a usage error (exit 2).
+
 With `--apply`, each `remove` runs `git worktree remove <path>` (never
 `--force`, so git refuses a dirty one too) and, only when its pull request
 merged, `git branch -D <branch>` (a squash merge leaves the branch's commits
 off the base, so `-d` would refuse). A failure is printed and the worktree
 counts as kept. Then `git worktree prune` clears entries whose folder is gone.
 
-Exit 0 when no worktree is kept, 1 when any is, 2 when the worktree list
-cannot be read or `--only` names no worktree. The pull request and issue repos are the profile's
+Exit 0 when no worktree is kept, 1 when any is or the confirmation could not
+be recorded, 2 when the worktree list cannot be read or `--only` names no
+worktree. The pull request and issue repos are the profile's
 `tracker.code_repo` and `tracker.issues_repo`.
 """
 import argparse
+import datetime
 import subprocess
 import sys
 from pathlib import Path
@@ -101,8 +122,9 @@ KEEP, REMOVE, REMOVE_WITH_BRANCH = "keep", "remove", "remove with branch"
 REMOVE_BRANCH = "remove branch"
 
 
-def decide(tree, issues_repo, code_repo):
-    """(KEEP | REMOVE | REMOVE_WITH_BRANCH, reason) for one worktree."""
+def decide(tree, issues_repo, code_repo, merged_counts=True):
+    """(KEEP | REMOVE | REMOVE_WITH_BRANCH, reason) for one worktree; with merged_counts False,
+    a merged pull request counts for nothing, as before the first sweep is confirmed."""
     branch = tree["branch"]
     if tree["locked"]:
         return KEEP, "locked"
@@ -129,7 +151,8 @@ def decide(tree, issues_repo, code_repo):
     # A squash merge leaves the branch's commits off the base, and a pruned
     # remote branch leaves them on no remote: a merged PR whose head contains
     # this tip carried them. A merged PR from an older tip does not cover newer work.
-    merged = [p for p in prs if p.get("state") == "MERGED" and _contains(p.get("headRefOid") or "", tip.stdout.strip())]
+    merged = [p for p in prs if merged_counts and p.get("state") == "MERGED"
+              and _contains(p.get("headRefOid") or "", tip.stdout.strip())]
     if int(ahead.stdout) > 0 and not merged:
         return KEEP, f"{ahead.stdout.strip()} commit(s) on no remote"
     if merged:
@@ -193,6 +216,18 @@ def _inside(path, folder):
         return False
 
 
+CONFIRMED = "gogogo-sweep-merged-confirmed"
+CONFIRM = "worktree_sweep.py --apply --confirm-merged"
+
+
+def confirmation_file():
+    """The clone's confirmation file, in the git folder all its worktrees share; None when git cannot say where."""
+    out = git("rev-parse", "--git-common-dir")
+    if out.returncode != 0 or not out.stdout.strip():
+        return None
+    return Path(out.stdout.strip()).resolve() / CONFIRMED
+
+
 def remove(tree, verdict):
     """Remove the worktree, and its branch for REMOVE_WITH_BRANCH; False when the worktree stays."""
     out = git("worktree", "remove", tree["path"])
@@ -210,7 +245,11 @@ def main(argv=None):
     parser = argparse.ArgumentParser(description="Remove worktrees whose issue's work is finished.")
     parser.add_argument("--apply", action="store_true", help="remove what the sweep says to remove")
     parser.add_argument("--only", metavar="PATH", help="consider only this worktree")
+    parser.add_argument("--confirm-merged", action="store_true",
+                        help="with --apply: confirm, once per clone, removing what merged pull requests finished")
     args = parser.parse_args(argv)
+    if args.confirm_merged and not args.apply:
+        parser.error("--confirm-merged needs --apply")
 
     trees = worktrees()
     if trees is None:
@@ -236,10 +275,36 @@ def main(argv=None):
     issues_repo, code_repo = repos()
 
     kept = False
+    # The first whole sweep in a clone holds what a merged PR alone would remove, until confirmed (gogogo#214).
+    hold = False
+    if args.apply:
+        confirmed = confirmation_file()
+        if args.confirm_merged:
+            try:
+                if confirmed is None:
+                    raise OSError("git rev-parse --git-common-dir failed")
+                confirmed.write_text(datetime.date.today().isoformat() + "\n")
+            except OSError as exc:
+                print(f"worktree_sweep: cannot record the confirmation: {exc}", file=sys.stderr)
+                kept = True
+                hold = not args.only
+        elif not args.only:
+            hold = confirmed is None or not confirmed.is_file()
     for tree in candidates:
         verdict, reason = decide(tree, issues_repo, code_repo)
+        label = f"{tree['path']} ({tree['branch'] or 'detached'})"
+        if hold and verdict == REMOVE_WITH_BRANCH:
+            # Held: judged as if no merged PR counted, so rules 5 and 7 decide as they did before.
+            unmerged, why = decide(tree, issues_repo, code_repo, merged_counts=False)
+            if unmerged == REMOVE:
+                verdict, reason = unmerged, why
+            else:
+                print(f"hold {label}: {reason}; the first sweep in this clone removes nothing on a merged PR "
+                      f"until confirmed: {CONFIRM}")
+                kept = True
+                continue
         word = KEEP if verdict == KEEP else REMOVE
-        print(f"{word} {tree['path']} ({tree['branch'] or 'detached'}): {reason}")
+        print(f"{word} {label}: {reason}")
         if verdict == KEEP:
             kept = True
         elif args.apply and not remove(tree, verdict):
@@ -249,6 +314,10 @@ def main(argv=None):
         for branch in local_branches(trees, base_branch(), current):
             verdict, reason = decide_branch(branch, code_repo)
             if verdict is None:
+                continue
+            if hold:
+                print(f"hold branch {branch}: {reason}; confirm with {CONFIRM}")
+                kept = True
                 continue
             print(f"{REMOVE_BRANCH} {branch}: {reason}")
             if args.apply:
