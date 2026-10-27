@@ -3,9 +3,8 @@
 
     tools/mutate.py <base> [--keep] [--jobs N]
 
-This repo's `mutate` command for its `unit` lane (`.agents/dev-process.md`),
-meeting the contract in the plugin's `references/profile-schema.md` § Lanes.
-It is not part of the plugin, so the plugin names no tool.
+This repo's mutation run for its own scripts (`docs/mutation.md`). It is not
+part of the plugin, so the plugin names no tool.
 
 It mutates only the `.py` files directly in plugins/gogogo/scripts that changed
 since the change left <base> (`git merge-base <base> HEAD`), uncommitted and

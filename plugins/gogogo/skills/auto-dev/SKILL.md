@@ -257,14 +257,6 @@ by the run* for §8 and §9.
   on the final commit (by exit status, `/gogogo:dev` §6). Each correction
   round runs the focused commands `/gogogo:dev` review rule 1 names. Record
   how many new tests went red.
-- **Mutation testing** as `/gogogo:dev` §6 says, for every lane with a `mutate`
-  command, to its end, in the foreground or polled. When it stops the issue (a
-  run that failed twice, or logic survivors left after the third run): commit
-  everything the change produced, and nothing else, to its branch and push it,
-  leave it unmerged, hand the card back to `tracker.columns.needs_human` as
-  `/gogogo:dev` §8 says with the failed run or the surviving mutants under the
-  Needs-you line, record the stop for the run report, and carry on with the
-  next.
 - **The spec check** as `/gogogo:dev` §5 says, before the review. When it
   stops the issue: commit everything the change produced, and nothing else,
   to its branch and push it, leave it unmerged, hand the card back to
