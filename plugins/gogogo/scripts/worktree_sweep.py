@@ -52,10 +52,12 @@ branch <name>: PR #<m> merged at its tip; confirm with worktree_sweep.py
 `gogogo-sweep-merged-confirmed` in the clone's git folder (`git rev-parse
 --git-common-dir`, shared by all its worktrees), then sweeps as normal; every
 later `--apply` sweep removes without holding. When the file cannot be
-written, it says so on stderr and holds. `--only`, a closed issue (rule 7,
-also when a merged pull request is held: the worktree is removed and its
-branch kept) and a sweep without `--apply` are never held; `--only` with
-`--confirm-merged` still writes the confirmation. `--confirm-merged` without
+written, it says so on stderr, holds (except with `--only`) and exits 1.
+While held, a worktree is judged as if no merged pull request counted, so a
+closed issue still removes it (rule 7, branch kept) and commits on no remote
+still keep it (rule 5, printed as `hold`). `--only` and a sweep without
+`--apply` are never held; `--only` with `--confirm-merged` still writes the
+confirmation. `--confirm-merged` without
 `--apply` is a usage error (exit 2).
 
 With `--apply`, each `remove` runs `git worktree remove <path>` (never
@@ -119,8 +121,9 @@ KEEP, REMOVE, REMOVE_WITH_BRANCH = "keep", "remove", "remove with branch"
 REMOVE_BRANCH = "remove branch"
 
 
-def decide(tree, issues_repo, code_repo):
-    """(KEEP | REMOVE | REMOVE_WITH_BRANCH, reason) for one worktree."""
+def decide(tree, issues_repo, code_repo, merged_counts=True):
+    """(KEEP | REMOVE | REMOVE_WITH_BRANCH, reason) for one worktree; with merged_counts False,
+    a merged pull request counts for nothing, as before the first sweep is confirmed."""
     branch = tree["branch"]
     if tree["locked"]:
         return KEEP, "locked"
@@ -147,7 +150,8 @@ def decide(tree, issues_repo, code_repo):
     # A squash merge leaves the branch's commits off the base, and a pruned
     # remote branch leaves them on no remote: a merged PR whose head contains
     # this tip carried them. A merged PR from an older tip does not cover newer work.
-    merged = [p for p in prs if p.get("state") == "MERGED" and _contains(p.get("headRefOid") or "", tip.stdout.strip())]
+    merged = [p for p in prs if merged_counts and p.get("state") == "MERGED"
+              and _contains(p.get("headRefOid") or "", tip.stdout.strip())]
     if int(ahead.stdout) > 0 and not merged:
         return KEEP, f"{ahead.stdout.strip()} commit(s) on no remote"
     if merged:
@@ -281,17 +285,18 @@ def main(argv=None):
                 confirmed.write_text(datetime.date.today().isoformat() + "\n")
             except OSError as exc:
                 print(f"worktree_sweep: cannot record the confirmation: {exc}", file=sys.stderr)
-                hold = kept = not args.only
+                kept = True
+                hold = not args.only
         elif not args.only:
             hold = confirmed is None or not confirmed.is_file()
     for tree in candidates:
         verdict, reason = decide(tree, issues_repo, code_repo)
         label = f"{tree['path']} ({tree['branch'] or 'detached'})"
         if hold and verdict == REMOVE_WITH_BRANCH:
-            # A closed issue removed the worktree before merged PRs were seen (rule 7): that is not held.
-            issue = issue_view(issues_repo, issue_in_branch(tree["branch"])) if issues_repo else None
-            if issue and issue.get("state") != "OPEN":
-                verdict, reason = REMOVE, f"issue #{issue_in_branch(tree['branch'])} closed"
+            # Held: judged as if no merged PR counted, so rules 5 and 7 decide as they did before.
+            unmerged, why = decide(tree, issues_repo, code_repo, merged_counts=False)
+            if unmerged == REMOVE:
+                verdict, reason = unmerged, why
             else:
                 print(f"hold {label}: {reason}; the first sweep in this clone removes nothing on a merged PR "
                       f"until confirmed: {CONFIRM}")

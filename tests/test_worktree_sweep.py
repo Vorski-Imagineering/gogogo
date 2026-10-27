@@ -440,6 +440,25 @@ class Sweep(unittest.TestCase):
         self.assertFalse(path.exists())
         self.assertIn("fix/12-x", self.branches())
 
+    def test_12_a_held_merged_pr_with_unpushed_work_and_a_closed_issue_is_held(self):
+        """Only the merged PR lets work on no remote past rule 5, so it is held, not removed as closed."""
+        self.confirmed.unlink()
+        path = self.worktree("fix/12-x")
+        self.run_git(path, "commit", "-q", "--allow-empty", "-m", "local only")
+        fixture = {**self.merged_as_gh_prints_it("fix/12-x"), "issue": {"12": {"state": "CLOSED", "comments": []}}}
+        self.assertEqual(self.sweep("--apply", fixture=fixture),
+                         (1, [f"hold {path} (fix/12-x): PR #3 merged{self.HOLD}"]))
+        self.assertTrue(path.exists())
+
+    def test_12_a_confirmation_that_cannot_be_written_with_only_exits_1(self):
+        self.confirmed.unlink()
+        path = self.worktree("fix/12-x")
+        (self.clone / ".git" / "gogogo-sweep-merged-confirmed").mkdir()  # a folder: the write fails
+        code, _ = self.sweep("--apply", "--confirm-merged", "--only", str(path),
+                             fixture=self.merged_as_gh_prints_it("fix/12-x"))
+        self.assertEqual(code, 1)
+        self.assertIn("cannot record the confirmation", self.stderr)
+
     def test_12_confirm_merged_with_only_records_the_confirmation(self):
         self.confirmed.unlink()
         path = self.worktree("fix/12-x")
