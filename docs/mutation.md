@@ -24,8 +24,8 @@ touches such a file names this run as the last step of its `## Verification`.
 ## What to do with the result
 
 1. A run whose output has no `mutants:` line is a failed run, never a pass. Run
-   it once more. A second failed run stops the issue for a person, with stop
-   reason `mutation`.
+   it once more. A second failed run stops the issue as verification that gave
+   up (stop reason `verify`, which `/gogogo:human-help` requeues once).
 2. `mutants: 0` means nothing on the changed lines can be mutated. It is
    reported and is not a failure.
 3. Each survivor is handled by the first of these that applies, and nothing
