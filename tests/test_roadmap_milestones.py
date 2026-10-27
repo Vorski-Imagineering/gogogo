@@ -1066,6 +1066,24 @@ class Safety(Case):
         link = [i for i in plan["items"] if i["kind"] == "link-section"]
         self.assertEqual(len(link), 1, plan["items"])
         self.assertNotIn("publishes", link[0])
+        code, out, err, writer, _ = self.apply_private(plan, "--items", str(link[0]["id"]),
+                                                       github=FakeGitHub([ms(7, "A")], [iss(5)], visibility="PRIVATE"))
+        self.assertEqual(code, 0, out + err)
+        self.assertNotIn("SKIPPED", out)
+        self.assertIn("/milestone/7", self.doc.read_text(encoding="utf-8"))
+
+    def test_a_hand_edited_milestone_number_does_not_pass_the_gate(self):
+        self.private_roadmap(roadmap((heading("Secret plan"), [5])))
+        github = FakeGitHub([], [iss(5)], visibility="PRIVATE")
+        _, plan, _ = self.plan(github)
+        link = next(i for i in plan["items"] if i["kind"] == "link-section")
+        link["milestone"] = {"number": 1, "title": "Secret plan"}
+        link.pop("publishes", None)
+        code, out, err, writer, _ = self.apply_private(plan, "--items", str(link["id"]), github=github)
+        self.assertEqual(code, 1, out + err)
+        self.assertIn("SKIPPED unapproved", out)
+        self.assertNotIn("Secret plan", out)
+        self.assertEqual(writer.calls, [])
 
     def test_a_declined_titles_issues_are_skipped_without_the_title(self):
         self.private_roadmap(roadmap((heading("Secret plan"), [5])))

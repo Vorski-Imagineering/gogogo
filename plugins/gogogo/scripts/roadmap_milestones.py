@@ -39,14 +39,16 @@ profile, the document or a read cannot be used; nothing is printed on stdout.
 With `tracker.public`, a document in another repo that is not public (or
 whose visibility cannot be read, or that has no remote) is a private roadmap:
 the plan goes ahead, gets `"private_roadmap": true`, and each `link-section`
-and `rename-milestone` item gets `"publishes": "<the exact title>"`, the
-heading text it would make public.
+to a milestone not yet created, and each `rename-milestone`, gets
+`"publishes": "<the exact title>"`, the heading text it would make public.
 
 `apply` applies only the ids in `--items`, a question only with
 `--choose ID=<1-based choice>`. For a private roadmap (worked out again, not
 read from the plan), a `link-section` or `rename-milestone` item applies only
-when its id is also given with `--publish ID`; otherwise it prints `SKIPPED
-unapproved` and changes nothing. Before each GitHub write it re-reads what the
+when its id is also given with `--publish ID`, unless a milestone already
+has that title (read live); an item that needs a milestone not yet created,
+under a title not approved that way, is skipped too. Each prints `SKIPPED
+unapproved` without the title and changes nothing. Before each GitHub write it re-reads what the
 item expected and skips it (`SKIPPED stale`) when someone changed it. It
 writes by milestone number, and it never deletes a milestone. Document edits
 are made in the working file, keeping every other byte. One line per item:
@@ -546,10 +548,12 @@ def apply(entries: list[dict], repo: str, roadmap: Path, github, writer, legend,
     # On a private roadmap, a title reaches the tracker only when its own item was approved with --publish;
     # an item that needs a milestone not yet created under some other title is skipped without naming it.
     approved = {e["section"] for e in entries if e["kind"] in unapproved and e["id"] in publish}
+    # Read live, not from the plan: a title a milestone already has is public already.
+    public_titles = {m["title"] for m in github.milestones(repo)} if unapproved else set()
     for entry in entries:
         tag = f"{entry['id']} {entry['kind']}" + (f" #{entry['issue']}" if entry.get("issue") else "")
         milestone = entry.get("milestone") or {}
-        existing = entry["kind"] == "link-section" and milestone.get("number") is not None
+        existing = entry["kind"] == "link-section" and entry.get("section") in public_titles
         if entry["kind"] in unapproved and entry["id"] not in publish and not existing:
             print(f"SKIPPED unapproved {tag}: publishing this title was not approved")
             worst = EXIT_ATTENTION
