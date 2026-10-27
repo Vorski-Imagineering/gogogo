@@ -60,18 +60,20 @@ yet. It holds whatever recon found, a person's request included. In order:
      moved meanwhile; say to where, and post nothing. Any other case: say the
      move may have failed, with its message, and post nothing.
 
-   Once parked, when the labels the issue read showed include
-   `tracker.ready_marker` (compared ignoring case), remove it with
-   `gh issue edit <N> --repo <tracker.issues_repo> --remove-label "<ready_marker>"`:
-   a parked issue needs something further. Then post the three lines with
+   Once parked, post the three lines with
    `gh issue comment <N> --repo <tracker.issues_repo> --body-file <scratch>/park-<N>.md`.
-   No label added and no spec. End this issue.
-7. **On close as not planned:** when the profile has `tracker.tool`, first
-   read the card as rule 6 does; a failed read, or a card in one of rule 6's
-   protected columns, closes nothing and posts nothing (say so). With no
-   `tracker.tool` there is no card to read, and the read is skipped. When
-   nothing above stopped it, run § 6's close command with the three lines as
-   its comment, read from the file so nothing in them is run by the shell:
+   No label and no spec. When the labels the issue read showed include
+   `tracker.ready_marker` (compared ignoring case), leave it, and say in the
+   reply that the parked issue still carries it, for a person to remove. End
+   this issue.
+7. **On close as not planned:** first read the issue as rule 6 does; a
+   failed read, or a closed issue, closes nothing and posts nothing (say so).
+   When the profile has `tracker.tool`, then read the card as rule 6 does; a
+   failed read, or a card in one of rule 6's protected columns, closes
+   nothing and posts nothing (say so). With no `tracker.tool` there is no
+   card to read, and that read is skipped. When nothing above stopped it, run
+   § 6's close command with the three lines as its comment, read from the
+   file so nothing in them is run by the shell:
    `gh issue close <N> --repo <tracker.issues_repo> --reason "not planned" --comment "$(cat "<scratch>/park-<N>.md")"`.
    End this issue.
 8. **On spec it anyway:** carry on to *Before you write* § 7. The trigger and
