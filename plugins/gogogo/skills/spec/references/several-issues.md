@@ -57,9 +57,10 @@ Part of `/gogogo:spec`. Read it in full. Section names and § numbers here are `
    request); *closed: nothing hits it today*; *not filed: nothing hits it
    today*; *stopped: nothing hits it today, no answer*; *parked in
    <column>*, *closed: cannot be acted on yet*, *not parked* (with why: the
-   card's column, a failed read or move, or moved meanwhile), *not filed:
-   cannot be acted on yet* or *stopped: cannot be acted on yet, no answer*
-   (*Before you write* § 6, item 4);
+   card's column, no card, a failed read or move, or moved meanwhile), *not
+   filed: cannot be acted on yet*, *stopped here: the board could not be read*
+   or *stopped: cannot be acted on yet, no answer* (*Before you write* § 6,
+   item 4);
    *skipped: changed by someone else meanwhile* (kept, or nobody to ask;
    Posting step 1); *replaced a version posted meanwhile*; or *not reached*
    (with why the run stopped). Each

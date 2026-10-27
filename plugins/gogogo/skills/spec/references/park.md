@@ -14,10 +14,11 @@ yet. It holds whatever recon found, a person's request included. In order:
      parts, a hand-written wire format, a dependency that does not cover the
      path): the part that is missing, and where recon found it missing. A
      hard design the issue did foresee is not a trigger.
-2. **An idea not yet filed** has no card to park: ask **don't file it** (file
-   nothing, and give the three lines of rule 5 in the reply, not in a file)
-   or **file and spec it** (Posting step 0 files it, then rule 8), and skip
-   rules 3 to 7.
+2. **An idea not yet filed** has no card to park, so rules 3 to 7 do not
+   apply: ask **don't file it** (file nothing; the reply gives the trigger,
+   its evidence and what would make it actionable, under rule 10's limits)
+   or **file and spec it** (carry on as rule 8; Posting step 0 files it when
+   the spec is posted).
 3. **Finding the column:** the single column from `<tracker.tool> fields`
    whose name contains `backlog`, ignoring case and emoji. With none,
    several, or no `tracker.tool`, the first choice in rule 4 is **close it as
@@ -48,19 +49,21 @@ yet. It holds whatever recon found, a person's request included. In order:
    - Otherwise:
      `move <N> --from "<the column read>" --to "<the backlog column>"`. A card
      the read showed with no column is moved without `--from`.
-   - A zero exit counts as parked. Exit 2 (the column was written, but the
-     read-back did not match): read the card again with `show <N>`; when it
-     is in the backlog column, it counts as parked. Exit 3: the card moved
-     meanwhile; say to where, and post nothing. Any other exit, or a card not
-     in the backlog column after exit 2: say the move failed, with its
-     message, and post nothing.
+   - A zero exit counts as parked. Exit 2 (the tool could not confirm the
+     move): read the card again with `show <N>`; only when that read succeeds
+     and shows the backlog column does it count as parked. Exit 3: the card
+     moved meanwhile; say to where, and post nothing. Any other case: say the
+     move may have failed, with its message, and post nothing.
 
    Once parked, post the three lines with
    `gh issue comment <N> --repo <tracker.issues_repo> --body-file <scratch>/park-<N>.md`.
    No label and no spec. End this issue.
-7. **On close as not planned:** § 6's close command with the three lines as
-   its comment, read from the file so nothing in them is run by the shell:
-   `gh issue close <N> --repo <tracker.issues_repo> --reason "not planned" --comment "$(cat <scratch>/park-<N>.md)"`.
+7. **On close as not planned:** first read the card as rule 6 does; a failed
+   read, or a card in one of rule 6's protected columns, closes nothing and
+   posts nothing (say so). Otherwise, § 6's close command with the three
+   lines as its comment, read from the file so nothing in them is run by the
+   shell:
+   `gh issue close <N> --repo <tracker.issues_repo> --reason "not planned" --comment "$(cat "<scratch>/park-<N>.md")"`.
    End this issue.
 8. **On spec it anyway:** carry on to *Before you write* § 7. The trigger and
    its evidence go into `## Context` as a trap.
