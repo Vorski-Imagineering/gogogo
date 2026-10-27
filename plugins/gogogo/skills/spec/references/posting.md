@@ -82,14 +82,20 @@ order, checking each step before starting the next:
    - anything else not known to be safe to publish.
 
    When unsure, remove it. Re-read the whole file again after each change.
-   Any later change to the spec before step 5 (a lint fix in step 4) is made
+   Like the list, the rest of this step applies only when `tracker.public`
+   is true. Any later change to the spec before step 5 (a lint fix in step 4) is made
    in this file, re-read the same way, and composed again (step 3); then
    step 4 runs again. A correction (below) is never composed again: every
    change to it, a lint fix included, is made in place in the composed body
    file, only its spec part is re-read, and then step 4 runs again.
    When the re-read removes what the lint needs and no rewrite meets both,
    stop this issue: post nothing, add no label, and report the lint error and
-   the removal (its kind and where it was, never the text). In a run of
+   the removal (its kind and where it was, never the text). In a correction
+   the spec already posted still holds what was to be corrected, so remove
+   the ready label
+   (`gh issue edit <N> --repo <tracker.issues_repo> --remove-label "<ready_marker>"`);
+   when the card is in `tracker.queue`, leave it and say so in the reply: a
+   person moves it, since a run would take it from there. In a run of
    several issues this ends that issue only, never the run, and its
    final-report line is *stopped: the public-tracker re-read removed what the
    lint needs*.
@@ -244,8 +250,8 @@ Which report to keep:
 **Correcting a spec you already posted:** edit the composed body file in the
 scratchpad (when it is gone, write the issue's current body to a new one),
 run step 2's public-tracker check on the spec part of it (below the `---`
-rule that ends `## Original report`, or all of it when there is no report
-section) and again after each change, and leave the report section as it
+rule that ends the report section, as *Which report to keep* finds it, or
+all of it when there is none) and again after each change, and leave the report section as it
 is. It is not composed again (step 3). Then re-run Posting steps 4 to 7 (the lint and the check of open specs that read this
 issue, `gh issue edit --body-file`, step 6's re-read of the description, the
 blocked-by links), so the issue carries one accurate spec rather than a spec
