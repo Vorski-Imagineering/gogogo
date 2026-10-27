@@ -55,7 +55,13 @@ Part of `/gogogo:spec`. Read it in full. Section names and § numbers here are `
    case); *left open* (with the question); *skipped* (closed, a pull request,
    or already ready); *skipped: being built* (with the column or pull
    request); *closed: nothing hits it today*; *not filed: nothing hits it
-   today*; *stopped: nothing hits it today, no answer*;
+   today*; *stopped: nothing hits it today, no answer*; *parked in
+   <column>*, *closed: cannot be acted on yet*, *not parked* or *not closed*
+   (with why: the card's column, a closed issue, no card, a failed read,
+   move or close, or moved meanwhile), *not
+   filed: cannot be acted on yet*, *stopped here: the board could not be read*
+   or *stopped: cannot be acted on yet, no answer* (*Before you write* § 6,
+   item 4);
    *skipped: changed by someone else meanwhile* (kept, or nobody to ask;
    Posting step 1); *replaced a version posted meanwhile*; *stopped: the
    public-tracker re-read removed what the lint needs* (Posting step 2); or *not reached*
