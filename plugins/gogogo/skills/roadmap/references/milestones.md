@@ -48,7 +48,11 @@ changed last wins. Nothing in GitHub changes until the person says yes.
    `choices`. For each **Publish** answer, add its id to `--items` and add
    `--publish <id>`; the script writes no such title without it. Report each line it prints. `SKIPPED stale` means someone changed
    it meanwhile; the next refresh plans it again. `FAILED` gives GitHub's
-   message. Skip this step when nothing was approved.
+   message. A `WARNING the milestones could not be read` line means the script
+   could not tell which titles are on the tracker already, so only titles
+   approved with **Publish** went through and the others print `SKIPPED
+   unapproved`; say so, and that the next refresh plans them again. Skip this
+   step when nothing was approved.
 6. **The document.** Changes to it (a heading linked, a row moved, added or
    removed) stay in the working file, for step 8's commit. When the document
    is still unchanged (step 2 found every mark agrees and nothing here changed

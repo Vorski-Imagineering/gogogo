@@ -53,8 +53,9 @@ item expected and skips it (`SKIPPED stale`) when someone changed it. It
 writes by milestone number, and it never deletes a milestone. Document edits
 are made in the working file, keeping every other byte. One line per item:
 `APPLIED`, `SKIPPED stale`, `SKIPPED unapproved` or `FAILED`, after a
-`WARNING` line when a private roadmap's milestones could not be read. Exit 0: every item applied. 1: any
-skipped or failed. 2: the plan, an id or a choice cannot be used.
+`WARNING` line when a private roadmap's milestones could not be read: no title
+then counts as public already, so only titles approved with `--publish` go
+through. Exit 0: every item applied. 1: any skipped or failed. 2: the plan, an id or a choice cannot be used.
 """
 from __future__ import annotations
 
@@ -550,14 +551,15 @@ def apply(entries: list[dict], repo: str, roadmap: Path, github, writer, legend,
     # an item that needs a milestone not yet created under some other title is skipped without naming it.
     approved = {e["section"] for e in entries if e["kind"] in unapproved and e["id"] in publish}
     # Read live, not from the plan: a title a milestone already has is public already. A failed
-    # read counts no title as public, so it only holds more back.
+    # read counts no title as public, so it only holds more back; each item it holds is skipped,
+    # and that skip, not the failed read, sets the exit.
     public_titles = set()
     if unapproved:
         try:
             public_titles = {m["title"] for m in github.milestones(repo)}
         except ReadError as exc:
-            print(f"WARNING the milestones could not be read ({exc}): every title counts as unapproved")
-            worst = EXIT_ATTENTION
+            print(f"WARNING the milestones could not be read ({exc}): no title counts as public already,"
+                  " so a title not approved with --publish is held back")
     for entry in entries:
         tag = f"{entry['id']} {entry['kind']}" + (f" #{entry['issue']}" if entry.get("issue") else "")
         milestone = entry.get("milestone") or {}

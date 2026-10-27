@@ -1094,8 +1094,23 @@ class Safety(Case):
         github.milestones_error = rm.ReadError("milestones: HTTP 502")
         code, out, err, writer, _ = self.apply_private(plan, "--items", f"{link},{numbered}", github=github)
         self.assertEqual(code, 1, out + err)
-        self.assertIn("WARNING the milestones could not be read", out)
+        self.assertEqual(out.count("WARNING the milestones could not be read"), 1, out)
         self.assertIn(f"SKIPPED unapproved {link} link-section", out)
+        self.assertIn(("set_issue_milestone", 6, 2), writer.calls)
+
+    def test_a_failed_milestone_read_with_everything_applied_exits_0(self):
+        """The warning alone holds nothing back, so it does not make the exit 1."""
+        self.private_roadmap(roadmap((heading("A"), [5]), (heading("B", 2), [6])))
+        github = FakeGitHub([ms(2, "B")], [iss(5), iss(6)], visibility="PRIVATE")
+        _, plan, _ = self.plan(github, "--link", "A")
+        numbered = next(i["id"] for i in plan["items"]
+                        if i["kind"] == "set-milestone" and (i["milestone"] or {}).get("number") == 2)
+        github.milestones_error = rm.ReadError("milestones: HTTP 502")
+        code, out, err, writer, _ = self.apply_private(plan, "--items", str(numbered), github=github)
+        self.assertEqual(code, 0, out + err)
+        self.assertEqual(out.count("WARNING the milestones could not be read"), 1, out)
+        self.assertIn("a title not approved with --publish is held back", out)
+        self.assertNotIn("SKIPPED", out)
         self.assertIn(("set_issue_milestone", 6, 2), writer.calls)
 
     def test_a_hand_edited_milestone_number_does_not_pass_the_gate(self):
