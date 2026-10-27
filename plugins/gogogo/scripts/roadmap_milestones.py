@@ -36,11 +36,17 @@ null for "leave both". While no heading is linked, every section with a
 tracked table is offered as a new milestone; after that, `--link HEADING`
 offers one by name. Exit 0: nothing to do. 1: items or skipped lines. 2: the
 profile, the document or a read cannot be used; nothing is printed on stdout.
-With `tracker.public`, a document in another repo that is not public is
-refused: milestone titles would publish its headings.
+With `tracker.public`, a document in another repo that is not public (or
+whose visibility cannot be read, or that has no remote) is a private roadmap:
+the plan goes ahead, gets `"private_roadmap": true`, and each `link-section`
+and `rename-milestone` item gets `"publishes": "<the exact title>"`, the
+heading text it would make public.
 
 `apply` applies only the ids in `--items`, a question only with
-`--choose ID=<1-based choice>`. Before each GitHub write it re-reads what the
+`--choose ID=<1-based choice>`. For a private roadmap (worked out again, not
+read from the plan), a `link-section` or `rename-milestone` item applies only
+when its id is also given with `--publish ID`; otherwise it prints `SKIPPED
+unapproved` and changes nothing. Before each GitHub write it re-reads what the
 item expected and skips it (`SKIPPED stale`) when someone changed it. It
 writes by milestone number, and it never deletes a milestone. Document edits
 are made in the working file, keeping every other byte. One line per item:
@@ -530,7 +536,8 @@ def load_plan(path: str, ids: str, choose: list[str]) -> list[dict]:
     return sorted(picked, key=lambda e: order.get(e["kind"], len(order)))
 
 
-def apply(entries: list[dict], repo: str, roadmap: Path, github, writer, legend) -> int:
+def apply(entries: list[dict], repo: str, roadmap: Path, github, writer, legend,
+          unapproved=(), publish=frozenset()) -> int:
     with open(roadmap, encoding="utf-8", newline="") as handle:
         text = handle.read()
     lines = text.splitlines(keepends=True)
@@ -538,6 +545,10 @@ def apply(entries: list[dict], repo: str, roadmap: Path, github, writer, legend)
     worst = EXIT_OK
     for entry in entries:
         tag = f"{entry['id']} {entry['kind']}" + (f" #{entry['issue']}" if entry.get("issue") else "")
+        if entry["kind"] in unapproved and entry["id"] not in publish:
+            print(f"SKIPPED unapproved {tag}: publishing this title was not approved")
+            worst = EXIT_ATTENTION
+            continue
         try:
             outcome = apply_one(entry, repo, lines, github, writer, legend, created)
         except (ReadError, ValueError) as exc:
@@ -697,6 +708,24 @@ def apply_one(entry, repo, lines, github, writer, legend, created) -> str:
 # --------------------------------------------------------------------------
 
 
+PUBLISHES = ("link-section", "rename-milestone")  # the kinds that write heading text to the tracker
+
+
+def private_roadmap(settings, repo, github, git) -> bool:
+    """True when the tracker is public and the roadmap's repo is not known to be public (gogogo#202)."""
+    if not (settings.get("tracker") or {}).get("public"):
+        return False
+    source = git.remote_repo()
+    if source is None:
+        return True
+    if source.lower() == repo.lower():
+        return False
+    try:
+        return github.visibility(source) != "PUBLIC"
+    except ReadError:
+        return True
+
+
 def run(args, github, history, writer) -> int:
     _, settings, roadmap = rs.load_profile(args)
     repo = settings["tracker"]["issues_repo"]
@@ -704,16 +733,19 @@ def run(args, github, history, writer) -> int:
         entries = load_plan(args.plan, args.items, args.choose or [])
         lines = roadmap.read_text(encoding="utf-8").splitlines(keepends=True)
         legend = rs.read_legend(rs.find_tables(lines), settings)
-        return apply(entries, repo, roadmap, github, writer, legend)
+        gated = private_roadmap(settings, repo, github, history(roadmap))
+        return apply(entries, repo, roadmap, github, writer, legend,
+                     unapproved=PUBLISHES if gated else (), publish=set(args.publish or []))
 
     git = history(roadmap)
-    if (settings.get("tracker") or {}).get("public"):
-        source = git.remote_repo()
-        if source is None or (source.lower() != repo.lower() and github.visibility(source) != "PUBLIC"):
-            raise Unusable(f"milestone titles would publish headings from {source or 'the roadmap’s repo'}, "
-                           f"which is not public, in {repo}")
+    private = private_roadmap(settings, repo, github, git)
     doc = parse_doc(git.text_at("HEAD"), repo)
     found = plan(doc, str(roadmap), repo, github, History(git, repo), args.link or [])
+    if private:
+        found["private_roadmap"] = True
+        for entry in found["items"]:
+            if entry["kind"] in PUBLISHES:
+                entry["publishes"] = entry["section"]
     print(json.dumps(found, indent=2, ensure_ascii=False))
     return EXIT_ATTENTION if found["items"] or found["skipped"] else EXIT_OK
 
@@ -729,6 +761,8 @@ def main(argv=None, github=None, history=Git, writer=None) -> int:
     applier.add_argument("--plan", required=True)
     applier.add_argument("--items", required=True, help="comma list of ids")
     applier.add_argument("--choose", action="append", metavar="ID=CHOICE", help="a question's 1-based choice")
+    applier.add_argument("--publish", action="append", type=int, metavar="ID",
+                         help="for a private roadmap: an approved item whose title may be published")
     args = parser.parse_args(argv)
     try:
         return run(args, github or GitHub(), history, writer or GhWriter())

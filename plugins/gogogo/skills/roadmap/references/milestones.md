@@ -22,20 +22,26 @@ changed last wins. Nothing in GitHub changes until the person says yes.
 2. **Show the plan**, one plain line per item, numbered by its `id`, with its
    `why`, in three groups: *In GitHub* (`side` github or both, not questions),
    *In the roadmap (goes into the refresh PR)* (`side` doc), and *Questions*.
-   Then each `skipped` line, each `kept` issue, and the `unlinked` headings.
+   Items carrying `publishes` (a private roadmap on a public tracker) go in a
+   fourth group, *Titles to publish from a private roadmap*, each with its
+   title word for word. Then each `skipped` line, each `kept` issue, and the
+   `unlinked` headings.
 3. **Ask once** with `AskUserQuestion`: **Apply all <k>** or **Apply none**,
-   where `<k>` counts the items that are not questions. A typed answer lists the
-   ids to apply. Then ask each question item in its own question, at most four
-   per call, its `choices` as the options, in order.
+   where `<k>` counts the items that are not questions and carry no
+   `publishes`. A typed answer lists the ids to apply. Then ask each question
+   item in its own question, at most four per call, its `choices` as the
+   options, in order. Then each item carrying `publishes` in its own question,
+   at most four per call: **Publish "<title>"** or **Don't publish**.
 4. **Nobody to answer.** A refused or failed question, or no person (`claude
    -p`): apply nothing, and list every item as not applied. Do not show the
    four-choice decline menu. Nothing is applied without an answer.
 5. **Apply** the approved ids and choices:
    ```bash
-   python3 "${CLAUDE_PLUGIN_ROOT}/scripts/roadmap_milestones.py" apply --plan <scratch>/milestones-plan.json --items <ids> [--choose <id>=<choice>]...
+   python3 "${CLAUDE_PLUGIN_ROOT}/scripts/roadmap_milestones.py" apply --plan <scratch>/milestones-plan.json --items <ids> [--choose <id>=<choice>]... [--publish <id>]...
    ```
    `<choice>` is the 1-based position of the answer among that question's
-   `choices`. Report each line it prints. `SKIPPED stale` means someone changed
+   `choices`. For each **Publish** answer, add its id to `--items` and add
+   `--publish <id>`; the script writes no such title without it. Report each line it prints. `SKIPPED stale` means someone changed
    it meanwhile; the next refresh plans it again. `FAILED` gives GitHub's
    message. Skip this step when nothing was approved.
 6. **The document.** Changes to it (a heading linked, a row moved, added or

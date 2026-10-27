@@ -80,6 +80,8 @@ class FakeGitHub:
         return dict(found)
 
     def visibility(self, repo):
+        if isinstance(self.vis, Exception):
+            raise self.vis
         return self.vis
 
 
@@ -976,17 +978,94 @@ class Safety(Case):
         self.assertEqual((code, plan), (2, None))
         self.assertIn("#6", err)
 
-    def test_a_private_roadmap_never_reaches_a_public_tracker(self):  # 19
+    def private_roadmap(self, text=None):
+        """A public tracker, and the roadmap in another repo, acme/private-plans (gogogo#202)."""
         self.profile.write_text(profile_text().replace(f'issues_repo = "{REPO}"',
                                                        f'issues_repo = "{REPO}"\npublic = true'), encoding="utf-8")
-        self.commit(roadmap((heading("A"), [5])), D1)
+        self.commit(text or roadmap((heading("A"), [5])), D1)
         self.git("remote", "add", "origin", "git@github.com:acme/private-plans.git")
+
+    def test_a_private_roadmap_never_reaches_a_public_tracker(self):  # 19
+        self.private_roadmap()
         code, plan, err = self.plan(FakeGitHub([], [iss(5)], visibility="PRIVATE"))
-        self.assertEqual((code, plan), (2, None))
-        self.assertIn("milestone titles would publish headings from acme/private-plans, which is not public, "
-                      f"in {REPO}", err)
-        code, plan, _ = self.plan(FakeGitHub([], [iss(5)], visibility="PUBLIC"))
-        self.assertEqual(code, 1)
+        self.assertEqual(code, 1, err)
+        link = [i for i in plan["items"] if i["kind"] == "link-section"]
+        self.assertEqual([i.get("publishes") for i in link], ["A"])
+        self.assertIs(plan.get("private_roadmap"), True)
+
+    def test_a_private_roadmaps_titles_are_marked(self):
+        self.private_roadmap(roadmap((heading("A"), [5]), (heading("B", 2), [6])))
+        github = FakeGitHub([ms(2, "B")], [iss(5), iss(6)], visibility="PRIVATE")
+        code, plan, err = self.plan(github, "--link", "A")
+        self.assertEqual(code, 1, err)
+        by_kind = {}
+        for entry in plan["items"]:
+            by_kind.setdefault(entry["kind"], []).append(entry)
+        self.assertEqual([i.get("publishes") for i in by_kind["link-section"]], ["A"])
+        self.assertTrue(by_kind.get("set-milestone"), plan["items"])
+        self.assertFalse([i for i in by_kind["set-milestone"] if "publishes" in i])
+
+    def test_a_rename_from_a_private_roadmap_is_marked(self):
+        self.private_roadmap(roadmap((heading("A2", 1), [5])))
+        code, plan, err = self.plan(FakeGitHub([ms(1, "A")], [iss(5, 1)], visibility="PRIVATE"))
+        self.assertEqual(code, 1, err)
+        rename = [i for i in plan["items"] if i["kind"] == "rename-milestone"]
+        self.assertEqual([i.get("publishes") for i in rename], ["A2"])
+
+    def apply_private(self, plan, *extra, github=None):
+        path = self.save(plan)
+        writer = Writer()
+        before = self.doc.read_text(encoding="utf-8")
+        code, out, err = self.run_main("apply", "--plan", path, *extra, writer=writer,
+                                       github=github or FakeGitHub([], [iss(5)], visibility="PRIVATE"))
+        return code, out, err, writer, before
+
+    def test_apply_writes_no_unapproved_title(self):
+        self.private_roadmap()
+        _, plan, _ = self.plan(FakeGitHub([], [iss(5)], visibility="PRIVATE"))
+        ident = str(next(i["id"] for i in plan["items"] if i["kind"] == "link-section"))
+        code, out, err, writer, before = self.apply_private(plan, "--items", ident)
+        self.assertEqual(code, 1, out + err)
+        self.assertIn("SKIPPED unapproved", out)
+        self.assertEqual(writer.calls, [])
+        self.assertEqual(self.doc.read_text(encoding="utf-8"), before)
+        code, out, err, writer, before = self.apply_private(plan, "--items", ident, "--publish", ident)
+        self.assertEqual(code, 0, out + err)
+        self.assertIn(("create_milestone", "A"), writer.calls)
+        self.assertIn("/milestone/99", self.doc.read_text(encoding="utf-8"))
+
+    def test_apply_gates_even_when_the_plan_lost_its_mark(self):
+        self.private_roadmap()
+        _, plan, _ = self.plan(FakeGitHub([], [iss(5)], visibility="PRIVATE"))
+        for entry in plan["items"]:
+            entry.pop("publishes", None)
+        ident = str(next(i["id"] for i in plan["items"] if i["kind"] == "link-section"))
+        code, out, err, writer, _ = self.apply_private(plan, "--items", ident)
+        self.assertEqual(code, 1, out + err)
+        self.assertIn("SKIPPED unapproved", out)
+        self.assertEqual(writer.calls, [])
+
+    def test_an_unreadable_visibility_counts_as_private(self):
+        self.private_roadmap()
+        down = FakeGitHub([], [iss(5)], visibility=rm.ReadError("visibility: HTTP 502"))
+        code, plan, err = self.plan(down)
+        self.assertEqual(code, 1, err)
+        self.assertEqual([i.get("publishes") for i in plan["items"] if i["kind"] == "link-section"], ["A"])
+        ident = str(next(i["id"] for i in plan["items"] if i["kind"] == "link-section"))
+        code, out, err, writer, _ = self.apply_private(plan, "--items", ident, github=down)
+        self.assertIn("SKIPPED unapproved", out)
+        self.assertEqual(writer.calls, [])
+
+    def test_a_public_roadmap_marks_nothing(self):
+        self.private_roadmap()
+        public = FakeGitHub([], [iss(5)], visibility="PUBLIC")
+        code, plan, err = self.plan(public)
+        self.assertEqual(code, 1, err)
+        self.assertFalse([i for i in plan["items"] if "publishes" in i])
+        ident = str(next(i["id"] for i in plan["items"] if i["kind"] == "link-section"))
+        code, out, err, writer, _ = self.apply_private(plan, "--items", ident, github=public)
+        self.assertEqual(code, 0, out + err)
+        self.assertIn(("create_milestone", "A"), writer.calls)
 
 
 if __name__ == "__main__":
