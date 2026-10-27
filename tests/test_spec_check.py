@@ -403,6 +403,24 @@ class ChangedFiles(unittest.TestCase):
         self.assertIn("F:naïve.md\tnaïve.md\tmet", lines)
         self.assertFalse([ln for ln in lines if ln.startswith("outside:")], lines)
 
+    def test_untracked_files_are_read_from_the_repo_top_in_a_subfolder(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            repo = self.slashless_repo(tmp, "**Edit:** `README.md`.")
+            body = (repo / "body.md").read_text().replace("**Create:** `tests/test_list.py`.",
+                                                          "**Create:** `top.md`, `sub/y.md`.")
+            (repo / "body.md").write_text(body)
+            git(repo, "switch", "-q", "-c", "change")
+            (repo / "top.md").write_text("new\n")
+            (repo / "sub" / "y.md").write_text("new\n")
+            (repo / "README.md").write_text("two\n")
+            out = subprocess.run([sys.executable, str(SCRIPT), "items", "../body.md", "--base", "main"],
+                                 cwd=repo / "sub", capture_output=True, text=True)
+        self.assertEqual(out.returncode, 0, out.stderr)
+        lines = out.stdout.splitlines()
+        self.assertIn("F:top.md\ttop.md\tmet", lines)
+        self.assertIn("F:sub/y.md\tsub/y.md\tmet", lines)
+        self.assertFalse([ln for ln in lines if ln.startswith("outside:")], lines)
+
     def test_slashless_edit_names_are_read_from_the_repo_top_in_a_subfolder(self):
         with tempfile.TemporaryDirectory() as tmp:
             repo = self.slashless_repo(tmp, "**Edit:** `README.md`, `x.py`.")
