@@ -20,24 +20,44 @@ changed last wins. Nothing in GitHub changes until the person says yes.
      step 6 below: the marks refresh still lands.
    - Exit 1: go on.
 2. **Show the plan**, one plain line per item, numbered by its `id`, with its
-   `why`, in three groups: *In GitHub* (`side` github or both, not questions),
-   *In the roadmap (goes into the refresh PR)* (`side` doc), and *Questions*.
-   Then each `skipped` line, each `kept` issue, and the `unlinked` headings.
-3. **Ask once** with `AskUserQuestion`: **Apply all <k>** or **Apply none**,
-   where `<k>` counts the items that are not questions. A typed answer lists the
-   ids to apply. Then ask each question item in its own question, at most four
-   per call, its `choices` as the options, in order.
+   `why`, in three groups: *In GitHub* (`side` github or both, not questions,
+   and not carrying `publishes`), *In the roadmap (goes into the refresh PR)*
+   (`side` doc), and *Questions*. Items carrying `publishes` (a private roadmap
+   on a public tracker) go only in a fourth group, *Titles to publish from a
+   private roadmap*, each with its title word for word. Then each `skipped` line, each `kept` issue, and the
+   `unlinked` headings.
+3. **Ask.** First, each item carrying `publishes` in its own question, at
+   most four per call: **Publish "<title>"** or **Don't publish**; only that
+   answer approves it. A title not published takes with it every item whose
+   `milestone.number` is null and `milestone.title` is that title (the issues
+   of that section; the script also skips them), and the report names it by
+   its item id only, never its text, when `tracker.public` is true. Then ask
+   once with `AskUserQuestion`: **Apply all <k>** or **Apply none**, where
+   `<k>` counts the items left that are not questions and carry no
+   `publishes`; ask nothing when `<k>` is 0. A typed answer lists the ids to
+   apply among those. Then ask each question item in its own question, at
+   most four per call, its `choices` as the options, in order.
 4. **Nobody to answer.** A refused or failed question, or no person (`claude
    -p`): apply nothing, and list every item as not applied. Do not show the
    four-choice decline menu. Nothing is applied without an answer.
 5. **Apply** the approved ids and choices:
    ```bash
-   python3 "${CLAUDE_PLUGIN_ROOT}/scripts/roadmap_milestones.py" apply --plan <scratch>/milestones-plan.json --items <ids> [--choose <id>=<choice>]...
+   python3 "${CLAUDE_PLUGIN_ROOT}/scripts/roadmap_milestones.py" apply --plan <scratch>/milestones-plan.json --items <ids> [--choose <id>=<choice>]... [--publish <id>]...
    ```
    `<choice>` is the 1-based position of the answer among that question's
-   `choices`. Report each line it prints. `SKIPPED stale` means someone changed
+   `choices`. For each **Publish** answer, add its id to `--items` and add
+   `--publish <id>`; the script writes no such title without it. Report each line it prints. `SKIPPED stale` means someone changed
    it meanwhile; the next refresh plans it again. `FAILED` gives GitHub's
-   message. Skip this step when nothing was approved.
+   message. A `WARNING the milestones could not be read` line means the script
+   could not tell which titles are on the tracker already. Look up each
+   `SKIPPED unapproved` line after it by its item id in the plan. Its title is
+   the item's `section`, or for an issue item its `milestone.title`. When no
+   item in the plan has that title as its `publishes`, nobody was asked about
+   it: report it as held back because the tracker could not be read, not
+   because of an answer. Otherwise it was asked and not approved: report it as
+   step 3 does. Either way the next refresh plans it again. Name these items
+   by id only, never by a title that was not published.
+   Skip this step when nothing was approved.
 6. **The document.** Changes to it (a heading linked, a row moved, added or
    removed) stay in the working file, for step 8's commit. When the document
    is still unchanged (step 2 found every mark agrees and nothing here changed

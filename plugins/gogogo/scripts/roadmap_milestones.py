@@ -2,7 +2,7 @@
 """Plan, and apply only what a person approved, the GitHub milestones a roadmap's sections stand for.
 
     roadmap_milestones.py [--profile FILE] [--file PATH] plan [--link HEADING]...
-    roadmap_milestones.py [--profile FILE] [--file PATH] apply --plan PLAN.json --items 1,3,4 [--choose ID=CHOICE]...
+    roadmap_milestones.py [--profile FILE] [--file PATH] apply --plan PLAN.json --items 1,3,4 [--choose ID=CHOICE]... [--publish ID]...
 
 A section of the roadmap (a `##` heading and the lines up to the next one) is a
 milestone when its heading links to one:
@@ -36,16 +36,27 @@ null for "leave both". While no heading is linked, every section with a
 tracked table is offered as a new milestone; after that, `--link HEADING`
 offers one by name. Exit 0: nothing to do. 1: items or skipped lines. 2: the
 profile, the document or a read cannot be used; nothing is printed on stdout.
-With `tracker.public`, a document in another repo that is not public is
-refused: milestone titles would publish its headings.
+With `tracker.public`, a document in another repo that is not public (or
+whose visibility cannot be read, or that has no remote) is a private roadmap:
+the plan goes ahead, gets `"private_roadmap": true`, and each `link-section`
+to a milestone not yet created, and each `rename-milestone`, gets
+`"publishes": "<the exact title>"`, the heading text it would make public.
 
 `apply` applies only the ids in `--items`, a question only with
-`--choose ID=<1-based choice>`. Before each GitHub write it re-reads what the
+`--choose ID=<1-based choice>`. For a private roadmap (worked out again, not
+read from the plan), a `link-section` or `rename-milestone` item applies only
+when its id is also given with `--publish ID`, unless a milestone already
+has that title (read live); an item that needs a milestone not yet created,
+under a title not approved that way, is skipped too. Each prints `SKIPPED
+unapproved` without the title and changes nothing. Before each GitHub write it re-reads what the
 item expected and skips it (`SKIPPED stale`) when someone changed it. It
 writes by milestone number, and it never deletes a milestone. Document edits
 are made in the working file, keeping every other byte. One line per item:
-`APPLIED`, `SKIPPED stale` or `FAILED`. Exit 0: every item applied. 1: any
-skipped or failed. 2: the plan, an id or a choice cannot be used.
+`APPLIED`, `SKIPPED stale`, `SKIPPED unapproved` or `FAILED`, after a
+`WARNING` line when a private roadmap's milestones were needed and could not
+be read: every title then counts as not yet on the tracker, so every item
+that needs a title not approved with `--publish` is skipped. Exit 0: every item
+applied. 1: any skipped or failed. 2: the plan, an id or a choice cannot be used.
 """
 from __future__ import annotations
 
@@ -530,14 +541,46 @@ def load_plan(path: str, ids: str, choose: list[str]) -> list[dict]:
     return sorted(picked, key=lambda e: order.get(e["kind"], len(order)))
 
 
-def apply(entries: list[dict], repo: str, roadmap: Path, github, writer, legend) -> int:
+def apply(entries: list[dict], repo: str, roadmap: Path, github, writer, legend,
+          unapproved=(), publish=frozenset()) -> int:
     with open(roadmap, encoding="utf-8", newline="") as handle:
         text = handle.read()
     lines = text.splitlines(keepends=True)
     created: dict[str, int] = {}
     worst = EXIT_OK
+    # On a private roadmap, a title reaches the tracker only when its own item was approved with --publish;
+    # an item that needs a milestone not yet created under some other title is skipped without naming it.
+    approved = {e["section"] for e in entries if e["kind"] in unapproved and e["id"] in publish}
+    def unapproved_link(entry):
+        return entry["kind"] == "link-section" and entry["kind"] in unapproved and entry["id"] not in publish
+
+    def unapproved_target(entry):
+        milestone = entry.get("milestone") or {}
+        return (bool(unapproved) and entry["kind"] not in unapproved and milestone.get("number") is None
+                and milestone.get("title") is not None and milestone["title"] not in approved)
+
+    # Read live, not from the plan, and only when an item's gate needs it: a title a milestone already
+    # has is public already. A failed read counts no title as public, so it only holds more back; each
+    # item it holds is skipped, and that skip, not the failed read, sets the exit.
+    public_titles = set()
+    if any(unapproved_link(e) or unapproved_target(e) for e in entries):
+        try:
+            public_titles = {m["title"] for m in github.milestones(repo)}
+        except ReadError as exc:
+            print(f"WARNING the milestones could not be read ({exc}): every title counts as not yet on the"
+                  " tracker, so the items below that need a title not approved with --publish are held back")
     for entry in entries:
         tag = f"{entry['id']} {entry['kind']}" + (f" #{entry['issue']}" if entry.get("issue") else "")
+        milestone = entry.get("milestone") or {}
+        existing = unapproved_link(entry) and entry.get("section") in public_titles
+        if entry["kind"] in unapproved and entry["id"] not in publish and not existing:
+            print(f"SKIPPED unapproved {tag}: publishing this title was not approved")
+            worst = EXIT_ATTENTION
+            continue
+        if unapproved_target(entry) and milestone["title"] not in public_titles:
+            print(f"SKIPPED unapproved {tag}: its milestone's title was not approved for publishing")
+            worst = EXIT_ATTENTION
+            continue
         try:
             outcome = apply_one(entry, repo, lines, github, writer, legend, created)
         except (ReadError, ValueError) as exc:
@@ -697,6 +740,25 @@ def apply_one(entry, repo, lines, github, writer, legend, created) -> str:
 # --------------------------------------------------------------------------
 
 
+PUBLISHES = ("link-section", "rename-milestone")  # the kinds that write heading text to the tracker
+
+
+def private_roadmap(settings, repo, github, git_of) -> bool:
+    """True when the tracker is public and the roadmap's repo is not known to be public (gogogo#202).
+    git_of() gives the roadmap's Git, read only when the tracker is public."""
+    if not (settings.get("tracker") or {}).get("public"):
+        return False
+    source = git_of().remote_repo()
+    if source is None:
+        return True
+    if source.lower() == repo.lower():
+        return False
+    try:
+        return github.visibility(source) != "PUBLIC"
+    except ReadError:
+        return True
+
+
 def run(args, github, history, writer) -> int:
     _, settings, roadmap = rs.load_profile(args)
     repo = settings["tracker"]["issues_repo"]
@@ -704,16 +766,21 @@ def run(args, github, history, writer) -> int:
         entries = load_plan(args.plan, args.items, args.choose or [])
         lines = roadmap.read_text(encoding="utf-8").splitlines(keepends=True)
         legend = rs.read_legend(rs.find_tables(lines), settings)
-        return apply(entries, repo, roadmap, github, writer, legend)
+        gated = private_roadmap(settings, repo, github, lambda: history(roadmap))
+        return apply(entries, repo, roadmap, github, writer, legend,
+                     unapproved=PUBLISHES if gated else (), publish=set(args.publish or []))
 
     git = history(roadmap)
-    if (settings.get("tracker") or {}).get("public"):
-        source = git.remote_repo()
-        if source is None or (source.lower() != repo.lower() and github.visibility(source) != "PUBLIC"):
-            raise Unusable(f"milestone titles would publish headings from {source or 'the roadmap’s repo'}, "
-                           f"which is not public, in {repo}")
+    private = private_roadmap(settings, repo, github, lambda: git)
     doc = parse_doc(git.text_at("HEAD"), repo)
     found = plan(doc, str(roadmap), repo, github, History(git, repo), args.link or [])
+    if private:
+        found["private_roadmap"] = True
+        for entry in found["items"]:
+            # Linking a heading to a milestone that already has its title publishes nothing new.
+            already = entry["kind"] == "link-section" and (entry.get("milestone") or {}).get("number") is not None
+            if entry["kind"] in PUBLISHES and not already:
+                entry["publishes"] = entry["section"]
     print(json.dumps(found, indent=2, ensure_ascii=False))
     return EXIT_ATTENTION if found["items"] or found["skipped"] else EXIT_OK
 
@@ -729,6 +796,8 @@ def main(argv=None, github=None, history=Git, writer=None) -> int:
     applier.add_argument("--plan", required=True)
     applier.add_argument("--items", required=True, help="comma list of ids")
     applier.add_argument("--choose", action="append", metavar="ID=CHOICE", help="a question's 1-based choice")
+    applier.add_argument("--publish", action="append", type=int, metavar="ID",
+                         help="for a private roadmap: an approved item whose title may be published")
     args = parser.parse_args(argv)
     try:
         return run(args, github or GitHub(), history, writer or GhWriter())

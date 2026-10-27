@@ -34,7 +34,7 @@ CASES = {
     "spec-no-argument-offers-new", "spec-pr-mentions-only",
     "spec-reverses-tested-behaviour", "spec-unmet-precondition",
     "spec-public-tracker-reread",
-    "roadmap-shared-checkout", "roadmap-milestones-ask-first",
+    "roadmap-shared-checkout", "roadmap-milestones-ask-first", "roadmap-private-titles-ask",
     "status-sweep-lists-only", "status-shows-independence",
     "wrap-up-asks-before-removing", "wrap-up-reviews-memories",
     "dev-suspected-fault", "auto-dev-fault-in-close-report",
