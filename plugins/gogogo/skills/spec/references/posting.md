@@ -91,9 +91,10 @@ order, checking each step before starting the next:
    When the re-read removes what the lint needs and no rewrite meets both,
    stop this issue: post nothing, add no label, and report the lint error and
    the removal (its kind and where it was, never the text). In a correction
-   the report also says that the spec already posted is not corrected, still
-   holds anything the re-read removed, and keeps its label and its card
-   where they are, so a person decides whether it may still be built. In a run of
+   the report also says that the spec already posted is not corrected and
+   keeps its label and its card where they are, and which removals were of
+   text already posted, which stays published, so a person decides whether
+   it may still be built. In a run of
    several issues this ends that issue only, never the run, and its
    final-report line is *stopped: the public-tracker re-read removed what the
    lint needs*.
@@ -248,10 +249,10 @@ Which report to keep:
 **Correcting a spec you already posted:** edit the composed body file in the
 scratchpad (when it is gone, write the issue's current body to a new one),
 run step 2's public-tracker check on all of it but the report, and again
-after each change, and leave the report as it is. The report is only the
-quoted lines of `## Original report` above its `---` rule or, in an older
-layout, the text above a `---` rule that comes before the first `##`
-heading; everything else is re-read. It is not composed again (step 3). Then re-run Posting steps 4 to 7 (the lint and the check of open specs that read this
+after each change, and leave the report as it is. The report is the
+`## Original report` section down to its `---` rule; a body that starts at
+`## Verify by hand` has none; in any other body it is what *Which report to
+keep* finds. It is not composed again (step 3). Then re-run Posting steps 4 to 7 (the lint and the check of open specs that read this
 issue, `gh issue edit --body-file`, step 6's re-read of the description, the
 blocked-by links), so the issue carries one accurate spec rather than a spec
 plus errata.
