@@ -74,8 +74,9 @@ yet. It holds whatever recon found, a person's request included. In order:
    § 6's close command with the three lines as its comment, read from the
    file so nothing in them is run by the shell:
    `gh issue close <N> --repo <tracker.issues_repo> --reason "not planned" --comment "$(cat "<scratch>/park-<N>.md")"`.
-   When it says the issue is already closed, it posted nothing: say so. End
-   this issue.
+   When it says the issue is already closed, it posted nothing: say so. A
+   non-zero exit: say the close failed, with its message, and that the three
+   lines may already be posted. End this issue.
 8. **On spec it anyway:** carry on to *Before you write* § 7. The trigger and
    its evidence go into `## Context` as a trap.
 9. **A decline, or no person to ask:** post nothing, move nothing, comment
