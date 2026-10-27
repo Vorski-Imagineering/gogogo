@@ -339,6 +339,16 @@ class PullRequests(Repos):
     def test_a_pr_gh_prints_with_an_empty_name_with_owner_claims_its_branch(self):
         """gh 2.87.3's `pr list --json headRepository` fills only id and name (gogogo#214)."""
         self.assertEqual(self.claimed_by(lambda tip: pr(5, "OPEN", tip, name_with_owner="")), (0, []))
+        # With a commit on no remote the branch is still listed, and the line names that PR.
+        self.branch_with("ahead", 1)
+        self.git("push", "-q", "origin", "ahead")
+        pushed = self.tip("ahead")
+        self.git("checkout", "-q", "ahead")
+        self.commit("ahead local")
+        self.git("checkout", "-q", "main")
+        code, lines = self.run_with({"pr": {"o/code ahead": [pr(6, "OPEN", pushed, name_with_owner="")]}})
+        self.assertEqual(code, 1)
+        self.assertTrue(any(ln.endswith("; PR #6 open, but 1 commit(s) are on no remote") for ln in lines), lines)
 
     def test_a_pr_without_the_cross_repository_field_does_not_count(self):
         def without(tip):
