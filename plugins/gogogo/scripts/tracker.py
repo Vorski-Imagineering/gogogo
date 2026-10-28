@@ -40,6 +40,9 @@ project-side index drops an item it drops it from both and the check passes
 over a missing card (a real card sat in a column, unarchived, while the read
 said "369 of 369"). `list` therefore asks a second, independent index (each
 open issue what it belongs to) and prints any card only that side can see.
+The reverse also happens: an issue's own side lists no board owned by another
+organisation, so `show` and `move` look a card the issue side cannot see up
+from the board's side.
 
 `views` and `tidy` keep the board current between runs: every view hides closed
 issues, every issue closed as completed sits in Done, every issue closed as not
@@ -514,7 +517,7 @@ query($owner: String!, $name: String!, $size: Int!, $after: String) {
           nodes {
             id
             isArchived
-            project { number }
+            project { number owner { ... on Organization { login } ... on User { login } } }
             fieldValueByName(name: "Status") {
               ... on ProjectV2ItemFieldSingleSelectValue { name updatedAt }
             }
@@ -710,7 +713,7 @@ query($owner: String!, $name: String!, $number: Int!) {
         nodes {
           id
           isArchived
-          project { number title }
+          project { number title owner { ... on Organization { login } ... on User { login } } }
           fieldValueByName(name: "Status") {
             ... on ProjectV2ItemFieldSingleSelectValue { name }
           }
@@ -722,8 +725,61 @@ query($owner: String!, $name: String!, $number: Int!) {
 """
 
 
+BOARD_ITEM_QUERY = """
+query($org: String!, $number: Int!, $q: String!) {
+  repositoryOwner(login: $org) {
+    ... on ProjectV2Owner {
+    projectV2(number: $number) {
+      items(first: 20, query: $q, archivedStates: [ARCHIVED, NOT_ARCHIVED]) {
+        nodes {
+          id
+          isArchived
+          fieldValueByName(name: "Status") {
+            ... on ProjectV2ItemFieldSingleSelectValue { name }
+          }
+          content { ... on Issue { number repository { nameWithOwner } } }
+        }
+      }
+    }
+    }
+  }
+}
+"""
+
+
+def on_this_board(node: dict) -> bool:
+    """An issue-side project item is this board's: the number and its owner.
+    A board with the same number in another organisation is not this one."""
+    project = node.get("project") or {}
+    login = (project.get("owner") or {}).get("login") or ""
+    return project.get("number") == PROJECT_NUMBER and login.lower() == ORG.lower()
+
+
+def board_side_card(number: int, repo: str) -> dict | None:
+    """The issue's card found from the board's side, archived or not, or None.
+
+    GitHub's issue-side `projectItems` lists no board owned by another
+    organisation, so a card there is only visible from the board. The search
+    can return near misses (another repo, a longer number): the match is exact.
+    """
+    data = graphql(BOARD_ITEM_QUERY, org=ORG, number=PROJECT_NUMBER, q=f"repo:{repo} #{number}")
+    project = ((data or {}).get("repositoryOwner") or {}).get("projectV2")
+    if not project:
+        raise BoardError(f"project {ORG}/#{PROJECT_NUMBER} not visible to this gh login")
+    for node in project["items"]["nodes"]:
+        content = node.get("content") or {}
+        found = (content.get("repository") or {}).get("nameWithOwner") or ""
+        if content.get("number") == number and found.lower() == repo.lower():
+            return node
+    return None
+
+
 def issue_card(number: int, repo: str) -> dict:
-    """The issue's own card on this board — a read that ignores board size."""
+    """The issue's own card on this board — a read that ignores board size.
+
+    Asked from the issue's side first; when that sees no card here, from the
+    board's side (a board in another organisation).
+    """
     owner, name = repo.split("/", 1)
     issue = graphql(
         ISSUE_ITEMS_QUERY, owner=owner, name=name, number=number
@@ -731,14 +787,9 @@ def issue_card(number: int, repo: str) -> dict:
     if not issue:
         raise BoardError(f"{repo}#{number} does not exist")
 
-    card = next(
-        (
-            node
-            for node in issue["projectItems"]["nodes"]
-            if node["project"]["number"] == PROJECT_NUMBER
-        ),
-        None,
-    )
+    card = next((node for node in issue["projectItems"]["nodes"] if on_this_board(node)), None)
+    if card is None:
+        card = board_side_card(number, repo)
     return {"issue": issue, "card": card}
 
 
@@ -1035,13 +1086,17 @@ def untidy(repo: str) -> tuple[list[dict], list[dict], list[dict]]:
     closed = [c for c in closed
               if c["state_reason"] != "NOT_PLANNED"
               and (c["status"] or "").lower() != DONE_COLUMN.lower()]
-    off_board = [
-        {"number": i["number"], "title": i["title"],
-         "repo": (i.get("repository") or {}).get("nameWithOwner") or repo}
-        for i in open_issues(repo)
-        if not any((n.get("project") or {}).get("number") == PROJECT_NUMBER
-                   for n in (i.get("projectItems") or {}).get("nodes") or [])
-    ]
+    # The board's own list too: across organisations the issue side sees no card,
+    # and an archived card is in neither read, so ask the board for what both missed.
+    listed = {((c["repo"] or "").lower(), c["number"]) for c in cards}
+    off_board = []
+    for i in open_issues(repo):
+        if any(on_this_board(n) for n in (i.get("projectItems") or {}).get("nodes") or []):
+            continue
+        where = (i.get("repository") or {}).get("nameWithOwner") or repo
+        if (where.lower(), i["number"]) in listed or board_side_card(i["number"], where):
+            continue
+        off_board.append({"number": i["number"], "title": i["title"], "repo": where})
     return closed, archive, off_board
 
 

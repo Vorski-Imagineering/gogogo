@@ -864,7 +864,8 @@ class KeepingTheBoardCurrent(unittest.TestCase):
              "projectItems": {"nodes": []}},
         ]
         with mock.patch.object(board, "fetch_items", return_value=items), \
-             mock.patch.object(board, "open_issues", return_value=iter(issues)):
+             mock.patch.object(board, "open_issues", return_value=iter(issues)), \
+             mock.patch.object(board, "board_side_card", return_value=None):
             return board.untidy("acme/issues")
 
     def test_untidy_finds_closed_issues_outside_done_and_open_issues_off_the_board(self):
@@ -1336,6 +1337,118 @@ class BlockedSkillSteps(unittest.TestCase):
 
     def test_spec_posting_sets_the_links(self):
         self.assertIn("block <N> --by", (SKILLS / "spec" / "references" / "posting.md").read_text(encoding="utf-8"))
+
+
+class CrossOrgBoardTests(unittest.TestCase):
+    """A board owned by another organisation: the issue side lists no card on it,
+    so `show`, `move` and `tidy` find it from the board's side (gogogo#227)."""
+
+    META = dict(MoveReadBackTests.META,
+                options={"Dev Ready": "rrr", "In progress": "ppp", "Done": "ddd"})
+
+    @staticmethod
+    def issue(nodes=()):
+        return {"repository": {"issue": {"title": "t", "url": "u", "state": "OPEN",
+                                         "blockedBy": {"totalCount": 0, "nodes": []},
+                                         "blocking": {"totalCount": 0, "nodes": []},
+                                         "projectItems": {"nodes": list(nodes)}}}}
+
+    @staticmethod
+    def found(*items):
+        return {"repositoryOwner": {"projectV2": {"items": {"nodes": [
+            {"id": f"BOARD_{repo}_{n}", "isArchived": archived,
+             "fieldValueByName": {"name": status} if status else None,
+             "content": {"number": n, "repository": {"nameWithOwner": repo}}}
+            for repo, n, status, archived in items]}}}}
+
+    def answer(self, issue_side, board_sides):
+        """A fake `graphql` that answers by query; each board-side read takes the next answer."""
+        board_sides = list(board_sides)
+        calls = []
+
+        def graphql(query, **variables):
+            calls.append((query, variables))
+            if query == board.ISSUE_ITEMS_QUERY:
+                return issue_side
+            if query == board.BOARD_ITEM_QUERY:
+                return board_sides.pop(0)
+            return {}
+        return graphql, calls
+
+    def test_a_card_only_the_board_side_sees_is_found(self):
+        fake, _ = self.answer(self.issue(), [self.found(("other/repo", 7, "Done", False),
+                                                        ("acme/issues", 7, "Dev Ready", False))])
+        with mock.patch.object(board, "graphql", side_effect=fake):
+            card = board.issue_card(7, "acme/issues")["card"]
+        self.assertEqual(card["id"], "BOARD_acme/issues_7")
+
+    def test_the_board_side_match_is_exact(self):
+        fake, _ = self.answer(self.issue(), [self.found(("acme/issues", 70, "Done", False),
+                                                        ("other/issues", 7, "Done", False))] * 2)
+        out = io.StringIO()
+        with mock.patch.object(board, "graphql", side_effect=fake):
+            self.assertIsNone(board.issue_card(7, "acme/issues")["card"])
+            with redirect_stdout(out):
+                board.cmd_show(Namespace(issue=7, repo="acme/issues", expect=None))
+        self.assertIn("not on project #2", out.getvalue())
+
+    def test_a_same_numbered_board_of_another_owner_is_not_taken(self):
+        theirs = {"id": "THEIRS", "isArchived": False, "fieldValueByName": {"name": "Done"},
+                  "project": {"number": 2, "owner": {"login": "elsewhere"}}}
+        fake, _ = self.answer(self.issue([theirs]), [self.found(("acme/issues", 7, "Dev Ready", False))])
+        with mock.patch.object(board, "graphql", side_effect=fake):
+            card = board.issue_card(7, "acme/issues")["card"]
+        self.assertEqual(card["id"], "BOARD_acme/issues_7")
+
+    def test_an_issue_side_hit_asks_nothing_more(self):
+        ours = {"id": "OURS", "isArchived": False, "fieldValueByName": {"name": "Dev Ready"},
+                "project": {"number": 2, "owner": {"login": "ACME"}}}
+        fake, calls = self.answer(self.issue([ours]), [])
+        with mock.patch.object(board, "graphql", side_effect=fake):
+            card = board.issue_card(7, "acme/issues")["card"]
+        self.assertEqual(card["id"], "OURS")
+        self.assertEqual(len(calls), 1)
+
+    def test_the_board_side_read_asks_for_archived_cards(self):
+        self.assertIn("archivedStates: [ARCHIVED, NOT_ARCHIVED]", board.BOARD_ITEM_QUERY)
+        fake, calls = self.answer(self.issue(), [self.found(("acme/issues", 7, "Done", True))])
+        with mock.patch.object(board, "graphql", side_effect=fake):
+            card = board.issue_card(7, "acme/issues")["card"]
+        self.assertTrue(card["isArchived"])
+        self.assertEqual(calls[1][1]["q"], "repo:acme/issues #7")
+
+    def test_a_board_side_payload_with_no_board_raises(self):
+        fake, _ = self.answer(self.issue(), [{"repositoryOwner": None}])
+        with mock.patch.object(board, "graphql", side_effect=fake):
+            with self.assertRaises(board.BoardError):
+                board.board_side_card(7, "acme/issues")
+
+    def test_a_cross_org_move_reads_back_and_exits_0(self):
+        fake, calls = self.answer(self.issue(), [self.found(("acme/issues", 7, "Dev Ready", False)),
+                                                 self.found(("acme/issues", 7, "In progress", False))])
+        with mock.patch.object(board, "board_meta", return_value=self.META), \
+             mock.patch.object(board, "graphql", side_effect=fake), \
+             redirect_stdout(io.StringIO()), redirect_stderr(io.StringIO()):
+            code = board.move_card(7, "acme/issues", "In progress", expect_from="Dev Ready")
+        self.assertEqual(code, 0)
+        writes = [v for q, v in calls if q == board.SET_FIELD_MUTATION]
+        self.assertEqual([w["item"] for w in writes], ["BOARD_acme/issues_7"])
+        self.assertEqual([q for q, _ in calls].count(board.BOARD_ITEM_QUERY), 2)
+
+    def test_untidy_keeps_cards_the_board_lists_and_archived_ones(self):
+        listed = {"id": "I6", "fieldValueByName": {"name": "Backlog"},
+                  "content": {"__typename": "Issue", "number": 6, "title": "t", "state": "OPEN",
+                              "repository": {"nameWithOwner": "acme/issues"}}}
+        issues = [{"number": n, "title": "t", "repository": {"nameWithOwner": "acme/issues"},
+                   "projectItems": {"nodes": []}} for n in (6, 7, 9)]
+        archived = {"id": "I7", "isArchived": True, "fieldValueByName": None}
+        with mock.patch.object(board, "fetch_items", return_value=[listed]), \
+             mock.patch.object(board, "open_issues", return_value=iter(issues)), \
+             mock.patch.object(board, "board_side_card",
+                               side_effect=lambda n, repo: archived if n == 7 else None) as asked:
+            _, _, off_board = board.untidy("acme/issues")
+        self.assertEqual([i["number"] for i in off_board], [9])
+        self.assertEqual([c.args[0] for c in asked.call_args_list], [7, 9])
 
 
 if __name__ == "__main__":
