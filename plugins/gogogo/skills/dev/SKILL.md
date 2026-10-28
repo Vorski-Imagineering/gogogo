@@ -249,10 +249,11 @@ The profile's `## Recon traps` lists what this codebase specifically hides.
   When the default branch can't be read, create nothing and say why.
 - **Take the card once the work has its place** (a branch started or
   continued, or the checkout's branch kept), before the first edit, when the
-  profile has `tracker.tool` and `tracker.columns.in_progress`. When the
-  bullet above ends with no place for the work (no branch made, continued or
-  kept), there is nothing to take. In an `/gogogo:auto-dev` run, skip it:
-  auto-dev §3 took the card. First, read it:
+  profile has `tracker.tool` and `tracker.columns.in_progress`. There is
+  nothing to take when the bullet above stopped, asked and was declined, or
+  created nothing other than keeping the checkout's other branch; a branch
+  the person named in answer to one of its questions is a place. In an
+  `/gogogo:auto-dev` run, skip it: auto-dev §3 took the card. First, read it:
   ```bash
   <tracker.tool> show <n>
   ```
