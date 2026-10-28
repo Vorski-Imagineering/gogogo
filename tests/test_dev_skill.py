@@ -130,5 +130,32 @@ class Authorisation(unittest.TestCase):
         self.assertNotIn("review=until-clean", rule[4], "a reversal still stops an authorised review")
 
 
+class TakeTheCard(unittest.TestCase):
+    """§4 takes the card into In progress once the work has its place (gogogo#228)."""
+
+    def setUp(self):
+        self.lines = section(SKILL.read_text(encoding="utf-8"), "4. ").splitlines()
+
+    def take(self):
+        return [i for i, ln in enumerate(self.lines) if " move <n>" in ln and "--to in_progress" in ln]
+
+    def test_one_take_with_from_to_in_progress(self):
+        takes = self.take()
+        self.assertEqual(len(takes), 1, takes)
+        self.assertIn("--from", self.lines[takes[0]])
+
+    def test_the_take_comes_after_the_placement(self):
+        placed = max(i for i, ln in enumerate(self.lines) if "git worktree add -b fix/" in ln)
+        self.assertGreater(self.take()[0], placed)
+
+    def test_the_take_reads_the_card_first(self):
+        placed = max(i for i, ln in enumerate(self.lines) if "git worktree add -b fix/" in ln)
+        reads = [i for i, ln in enumerate(self.lines) if " show <n>" in ln]
+        self.assertTrue(any(placed < i < self.take()[0] for i in reads), reads)
+
+    def test_the_take_never_adds_a_card(self):
+        self.assertNotIn("--add-missing", "\n".join(self.lines))
+
+
 if __name__ == "__main__":
     unittest.main()
