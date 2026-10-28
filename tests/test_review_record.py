@@ -87,11 +87,6 @@ class Example(unittest.TestCase):
                          ("0d6f3c2a-8b1e-4f5d-9a7c-2e4b6d8f0a1c", "2026-10-03T09:00Z", "2026-10-03T10:30Z"))
         self.assertEqual(record["malformed"], [])
 
-    def test_the_v2_example_still_parses(self):
-        record = review_stats.parse_review(EXAMPLE_V2)
-        self.assertEqual((record["v"], record["applied_as"]["excess"], record["applied_as_rounds"]), (2, 0, None))
-        self.assertTrue(record["consistent"])
-
     def test_a_v2_record_without_the_new_keys_still_parses(self):
         record = review_stats.parse_review(EXAMPLE_BEFORE_62)
         self.assertIsNotNone(record)

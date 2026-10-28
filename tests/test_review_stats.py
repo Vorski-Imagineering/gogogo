@@ -642,9 +642,6 @@ class SkipsAndSessions(StatsBase):
         self.assertEqual(code, 1)
 
 
-if __name__ == "__main__":
-    unittest.main()
-
 
 NO_LATE = {k: 0 for k in rs.APPLIED_AS}
 
@@ -704,3 +701,7 @@ class V3(StatsBase):
         for row in data["rows"]:
             self.assertTrue({"size", "applied_as_rounds"} <= set(row))
         self.assertTrue({"late_applied_as", "size"} <= set(data["summary"]))
+
+
+if __name__ == "__main__":
+    unittest.main()

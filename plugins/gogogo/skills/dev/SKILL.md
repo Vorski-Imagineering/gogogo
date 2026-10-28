@@ -342,7 +342,7 @@ Comment in the reporter's language, not the codebase's:
   A **Findings** table, `| Id | Round | Test | Recorded as | Re-fixes |`,
   inside a `<details>` block when it has more than five rows: ids `F1`, `F2`,
   … in the order the findings were raised; *Test* is §5's table row (1 to 7)
-  or `declined`; *Re-fixes* is the id of the finding whose correction this
+  or `declined`; *Recorded as* is the word from that table; *Re-fixes* is the id of the finding whose correction this
   one corrects (§5 rule 3), or `-`. **Added beyond the spec**, when anything was (§5 test 5).
   **Declined**: one line per declined finding, by its id, with its reason word from §5's
   table, inside a `<details>` block when there are more than five. The

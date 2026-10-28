@@ -125,7 +125,8 @@ Then the review, by these rules:
    | 7 | anything else | declined, with one line saying why | `hypothetical` (a setup or input no real repo or run has), `style` (wording, naming, tidiness, speed with no wrong result), `settled` (the spec, an Approvals row or an earlier round decided it), `reversal`, `late` |
 
    A removal under test 6 is a correction like any other: the next round
-   reviews it, and rule 4 applies to it.
+   reviews it, and rule 4 applies to it. Taking out what an earlier
+   correction added is not itself a reversal.
 
    Test 4 is read by consequence, not by file: a finding on a file a Hard
    Stop covers is not test 4 unless its consequence is. A finding that meets
@@ -189,7 +190,7 @@ Then the review, by these rules:
     needed it. A correction fixes the case the finding shows, not the cases it
     suggests: those are follow-ups.
 11. **Cut what grew.** Before round 1, and after each round's corrections,
-    measure the change: `git diff --shortstat origin/<base>` from the change's
+    measure the change: `git diff --shortstat $(git merge-base origin/<base> HEAD)` from the change's
     working tree, after `git fetch origin` and, in a run that does not commit,
     `git add -N` on the files `git status --short` lists as untracked.
     `<base>` is the branch the change merges into, as the spec check names it.
