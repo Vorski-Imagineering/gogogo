@@ -1420,7 +1420,7 @@ class CrossOrgBoardTests(unittest.TestCase):
     def test_a_board_side_payload_with_no_board_raises(self):
         fake, _ = self.answer(self.issue(), [{"repositoryOwner": None}])
         with mock.patch.object(board, "graphql", side_effect=fake):
-            with self.assertRaises(board.BoardError):
+            with self.assertRaisesRegex(board.BoardError, "not visible"):
                 board.board_side_card(7, "acme/issues")
 
     def test_a_cross_org_move_reads_back_and_exits_0(self):
@@ -1449,6 +1449,19 @@ class CrossOrgBoardTests(unittest.TestCase):
             _, _, off_board = board.untidy("acme/issues")
         self.assertEqual([i["number"] for i in off_board], [9])
         self.assertEqual([c.args[0] for c in asked.call_args_list], [7, 9])
+
+    def test_untidy_trusts_the_issue_side_and_names_each_issues_repo(self):
+        ours = {"project": {"number": 2, "owner": {"login": "acme"}}}
+        issues = [{"number": 4, "title": "t4", "repository": {"nameWithOwner": "acme/issues"},
+                   "projectItems": {"nodes": [ours]}},
+                  {"number": 9, "title": "t9", "repository": {"nameWithOwner": "acme/other"},
+                   "projectItems": {"nodes": []}}]
+        with mock.patch.object(board, "fetch_items", return_value=[]), \
+             mock.patch.object(board, "open_issues", return_value=iter(issues)), \
+             mock.patch.object(board, "board_side_card", return_value=None) as asked:
+            _, _, off_board = board.untidy("acme/issues")
+        self.assertEqual(off_board, [{"number": 9, "title": "t9", "repo": "acme/other"}])
+        self.assertEqual([c.args for c in asked.call_args_list], [(9, "acme/other")])
 
 
 if __name__ == "__main__":
