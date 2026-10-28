@@ -250,7 +250,7 @@ The profile's `## Recon traps` lists what this codebase specifically hides.
 - **Take the card once the work has its place** (a branch started or
   continued, or the checkout's branch kept), before the first edit, when the
   profile has `tracker.tool` and `tracker.columns.in_progress`. When the
-  bullet above created nothing, there is nothing to take. In an
+  bullet above stopped, or asked and was declined, there is nothing to take. In an
   `/gogogo:auto-dev` run, skip it: auto-dev §3 took the card. First, read it:
   ```bash
   <tracker.tool> show <n>
@@ -260,7 +260,8 @@ The profile's `## Recon traps` lists what this codebase specifically hides.
     a `stages` column, or no card on the board: leave it, never add one, and
     say so in one line naming its column (or "closed", or "no card").
   - Otherwise, with `--from needs_human` (the role key) when the column read is
-    `tracker.columns.needs_human`, and no `--from` for a card with no column:
+    `tracker.columns.needs_human`, and no `--from` for a card with no column
+    (`column: on board, no status`):
     ```bash
     <tracker.tool> move <n> --from "<the column read>" --to in_progress
     ```
