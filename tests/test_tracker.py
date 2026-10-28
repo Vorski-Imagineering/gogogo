@@ -1463,6 +1463,17 @@ class CrossOrgBoardTests(unittest.TestCase):
         self.assertEqual(off_board, [{"number": 9, "title": "t9", "repo": "acme/other"}])
         self.assertEqual([c.args for c in asked.call_args_list], [(9, "acme/other")])
 
+    def test_untidy_does_not_trust_a_same_numbered_board_of_another_owner(self):
+        theirs = {"project": {"number": 2, "owner": {"login": "elsewhere"}}}
+        issues = [{"number": 5, "title": "t5", "repository": {"nameWithOwner": "acme/issues"},
+                   "projectItems": {"nodes": [theirs]}}]
+        with mock.patch.object(board, "fetch_items", return_value=[]), \
+             mock.patch.object(board, "open_issues", return_value=iter(issues)), \
+             mock.patch.object(board, "board_side_card", return_value=None) as asked:
+            _, _, off_board = board.untidy("acme/issues")
+        self.assertEqual([i["number"] for i in off_board], [5])
+        self.assertEqual([c.args for c in asked.call_args_list], [(5, "acme/issues")])
+
 
 if __name__ == "__main__":
     unittest.main()
