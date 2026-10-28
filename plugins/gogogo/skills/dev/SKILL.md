@@ -335,23 +335,35 @@ Comment in the reporter's language, not the codebase's:
 - **How it was verified**: which rungs ran, how many new tests went red, what
   the real run showed.
 - **How it was reviewed**: the kind (code, prose, or mixed: code with prose
-  files, §5 rule 7) and the coverage. One line per round: how many findings
-  were applied and how many declined, and the most important applied finding
-  in a few words. **Added beyond the spec**, when anything was (§5 test 5).
-  **Declined**: one line per declined finding with its reason word from §5's
+  files, §5 rule 7), the coverage, and the size before round 1 as
+  `+<insertions> −<deletions>` (§5 rule 11). One line per round: how many
+  findings were applied and how many declined, the most important applied
+  finding in a few words, and the size after that round, written the same way.
+  A **Findings** table, `| Id | Round | Test | Recorded as | Re-fixes |`,
+  inside a `<details>` block when it has more than five rows: ids `F1`, `F2`,
+  … in the order the findings were raised; *Test* is §5's table row (1 to 7)
+  or `declined`; *Re-fixes* is the id of the finding whose correction this
+  one corrects (§5 rule 3), or `-`. **Added beyond the spec**, when anything was (§5 test 5).
+  **Declined**: one line per declined finding, by its id, with its reason word from §5's
   table, inside a `<details>` block when there are more than five. The
   follow-ups. How the review ended (§5 rule 8). When §3 found that the bug
   this issue fixes was introduced by the change made for an earlier issue in
   this tracker, say so in one sentence. End the comment with the record on one
   line, with no spaces inside a value:
-  `<!-- gogogo:review v=2 pr=<n|none> kind=<code|prose|mixed> coverage=<precise|broad|exhaustive> rounds=<n> applied=<a1,a2,…> declined=<d1,d2,…> refix=<f1,f2,…> applied_as=spec:<n>,regression:<n>,bug:<n>,risk:<n>,added:<n> declined_as=hypothetical:<n>,style:<n>,settled:<n>,reversal:<n>,beyond:<n>,late:<n> followups=<n> end=<clean|third-attempt|reversal|unfixable|prose|breaker> escaped_from=<n|none> escaped_as=<declined|missed|none> impl=<model> reviewer=<model> session=<id|unknown> t_branch=<YYYY-MM-DDTHH:MMZ|unknown> t_verified=<YYYY-MM-DDTHH:MMZ|unknown> -->`
+  `<!-- gogogo:review v=3 pr=<n|none> kind=<code|prose|mixed> coverage=<precise|broad|exhaustive> rounds=<n> applied=<a1,a2,…> declined=<d1,d2,…> refix=<f1,f2,…> size=<s0>,<s1>,… applied_as=spec:<n>,regression:<n>,bug:<n>,risk:<n>,added:<n>,excess:<n>;… declined_as=hypothetical:<n>,style:<n>,settled:<n>,reversal:<n>,beyond:<n>,late:<n> followups=<n> end=<clean|third-attempt|reversal|unfixable|prose|breaker> escaped_from=<n|none> escaped_as=<declined|missed|none> impl=<model> reviewer=<model> session=<id|unknown> t_branch=<YYYY-MM-DDTHH:MMZ|unknown> t_verified=<YYYY-MM-DDTHH:MMZ|unknown> -->`
   - `pr` is the pull request the change went through, or `none` when there
     is none yet. `coverage` is round 1's.
   - `applied`, `declined` and `refix` have one number per round, in order.
     `refix` counts the applied findings that fixed an earlier correction (§5
-    rule 3); its first number is always 0.
-  - `applied_as` and `declined_as` are totals over the whole review by the
-    *Recorded as* words; each adds up to the sum of its per-round list.
+    rule 3): a round's applied rows with an id under *Re-fixes*. Its first
+    number is always 0.
+  - `size` has `rounds + 1` entries, each `<insertions>+<deletions>`: `s0` is
+    the change as round 1 read it, `sk` the change after round `k`'s
+    corrections and cut (§5 rule 11).
+  - `applied_as` has one entry per round, separated by `;`, by the *Recorded
+    as* words; round `k`'s entry adds up to `applied`'s `k`th number.
+    `declined_as` is a total over the whole review and adds up to the sum of
+    `declined`.
   - `followups` is the number of follow-ups the report lists.
   - `escaped_from` is set when §3 found that the bug this issue fixes was
     introduced by the change made for an earlier issue in this tracker: that

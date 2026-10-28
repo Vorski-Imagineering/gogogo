@@ -27,6 +27,13 @@ Everything else is declined with a reason word. Each finding gets three
 attempts, a correction is never undone and redone, and prose files get two
 rounds each, and one more for a fix made in the second, even inside a code change.
 
+A correction is the smallest fix: it deletes or narrows before it adds, and
+a second attempt is smaller than the first. The reviewer is also asked to name
+code, tests or guards the spec does not need, which are removed. The change is
+measured before round 1 and after every round; when a round's corrections grew
+it, what no finding needs is cut before the next round. The record (`v=3`)
+carries the size after every round and the reasons applied in each round.
+
 A review ends `clean` when a round applies nothing. It ends with a person on:
 - a third attempt that is still wrong;
 - a reversal the spec doesn't settle;
@@ -34,7 +41,7 @@ A review ends `clean` when a round applies nothing. It ends with a person on:
 - a defect in the round that reviews a prose file's second-round fix;
 - the breaker, at round 13.
 
-Every report ends with a record of the review (`v=2`). `review_stats.py`
+Every report ends with a record of the review (`v=3`; earlier reports carry `v=2`). `review_stats.py`
 prints them as a table, with each issue's outcome and any later bug traced
 back to the review that let it through. To read the numbers:
 - **Rounds** and **ended** say whether reviews converge.
@@ -177,6 +184,21 @@ Decided on 2026-10-02 and specified in
    records, with each issue's outcome and any later bug traced back to it. The
    attempt limit, the breaker and the default coverage change only on those
    numbers.
+8. **A correction is the smallest fix** (2026-10-27). Split by round, the
+   records showed most late findings fixing an earlier fix:
+
+   | Repo | Reviews | Over 3 rounds | Applied in round 1 | Applied in round 2+ | Of those, fixes of fixes | Round 4+: fixes of fixes |
+   |---|---|---|---|---|---|---|
+   | gogogo | 85 | 13 | 254 | 184 | 82% | 33 of 46 |
+   | a code-only adopter | 58 | 30 | 233 | 305 | 89% | 55 of 60 |
+   | a second adopter | 26 | 11 | 96 | 115 | 85% | 25 of 29 |
+
+   Each correction tended to add code (a helper, an option, a guard) that the
+   next round then found fault with. So four rules: a correction deletes or
+   narrows before it adds; a round that grew the change is cut back before the
+   next; the reviewer names what the spec does not need; and the record keeps
+   the size and the reasons per round. A gate on what later rounds may apply
+   waits for the `v=3` numbers.
 
 Not taken: a fixed round limit as the rule, depth presets, a setting for the
 reviewer's model (the record notes the models instead), and a second agent to

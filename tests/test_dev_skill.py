@@ -157,5 +157,23 @@ class TakeTheCard(unittest.TestCase):
         self.assertNotIn("--add-missing", "\n".join(self.lines))
 
 
+
+class Excess(unittest.TestCase):
+    """The review's table names only reasons review_stats.py counts, and the size is measured (gogogo#231)."""
+
+    def test_recorded_as_words_are_the_counted_reasons(self):
+        sys.path.insert(0, str(SKILLS.parent / "scripts"))
+        import review_stats
+        rows = [line for line in DEV_REVIEW.read_text(encoding="utf-8").splitlines()
+                if re.match(r"\s*\| \d+ \|", line)]
+        words = {w for row in rows for w in re.findall(r"`([a-z-]+)`", row.rstrip(" |").rsplit(" | ", 1)[1])}
+        self.assertEqual(words, set(review_stats.APPLIED_AS) | set(review_stats.DECLINED_AS))
+
+    def test_the_review_measures_the_size(self):
+        text = DEV_REVIEW.read_text(encoding="utf-8")
+        self.assertIn("git diff --shortstat", text)
+        self.assertIn("`size`", text)
+
+
 if __name__ == "__main__":
     unittest.main()

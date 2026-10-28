@@ -107,7 +107,8 @@ Then the review, by these rules:
    not run per round (§6 runs it once, after the last round). Every round, tell the review where the
    spec is (the issue number) and to report only where the change fails the
    spec or a rule in `CLAUDE.md`, breaks something that worked, or has a bug
-   with a concrete triggering case. From round 2, also give it the findings
+   with a concrete triggering case, and to name any code, test or guard the
+   change has that the spec does not need. From round 2, also give it the findings
    already declined, one line each, and tell it not to raise them again.
 2. **Which findings are applied.** Take the first test a finding meets. A
    reviewer's own label ("correctness", a severity) does not change which
@@ -120,7 +121,11 @@ Then the review, by these rules:
    | 3 | a bug, with a concrete case | applied. Code: write the test that fails first, see it fail, then fix. What no test reaches (prose, configuration, a script's output): the exact situation or input and the wrong result, reproduced or traced to a `file:line` | `bug` |
    | 4 | a consequence that would be a security hole, lost or corrupted data, or a change the repo's Hard Stop rules require approval for that no Approvals row covers | no concrete case needed: fixed, or the issue stops for a person; an unapproved Hard Stop always stops (§4) | `risk` |
    | 5 | behaviour the spec does not have | applied only when small: touches no Hard Stop item, adds no new user-visible behaviour, setting or message, stays inside the files the spec lists, and has a test. Named in the report under *Added beyond the spec*. Otherwise declined and listed as a follow-up | `added`, or declined as `beyond` |
-   | 6 | anything else | declined, with one line saying why | `hypothetical` (a setup or input no real repo or run has), `style` (wording, naming, tidiness, speed with no wrong result), `settled` (the spec, an Approvals row or an earlier round decided it), `reversal`, `late` |
+   | 6 | code, a test or a guard the change has that no spec item, `CLAUDE.md` rule or passing test needs | applied by removing it, when every spec item is still met and the lane's `focused` command for the modules that cover the files touched is still green; otherwise declined as `settled` with the item or test that needs it | `excess`, or declined as `settled` |
+   | 7 | anything else | declined, with one line saying why | `hypothetical` (a setup or input no real repo or run has), `style` (wording, naming, tidiness, speed with no wrong result), `settled` (the spec, an Approvals row or an earlier round decided it), `reversal`, `late` |
+
+   A removal under test 6 is a correction like any other: the next round
+   reviews it, and rule 4 applies to it.
 
    Test 4 is read by consequence, not by file: a finding on a file a Hard
    Stop covers is not test 4 unless its consequence is. A finding that meets
@@ -129,8 +134,10 @@ Then the review, by these rules:
 3. **Three attempts per finding.** From round 2, a finding that meets tests 1
    to 4 means a correction was wrong; it belongs to the finding that
    correction was for. The second attempt says what the first got wrong and
-   takes a different approach, not a patch on the patch. A third attempt does
-   the same. When a round finds such a defect in the third attempt, the issue
+   is smaller than the first: it takes out or narrows what the first attempt
+   added, and only when no smaller fix meets the finding does it take a
+   different approach. Never a patch on the patch. A third attempt does the
+   same. When a round finds such a defect in the third attempt, the issue
    stops for a person, with the three attempts and what each got wrong in the
    report. Under `review=until-clean` (`/gogogo:dev` §1) there is no attempt
    limit: each attempt still says what the last got wrong and takes a
@@ -175,6 +182,24 @@ Then the review, by these rules:
    of rule 8. A second silence ends the review with `silent`, which stops the
    issue for a person. The transcript is the review fork's file under the
    session's `subagents` folder; its last write time is the check.
+10. **A correction is the smallest fix.** A correction deletes or narrows
+    before it adds. It adds no helper, option, setting, message, lock, cache
+    or new file unless the finding cannot be fixed without one; then the
+    round's line in the report (§7) says what was added and why the finding
+    needed it. A correction fixes the case the finding shows, not the cases it
+    suggests: those are follow-ups.
+11. **Cut what grew.** Before round 1, and after each round's corrections,
+    measure the change: `git diff --shortstat origin/<base>` from the change's
+    working tree, after `git fetch origin` and, in a run that does not commit,
+    `git add -N` on the files `git status --short` lists as untracked.
+    `<base>` is the branch the change merges into, as the spec check names it.
+    The size is insertions plus deletions. When a round's corrections made the
+    change larger than it was after the previous round, before the next round
+    starts re-read those corrections and take out whatever no applied finding
+    needs, then measure again. The cut is part of that round's corrections (in
+    a run that commits, committed with them before the next round's range is
+    taken). When the change is still larger, the round's line in the report
+    says in a few words what grew it. The sizes go in the record as `size`.
 
 When the spec moves content unchanged, findings about that content are not
 part of the move: list them in the report as follow-ups. A finding there that

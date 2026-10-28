@@ -69,6 +69,15 @@ the distinct issues it handed to a person (stops), and its skips. `unknown`,
 or anything that is not a full session id, is no session; those markers are
 counted apart.
 
+Since gogogo#231 a record is `v=3`: `size=<ins>+<del>,…` gives the change's
+size before round 1 and after each round (`rounds + 1` entries), and
+`applied_as` gives one entry per round, separated by `;`, with `excess` added
+to the reasons. A v=3 record whose size or per-round reasons do not match its
+rounds and `applied` is marked `!`. Each row gains `size` (the last entry) and
+`applied_as_rounds`; the summary adds the reasons applied after round 3 and how
+many correction rounds grew the change, both from v=3 records only. A v=2
+record reads as before, with `excess` 0.
+
 The outcome of a row is the verdict of the latest `<!-- auto-test v1 … -->`
 marker on the issue (pass, fail, needs-human); else `confirmed` when the issue
 is closed as completed, `dropped` when it is closed otherwise, else `waiting`.
@@ -116,12 +125,12 @@ SKIP = re.compile(r"^[ \t]*<!-- gogogo:skip (.*?) -->[ \t\r]*$", re.M)
 SKIPS = ("lint", "nospec", "decision", "hard-stop")
 TIME = re.compile(r"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}Z")
 UUID = re.compile(r"[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}")
-APPLIED_AS = ("spec", "regression", "bug", "risk", "added")
+APPLIED_AS = ("spec", "regression", "bug", "risk", "added", "excess")
 DECLINED_AS = ("hypothetical", "style", "settled", "reversal", "beyond", "late")
 ENDS = ("clean", "third-attempt", "reversal", "unfixable", "prose", "breaker")
 OLD_COVERAGE = {"high": "broad", "medium": "precise", "max": "exhaustive"}
 VERDICTS = {"PASS": "pass", "FAIL": "fail", "NEEDS_HUMAN": "needs-human"}
-COLUMNS = ("issue", "pr", "kind", "coverage", "rounds", "applied", "declined", "refix", "end", "outcome",
+COLUMNS = ("issue", "pr", "kind", "coverage", "rounds", "applied", "declined", "refix", "size", "end", "outcome",
            "escaped", "mutants", "survived", "added", "spec_items", "spec_unmet", "spec_declared", "weaker")
 
 
@@ -148,6 +157,14 @@ def _fields(body: str) -> dict[str, str] | None:
 
 def _ints(value: str) -> list[int]:
     return [int(x) for x in value.split(",")]
+
+
+def _size(value: str) -> list[tuple[int, int]]:
+    """`10+2,14+2`: (insertions, deletions) after each round."""
+    pairs = [tuple(int(x) for x in part.split("+")) for part in value.split(",")]
+    if any(len(pair) != 2 for pair in pairs):
+        raise ValueError(value)
+    return pairs
 
 
 def _reasons(value: str, names: tuple[str, ...]) -> dict[str, int]:
@@ -183,19 +200,28 @@ def parse_review(text: str) -> dict | None:
             record = {"v": 1, "pr": fields["pr"], "kind": fields["kind"],
                       "coverage": OLD_COVERAGE.get(fields["level"], fields["level"]),
                       "rounds": int(fields["rounds"]), "applied": _ints(fields["applied"]),
-                      "declined": _ints(fields["declined"]), "refix": None, "applied_as": None,
+                      "declined": _ints(fields["declined"]), "refix": None, "size": None, "applied_as": None,
+                      "applied_as_rounds": None,
                       "declined_as": None, "followups": None,
                       "end": {"no": "clean", "yes": "stopped"}[fields["stopped"]],
                       "escaped_from": None, "escaped_as": None, "impl": None, "reviewer": None,
                       "session": None, "t_branch": None, "t_verified": None, "malformed": []}
             record["consistent"] = all(len(record[k]) == record["rounds"] for k in ("applied", "declined"))
             return record
-        if fields["v"] != "2":
+        if fields["v"] not in ("2", "3"):
             return None
-        record = {"v": 2, "pr": fields["pr"], "kind": fields["kind"], "coverage": fields["coverage"],
+        if fields["v"] == "2":
+            # v=2 has no `excess` and no per-round reasons (gogogo#231).
+            size, rounds_as = None, None
+            applied_as = {**_reasons(fields["applied_as"], APPLIED_AS[:-1]), "excess": 0}
+        else:
+            size = _size(fields["size"])
+            rounds_as = [_reasons(part, APPLIED_AS) for part in fields["applied_as"].split(";")]
+            applied_as = {k: sum(r[k] for r in rounds_as) for k in APPLIED_AS}
+        record = {"v": int(fields["v"]), "pr": fields["pr"], "kind": fields["kind"], "coverage": fields["coverage"],
                   "rounds": int(fields["rounds"]), "applied": _ints(fields["applied"]),
-                  "declined": _ints(fields["declined"]), "refix": _ints(fields["refix"]),
-                  "applied_as": _reasons(fields["applied_as"], APPLIED_AS),
+                  "declined": _ints(fields["declined"]), "refix": _ints(fields["refix"]), "size": size,
+                  "applied_as": applied_as, "applied_as_rounds": rounds_as,
                   "declined_as": _reasons(fields["declined_as"], DECLINED_AS),
                   "followups": int(fields["followups"]), "end": fields["end"],
                   "escaped_from": None if fields["escaped_from"] == "none" else int(fields["escaped_from"]),
@@ -212,6 +238,10 @@ def parse_review(text: str) -> dict | None:
     record["consistent"] = (all(len(record[k]) == record["rounds"] for k in ("applied", "declined", "refix"))
                             and sum(record["applied_as"].values()) == sum(record["applied"])
                             and sum(record["declined_as"].values()) == sum(record["declined"]))
+    if record["v"] == 3:
+        record["consistent"] = (record["consistent"] and len(size) == record["rounds"] + 1
+                                and len(rounds_as) == record["rounds"]
+                                and all(sum(r.values()) == a for r, a in zip(rounds_as, record["applied"])))
     return record
 
 
@@ -402,9 +432,11 @@ def build(records, unreadable, verdicts, issues, stops=(), unreadable_stops=0, s
     rows = []
     for r in records:
         rows.append({"issue": r["issue"], "title": issues.get(r["issue"], {}).get("title"),
-                     "format": "old" if r["v"] == 1 else "v2", "consistent": r["consistent"], "pr": r["pr"],
+                     "format": "old" if r["v"] == 1 else f"v{r['v']}", "consistent": r["consistent"], "pr": r["pr"],
                      "kind": r["kind"], "coverage": r["coverage"], "rounds": r["rounds"],
-                     "applied": r["applied"], "declined": r["declined"], "refix": r["refix"], "end": r["end"],
+                     "applied": r["applied"], "declined": r["declined"], "refix": r["refix"],
+                     "size": "+".join(map(str, r["size"][-1])) if r["size"] else None,
+                     "applied_as_rounds": r["applied_as_rounds"], "end": r["end"],
                      "outcome": outcome(r["issue"], verdicts, issues.get(r["issue"], {})), "escaped": [],
                      "impl": r["impl"], "reviewer": r["reviewer"], "session": r["session"],
                      "t_branch": r["t_branch"], "t_verified": r["t_verified"], "posted": r.get("posted")})
@@ -422,8 +454,11 @@ def build(records, unreadable, verdicts, issues, stops=(), unreadable_stops=0, s
             for row in rows:
                 if row["issue"] == r["escaped_from"]:
                     row["escaped"].append(f"#{r['issue']} ({r['escaped_as']})")
-    new = [r for r in records if r["v"] == 2]
+    new = [r for r in records if r["v"] >= 2]
     counted = [r for r in new if r["consistent"]]
+    sized = [r for r in counted if r["v"] == 3]
+    # Round k (k >= 2) reviews the corrections that took the change from size k-2 to size k-1.
+    steps = [(sum(r["size"][k - 1]), sum(r["size"][k - 2])) for r in sized for k in range(2, r["rounds"] + 1)]
     applied_total = sum(sum(r["applied"]) for r in new)
     checks = [r["spec_check"] for r in records if r.get("spec_check")]
     guarded = [r["tests"] for r in records if r.get("tests")]
@@ -438,6 +473,8 @@ def build(records, unreadable, verdicts, issues, stops=(), unreadable_stops=0, s
         "refix_rate": sum(sum(r["refix"]) for r in new) / applied_total if applied_total else None,
         "applied_as": {k: sum(r["applied_as"][k] for r in counted) for k in APPLIED_AS},
         "declined_as": {k: sum(r["declined_as"][k] for r in counted) for k in DECLINED_AS},
+        "late_applied_as": {k: sum(rnd[k] for r in sized for rnd in r["applied_as_rounds"][3:]) for k in APPLIED_AS},
+        "size": {"records": len(sized), "rounds": len(steps), "grew": sum(after > before for after, before in steps)},
         "outcomes": dict(Counter(row["outcome"] for row in rows)),
         "escaped": {"declined": escaped["declined"], "missed": escaped["missed"]},
         "spec_check": {"records": len(checks),
@@ -502,6 +539,10 @@ def render(repo: str, data: dict) -> str:
               f"refix rate (new records): {rate}",
               "applied by reason: " + ", ".join(f"{k} {v}" for k, v in s["applied_as"].items()),
               "declined by reason: " + ", ".join(f"{k} {v}" for k, v in s["declined_as"].items()),
+              "applied by reason after round 3 (v3 records): "
+              + ", ".join(f"{k} {v}" for k, v in s["late_applied_as"].items()),
+              (f"size: {s['size']['records']} records, corrections grew the change in {s['size']['grew']} of "
+               f"{s['size']['rounds']} rounds" if s["size"]["records"] else "size: no v3 records"),
               "outcomes: " + ", ".join(f"{k} {v}" for k, v in sorted(s["outcomes"].items())),
               f"escaped bugs: {s['escaped']['declined']} declined, {s['escaped']['missed']} missed"]
     new = s["repo_records"] - s["old_format"]

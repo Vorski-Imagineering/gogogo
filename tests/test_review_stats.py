@@ -33,6 +33,19 @@ def v2(pr=1, rounds=1, applied="1", declined="0", refix="0", applied_as="spec:1,
             f"{' ' + extra if extra else ''} -->")
 
 
+def reasons(**counts):
+    """One round's (or a v=2 total's) reasons, every v=3 name present."""
+    return ",".join(f"{k}:{counts.get(k, 0)}" for k in rs.APPLIED_AS)
+
+
+def v3(pr=1, rounds=3, applied="2,1,1", declined="0,0,0", refix="0,1,0", size="10+2,14+2,12+3,12+3",
+       applied_as=None, declined_as="hypothetical:0,style:0,settled:0,reversal:0,beyond:0,late:0"):
+    applied_as = applied_as or ";".join((reasons(spec=1, bug=1), reasons(bug=1), reasons(excess=1)))
+    return (f"<!-- gogogo:review v=3 pr={pr} kind=code coverage=broad rounds={rounds} applied={applied} "
+            f"declined={declined} refix={refix} size={size} applied_as={applied_as} declined_as={declined_as} "
+            f"followups=0 end=clean escaped_from=none escaped_as=none impl=m1 reviewer=m2 -->")
+
+
 def stop(reason, session=None):
     tail = f" session={session}" if session is not None else ""
     return f"**Needs you:** do the thing.\n<!-- gogogo:stop v=1 reason={reason}{tail} -->"
@@ -631,3 +644,63 @@ class SkipsAndSessions(StatsBase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+NO_LATE = {k: 0 for k in rs.APPLIED_AS}
+
+
+class V3(StatsBase):
+    """v=3 records: the size after every round and the reasons per round (gogogo#231)."""
+
+    def test_a_v3_record_gives_its_size_and_reasons(self):
+        data = self.json_of([(231, v3())])
+        row = data["rows"][0]
+        self.assertEqual((row["format"], row["consistent"], row["size"]), ("v3", True, "12+3"))
+        s = data["summary"]
+        self.assertEqual(s["applied_as"]["excess"], 1)
+        self.assertEqual(s["applied_as"]["bug"], 2)
+        self.assertEqual(s["late_applied_as"], NO_LATE)
+        self.assertEqual(s["size"], {"records": 1, "rounds": 2, "grew": 1})
+
+    def test_late_reasons_start_at_round_four(self):
+        record = v3(rounds=5, applied="1,0,0,2,1", declined="0,0,0,0,0", refix="0,0,0,2,1",
+                    size="1+0,2+0,2+0,2+0,3+0,3+0",
+                    applied_as=";".join((reasons(spec=1), reasons(), reasons(), reasons(bug=2), reasons(spec=1))))
+        late = self.json_of([(231, record)])["summary"]["late_applied_as"]
+        self.assertEqual(late, {**NO_LATE, "spec": 1, "bug": 2})
+
+    def test_a_record_that_does_not_add_up_is_marked_and_not_counted(self):
+        short_size = v3(size="10+2,14+2,12+3")
+        wrong_round = v3(applied_as=";".join((reasons(spec=1, bug=1), reasons(bug=2), reasons(excess=1))))
+        for record in (short_size, wrong_round):
+            data = self.json_of([(231, record)])
+            self.assertFalse(data["rows"][0]["consistent"], record)
+            self.assertEqual(data["summary"]["applied_as"], NO_LATE, record)
+            self.assertEqual(data["summary"]["size"], {"records": 0, "rounds": 0, "grew": 0}, record)
+            _, out, _ = self.run_stats([(231, record)])
+            self.assertIn("#231!", out)
+
+    def test_v2_and_v3_together(self):
+        data = self.json_of([(40, v2()), (231, v3())])
+        s = data["summary"]
+        self.assertEqual(s["applied_as"], {**NO_LATE, "spec": 2, "bug": 2, "excess": 1})
+        self.assertEqual(s["late_applied_as"], NO_LATE)
+        self.assertEqual(s["size"], {"records": 1, "rounds": 2, "grew": 1})
+        rows = {row["issue"]: row for row in data["rows"]}
+        self.assertEqual((rows[40]["format"], rows[40]["size"], rows[40]["applied_as_rounds"]), ("v2", None, None))
+
+    def test_render_shows_size_and_late_reasons(self):
+        _, out, _ = self.run_stats([(231, v3())])
+        header = next(line for line in out.splitlines() if line.startswith("issue"))
+        self.assertIn("refix  size", header)
+        self.assertIn("applied by reason after round 3 (v3 records): spec 0, regression 0, bug 0, risk 0, "
+                      "added 0, excess 0", out)
+        self.assertIn("size: 1 records, corrections grew the change in 1 of 2 rounds", out)
+        _, out, _ = self.run_stats([(40, v2())])
+        self.assertIn("size: no v3 records", out)
+
+    def test_json_keys(self):
+        data = self.json_of([(40, v2()), (231, v3())])
+        for row in data["rows"]:
+            self.assertTrue({"size", "applied_as_rounds"} <= set(row))
+        self.assertTrue({"late_applied_as", "size"} <= set(data["summary"]))
