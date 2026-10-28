@@ -247,6 +247,33 @@ The profile's `## Recon traps` lists what this codebase specifically hides.
   otherwise start fresh with
   `git fetch origin && git worktree add -b fix/<issue-number>-<short-slug> <path> origin/<base>`.
   When the default branch can't be read, create nothing and say why.
+- **Take the card once the work has its place**: wherever the bullet above
+  leaves the work, whether a branch it started or continued, one the person
+  named in answer to its question (in its worktree, for `worktree`), or the
+  checkout left where it was, on another branch or a detached HEAD. Do it
+  before the first edit, when the profile has `tracker.tool` and
+  `tracker.columns.in_progress`. When it leaves the work nowhere (it stopped
+  with no answer that gave a place, the default branch could not be read, or
+  the person declined every way it offered), there is nothing to take. In an
+  `/gogogo:auto-dev` run, skip it: auto-dev §3 took the card. First, read it:
+  ```bash
+  <tracker.tool> show <n>
+  ```
+  - A non-zero exit: one line, `card not read: <its message>`; move nothing.
+  - The issue closed, the card already in `tracker.columns.in_progress` or in
+    a `stages` column, or no card on the board: leave it, never add one, and
+    say so in one line naming its column (or "closed", or "no card").
+  - Otherwise, with `--from needs_human` (the role key) when the column read is
+    `tracker.columns.needs_human`, and no `--from` for a card with no column
+    (`column: on board, no status`):
+    ```bash
+    <tracker.tool> move <n> --from "<the column read>" --to in_progress
+    ```
+    Exit 0: report its line. Exit 3: `show <n>` again, say the card moved
+    meanwhile and name its column, and leave it. Any other exit: say the move
+    failed, with its message.
+  This step never asks the person or stops the build; §8 moves the card again
+  at hand-back.
 - `CLAUDE.md` is not relaxed because a change is small. Reuse first; follow
   existing patterns.
 - **Thread a change through every consumer.** If you change a value, a flag or
@@ -419,12 +446,12 @@ and integration follow this skill and the repo's merge path. See the profile's
 - **An authorisation with `model` or `effort`** (§1) runs §3 to §6 in one
   `Agent` call: `subagent_type: "gogogo:build-<effort>"` (`general-purpose`
   when there is no `effort`), with `model: "<m>"`, left out when `m` is
-  `inherit` or absent. This session first places the work as §4's first
-  bullet says (asking there when it asks); in an `/gogogo:auto-dev` run,
+  `inherit` or absent. This session first places the work, and takes the card, as §4's first
+  two bullets say (asking there when it asks); in an `/gogogo:auto-dev` run,
   auto-dev §3 has placed it, and that place is used. The prompt names the issue, that
   worktree (or this folder), the body file and the authorisation line, and
   tells it to follow `/gogogo:dev` §3 to §6 exactly, in that place, leaving
-  out §4's first bullet; to run the review as `/code-review` from
+  out §4's first two bullets; to run the review as `/code-review` from
   inside the subagent, so the review uses the same model and effort; to
   start the spec check's reader with the same `model`; with
   `review=until-clean`, to review as `references/review.md` says for it; in
