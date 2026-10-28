@@ -247,13 +247,14 @@ The profile's `## Recon traps` lists what this codebase specifically hides.
   otherwise start fresh with
   `git fetch origin && git worktree add -b fix/<issue-number>-<short-slug> <path> origin/<base>`.
   When the default branch can't be read, create nothing and say why.
-- **Take the card once the work has its place** (a branch started or
-  continued, or the checkout's branch kept), before the first edit, when the
-  profile has `tracker.tool` and `tracker.columns.in_progress`. There is
-  nothing to take when the bullet above stopped, asked and was declined, or
-  created nothing other than keeping the checkout's other branch; a branch
-  the person named in answer to one of its questions is a place. In an
-  `/gogogo:auto-dev` run, skip it: auto-dev §3 took the card. First, read it:
+- **Take the card once the work has its place**: the bullet above started or
+  continued the issue's branch (in its worktree, for `worktree`), or kept the
+  checkout on the branch this session was on. Do it before the first edit,
+  when the profile has `tracker.tool` and `tracker.columns.in_progress`. When
+  the bullet above ends with neither (it stopped, the default branch could not
+  be read, or the person declined every way it offered), there is nothing to
+  take. In an `/gogogo:auto-dev` run, skip it: auto-dev §3 took the card.
+  First, read it:
   ```bash
   <tracker.tool> show <n>
   ```
