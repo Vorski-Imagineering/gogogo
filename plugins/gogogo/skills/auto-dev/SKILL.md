@@ -265,7 +265,10 @@ by the run* for §8 and §9.
   with the next.
 - Review as `/gogogo:dev` §5 says. The run commits, so each correction
   round's target is the correction commits' range. The number of rounds
-  never stops an issue except through §5's own endings.
+  never stops an issue except through §5's own endings. The size
+  (`/gogogo:dev` §5 rule 11) is measured in the issue's worktree against
+  `origin/<base>`, and a cut is committed with the round's corrections before
+  the next round's range is taken.
 - **When the review stops an issue** (one of `/gogogo:dev` §5 rule 8's
   endings for a person: `third-attempt`, `reversal`, `unfixable`, `prose` or
   `breaker`): commit

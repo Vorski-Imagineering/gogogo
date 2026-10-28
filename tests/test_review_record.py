@@ -26,18 +26,27 @@ import profile_check  # noqa: E402
 import review_stats  # noqa: E402
 from test_dev_skill import moved  # noqa: E402
 
-KEYS = ["v", "pr", "kind", "coverage", "rounds", "applied", "declined", "refix", "applied_as",
+KEYS = ["v", "pr", "kind", "coverage", "rounds", "applied", "declined", "refix", "size", "applied_as",
         "declined_as", "followups", "end", "escaped_from", "escaped_as", "impl", "reviewer",
         "session", "t_branch", "t_verified"]
 MARKER = re.compile(r"<!-- gogogo:review (.*?) -->")
-# Design 2's worked example, verbatim.
-EXAMPLE = ("<!-- gogogo:review v=2 pr=482 kind=mixed coverage=broad rounds=3 applied=5,2,0 declined=3,1,2 "
-           "refix=0,1,0 applied_as=spec:2,regression:1,bug:3,risk:0,added:1 "
+# Design 2's worked example (gogogo#33), as v=2 records already on issues carry it.
+EXAMPLE_V2 = ("<!-- gogogo:review v=2 pr=482 kind=mixed coverage=broad rounds=3 applied=5,2,0 declined=3,1,2 "
+              "refix=0,1,0 applied_as=spec:2,regression:1,bug:3,risk:0,added:1 "
+              "declined_as=hypothetical:3,style:1,settled:1,reversal:0,beyond:1,late:0 followups=1 end=clean "
+              "escaped_from=none escaped_as=none impl=claude-opus-5-5 reviewer=claude-opus-5-5 "
+              "session=0d6f3c2a-8b1e-4f5d-9a7c-2e4b6d8f0a1c t_branch=2026-10-03T09:00Z t_verified=2026-10-03T10:30Z -->")
+# The same review as a v=3 record (gogogo#231): the size after every round, the reasons per round.
+EXAMPLE = ("<!-- gogogo:review v=3 pr=482 kind=mixed coverage=broad rounds=3 applied=5,2,0 declined=3,1,2 "
+           "refix=0,1,0 size=40+12,52+15,50+14,50+14 "
+           "applied_as=spec:2,regression:1,bug:1,risk:0,added:1,excess:0;"
+           "spec:0,regression:0,bug:1,risk:0,added:0,excess:1;"
+           "spec:0,regression:0,bug:0,risk:0,added:0,excess:0 "
            "declined_as=hypothetical:3,style:1,settled:1,reversal:0,beyond:1,late:0 followups=1 end=clean "
            "escaped_from=none escaped_as=none impl=claude-opus-5-5 reviewer=claude-opus-5-5 "
            "session=0d6f3c2a-8b1e-4f5d-9a7c-2e4b6d8f0a1c t_branch=2026-10-03T09:00Z t_verified=2026-10-03T10:30Z -->")
 # A v2 record from before gogogo#62: no session or phase times.
-EXAMPLE_BEFORE_62 = EXAMPLE.split(" session=")[0] + " -->"
+EXAMPLE_BEFORE_62 = EXAMPLE_V2.split(" session=")[0] + " -->"
 STOP = re.compile(r"<!-- gogogo:stop (.*?) -->")
 # The format before gogogo#33, as records already on issues carry it.
 OLD_EXAMPLE = ("<!-- gogogo:review pr=482 kind=code level=high rounds=4 applied=5,2,1,0 "
@@ -61,12 +70,16 @@ class Example(unittest.TestCase):
     def test_the_example_parses_and_adds_up(self):
         record = review_stats.parse_review(EXAMPLE)
         self.assertIsNotNone(record)
-        self.assertEqual((record["v"], record["rounds"], record["pr"]), (2, 3, "482"))
-        for key in ("applied", "declined", "refix"):
+        self.assertEqual((record["v"], record["rounds"], record["pr"]), (3, 3, "482"))
+        for key in ("applied", "declined", "refix", "applied_as_rounds"):
             self.assertEqual(len(record[key]), record["rounds"], key)
+        self.assertEqual(len(record["size"]), record["rounds"] + 1)
+        self.assertEqual(record["size"][-1], (50, 14))
         self.assertEqual(record["refix"][0], 0)
         for refix, applied in zip(record["refix"], record["applied"]):
             self.assertLessEqual(refix, applied)
+        for reasons, applied in zip(record["applied_as_rounds"], record["applied"]):
+            self.assertEqual(sum(reasons.values()), applied)
         self.assertEqual(sum(record["applied_as"].values()), sum(record["applied"]))
         self.assertEqual(sum(record["declined_as"].values()), sum(record["declined"]))
         self.assertTrue(record["consistent"])
@@ -85,6 +98,7 @@ class Example(unittest.TestCase):
         self.assertIsNotNone(record)
         self.assertEqual((record["v"], record["coverage"], record["end"]), (1, "broad", "clean"))
         self.assertIsNone(record["refix"])
+        self.assertEqual((record["size"], record["applied_as"]), (None, None))
 
 
 class Settings(unittest.TestCase):

@@ -29,7 +29,7 @@ CASES = {
     "auto-dev-review-wait", "auto-dev-late-run-pr", "dev-merge-refused",
     "dev-deletes-merged-local-branch", "dev-blocked-goes-to-queue", "auto-dev-skips-blocked",
     "human-help-review-stop", "human-help-hard-stop-asks", "human-help-requeued-twice",
-    "dev-authorised-until-clean", "dev-authorised-model",
+    "dev-authorised-until-clean", "dev-authorised-model", "dev-correction-smallest-fix",
     "spec-declined-question", "spec-being-built", "spec-nothing-hits-today",
     "spec-no-argument-offers-new", "spec-pr-mentions-only",
     "spec-reverses-tested-behaviour", "spec-unmet-precondition",
