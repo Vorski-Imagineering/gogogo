@@ -661,10 +661,13 @@ class V3(StatsBase):
 
     def test_late_reasons_start_at_round_four(self):
         record = v3(rounds=5, applied="1,0,0,2,1", declined="0,0,0,0,0", refix="0,0,0,2,1",
-                    size="1+0,2+0,2+0,2+0,3+0,3+0",
+                    size="1+0,2+0,2+0,2+0,3+0,4+0",
                     applied_as=";".join((reasons(spec=1), reasons(), reasons(), reasons(bug=2), reasons(spec=1))))
-        late = self.json_of([(231, record)])["summary"]["late_applied_as"]
-        self.assertEqual(late, {**NO_LATE, "spec": 1, "bug": 2})
+        data = self.json_of([(231, record)])
+        self.assertEqual(data["summary"]["late_applied_as"], {**NO_LATE, "spec": 1, "bug": 2})
+        # Rounds 2 to 5 read sizes 1..4; an unchanged size is not growth.
+        self.assertEqual(data["summary"]["size"], {"records": 1, "rounds": 4, "grew": 2})
+        self.assertEqual(data["rows"][0]["size"], "4+0")
 
     def test_a_record_that_does_not_add_up_is_marked_and_not_counted(self):
         short_size = v3(size="10+2,14+2,12+3")
@@ -694,7 +697,7 @@ class V3(StatsBase):
                       "added 0, excess 0", out)
         self.assertIn("size: 1 records, corrections grew the change in 1 of 2 rounds", out)
         _, out, _ = self.run_stats([(40, v2())])
-        self.assertIn("size: no v3 records", out)
+        self.assertIn("size: no v3 records", out.splitlines())
 
     def test_json_keys(self):
         data = self.json_of([(40, v2()), (231, v3())])

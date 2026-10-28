@@ -98,6 +98,7 @@ class Example(unittest.TestCase):
         self.assertIsNotNone(record)
         self.assertEqual((record["v"], record["coverage"], record["end"]), (1, "broad", "clean"))
         self.assertIsNone(record["refix"])
+        self.assertEqual((record["size"], record["applied_as"]), (None, None))
 
 
 class Settings(unittest.TestCase):
