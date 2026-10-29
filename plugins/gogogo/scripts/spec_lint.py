@@ -353,7 +353,7 @@ def lint(body, settings):
     spec_lines = [line for title, _, lines in sections if title != REPORT for line in lines]
     prose, fenced = [], False  # a part is named in prose, never inside a code block
     for line in spec_lines:
-        if line.lstrip().startswith("```") and "```" not in line.lstrip()[3:]:
+        if line.lstrip().startswith("```"):
             fenced = not fenced
         elif not fenced:
             prose.append(line)

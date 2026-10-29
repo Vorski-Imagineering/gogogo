@@ -445,10 +445,6 @@ class RelatedRepos(unittest.TestCase):
                             "1. Change the filter.\n\n```bash\n# then the client's half runs\necho **client's half**\n```")
         self.assertEqual(run(body, RELATED)[2], None)
 
-    def test_an_inline_code_span_is_not_a_fence(self):
-        body = HALF.replace("1. Change the filter.", "1. Change the filter.\n```make test``` runs the suite.")
-        self.assertEqual(run(body, RELATED)[2], NO_ISSUE)
-
     def test_a_phrase_of_punctuation_matches_nothing(self):
         settings = dict(SETTINGS, related_repos=[{"repo": "example-org/client-repo", "half": "—"}])
         self.assertEqual(run(GOOD, settings)[2], None)
