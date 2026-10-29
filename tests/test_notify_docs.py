@@ -14,6 +14,9 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 PLUGIN = ROOT / "plugins" / "gogogo"
+sys.path.insert(0, str(PLUGIN / "scripts"))
+
+import notify  # noqa: E402
 
 
 def text(path):
@@ -36,8 +39,6 @@ class NotifyDocs(unittest.TestCase):
         self.assertIn('scripts/notify.py" status', doc)
 
     def test_18_auto_dev_events_name_every_field(self):
-        sys.path.insert(0, str(PLUGIN / "scripts"))
-        import notify
         doc = section(text(PLUGIN / "skills" / "auto-dev" / "SKILL.md"), "## 8. Between issues")
         self.assertIn('notify.py" send --event', doc)
         for name in ("run_started", "issue_skipped", "issue_started", "issue_merged", "needs_you", "run_closed"):
