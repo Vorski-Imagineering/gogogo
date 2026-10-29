@@ -100,6 +100,20 @@ under `--baseline`. A case that was meant to run and is not in the result
 Each run's own scores are in `aggregate-result.json` in the run's report folder
 under `plugins/gogogo/evals/results/` (not committed).
 
+The report keeps which graders passed, not the answers. To see what a failing
+case answered, run that case alone and keep its traces:
+
+```bash
+claude plugin eval plugins/gogogo --case <name> --runs 2 --ablation none \
+  --trust-plugin --no-publish --keep-temp --json <scratch>/r.json
+```
+
+Each run in `<scratch>/r.json` has a `tracePath`; the line of that file whose
+`type` is `result` holds the answer. `--case` takes one name: a second
+`--case` is ignored. A prompt run by hand with `claude -p --plugin-dir` may
+load the installed gogogo plugin instead of the working tree's, so its answer
+says nothing about your change.
+
 ## Why it is written this way
 
 - **0.66.** The lane passes a case at a score of 0.66 or more over its graders
