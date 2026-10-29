@@ -389,6 +389,54 @@ class NumberedItemsAndFileGroups(unittest.TestCase):
                                   "not_in_scope": ["- x"]})
 
 
+RELATED = dict(SETTINGS, related_repos=[{"repo": "example-org/client-repo", "half": "client's half"}])
+HALF = GOOD.replace("1. Change the filter.", "1. Change the filter.\n2. **Client's half.** The client shows the new field.")
+NO_ISSUE = "cross-repo half without an issue"
+
+
+class RelatedRepos(unittest.TestCase):
+    """gogogo#234: a part of the work in a related repo cites an issue there."""
+
+    def test_no_list_changes_nothing(self):
+        errs, warns, withheld = run(HALF)
+        self.assertEqual((errs, withheld), ([], None))
+        self.assertFalse([w for w in warns if "half" in w], warns)
+
+    def test_an_uncited_half_withholds(self):
+        errs, warns, withheld = run(HALF, RELATED)
+        self.assertEqual((errs, withheld), ([], NO_ISSUE))
+        self.assertIn("## Design: client's half has no example-org/client-repo#<n> cited; "
+                      "file it in example-org/client-repo and cite it", warns)
+
+    def test_a_cited_half_applies(self):
+        for cite in ("Filed as example-org/client-repo#12.", "See https://github.com/example-org/client-repo/issues/12.",
+                     "Filed as Example-Org/Client-Repo#12."):
+            body = HALF.replace("the new field.", f"the new field. {cite}")
+            self.assertEqual(run(body, RELATED)[2], None, cite)
+
+    def test_the_report_is_not_read(self):
+        quoted = GOOD.replace("> 1. Open the page", "> 1. Open the page\n> **Client's half** is waiting.")
+        self.assertEqual(run(quoted, RELATED)[2], None)
+        cited_in_report = HALF.replace("> 1. Open the page", "> 1. Open the page\n> See example-org/client-repo#12.")
+        self.assertEqual(run(cited_in_report, RELATED)[2], NO_ISSUE)
+
+    def test_a_heading_counts_and_prose_does_not(self):
+        heading = GOOD.replace("1. Change the filter.", "1. Change the filter.\n\n### Client's half\n\n2. Show the field.")
+        self.assertEqual(run(heading, RELATED)[2], NO_ISSUE)
+        prose = GOOD.replace("1. Change the filter.", "1. Change the filter; the client's half is small.")
+        self.assertEqual(run(prose, RELATED)[2], None)
+
+    def test_another_repos_ref_does_not_cite(self):
+        for cite in ("example-org/other-repo#12", "example-org/client-repo-2#12", "other-example-org/client-repo#12"):
+            body = HALF.replace("the new field.", f"the new field. Filed as {cite}.")
+            self.assertEqual(run(body, RELATED)[2], NO_ISSUE, cite)
+
+    def test_a_hard_stop_reason_comes_first(self):
+        body = HALF.replace("| Schema | no |", "| Schema | yes |").replace(
+            "implement directly.**", "proposal — Schema awaits approval.**")
+        self.assertEqual(run(body, RELATED)[2], "a Hard Stop awaits approval")
+
+
 class CommandLine(unittest.TestCase):
     def call(self, *argv):
         out, err = io.StringIO(), io.StringIO()

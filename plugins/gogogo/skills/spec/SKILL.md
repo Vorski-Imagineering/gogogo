@@ -122,7 +122,7 @@ Only when the user gives more than one issue, or a board column, or accepted the
 | `## Verify by hand` | **First section of the spec**, directly under the report. Numbered steps a non-technical person can follow to confirm the work is done. Required, never omitted. |
 | `## Approvals` | Every decision the **user** made. Required, never omitted. |
 | `## Context` | What is broken, with `file:line`. Why the ticket's framing misleads. The unlock. The traps. Alternatives rejected, each with its reason. |
-| `## Design` | Artefacts numbered 1., 2., 3. at the start of a line. Exact signatures, exact rules in order, exact selectors. Where each piece lands, following `design.placement_rule` when the profile has one. |
+| `## Design` | Artefacts numbered 1., 2., 3. at the start of a line. Exact signatures, exact rules in order, exact selectors. Where each piece lands, following `design.placement_rule` when the profile has one. Work in a repo the profile's `related_repos` lists is that repo's part: **REQUIRED REFERENCE** `references/related-repos.md`. |
 | `## Test cases` | Real cases in every applicable lane, numbered 1., 2., 3. at the start of a line straight through the section, across lanes; checks in a lane a test cannot reach stay as bullets. Never "add tests". |
 | `## Files` | A `**Create:**` and an `**Edit:**` group with each path in backticks, then `**Explicitly not in scope:**` as a bullet list. |
 | `## Verification` | Gate commands and the prove-it-fails step. This is the implementing agent's gate. |

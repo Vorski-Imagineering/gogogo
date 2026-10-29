@@ -189,6 +189,8 @@ order, checking each step before starting the next:
    **Not every posted spec earns it.** Withhold it, and say why in your reply,
    when:
 
+   - the check's last line (step 4) is `label: withhold (<reason>)`; say the
+     reason;
    - the Hard-stop verdict has a **yes** that no Approvals row approves. The
      spec is a proposal waiting at a gate; label it once the user approves and
      you have added the row;

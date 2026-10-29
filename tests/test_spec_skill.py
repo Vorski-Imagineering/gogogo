@@ -60,6 +60,17 @@ def section(text, prefix, level="## "):
     return lines[start:end]
 
 
+class RelatedRepoHalf(unittest.TestCase):
+    """gogogo#234: the spec files the part of the work in a related repo, and cites it."""
+
+    def test_related_repos_reference_is_named_and_shaped(self):
+        self.assertEqual(skill_text().count("references/related-repos.md"), 1)
+        ref = (SKILL.parent / "references" / "related-repos.md").read_text(encoding="utf-8")
+        for name in ("related_repos", "half", "gh issue create", "**Blocked by:**", "isPrivate"):
+            self.assertIn(name, ref)
+        self.assertNotIn("related-repos.md", POSTING.read_text(encoding="utf-8"))
+
+
 class DeclinedQuestion(unittest.TestCase):
     def test_declined_question_subsection(self):
         lines = skill_text().splitlines()
