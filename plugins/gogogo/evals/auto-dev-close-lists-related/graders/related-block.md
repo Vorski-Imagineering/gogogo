@@ -1,4 +1,4 @@
 ---
 type: regex
-pattern: 'RELATED'
+pattern: 'RELATED[\s\S]*waiting (?:there|here)'
 ---

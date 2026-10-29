@@ -130,7 +130,7 @@ class RelatedRepos(unittest.TestCase):
     """gogogo#239: a RELATED block lists what each related repo waits on, from reads status already makes."""
 
     GATHER = [
-        'git rev-parse --show-toplevel        # its basename is <repo>',
+        'git rev-parse --show-toplevel',
         'git --no-optional-locks status --porcelain=v2 --branch',
         'python3 "${CLAUDE_PLUGIN_ROOT}/scripts/tracker.py" fields',
         'python3 "${CLAUDE_PLUGIN_ROOT}/scripts/tracker.py" list --json',
@@ -138,7 +138,7 @@ class RelatedRepos(unittest.TestCase):
         'python3 "${CLAUDE_PLUGIN_ROOT}/scripts/stage_sync.py" reverts',
         'gh pr list --repo <tracker.code_repo> --state open --json number,title,headRefName,isDraft --limit 100',
         "git for-each-ref refs/heads --format='%(refname:short)|%(upstream:short)|%(upstream:track)'",
-        'git rev-list --count <base>..<branch>      # each branch other than the base',
+        'git rev-list --count <base>..<branch>',
         'git worktree list --porcelain',
         'python3 "${CLAUDE_PLUGIN_ROOT}/scripts/worktree_sweep.py"',
     ]
@@ -167,7 +167,7 @@ class RelatedRepos(unittest.TestCase):
             if line.strip().startswith("```"):
                 fenced = not fenced
             elif fenced:
-                commands.append(line.strip())
+                commands.append(line.split("  #", 1)[0].strip())
         self.assertEqual(commands, self.GATHER)
         self.assertNotIn("tracker.py", self.bullet())
         self.assertNotIn("gh ", self.bullet())

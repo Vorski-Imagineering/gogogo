@@ -177,7 +177,7 @@ These rules apply, in order.
      no `related`, its `column` here or `not on this board`.
   3. `    waiting here:   ` then one item per open issue in `<R>` that one or
      more of our open, non-pull-request cards list in `blocking` with `state`
-     `OPEN`: `<R>#<n> waits on <card ref> [<its column>][, <card ref> [<its column>]…]`.
+     `OPEN`: `<R>#<n> waits on <card ref> [<its column, or no status>][, <card ref> [<its column, or no status>]…]`.
   4. Items are separated by ` · `, in `list --json` order (by its first card
      for 3), at most 10, then `+N more`. An empty line reads `none`.
      `<card ref>` is *A card*'s ref (`#n`, or `<repo>#n` when its repo is not
