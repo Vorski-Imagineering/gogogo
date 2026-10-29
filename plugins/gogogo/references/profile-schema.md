@@ -307,7 +307,7 @@ half = "client's half"
 - `half` (optional): the phrase a spec here uses for the part of a change
   built in that repo.
 
-Read by: `tracker.py` reads `board` and `merged_columns` for blocker states; #234 reads `half`.
+Read by: `tracker.py` reads `board` and `merged_columns` for blocker states; `/gogogo:spec` and `spec_lint.py` read `half`.
 
 ### Release
 

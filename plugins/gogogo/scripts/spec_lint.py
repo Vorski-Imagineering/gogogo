@@ -6,9 +6,10 @@
 
 It checks what can be checked mechanically: the sections and their order, the
 Approvals table, that the Hard-stop verdict agrees with its own answers, that
-the human check names real URLs, and that Design and Test cases number their
-items (`1.` or `**1.**` at the start of the line) and Files groups its paths,
-which `spec_check.py` reads. It cannot judge whether the design is right; the
+the human check names real URLs, that Design and Test cases number their items
+(`1.` or `**1.**` at the start of the line) and Files groups its paths, which
+`spec_check.py` reads, and that a part of the work in a repo the profile's
+`related_repos` lists cites an issue there. It cannot judge whether the design is right; the
 skill's pre-post check does that.
 
 Output: one `error:` or `warning:` line per finding, then `label: apply` or
@@ -90,6 +91,14 @@ def split_sections(body):
         else:
             current[2].append(line)
     return preamble, sections
+
+
+def _labels(line):
+    """A heading's text, and each `**…**` span's text, on one line."""
+    found = re.findall(r"\*\*(.+?)\*\*", line)
+    if re.match(r"#{1,6}\s", line):
+        found.append(line.lstrip("#"))
+    return found
 
 
 def table_rows(lines):
@@ -339,6 +348,26 @@ def lint(body, settings):
             warnings.append(f"## Approvals: mentions a {change} but has no row about applying it "
                             f"({entry.get('apply', 'apply')}); the unattended run will build it "
                             "and then stop")
+
+    # --- the part of the work in a related repo ---------------------------
+    spec_lines = [line for title, _, lines in sections if title != REPORT for line in lines]
+    prose, fenced = [], False  # a part is named in prose, never inside a code block
+    for line in spec_lines:
+        if line.lstrip().startswith("```"):
+            fenced = not fenced
+        elif not fenced:
+            prose.append(line)
+    for entry in settings.get("related_repos") or []:
+        repo, half = (entry.get("repo"), entry.get("half")) if isinstance(entry, dict) else (None, None)
+        if not (isinstance(repo, str) and isinstance(half, str) and norm(half)):
+            continue
+        if not any(norm(half) in norm(text) for line in prose for text in _labels(line)):
+            continue
+        cited = re.compile(rf"(?:(?<![\w./-]){re.escape(repo)}#|github\.com/{re.escape(repo)}/issues/)\d+(?![\w-])",
+                           re.I)
+        if not any(cited.search(line) for line in spec_lines):
+            label = label or "cross-repo half without an issue"
+            warnings.append(f"## Design: {half} has no {repo}#<n> cited; file it in {repo} and cite it")
 
     if re.search(r"external unknown", approvals_text, re.I):
         label = label or "an external unknown is open"
