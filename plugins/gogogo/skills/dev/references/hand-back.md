@@ -13,24 +13,26 @@ The card moves to the column of the **stage the code has actually reached**,
 and no further. Take the first case that fits:
 
 - **blocked by another issue**: the next step of this issue cannot begin until
-  an open issue B is merged, or ships when the spec marks it `(shipped)`. B is named in the spec's `**Blocked by:**` line,
-  or found mid-change, as when what is left is a person's step that needs B
-  first. Read B's state from the `blocked by:` line for B in
-  `<tracker.tool> show <n>`, which also reads a related repo's board. With no
-  such line (no link yet), read B itself:
+  an open issue B is merged, or ships when the spec marks it `(shipped)`. B is
+  named in the spec's `**Blocked by:**` line, or found mid-change, as when
+  what is left is a person's step that needs B first. Read B's state from the
+  `blocked by:` line for B in `<tracker.tool> show <n>`, which also reads a
+  related repo's board. With no such line (no link yet), read B itself:
   `gh issue view <B> --repo <its repo> --json state,stateReason` and
   `<tracker.tool> show <B> --repo <its repo>`. B still blocks when:
   - that line's state is `open` (with no line: B is `OPEN` with its card in no
     column of the profile's `stages`, or not on this board); or
-  - the spec marks B `(shipped)` and that line ends `, not shipped` (with no
-    line: B is `OPEN`). For such a B the merge is the step that cannot begin, so
-    it is checked right before merging, and this case applies instead of the
-    merge, with the report's first line ending `taken once <B> ships`.
+  - the spec marks B `(shipped)` and that line ends `, not shipped`. With no
+    line for such a B, set the link first (step 2 below) and read
+    `<tracker.tool> show <n>` again. For such a B the merge is the step that
+    cannot begin, so it is checked right before merging, and this case
+    applies instead of the merge, with the report's first line ending
+    `taken once <B> ships`.
 
   B closed as `NOT_PLANNED` or `DUPLICATE` (state `dropped`): take "stopped
   for a person" with `reason=decision`, naming B and how it closed. Otherwise
-  B has merged (closed as `COMPLETED`, or with no reason, counts too), and
-  this case does not apply.
+  B has merged, or shipped for a B marked `(shipped)` (closed as `COMPLETED`,
+  or with no reason, counts too), and this case does not apply.
 
   When B still blocks, this is not a stop, and not
   `tracker.columns.needs_human`: nobody can act on it until B lands. In order:
