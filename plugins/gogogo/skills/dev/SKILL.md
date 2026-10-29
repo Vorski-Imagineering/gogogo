@@ -95,8 +95,12 @@ Stop and say so, rather than guessing, when the issue:
   `/gogogo:spec`, not an improvised implementation.
 
 **A blocked issue.** When `<tracker.tool> show <n>` prints a `blocked by:` line
-whose state is `open`, tell the person which issue blocks it and ask: **build
-anyway** or **leave it**. With no person to ask, leave it and say why.
+whose state is `open`, or one ending `, not shipped` for a ref the spec's
+`**Blocked by:**` line marks `(shipped)`, tell the person which issue blocks it
+and ask: **build anyway** or **leave it**. With no person to ask, leave it and
+say why. In an `/gogogo:auto-dev` run, its blocked-row rule decides whether a
+`(shipped)` row is taken; the check right before merging
+(`references/hand-back.md`, *blocked by another issue*) still applies.
 
 **An issue carrying a spec in its body is the ready case.** Its `## Approvals`
 table records every decision the user made, and it is what licenses

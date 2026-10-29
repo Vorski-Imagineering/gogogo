@@ -686,6 +686,12 @@ class RelatedRepos(unittest.TestCase):
         row = next(line for line in doc.splitlines() if line.startswith("| `related_repos` |"))
         self.assertEqual(row.split(" | ")[3].rstrip(" |"), pc.FIELDS["related_repos"][2])
 
+    def test_shipped_columns_is_checked(self):
+        self.assertEqual(self.check(lambda s: s["related_repos"][0].update(shipped_columns=["Released"])), ([], []))
+        for bad in ("Released", [], ["Released", ""]):
+            errors, _ = self.check(lambda s: s["related_repos"][0].update(shipped_columns=bad))
+            self.assertEqual(errors, [f"{WHERE}: shipped_columns must be a list of column names"], bad)
+
     def test_an_unknown_key_warns(self):
         errors, warnings = self.check(lambda s: s["related_repos"][0].update(role="client"))
         self.assertEqual(errors, [])

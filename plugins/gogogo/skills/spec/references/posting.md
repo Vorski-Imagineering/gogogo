@@ -172,9 +172,15 @@ order, checking each step before starting the next:
 5. `gh issue edit <N> --body-file <composed file>`.
 6. **Re-read the description** and confirm both the report and the spec are
    there.
-7. **Set the blocked-by links.** For each ref on the spec's `**Blocked by:**`
-   line in `## Context` (none: skip this step without a word), run
-   `<tracker.tool> block <N> --by <ref>` (for `shared`,
+7. **Set the blocked-by links.** A condition that this issue must not merge,
+   or reach an environment, before another issue ships is that issue's ref on
+   the `**Blocked by:**` line followed by `(shipped)`, such as
+   `**Blocked by:** example-org/client-repo#5 (shipped)`. It is never a stop
+   in `## Verification`, an Approvals row, or a step waiting for a person's
+   comment: a gate is for a person's judgement only. For each ref on the
+   spec's `**Blocked by:**` line in `## Context` (none: skip this step without
+   a word), run `<tracker.tool> block <N> --by <ref>`, the ref without its
+   `(shipped)` mark (for `shared`,
    `python3 "${CLAUDE_PLUGIN_ROOT}/scripts/tracker.py" block <N> --by <ref>`). It
    sets GitHub's "blocked by" link and reads it back from the blocker's side.
    Report each result. A non-zero exit is reported and does not withhold the

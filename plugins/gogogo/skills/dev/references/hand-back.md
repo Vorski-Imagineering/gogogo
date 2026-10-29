@@ -13,16 +13,29 @@ The card moves to the column of the **stage the code has actually reached**,
 and no further. Take the first case that fits:
 
 - **blocked by another issue**: the next step of this issue cannot begin until
-  an open issue B is merged. B is named in the spec's `**Blocked by:**` line,
-  or found mid-change, as when what is left is a person's step that needs B
-  first. Read B itself, since no link may exist yet:
+  an open issue B is merged, or ships when the spec marks it `(shipped)`. B is
+  named in the spec's `**Blocked by:**` line, or found mid-change, as when
+  what is left is a person's step that needs B first. Read B's state from the
+  `blocked by:` line for B in `<tracker.tool> show <n>`, which also reads a
+  related repo's board. With no such line (no link yet), for a B the spec
+  marks `(shipped)` set the link first (step 2 below) and read
+  `<tracker.tool> show <n>` again; for any other B, read B itself:
   `gh issue view <B> --repo <its repo> --json state,stateReason` and
-  `<tracker.tool> show <B> --repo <its repo>`. B still blocks when it is
-  `OPEN` with its card in no column of the profile's `stages` (or not on this
-  board). Closed any other way than below (`COMPLETED`, or no reason), or its
-  card in a stage column: it has merged, and this case does not apply. Closed as `NOT_PLANNED` or `DUPLICATE`: take "stopped for
-  a person" with `reason=decision`, naming B and how it closed. Not a stop, and not `tracker.columns.needs_human`:
-  nobody can act on it until B lands. In order:
+  `<tracker.tool> show <B> --repo <its repo>`. B still blocks when:
+  - that line's state is `open` (with no line: B is `OPEN` with its card in no
+    column of the profile's `stages`, or not on this board); or
+  - the spec marks B `(shipped)` and that line ends `, not shipped`. For such
+    a B the merge is the step that cannot begin, so it is checked right
+    before merging, and this case applies instead of the merge, with the
+    report's first line ending `taken once <B> ships`.
+
+  B closed as `NOT_PLANNED` or `DUPLICATE` (state `dropped`): take "stopped
+  for a person" with `reason=decision`, naming B and how it closed. Otherwise
+  B has merged, or shipped for a B marked `(shipped)` (closed as `COMPLETED`,
+  or with no reason, counts too), and this case does not apply.
+
+  When B still blocks, this is not a stop, and not
+  `tracker.columns.needs_human`: nobody can act on it until B lands. In order:
   1. When there is work: commit and push it, and leave its PR open, opening it
      as a draft if none exists. In an interactive session with nothing
      committed, ask first, as the case below does.
@@ -32,15 +45,16 @@ and no further. Take the first case that fits:
      with `reason=decision` and a Needs-you line naming B, so the dependency
      is never left only in prose.
   3. Post the §7 report. Its first line is
-     `**Blocked by <B>:** <what B must deliver>. This returns to <tracker.queue> and is taken once <B> merges.`,
+     `**Blocked by <B>:** <what B must deliver>. This returns to <tracker.queue> and is taken once <B> merges.`
+     (`ships` in place of `merges` for a B the spec marks `(shipped)`),
      then, on its own line, the marker
      `<!-- gogogo:blocked v=1 by=<owner/repo>#<B> session=<id|unknown> -->`.
      It carries no stop marker.
   4. `<tracker.tool> move <n> --from "<the column read before the move>" --to "<tracker.queue>"`,
      so a person's move meanwhile is not undone (exit 3 is reported, not
      retried). Keep `tracker.ready_marker`: the spec needs nothing from
-     anyone, and the queue passes the card over until B merges
-     (`/gogogo:auto-dev`).
+     anyone, and the queue passes the card over until B merges, or ships
+     for a B the spec marks `(shipped)` (`/gogogo:auto-dev`).
 - **stopped for a person**: a review that ended for a person (§5 rule 8: a
   defect in a finding's third attempt, a reversal the spec does not settle, a
   finding you could not fix, a defect in the round that reviews a prose file's second-round fix, or the breaker

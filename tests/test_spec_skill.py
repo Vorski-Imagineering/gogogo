@@ -418,5 +418,17 @@ class GivenNothing(unittest.TestCase):
         self.assertIn("no argument", description)
 
 
+
+class ShipWait(unittest.TestCase):
+    """gogogo#238: "must not merge before X ships" is a marked Blocked-by ref, never a gate."""
+
+    def test_posting_step_7_says_a_ship_wait_is_a_link(self):
+        step = POSTING.read_text(encoding="utf-8").split("\n7. **", 1)[1].split("\n8. **", 1)[0]
+        self.assertIn("(shipped)", step)
+        self.assertIn("never", step)
+        sentence = " ".join(skill_text().split("A chain across issues", 1)[1].split("Posting sets", 1)[0].split())
+        self.assertIn("`references/posting.md` step 7", sentence)
+
+
 if __name__ == "__main__":
     unittest.main()
