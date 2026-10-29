@@ -392,7 +392,9 @@ no credentials, so call it the same way in every repo. The events:
 - `needs_you`, for an issue taken and then stopped, never for a triage skip (its skip event says it): `{"event": "needs_you", "issue": <n>, "title": "<title>", "reason": "<the Needs-you line>", "column": "<tracker.columns.needs_human>"}`;
 - `run_closed`, from §9 only: `{"event": "run_closed", "merged": <a>, "need_you": <b>, "skipped": <c>}`, where `<b>` counts issues taken and stopped, and `<c>` the triage skips and §3's skips, each issue once.
 
-A `send` that exits non-zero (exit 2 is an event the script refused) is a `notify failed: <its line>`, and the run
+In each event a value in quotes is text, and a bare one (`<n>`, `<k>`, `<a>`, `<b>`, `<c>`) is a whole number: a count, never a list.
+
+A `send` that exits 2 refused the event, and its line names every wrong field and the fields the event takes: correct the event from that line and send it once more. A second refusal, or any other non-zero exit (never resent), is a `notify failed: <its line>`, and the run
 goes on. Each is given once, in the next report to the person in this session
 (a between-issues report, §9's report, or a stop's question), never in a
 tracker comment. Never put a token on a command line or in a report.

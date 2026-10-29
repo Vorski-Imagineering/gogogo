@@ -36,7 +36,8 @@ sent as Telegram HTML, with every value from the event escaped. When Telegram
 refuses the HTML it is sent once as plain text, and `notify: sent as plain text:
 <why>` goes to stderr; a message too long for Telegram goes as its plain text, cut.
 A bad event (not JSON, an unknown name, a missing or mistyped field) is exit 2 and
-sends nothing, whatever the `notify` setting. `send --text` and plain stdin send the
+sends nothing, whatever the `notify` setting; its one line names every wrong field
+and every field the event takes, with its type. `send --text` and plain stdin send the
 text as it is, with no markup.
 
 `init` and `chat-id --save` write the per-user file; with `--repo` they write
@@ -335,13 +336,18 @@ def parse_event(text):
             fields["environment"] = str
         else:
             fields.update(DEPLOYED_FULL)
+    optional = OPTIONAL.get(name, ())
+    problems = []
     for field, kind in fields.items():
         if field not in event:
-            if field in OPTIONAL.get(name, ()):
-                continue
-            raise UsageError(f"{name}: missing {field}")
-        if not _typed(event[field], kind):
-            raise UsageError(f"{name}: {field} must be {kind.__name__}")
+            if field not in optional:
+                problems.append(f"missing {field}")
+        elif not _typed(event[field], kind):
+            problems.append(f"{field} must be {kind.__name__}")
+    if problems:
+        takes = ", ".join(f"{field} ({kind.__name__}{', optional' if field in optional else ''})"
+                          for field, kind in fields.items())
+        raise UsageError(f"{name}: {'; '.join(problems)}. {name} takes {takes}")
     if name == "deployed" and "issues" in fields:
         for item in event["issues"]:
             if not (isinstance(item, dict) and _typed(item.get("repo"), str) and _typed(item.get("issue"), int)

@@ -44,6 +44,7 @@ CASES = {
     "setup-machine-has-bot",
     "idea-files-upstream-checked",
     "auto-dev-sends-event-json",
+    "auto-dev-resends-refused-event",
     "spec-approval-lists-edge-cases", "human-help-approval-lists-edge-cases",
     "sentry-debug-quiet-week", "sentry-debug-no-sentry-settings",
 }
