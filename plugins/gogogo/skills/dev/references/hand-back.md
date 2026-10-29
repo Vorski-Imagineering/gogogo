@@ -17,17 +17,17 @@ and no further. Take the first case that fits:
   named in the spec's `**Blocked by:**` line, or found mid-change, as when
   what is left is a person's step that needs B first. Read B's state from the
   `blocked by:` line for B in `<tracker.tool> show <n>`, which also reads a
-  related repo's board. With no such line (no link yet), read B itself:
+  related repo's board. With no such line (no link yet), for a B the spec
+  marks `(shipped)` set the link first (step 2 below) and read
+  `<tracker.tool> show <n>` again; for any other B, read B itself:
   `gh issue view <B> --repo <its repo> --json state,stateReason` and
   `<tracker.tool> show <B> --repo <its repo>`. B still blocks when:
   - that line's state is `open` (with no line: B is `OPEN` with its card in no
     column of the profile's `stages`, or not on this board); or
-  - the spec marks B `(shipped)` and that line ends `, not shipped`. With no
-    line for such a B, set the link first (step 2 below) and read
-    `<tracker.tool> show <n>` again. For such a B the merge is the step that
-    cannot begin, so it is checked right before merging, and this case
-    applies instead of the merge, with the report's first line ending
-    `taken once <B> ships`.
+  - the spec marks B `(shipped)` and that line ends `, not shipped`. For such
+    a B the merge is the step that cannot begin, so it is checked right
+    before merging, and this case applies instead of the merge, with the
+    report's first line ending `taken once <B> ships`.
 
   B closed as `NOT_PLANNED` or `DUPLICATE` (state `dropped`): take "stopped
   for a person" with `reason=decision`, naming B and how it closed. Otherwise
