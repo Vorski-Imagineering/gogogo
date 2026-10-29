@@ -272,5 +272,15 @@ class Authorisation(unittest.TestCase):
         self.assertIn("/gogogo:dev` §1", four)
 
 
+
+class CloseReport(unittest.TestCase):
+    """gogogo#239: the close report ends with the RELATED block, from one read."""
+
+    def test_lists_related_repos(self):
+        close = section(SKILL.read_text(encoding="utf-8"), "9. Close the run")
+        for words in ("related_repos", "list --issues-only --open-only --json", "RELATED  unreadable:", "/gogogo:status"):
+            self.assertIn(words, close)
+
+
 if __name__ == "__main__":
     unittest.main()
