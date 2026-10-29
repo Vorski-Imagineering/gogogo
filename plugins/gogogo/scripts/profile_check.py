@@ -21,6 +21,7 @@ Standard library only (tomllib needs Python 3.11+).
 import argparse
 import copy
 import json
+import re
 import sys
 import tomllib
 from pathlib import Path
@@ -69,6 +70,7 @@ FIELDS = {
                                     "Optional; absent means the in_progress column."),
     "environments": (list, SKILLS, "Where code runs: name, roles, and url/serves/reached_by/data/writes."),
     "stages": (list, (ONE, LOOP, TEST), "The path a change takes after it merges: code_is, column, environment."),
+    "related_repos": (list, (), "Other repos one product is built with: repo, board, merged_columns, half."),
     "hard_stops.source": (str, SKILLS, "Where the repo's Hard Stop rules live (file#anchor)."),
     "hard_stops.form": (str, (SPEC, ONE, LOOP), "categories | questions."),
     "hard_stops.items": (list, (SPEC, ONE, LOOP), "Names of the categories or questions, in order."),
@@ -205,6 +207,11 @@ COLUMN_ROLES = tuple(p.split(".", 2)[2] for p in FIELDS if p.startswith("tracker
 
 # The keys a stage may have (`stages` is a list, so FIELDS cannot name them).
 STAGE_KEYS = ("code_is", "environment", "column", "moved_by", "tag")
+
+# The keys a related repo may have (`related_repos` is a list too).
+RELATED_KEYS = ("repo", "board", "merged_columns", "half")
+RELATED_REPO = re.compile(r"^[A-Za-z0-9][A-Za-z0-9-]*/[A-Za-z0-9._-]+$")
+RELATED_BOARD = re.compile(r"^[A-Za-z0-9][A-Za-z0-9-]*#[1-9][0-9]*$")
 
 ENUMS = {
     "tracker.kind": {"github-project", "todo-file"},
@@ -386,6 +393,48 @@ def environment(settings, name):
     return None
 
 
+def _check_related_repos(settings):
+    """Each related repo: its repo, board, merged columns and half phrase.
+    Returns (errors, warnings). Nothing is looked up: the check runs offline.
+
+    `_leaf_paths` does not descend into lists, so a typo'd key inside an entry
+    is caught here or nowhere.
+    """
+    errors, warnings = [], []
+    related = settings.get("related_repos")
+    if not isinstance(related, list):
+        return errors, warnings
+    tracker = settings.get("tracker") if isinstance(settings.get("tracker"), dict) else {}
+    own = {r.lower() for r in (tracker.get("code_repo"), tracker.get("issues_repo")) if isinstance(r, str)}
+    seen = {}
+    for i, entry in enumerate(related):
+        repo = entry.get("repo") if isinstance(entry, dict) else None
+        if not isinstance(repo, str) or not RELATED_REPO.fullmatch(repo):
+            errors.append(f"related_repos[{i}]: each entry needs repo, as owner/name")
+            continue
+        where = f"related_repos[{i}] ({repo})"
+        if repo.lower() in own:
+            errors.append(f"{where}: repo is this repo itself")
+        if repo.lower() in seen:
+            errors.append(f"{where}: repo is also related_repos[{seen[repo.lower()]}]")
+        else:
+            seen[repo.lower()] = i
+        board = entry.get("board")
+        if "board" in entry and not (isinstance(board, str) and RELATED_BOARD.fullmatch(board)):
+            errors.append(f'{where}: board must be owner#number, such as "acme#3"')
+        merged = entry.get("merged_columns")
+        if "merged_columns" in entry and not (isinstance(merged, list) and merged
+                                              and all(isinstance(c, str) and c for c in merged)):
+            errors.append(f"{where}: merged_columns must be a list of column names")
+        half = entry.get("half")
+        if "half" in entry and not (isinstance(half, str) and half):
+            errors.append(f"{where}: half must be a non-empty phrase")
+        for key in entry:
+            if key not in RELATED_KEYS:
+                warnings.append(f"{where}: unknown key '{key}' (typo, or not in this profile version)")
+    return errors, warnings
+
+
 def _check_auto_test(settings, sections):
     """auto-test tests on the `verify.human` environment, in the column of its one stage."""
     errors = []
@@ -493,6 +542,9 @@ def check(settings, sections, skill=None, root=None):
     stage_errors, stage_warnings = _check_stages(settings)
     errors.extend(stage_errors)
     warnings.extend(stage_warnings)
+    related_errors, related_warnings = _check_related_repos(settings)
+    errors.extend(related_errors)
+    warnings.extend(related_warnings)
     major, present = _lookup(settings, "release.major")
     if present and isinstance(major, int) and not isinstance(major, bool) and major < 1:
         errors.append("release.major: must be 1 or more")

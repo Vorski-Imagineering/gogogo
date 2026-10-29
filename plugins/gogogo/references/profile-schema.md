@@ -97,6 +97,7 @@ no skill requires it; a skill that finds it uses it.
 | `tracker.columns.needs_human` | str | optional | Column of an issue stopped for a person: an unreviewed fix, a decision or Hard Stop found mid-change, or verification that gave up. Optional; absent means the `in_progress` column. |
 | `environments` | list | all | Where code runs: name, roles, and url/serves/reached_by/data/writes. |
 | `stages` | list | `dev`, `auto-dev`, `auto-test` | The path a change takes after it merges: code_is, column, environment. |
+| `related_repos` | list | optional | Other repos one product is built with: repo, board, merged_columns, half. |
 | `hard_stops.source` | str | all | Where the repo's Hard Stop rules live (file#anchor). |
 | `hard_stops.form` | str | `spec`, `dev`, `auto-dev` | categories / questions. |
 | `hard_stops.items` | list | `spec`, `dev`, `auto-dev` | Names of the categories or questions, in order. |
@@ -281,6 +282,32 @@ tag = "deploy-*"
 `profile_check.py` warns on any other key in a stage (a typo there would
 otherwise be silent), and when `handback.reporter` is `trailer` but no stage
 has a `tag`.
+
+### Related repos
+
+`related_repos` lists the other repos one product is built with, such as a
+backend and its client, each with its own board and session. It is optional;
+absent means there are none. The profile check validates each entry but does
+not look the repos or boards up: it runs offline.
+
+```toml
+[[related_repos]]
+repo = "example-org/client-repo"
+board = "example-org#7"
+merged_columns = ["In Dev"]
+half = "client's half"
+```
+
+- `repo` (required): the other repo, as `owner/name`; never this repo itself.
+- `board` (optional): that repo's project board, as `owner#number`. Absent:
+  its blockers are read as today.
+- `merged_columns` (optional): that board's columns meaning the change is
+  merged to its base branch, not that it is in production. Absent: the same
+  names as this profile's `stages` columns.
+- `half` (optional): the phrase a spec here uses for the part of a change
+  built in that repo.
+
+Read by: nothing yet; #233 reads `board` and `merged_columns`, #234 reads `half`.
 
 ### Release
 
