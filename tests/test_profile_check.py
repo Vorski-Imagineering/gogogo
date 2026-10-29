@@ -90,6 +90,12 @@ environment = "production"
 column = "In Production"
 tag = "deploy-*"
 
+[[related_repos]]
+repo = "example-org/client-repo"
+board = "example-org#7"
+merged_columns = ["In Dev"]
+half = "client's half"
+
 [verify]
 agent = ["dev"]
 human = "production"
@@ -587,6 +593,85 @@ class Environments(unittest.TestCase):
 
 AUTO_TEST_FIELDS = [p for p in pc.FIELDS if p.startswith("auto_test.")]
 OTHER_SKILLS = (pc.SPEC, pc.ONE, pc.LOOP, pc.TECH)
+
+
+RELATED_TABLE = """[[related_repos]]
+repo = "example-org/client-repo"
+board = "example-org#7"
+merged_columns = ["In Dev"]
+half = "client's half"
+
+"""
+NO_RELATED = COMPLETE.replace(RELATED_TABLE, "")
+FULL_ENTRY = {"repo": "example-org/client-repo", "board": "example-org#7",
+              "merged_columns": ["In Dev"], "half": "client's half"}
+WHERE = "related_repos[0] (example-org/client-repo)"
+
+
+class RelatedRepos(unittest.TestCase):
+    """The optional list of other repos one product is built with (gogogo#235)."""
+
+    def check(self, mutate, text=COMPLETE):
+        settings, sections = parse(text)
+        mutate(settings)
+        return pc.check(settings, sections)
+
+    def test_absent_changes_nothing(self):
+        self.assertNotEqual(NO_RELATED, COMPLETE)
+        settings, sections = parse(NO_RELATED)
+        for skill in (None, *pc.SKILLS):
+            self.assertEqual(pc.check(settings, sections, skill), ([], []), skill)
+
+    def test_a_full_entry_passes_and_shows(self):
+        errors, warnings = self.check(lambda s: None)
+        self.assertEqual([e for e in errors + warnings if "related_repos" in e], [])
+        with tempfile.TemporaryDirectory() as tmp:
+            good = Path(tmp) / "good.md"
+            good.write_text(COMPLETE)
+            code, out, _ = run_main("--path", str(good), "--show")
+        self.assertEqual(code, pc.EXIT_OK)
+        shown = json.loads(out[out.index("{"):])
+        self.assertEqual(shown["settings"]["related_repos"], [FULL_ENTRY])
+
+    def test_repo_alone_passes(self):
+        self.assertEqual(self.check(lambda s: s.update(related_repos=[{"repo": "example-org/client-repo"}])),
+                         ([], []))
+
+    def test_each_bad_entry_is_named(self):
+        def entry(**kw):
+            return lambda s: s.update(related_repos=[dict(FULL_ENTRY, **kw)])
+        cases = [
+            (lambda s: s.update(related_repos=[{"board": "example-org#7"}]),
+             "related_repos[0]: each entry needs repo, as owner/name"),
+            (entry(repo="client-repo"), "related_repos[0]: each entry needs repo, as owner/name"),
+            (entry(repo="Acme/Code"), "related_repos[0] (Acme/Code): repo is this repo itself"),
+            (entry(repo="acme/issues"), "related_repos[0] (acme/issues): repo is this repo itself"),
+            (lambda s: s.update(related_repos=[dict(FULL_ENTRY), dict(FULL_ENTRY, repo="Example-Org/Client-Repo")]),
+             "related_repos[1] (Example-Org/Client-Repo): repo is also related_repos[0]"),
+            (entry(board="example-org/7"), f'{WHERE}: board must be owner#number, such as "acme#3"'),
+            (entry(board="example-org#0"), f'{WHERE}: board must be owner#number, such as "acme#3"'),
+            (entry(merged_columns="In Dev"), f"{WHERE}: merged_columns must be a list of column names"),
+            (entry(merged_columns=[]), f"{WHERE}: merged_columns must be a list of column names"),
+            (entry(half=""), f"{WHERE}: half must be a non-empty phrase"),
+        ]
+        for mutate, expected in cases:
+            errors, _ = self.check(mutate)
+            self.assertEqual(errors, [expected], expected)
+        with tempfile.TemporaryDirectory() as tmp:
+            bad = Path(tmp) / "bad.md"
+            bad.write_text(COMPLETE.replace('board = "example-org#7"', 'board = "example-org/7"'))
+            code, _, err = run_main("--path", str(bad))
+        self.assertEqual(code, pc.EXIT_INVALID)
+        self.assertIn(f'error: {WHERE}: board must be owner#number', err)
+
+    def test_an_unknown_key_warns(self):
+        errors, warnings = self.check(lambda s: s["related_repos"][0].update(role="client"))
+        self.assertEqual(errors, [])
+        self.assertEqual(warnings, [f"{WHERE}: unknown key 'role' (typo, or not in this profile version)"])
+
+    def test_not_a_list_is_a_type_error(self):
+        errors, _ = self.check(lambda s: s.update(related_repos="example-org/client-repo"))
+        self.assertEqual(errors, ["related_repos: expected list, found str"])
 
 
 class AutoTest(unittest.TestCase):
