@@ -1309,6 +1309,11 @@ class RelatedBoardBlockers(unittest.TestCase):
         self.assertEqual(entry["blocker_state"], "open")
         self.assertEqual(entry["related"]["error"], "Expecting value: line 1 column 1")
 
+    def test_a_failure_with_no_message_is_still_named(self):
+        _, payload, _ = self.listed([self.blocked()], [TimeoutError()])
+        entry = payload[11]["blocked_by"][0]
+        self.assertEqual((entry["blocker_state"], entry["related"]["error"]), ("open", "TimeoutError"))
+
     def test_no_card_there_still_blocks(self):
         _, payload, _ = self.listed([self.blocked()], [self.found("Merged", number=50)])
         entry = payload[11]["blocked_by"][0]

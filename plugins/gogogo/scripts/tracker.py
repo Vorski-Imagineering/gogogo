@@ -508,7 +508,7 @@ def related_card(entry: dict) -> dict | None:
             node = board_side_card(entry["number"], repo, target["owner"], target["number"])
             found = {"board": board, "column": ((node or {}).get("fieldValueByName") or {}).get("name")}
         except Exception as exc:  # any failure of this one read: the blocker still blocks
-            found = {"board": board, "column": None, "error": " ".join(str(exc).split())}
+            found = {"board": board, "column": None, "error": " ".join(str(exc).split()) or type(exc).__name__}
         _RELATED_CARDS[key] = found
     return _RELATED_CARDS[key]
 
