@@ -37,7 +37,8 @@ and no further. Take the first case that fits:
      with `reason=decision` and a Needs-you line naming B, so the dependency
      is never left only in prose.
   3. Post the §7 report. Its first line is
-     `**Blocked by <B>:** <what B must deliver>. This returns to <tracker.queue> and is taken once <B> merges.`,
+     `**Blocked by <B>:** <what B must deliver>. This returns to <tracker.queue> and is taken once <B> merges.`
+     (`ships` in place of `merges` for a B the spec marks `(shipped)`),
      then, on its own line, the marker
      `<!-- gogogo:blocked v=1 by=<owner/repo>#<B> session=<id|unknown> -->`.
      It carries no stop marker.

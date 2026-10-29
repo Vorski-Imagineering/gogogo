@@ -46,7 +46,8 @@ them in the same board read §1 already makes.
    rule 2. When the ref has no entry, it is listed
    `skip (blocked by <ref> (until shipped, no blocked-by link))`. No comment,
    no move, no marker and no `issue_skipped`; the ready label is kept, and
-   rule 7 applies.
+   rule 7 applies. In a run this rule, not `/gogogo:dev`'s blocked-issue
+   question, decides the row.
 6. **Order**, when the user gave none:
    - first, rows whose `blocking` list names an open issue, the row blocking
      the most open issues first;

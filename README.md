@@ -85,7 +85,8 @@ repo first ([Adopting it in a repo](#adopting-it-in-a-repo), step 1).
    with a note saying what you need to do; one still missing a decision is
    skipped and named in the run's report. One waiting on another open issue
    carries GitHub's "blocked by" link and stays in `Dev Ready`, passed over
-   until that issue merges. Preview the run first with
+   until that issue merges, or until it ships when the spec marks it
+   `(shipped)`. Preview the run first with
    `/gogogo:auto-dev --triage-only`, which changes nothing.
 
 ### auto-dev under `/goal`
@@ -319,7 +320,7 @@ rebased.
 | `/gogogo:human-help` | Works the Human!Help! column: for each card whose question an answer has settled, records the answer and requeues it; asks you one question per card that needs a decision; leaves the rest in the column with a reason. Never a Hard Stop without your answer. |
 | `/gogogo:idea` | Files what the session has found as an un-specced issue (request, findings, open questions), after showing you the draft. No further research; `/gogogo:spec` designs it later. When you name gogogo's own tracker, it files a suspected gogogo fault there, only after `name_check.py` finds none of this repo's names in the title and body. |
 | `/gogogo:dev` | One issue end to end: read, triage, find the cause, change, review, verify on real data, report, move the card. An issue you authorised through `/gogogo:human-help` is reviewed until it is clean, on the model and effort you named. |
-| `/gogogo:auto-dev` | Works the ready queue unattended, one issue after another, each on its own branch. Passes over a card GitHub marks as blocked by an open issue, and takes blockers first. `--triage-only` reads the queue and changes nothing. |
+| `/gogogo:auto-dev` | Works the ready queue unattended, one issue after another, each on its own branch. Passes over a card GitHub marks as blocked by an open issue (or, for a blocker its spec marks `(shipped)`, one not yet in production), and takes blockers first. `--triage-only` reads the queue and changes nothing. |
 | `/gogogo:setup` | Opens with the repo's setup and configuration, then onboards it, or checks it is still set up right: plugin settings, profile, Hard Stops, board and columns, ready label, competing local skills. |
 | `/gogogo:wrap-up` | Before you close a session: finds anything uncommitted, unpushed, stranded or still running, saves what the session learned, and says plainly whether it is safe to close. |
 | `/gogogo:tech-eval` | Evaluates a library, service or tool against the repo before anyone adopts it, and records the verdict in the repo's decisions register. |

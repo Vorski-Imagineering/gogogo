@@ -494,7 +494,8 @@ def blocker_state(entry: dict, cards_by_ref: dict, stages: list[str], related: d
     if where and where in {_bare(s) for s in stages}:
         return "merged"
     if related and not related.get("error") and related.get("column"):
-        merged = RELATED.get((entry.get("repo") or "").lower(), {}).get("merged") or stages
+        target = RELATED.get((entry.get("repo") or "").lower(), {})
+        merged = (target.get("merged") or stages) + (target.get("shipped") or [])  # shipped implies merged
         if _bare(related["column"]) in {_bare(c) for c in merged}:
             return "merged"
     return "open"

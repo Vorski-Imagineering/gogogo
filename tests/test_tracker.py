@@ -1438,6 +1438,15 @@ column = "In Production"
         self.assertFalse(shipped(9, repo=backend, related={"board": "example-org#7", "column": None, "error": "no access"}))
         self.assertFalse(shipped(9, repo="example-org/plain", related={"board": "example-org#8", "column": "Released"}))
 
+    def test_a_shipped_column_also_counts_as_merged(self):
+        board.RELATED.clear()
+        board.RELATED["example-org/backend"] = {"owner": "example-org", "number": 7,
+                                                "merged": ["In Dev"], "shipped": ["Released"]}
+        entry = {"number": 5, "repo": "example-org/backend", "state": "OPEN", "state_reason": None}
+        related = {"board": "example-org#7", "column": "Released"}
+        self.assertEqual(board.blocker_state(entry, {}, ["In Dev"], related), "merged")
+        self.assertTrue(board.blocker_shipped(entry, {}, related))
+
     def test_production_columns_come_from_the_environments_roles(self):
         self.configure(self.PROFILE)
         self.assertEqual(board.PRODUCTION, ["In Production"])
