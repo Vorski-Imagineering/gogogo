@@ -507,7 +507,7 @@ def related_card(entry: dict) -> dict | None:
         try:
             node = board_side_card(entry["number"], repo, target["owner"], target["number"])
             found = {"board": board, "column": ((node or {}).get("fieldValueByName") or {}).get("name")}
-        except (BoardError, subprocess.SubprocessError) as exc:
+        except Exception as exc:  # any failure of this one read: the blocker still blocks
             found = {"board": board, "column": None, "error": " ".join(str(exc).split())}
         _RELATED_CARDS[key] = found
     return _RELATED_CARDS[key]
@@ -909,7 +909,7 @@ def cmd_show(args: argparse.Namespace) -> int:
         where = ((blocker or {}).get("fieldValueByName") or {}).get("name")
         by_ref = {ref_key(entry["repo"], entry["number"]): {"status": where}} if where else {}
         state = blocker_state(entry, by_ref, stage_columns())
-        related = related_card(entry) if state == "open" and entry.get("repo") else None
+        related = related_card(entry) if state == "open" else None
         if related is not None:
             state = blocker_state(entry, by_ref, stage_columns(), related)
         if related is None:
