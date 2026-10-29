@@ -98,8 +98,8 @@ Stop and say so, rather than guessing, when the issue:
 whose state is `open`, or one ending `, not shipped` for a ref the spec's
 `**Blocked by:**` line marks `(shipped)`, tell the person which issue blocks it
 and ask: **build anyway** or **leave it**. With no person to ask, leave it and
-say why. In an `/gogogo:auto-dev` run, its blocked-row rule decides a
-`(shipped)` row instead.
+say why. In an `/gogogo:auto-dev` run, its blocked-row rule decides whether a
+`(shipped)` row is taken; the check right before merging still applies.
 
 **An issue carrying a spec in its body is the ready case.** Its `## Approvals`
 table records every decision the user made, and it is what licenses

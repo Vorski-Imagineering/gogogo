@@ -18,9 +18,11 @@ and no further. Take the first case that fits:
   first. Read B itself, since no link may exist yet:
   `gh issue view <B> --repo <its repo> --json state,stateReason` and
   `<tracker.tool> show <B> --repo <its repo>`. B still blocks when it is
-  `OPEN` with its card in no column of the profile's `stages` (or not on this
-  board). Closed any other way than below (`COMPLETED`, or no reason), or its
-  card in a stage column: it has merged, and this case does not apply. B
+  `OPEN` and none of the next sentence's cases holds. Closed any other way
+  than below (`COMPLETED`, or no reason), its
+  card in a stage column, or `merged` on the `blocked by:` line for B in
+  `<tracker.tool> show <n>` (which also reads a related repo's board): it has
+  merged, and this case does not apply. B
   also still blocks when the spec marks it `(shipped)` and its `show` line
   ends `, not shipped`: for such a B the merge is the step that cannot begin,
   so it is checked right before merging, and this case applies instead of
