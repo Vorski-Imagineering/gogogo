@@ -638,31 +638,35 @@ class RelatedRepos(unittest.TestCase):
                          ([], []))
 
     def test_each_bad_entry_is_named(self):
-        def entry(**kw):
-            return lambda s: s.update(related_repos=[dict(FULL_ENTRY, **kw)])
+        def table(**kw):
+            keys = dict(repo='"example-org/client-repo"', board='"example-org#7"',
+                        merged_columns='["In Dev"]', half='"client\'s half"')
+            keys.update(kw)
+            return "[[related_repos]]\n" + "".join(f"{k} = {v}\n" for k, v in keys.items() if v is not None) + "\n"
         cases = [
-            (lambda s: s.update(related_repos=[{"board": "example-org#7"}]),
-             "related_repos[0]: each entry needs repo, as owner/name"),
-            (entry(repo="client-repo"), "related_repos[0]: each entry needs repo, as owner/name"),
-            (entry(repo="Acme/Code"), "related_repos[0] (Acme/Code): repo is this repo itself"),
-            (entry(repo="acme/issues"), "related_repos[0] (acme/issues): repo is this repo itself"),
-            (lambda s: s.update(related_repos=[dict(FULL_ENTRY), dict(FULL_ENTRY, repo="Example-Org/Client-Repo")]),
+            (table(repo=None), "related_repos[0]: each entry needs repo, as owner/name"),
+            (table(repo='"client-repo"'), "related_repos[0]: each entry needs repo, as owner/name"),
+            (table(repo='"Acme/Code"'), "related_repos[0] (Acme/Code): repo is this repo itself"),
+            (table(repo='"acme/issues"'), "related_repos[0] (acme/issues): repo is this repo itself"),
+            (table() + table(repo='"Example-Org/Client-Repo"'),
              "related_repos[1] (Example-Org/Client-Repo): repo is also related_repos[0]"),
-            (entry(board="example-org/7"), f'{WHERE}: board must be owner#number, such as "acme#3"'),
-            (entry(board="example-org#0"), f'{WHERE}: board must be owner#number, such as "acme#3"'),
-            (entry(merged_columns="In Dev"), f"{WHERE}: merged_columns must be a list of column names"),
-            (entry(merged_columns=[]), f"{WHERE}: merged_columns must be a list of column names"),
-            (entry(half=""), f"{WHERE}: half must be a non-empty phrase"),
+            (table(board='"example-org/7"'), f'{WHERE}: board must be owner#number, such as "acme#3"'),
+            (table(board='"example-org#0"'), f'{WHERE}: board must be owner#number, such as "acme#3"'),
+            (table(merged_columns='"In Dev"'), f"{WHERE}: merged_columns must be a list of column names"),
+            (table(merged_columns="[]"), f"{WHERE}: merged_columns must be a list of column names"),
+            (table(half='""'), f"{WHERE}: half must be a non-empty phrase"),
         ]
-        for mutate, expected in cases:
-            errors, _ = self.check(mutate)
-            self.assertEqual(errors, [expected], expected)
-        with tempfile.TemporaryDirectory() as tmp:
-            bad = Path(tmp) / "bad.md"
-            bad.write_text(COMPLETE.replace('board = "example-org#7"', 'board = "example-org/7"'))
-            code, _, err = run_main("--path", str(bad))
-        self.assertEqual(code, pc.EXIT_INVALID)
-        self.assertIn(f'error: {WHERE}: board must be owner#number', err)
+        self.assertEqual(table(), RELATED_TABLE)
+        for related, expected in cases:
+            text = COMPLETE.replace(RELATED_TABLE, related)
+            settings, sections = parse(text)
+            self.assertEqual(pc.check(settings, sections)[0], [expected], expected)
+            with tempfile.TemporaryDirectory() as tmp:
+                bad = Path(tmp) / "bad.md"
+                bad.write_text(text)
+                code, _, err = run_main("--path", str(bad))
+            self.assertEqual(code, pc.EXIT_INVALID, expected)
+            self.assertIn(f"error: {expected}", err)
 
     def test_an_unknown_key_warns(self):
         errors, warnings = self.check(lambda s: s["related_repos"][0].update(role="client"))
