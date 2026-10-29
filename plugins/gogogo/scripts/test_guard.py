@@ -319,7 +319,7 @@ def main(argv=None) -> int:
             print(f"error: {line}", file=sys.stderr)
         return 2
     tokens = licences(body)
-    wide = [t for t in tokens if too_wide(t, globs)]
+    wide = list(dict.fromkeys(t for t in tokens if too_wide(t, globs)))
     tokens = [t for t in tokens if t not in wide]
     counts = {v: 0 for v in VERDICTS}
     lic = unlic = 0

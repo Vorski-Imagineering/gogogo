@@ -547,9 +547,7 @@ class Verify(unittest.TestCase):
         self.assertIn("H1  licensed", out.stdout)
 
     def test_a_folder_licence_covers_nothing_outside_it(self):
-        text = TEST_A.replace("    assert two() == 2\n", "").replace("    assert four() == 4\n", "")
-        self.r.write("tests/test_a.py", text)
-        self.r.commit("loosen both")
+        self.two_hunks()
         out = self.folder_verify("tests/old/")
         self.assertEqual(out.returncode, 1, out.stdout + out.stderr)
         self.assertEqual(out.stdout.count("NOT LICENSED"), 2, out.stdout)
@@ -579,6 +577,9 @@ class Verify(unittest.TestCase):
         lines = out.stdout.splitlines()
         self.assertLess(lines.index("test-guard: too wide, licenses nothing: tests/"),
                         next(i for i, line in enumerate(lines) if line.startswith("H1")))
+        twice = self.r.run("verify", body=body(cases="1. `tests/` removed\n2. `tests/` rewritten"),
+                           answers=self.weaker_all())
+        self.assertEqual(twice.stdout.count("too wide, licenses nothing"), 1, twice.stdout)
         wide = json.loads(self.folder_verify("tests/", "--json").stdout)
         self.assertEqual((wide["too_wide"], wide["unlicensed"], wide["hunks"]), (["tests/"], 2, 2))
         self.assertEqual(json.loads(self.folder_verify("tests/old/", "--json").stdout)["too_wide"], [])
