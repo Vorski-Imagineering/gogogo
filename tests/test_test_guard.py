@@ -26,6 +26,7 @@ sys.path.insert(0, str(PLUGIN / "scripts"))
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 import review_stats  # noqa: E402
+import test_guard as guard  # noqa: E402
 from test_dev_skill import moved  # noqa: E402
 from test_tech_eval import PROJECT_NAMES  # noqa: E402
 
@@ -578,8 +579,17 @@ class Verify(unittest.TestCase):
         lines = out.stdout.splitlines()
         self.assertLess(lines.index("test-guard: too wide, licenses nothing: tests/"),
                         next(i for i, line in enumerate(lines) if line.startswith("H1")))
-        self.assertEqual(json.loads(self.folder_verify("tests/", "--json").stdout)["too_wide"], ["tests/"])
+        wide = json.loads(self.folder_verify("tests/", "--json").stdout)
+        self.assertEqual((wide["too_wide"], wide["unlicensed"], wide["hunks"]), (["tests/"], 2, 2))
         self.assertEqual(json.loads(self.folder_verify("tests/old/", "--json").stdout)["too_wide"], [])
+
+    def test_too_wide_reads_only_the_fixed_part_of_a_pattern(self):
+        globs = ["plugins/gogogo/evals/*/graders/*"]
+        self.assertTrue(guard.too_wide("plugins/gogogo/evals/", globs))
+        self.assertTrue(guard.too_wide("plugins/", globs))
+        self.assertFalse(guard.too_wide("plugins/gogogo/evals/old-case/", globs))
+        self.assertFalse(guard.too_wide("plugins/gogogo/evals/*/", globs), "only the part before the first wildcard counts")
+        self.assertFalse(guard.too_wide("plugins/gogogo/evals", globs), "a folder needs its trailing slash")
 
     def test_a_folder_licence_covers_a_file_renamed_out_of_it(self):
         self.r.at_base("tests/old/test_x.py", OLD_X)
