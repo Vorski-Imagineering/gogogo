@@ -125,5 +125,53 @@ class Skill(unittest.TestCase):
         self.assertRegex(README.read_text(encoding="utf-8"), r"(?m)^\| `/gogogo:status` \|")
 
 
+
+class RelatedRepos(unittest.TestCase):
+    """gogogo#239: a RELATED block lists what each related repo waits on, from reads status already makes."""
+
+    GATHER = [
+        'git rev-parse --show-toplevel',
+        'git --no-optional-locks status --porcelain=v2 --branch',
+        'python3 "${CLAUDE_PLUGIN_ROOT}/scripts/tracker.py" fields',
+        'python3 "${CLAUDE_PLUGIN_ROOT}/scripts/tracker.py" list --json',
+        'gh project view <tracker.project_number> --owner <tracker.project_owner> --format json -q .url',
+        'python3 "${CLAUDE_PLUGIN_ROOT}/scripts/stage_sync.py" reverts',
+        'gh pr list --repo <tracker.code_repo> --state open --json number,title,headRefName,isDraft --limit 100',
+        "git for-each-ref refs/heads --format='%(refname:short)|%(upstream:short)|%(upstream:track)'",
+        'git rev-list --count <base>..<branch>',
+        'git worktree list --porcelain',
+        'python3 "${CLAUDE_PLUGIN_ROOT}/scripts/worktree_sweep.py"',
+    ]
+
+    def bullet(self):
+        return skill_text().split("- **Related repos.**", 1)[1].split("\n- **", 1)[0]
+
+    def test_template_has_the_related_block(self):
+        template = skill_text().split("\n## Template", 1)[1].split("```", 2)[1].splitlines()
+        reverted, related, code = template.index("REVERTED"), template.index("RELATED"), template.index("CODE")
+        self.assertLess(reverted, related)
+        self.assertLess(related, code)
+        block = template[related:code]
+        self.assertTrue(any("waiting there:" in line for line in block), block)
+        self.assertTrue(any("waiting here:" in line for line in block), block)
+
+    def test_keys_it_names_are_known(self):
+        keys = set(re.findall(r"related_repos\[\]\.(\w+)", skill_text()))
+        self.assertTrue({"repo", "board"} <= keys, keys)
+        self.assertLessEqual(keys, set(pc.RELATED_KEYS))
+
+    def test_adds_no_read(self):
+        gather = skill_text().split("\n## Gather\n", 1)[1].split("\n## ", 1)[0]
+        fenced, commands = False, []
+        for line in gather.splitlines():
+            if line.strip().startswith("```"):
+                fenced = not fenced
+            elif fenced:
+                commands.append(line.split("  #", 1)[0].strip())
+        self.assertEqual(commands, self.GATHER)
+        self.assertNotIn("tracker.py", self.bullet())
+        self.assertNotIn("gh ", self.bullet())
+
+
 if __name__ == "__main__":
     unittest.main()
