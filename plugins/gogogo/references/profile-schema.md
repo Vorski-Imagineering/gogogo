@@ -306,7 +306,8 @@ half = "client's half"
   merged to its base branch, not that it is in production. Absent: the same
   names as this profile's `stages` columns.
 - `shipped_columns` (optional): that board's columns meaning the change is in
-  production. A `**Blocked by:**` ref marked `(shipped)` waits for one of them.
+  production; a card in one also counts as merged. A `**Blocked by:**` ref
+  marked `(shipped)` waits for one of them.
   Absent: only closing the issue as completed counts as shipped. On this
   repo's own board the same wait uses the columns of `stages` whose
   `environment` has the `production` role.

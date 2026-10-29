@@ -56,7 +56,7 @@ commands fix what is already there.
 `column` on this board (or null) and its `blocker_state`: `open` while it
 still blocks, `merged` once it is closed as completed or its card is in a
 stage column (for a blocker in a repo `related_repos` lists with a board, its
-card on that board in that entry's merged columns; such an entry also carries
+card on that board in that entry's merged or shipped columns; such an entry also carries
 `related`: that board, the column there, and an `error` when it could not be
 read), `dropped` when it closed as not planned or as a duplicate. Each also
 carries `shipped`: true once the blocker is closed as completed or its card is
@@ -484,7 +484,8 @@ def blocker_state(entry: dict, cards_by_ref: dict, stages: list[str], related: d
     work still stands is a person's question. Closed otherwise, or open with its
     card in a stage column, is `merged`. An open blocker in a repo the profile's
     `related_repos` lists with a board is `merged` when its card on that board
-    is in that entry's `merged_columns` (absent: this profile's stage columns).
+    is in that entry's `merged_columns` (absent: this profile's stage columns)
+    or its `shipped_columns`: a change in production has merged.
     Everything else, an open blocker not on this board included, is `open`.
     """
     if entry.get("state") == "CLOSED":

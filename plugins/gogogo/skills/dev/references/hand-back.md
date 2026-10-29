@@ -45,8 +45,8 @@ and no further. Take the first case that fits:
   4. `<tracker.tool> move <n> --from "<the column read before the move>" --to "<tracker.queue>"`,
      so a person's move meanwhile is not undone (exit 3 is reported, not
      retried). Keep `tracker.ready_marker`: the spec needs nothing from
-     anyone, and the queue passes the card over until B merges
-     (`/gogogo:auto-dev`).
+     anyone, and the queue passes the card over until B merges, or ships
+     for a B the spec marks `(shipped)` (`/gogogo:auto-dev`).
 - **stopped for a person**: a review that ended for a person (§5 rule 8: a
   defect in a finding's third attempt, a reversal the spec does not settle, a
   finding you could not fix, a defect in the round that reviews a prose file's second-round fix, or the breaker

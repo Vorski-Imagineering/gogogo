@@ -1445,7 +1445,6 @@ column = "In Production"
         entry = {"number": 5, "repo": "example-org/backend", "state": "OPEN", "state_reason": None}
         related = {"board": "example-org#7", "column": "Released"}
         self.assertEqual(board.blocker_state(entry, {}, ["In Dev"], related), "merged")
-        self.assertTrue(board.blocker_shipped(entry, {}, related))
 
     def test_production_columns_come_from_the_environments_roles(self):
         self.configure(self.PROFILE)

@@ -19,7 +19,7 @@ them in the same board read §1 already makes.
    - `merged`: it is closed as completed, or its card is in one of the
      profile's `stages` columns, or, for such a blocker, its card on that
      board is in that entry's `merged_columns` (absent: the profile's
-     `stages` columns);
+     `stages` columns) or its `shipped_columns`;
    - `dropped`: it closed as not planned or as a duplicate.
 2. **Any `open` blocker: pass the row over.** List it as
    `skip (blocked by <ref> (<where>))`, one ref per open blocker, where a
