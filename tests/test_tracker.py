@@ -613,19 +613,17 @@ class ConfigureTests(unittest.TestCase):
         self.addCleanup(board.RELATED.clear)
         path = self.write("""+++
 profile = 1
+related_repos = [
+  "example-org/not-a-table",
+  { board = "example-org#3" },
+  { repo = "example-org/no-board" },
+  { repo = "example-org/bad-board", board = "example-org/7" },
+  { repo = "Example-Org/Backend", board = "example-org#7", merged_columns = ["Merged"] },
+]
 [tracker]
 project_owner = "someone"
 project_number = 7
 issues_repo = "someone/tracker"
-[[related_repos]]
-repo = "Example-Org/Backend"
-board = "example-org#7"
-merged_columns = ["Merged"]
-[[related_repos]]
-repo = "example-org/no-board"
-[[related_repos]]
-repo = "example-org/bad-board"
-board = "example-org/7"
 +++
 """)
         board.configure(path)
@@ -1335,6 +1333,13 @@ class RelatedBoardBlockers(unittest.TestCase):
         _, payload, related_calls = self.listed([self.blocked(11), self.blocked(12)], [self.found("Merged")])
         self.assertEqual(len(related_calls), 1)
         self.assertEqual(payload[12]["blocked_by"][0]["blocker_state"], "merged")
+
+    def test_each_blocker_in_one_repo_is_read_on_its_own(self):
+        nodes = [self.blocked(11), linked(12, "client card", "Dev Priority", blocked_by=[(6, "OPEN", None, self.BACKEND)])]
+        _, payload, related_calls = self.listed(nodes, [self.found("Merged"), self.found("Backlog", number=6)])
+        self.assertEqual([c["q"] for c in related_calls], ["repo:example-org/backend #5", "repo:example-org/backend #6"])
+        self.assertEqual((payload[11]["blocked_by"][0]["blocker_state"], payload[12]["blocked_by"][0]["blocker_state"]),
+                         ("merged", "open"))
 
     def test_a_closed_related_blocker_needs_no_read(self):
         _, payload, related_calls = self.listed([self.blocked(state="CLOSED", reason="COMPLETED")], [])
