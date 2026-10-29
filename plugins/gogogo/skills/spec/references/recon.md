@@ -80,9 +80,14 @@ the spec and name them.
    behaviour.
 3. Write one `**Rewrite licensed**` line per kept test in `## Test cases`,
    naming it `path::name` (`path::Class::name` for a method). Never a bare
-   path: that licenses every hunk in the file. Put each test in the Hard Stop
-   approval question for that Design; the line cites that Approvals row, or row
-   1 when no Hard Stop is triggered.
+   path: that licenses every hunk in the file. Two exceptions. A test file
+   the Design deletes is named by its path alone. A folder the Design
+   removes or rewrites whole is one line naming the folder with a trailing
+   slash (`<folder>/`), from the repo root, which licenses every test file
+   beneath it; never a folder at or above a lane's `tests` pattern (`tests/`
+   when the pattern is `tests/*`), which the guard refuses as too wide.
+   Put each test in the Hard Stop approval question for that Design; the line
+   cites that Approvals row, or row 1 when no Hard Stop is triggered.
    Put no other backticked text on that line: the guard reads every backticked
    token, and a bare path licenses every change to that file. Describe what the
    test asserts in plain words.

@@ -391,7 +391,7 @@ has no card and no pull request.
    ```
    **Rewrite licensed** (Approvals row <N>): rewrite `<path>::<name>`: <what it asserts after> (Design <k>).
    ```
-   Always `path::name`, never a bare path. With no Hard Stop, `<N>` is row 1.
+   Always `path::name`; a whole file or folder only as `references/recon.md` says. With no Hard Stop, `<N>` is row 1.
 
 **REQUIRED REFERENCE:** read `references/recon.md` for how to do 2-5 and 8, and the
 profile's `## Recon traps` for what this codebase specifically hides.

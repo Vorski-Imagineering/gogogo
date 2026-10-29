@@ -386,6 +386,10 @@ def body(cases="1. The parser reads both forms.", files="**Edit:** `app/code.py`
     return BODY.format(cases=cases, files=files)
 
 
+OLD_X = "def test_x():\n    assert x() == 1\n    assert x() != 2\n"
+OLD_Y = "def test_y():\n    assert y() == 1\n"
+
+
 class Verify(unittest.TestCase):
     def setUp(self):
         self.r = Repo()
@@ -505,6 +509,85 @@ class Verify(unittest.TestCase):
         (self.r.repo / "tests/test_a.py").unlink()
         self.r.commit("drop")
         out = self.verify("H1\tweaker\tthe file is gone\n", cases="1. `tests/test_a.py` removed with the old parser")
+        self.assertEqual(out.returncode, 0, out.stdout + out.stderr)
+        self.assertIn("H1  licensed", out.stdout)
+
+    # gogogo#236: a licence naming a folder with a trailing slash covers every test file beneath it.
+
+    def weaker_all(self, r=None):
+        listed = (r or self.r).run("list").stdout
+        return "".join(f"{i}\tweaker\tgone\n" for i in re.findall(r"^(H\d+)  ", listed, re.M))
+
+    def folder_verify(self, token, *extra, r=None):
+        r = r or self.r
+        return r.run("verify", *extra, body=body(cases=f"1. `{token}` removed with the old parser"),
+                     answers=self.weaker_all(r))
+
+    def delete_old(self):
+        self.r.at_base("tests/old/test_x.py", OLD_X)
+        self.r.at_base("tests/old/test_y.py", OLD_Y)
+        (self.r.repo / "tests/old/test_x.py").unlink()
+        (self.r.repo / "tests/old/test_y.py").unlink()
+        self.r.commit("drop the old tests")
+
+    def test_a_folder_licence_covers_a_deleted_file_beneath_it(self):
+        self.delete_old()
+        out = self.folder_verify("tests/old/")
+        self.assertEqual(out.returncode, 0, out.stdout + out.stderr)
+        self.assertEqual(out.stdout.count("  licensed  "), 2, out.stdout)
+        self.assertIn("licensed=2 unlicensed=0", out.stdout)
+
+    def test_a_folder_licence_covers_a_changed_hunk_beneath_it(self):
+        self.r.at_base("tests/old/test_x.py", OLD_X)
+        self.r.write("tests/old/test_x.py", OLD_X.replace("    assert x() != 2\n", ""))
+        self.r.commit("loosen")
+        out = self.folder_verify("tests/old/")
+        self.assertEqual(out.returncode, 0, out.stdout + out.stderr)
+        self.assertIn("H1  licensed", out.stdout)
+
+    def test_a_folder_licence_covers_nothing_outside_it(self):
+        text = TEST_A.replace("    assert two() == 2\n", "").replace("    assert four() == 4\n", "")
+        self.r.write("tests/test_a.py", text)
+        self.r.commit("loosen both")
+        out = self.folder_verify("tests/old/")
+        self.assertEqual(out.returncode, 1, out.stdout + out.stderr)
+        self.assertEqual(out.stdout.count("NOT LICENSED"), 2, out.stdout)
+
+    def test_a_folder_without_its_slash_covers_nothing(self):
+        self.delete_old()
+        out = self.folder_verify("tests/old")
+        self.assertEqual(out.returncode, 1, out.stdout + out.stderr)
+        self.assertEqual(out.stdout.count("NOT LICENSED"), 2, out.stdout)
+
+    def test_a_folder_licence_is_anchored_at_the_root(self):
+        r = Repo(tests='tests = ["tests/*", "lib/*"]')
+        self.addCleanup(r.close)
+        r.branch()
+        r.at_base("lib/old/test_z.py", OLD_Y)
+        (r.repo / "lib/old/test_z.py").unlink()
+        r.commit("drop")
+        out = self.folder_verify("old/", r=r)
+        self.assertEqual(out.returncode, 1, out.stdout + out.stderr)
+        self.assertIn("H1  NOT LICENSED", out.stdout)
+
+    def test_a_whole_test_area_is_too_wide(self):
+        self.delete_old()
+        out = self.folder_verify("tests/")
+        self.assertEqual(out.returncode, 1, out.stdout + out.stderr)
+        self.assertEqual(out.stdout.count("NOT LICENSED"), 2, out.stdout)
+        lines = out.stdout.splitlines()
+        self.assertLess(lines.index("test-guard: too wide, licenses nothing: tests/"),
+                        next(i for i, line in enumerate(lines) if line.startswith("H1")))
+        self.assertEqual(json.loads(self.folder_verify("tests/", "--json").stdout)["too_wide"], ["tests/"])
+        self.assertEqual(json.loads(self.folder_verify("tests/old/", "--json").stdout)["too_wide"], [])
+
+    def test_a_folder_licence_covers_a_file_renamed_out_of_it(self):
+        self.r.at_base("tests/old/test_x.py", OLD_X)
+        git(self.r.repo, "mv", "tests/old/test_x.py", "tests/new_test_x.py")
+        self.r.write("tests/new_test_x.py", OLD_X.replace("    assert x() != 2\n", ""))
+        self.r.commit("move and loosen")
+        self.assertIn("(renamed from tests/old/test_x.py)", self.r.run("list").stdout, "git did not pair the rename")
+        out = self.folder_verify("tests/old/")
         self.assertEqual(out.returncode, 0, out.stdout + out.stderr)
         self.assertIn("H1  licensed", out.stdout)
 
