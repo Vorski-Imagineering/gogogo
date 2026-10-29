@@ -409,7 +409,7 @@ def _check_related_repos(settings):
     seen = {}
     for i, entry in enumerate(related):
         repo = entry.get("repo") if isinstance(entry, dict) else None
-        if not isinstance(repo, str) or not RELATED_REPO.match(repo):
+        if not isinstance(repo, str) or not RELATED_REPO.fullmatch(repo):
             errors.append(f"related_repos[{i}]: each entry needs repo, as owner/name")
             continue
         where = f"related_repos[{i}] ({repo})"
@@ -420,14 +420,14 @@ def _check_related_repos(settings):
         else:
             seen[repo.lower()] = i
         board = entry.get("board")
-        if "board" in entry and not (isinstance(board, str) and RELATED_BOARD.match(board)):
+        if "board" in entry and not (isinstance(board, str) and RELATED_BOARD.fullmatch(board)):
             errors.append(f'{where}: board must be owner#number, such as "acme#3"')
         merged = entry.get("merged_columns")
         if "merged_columns" in entry and not (isinstance(merged, list) and merged
-                                              and all(isinstance(c, str) and c.strip() for c in merged)):
+                                              and all(isinstance(c, str) and c for c in merged)):
             errors.append(f"{where}: merged_columns must be a list of column names")
         half = entry.get("half")
-        if "half" in entry and not (isinstance(half, str) and half.strip()):
+        if "half" in entry and not (isinstance(half, str) and half):
             errors.append(f"{where}: half must be a non-empty phrase")
         for key in entry:
             if key not in RELATED_KEYS:

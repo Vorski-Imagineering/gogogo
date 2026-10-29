@@ -669,6 +669,12 @@ class RelatedRepos(unittest.TestCase):
             self.assertEqual(code, pc.EXIT_INVALID, expected)
             self.assertIn(f"error: {expected}", err)
 
+    def test_a_trailing_newline_is_refused(self):
+        errors, _ = self.check(lambda s: s.update(related_repos=[
+            {"repo": "example-org/client-repo\n"}, dict(FULL_ENTRY, board="example-org#7\n")]))
+        self.assertEqual(errors, ["related_repos[0]: each entry needs repo, as owner/name",
+                                  'related_repos[1] (example-org/client-repo): board must be owner#number, such as "acme#3"'])
+
     def test_a_bad_entry_does_not_stop_the_rest(self):
         errors, _ = self.check(lambda s: s.update(related_repos=[
             {"repo": "client-repo"}, dict(FULL_ENTRY, board="example-org/7")]))
