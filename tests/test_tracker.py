@@ -618,7 +618,7 @@ related_repos = [
   { board = "example-org#3" },
   { repo = "example-org/no-board" },
   { repo = "example-org/bad-board", board = "example-org/7" },
-  { repo = "Example-Org/Backend", board = "example-org#7", merged_columns = ["Merged"] },
+  { repo = "Example-Org/Backend", board = "example-org#7", merged_columns = ["Merged"], shipped_columns = ["Released"] },
 ]
 [tracker]
 project_owner = "someone"
@@ -628,7 +628,7 @@ issues_repo = "someone/tracker"
 """)
         board.configure(path)
         self.assertEqual(board.RELATED, {"example-org/backend": {"owner": "example-org", "number": 7,
-                                                                 "merged": ["Merged"], "shipped": None}})
+                                                                 "merged": ["Merged"], "shipped": ["Released"]}})
 
     def test_board_repo_and_columns_come_from_the_profile(self):
         path = self.write("""+++
