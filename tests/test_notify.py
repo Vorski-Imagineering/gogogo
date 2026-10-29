@@ -353,6 +353,14 @@ class Events(Case):
                 self.assertTrue(err.startswith("notify: "), err)
         self.urlopen.assert_not_called()
 
+    def test_7_a_refusal_prints_the_whole_line_and_sends_nothing(self):
+        self.write_creds()
+        code, out, err = self.send({"event": "run_closed", "merged": 1, "need_you": [41, 44]})
+        self.assertEqual((code, out), (2, ""))
+        self.assertEqual(err, "notify: run_closed: need_you must be int; missing skipped. "
+                              "run_closed takes merged (int), need_you (int), skipped (int)\n")
+        self.urlopen.assert_not_called()
+
     def test_7_a_valid_event_with_notify_off_says_off(self):
         self.write_creds()
         code, out, _ = self.send(EVENTS["issue_merged"], notify_value="none")
@@ -939,20 +947,49 @@ class Exact(Case):
 
     def test_each_missing_or_mistyped_field_is_named(self):
         optional = {"issue_skipped": {"title", "column"}}
+        takes = {
+            "run_started": "host (str), count (int), queue (str)",
+            "issue_skipped": "issue (int), reason (str), title (str, optional), column (str, optional)",
+            "issue_started": "issue (int), title (str)",
+            "issue_merged": "issue (int), title (str), sha (str), column (str)",
+            "needs_you": "issue (int), title (str), reason (str), column (str)",
+            "run_closed": "merged (int), need_you (int), skipped (int)",
+            "deployed": "tag (str), environment (str), issues (list), more (int), unlinked_commits (int)",
+            "connected": "host (str), scope (str)",
+        }
+        self.assertEqual(set(takes), set(EVENTS))
         for name, event in EVENTS.items():
             for field in [k for k in event if k != "event"]:
                 if field in optional.get(name, ()):
                     continue
                 with self.assertRaises(notify.UsageError) as raised:
                     notify.parse_event(json.dumps({k: v for k, v in event.items() if k != field}))
-                self.assertEqual(str(raised.exception), f"{name}: missing {field}")
+                self.assertEqual(str(raised.exception), f"{name}: missing {field}. {name} takes {takes[name]}")
         with self.assertRaises(notify.UsageError) as raised:
             notify.parse_event(json.dumps({"event": "issue_skipped", "issue": 7, "reason": "r", "column": 5}))
-        self.assertEqual(str(raised.exception), "issue_skipped: column must be str",
+        self.assertEqual(str(raised.exception), "issue_skipped: column must be str. issue_skipped takes issue (int), "
+                         "reason (str), title (str, optional), column (str, optional)",
                          "a missing optional field does not end the checks")
         with self.assertRaises(notify.UsageError) as raised:
             notify.parse_event(json.dumps({"event": "deployed", "tag": "t", "first": True}))
-        self.assertEqual(str(raised.exception), "deployed: missing environment")
+        self.assertEqual(str(raised.exception), "deployed: missing environment. deployed takes tag (str), environment (str)")
+
+    def test_every_problem_is_named_at_once(self):
+        with self.assertRaises(notify.UsageError) as raised:
+            notify.parse_event(json.dumps({"event": "run_closed", "merged": 1, "need_you": [41, 44]}))
+        self.assertEqual(str(raised.exception), "run_closed: need_you must be int; missing skipped. "
+                         "run_closed takes merged (int), need_you (int), skipped (int)")
+        with self.assertRaises(notify.UsageError) as raised:
+            notify.parse_event(json.dumps({"event": "issue_merged"}))
+        self.assertTrue(str(raised.exception).startswith(
+            "issue_merged: missing issue; missing title; missing sha; missing column. issue_merged takes "),
+            str(raised.exception))
+
+    def test_a_bool_is_not_an_int_in_the_list(self):
+        with self.assertRaises(notify.UsageError) as raised:
+            notify.parse_event(json.dumps({"event": "run_closed", "merged": True, "need_you": 0, "skipped": "0"}))
+        self.assertEqual(str(raised.exception), "run_closed: merged must be int; skipped must be int. "
+                         "run_closed takes merged (int), need_you (int), skipped (int)")
 
     def test_deployed_issues_are_each_checked(self):
         base = {"event": "deployed", "tag": "t", "environment": "e", "more": 0, "unlinked_commits": 0}
