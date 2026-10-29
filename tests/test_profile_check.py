@@ -654,6 +654,7 @@ class RelatedRepos(unittest.TestCase):
             (table(board='"example-org#0"'), f'{WHERE}: board must be owner#number, such as "acme#3"'),
             (table(merged_columns='"In Dev"'), f"{WHERE}: merged_columns must be a list of column names"),
             (table(merged_columns="[]"), f"{WHERE}: merged_columns must be a list of column names"),
+            (table(merged_columns='["In Dev", ""]'), f"{WHERE}: merged_columns must be a list of column names"),
             (table(half='""'), f"{WHERE}: half must be a non-empty phrase"),
         ]
         self.assertEqual(table(), RELATED_TABLE)
@@ -667,6 +668,17 @@ class RelatedRepos(unittest.TestCase):
                 code, _, err = run_main("--path", str(bad))
             self.assertEqual(code, pc.EXIT_INVALID, expected)
             self.assertIn(f"error: {expected}", err)
+
+    def test_a_bad_entry_does_not_stop_the_rest(self):
+        errors, _ = self.check(lambda s: s.update(related_repos=[
+            {"repo": "client-repo"}, dict(FULL_ENTRY, board="example-org/7")]))
+        self.assertEqual(errors, ["related_repos[0]: each entry needs repo, as owner/name",
+                                  'related_repos[1] (example-org/client-repo): board must be owner#number, such as "acme#3"'])
+
+    def test_the_schema_row_matches_the_checker(self):
+        doc = (PLUGIN / "references" / "profile-schema.md").read_text()
+        row = next(line for line in doc.splitlines() if line.startswith("| `related_repos` |"))
+        self.assertEqual(row.split(" | ")[3].rstrip(" |"), pc.FIELDS["related_repos"][2])
 
     def test_an_unknown_key_warns(self):
         errors, warnings = self.check(lambda s: s["related_repos"][0].update(role="client"))
