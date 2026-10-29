@@ -583,8 +583,9 @@ class Verify(unittest.TestCase):
 
     def test_a_folder_licence_covers_a_file_renamed_out_of_it(self):
         self.r.at_base("tests/old/test_x.py", OLD_X)
-        git(self.r.repo, "mv", "tests/old/test_x.py", "tests/new_test_x.py")
-        self.r.write("tests/new_test_x.py", OLD_X.replace("    assert x() != 2\n", ""))
+        (self.r.repo / "tests/new").mkdir()
+        git(self.r.repo, "mv", "tests/old/test_x.py", "tests/new/test_x.py")
+        self.r.write("tests/new/test_x.py", OLD_X.replace("    assert x() != 2\n", ""))
         self.r.commit("move and loosen")
         self.assertIn("(renamed from tests/old/test_x.py)", self.r.run("list").stdout, "git did not pair the rename")
         out = self.folder_verify("tests/old/")
