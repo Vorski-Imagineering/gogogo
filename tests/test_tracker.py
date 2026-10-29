@@ -609,6 +609,29 @@ class ConfigureTests(unittest.TestCase):
         tmp.close()
         return tmp.name
 
+    def test_related_repos_with_a_board_are_read(self):
+        self.addCleanup(board.RELATED.clear)
+        path = self.write("""+++
+profile = 1
+[tracker]
+project_owner = "someone"
+project_number = 7
+issues_repo = "someone/tracker"
+[[related_repos]]
+repo = "Example-Org/Backend"
+board = "example-org#7"
+merged_columns = ["Merged"]
+[[related_repos]]
+repo = "example-org/no-board"
+[[related_repos]]
+repo = "example-org/bad-board"
+board = "example-org/7"
++++
+""")
+        board.configure(path)
+        self.assertEqual(board.RELATED, {"example-org/backend": {"owner": "example-org", "number": 7,
+                                                                 "merged": ["Merged"]}})
+
     def test_board_repo_and_columns_come_from_the_profile(self):
         path = self.write("""+++
 profile = 1
@@ -1197,6 +1220,136 @@ class BlockedByLinks(unittest.TestCase):
     def test_the_docstring_names_the_block_command(self):
         self.assertIn("block <issue> --by", board.__doc__)
         self.assertRegex(board.__doc__, r"`block`: 0 linked")
+
+
+class RelatedBoardBlockers(unittest.TestCase):
+    """gogogo#233: a blocker in a repo `related_repos` lists is read from that repo's board."""
+
+    BACKEND = "example-org/backend"
+
+    def setUp(self):
+        board.RELATED.clear()
+        board._RELATED_CARDS.clear()
+        board.RELATED[self.BACKEND] = {"owner": "example-org", "number": 7, "merged": ["Merged"]}
+        self.addCleanup(board.RELATED.clear)
+        self.addCleanup(board._RELATED_CARDS.clear)
+
+    @staticmethod
+    def found(status, repo="example-org/backend", number=5):
+        return {"repositoryOwner": {"projectV2": {"items": {"nodes": [
+            {"id": "THEIR_CARD", "isArchived": False,
+             "fieldValueByName": {"name": status} if status else None,
+             "content": {"number": number, "repository": {"nameWithOwner": repo}}}]}}}}
+
+    def fake(self, related_answers):
+        """`graphql` for one board page, then one answer per related read (an exception is raised)."""
+        answers = list(related_answers)
+        calls = []
+
+        def graphql(query, **variables):
+            calls.append((query, variables))
+            if query == board.BOARD_ITEM_QUERY:
+                answer = answers.pop(0)
+                if isinstance(answer, Exception):
+                    raise answer
+                return answer
+            return self.board_page
+        return graphql, calls
+
+    def listed(self, nodes, related_answers):
+        self.board_page = page(nodes, total=len(nodes))
+        fake, calls = self.fake(related_answers)
+        args = Namespace(status=None, open_only=False, issues_only=False,
+                         json=True, repo=board.DEFAULT_REPO, no_crosscheck=True)
+        with mock.patch.object(board, "graphql", side_effect=fake), mock.patch("builtins.print") as printed:
+            code = board.cmd_list(args)
+        payload = {c["number"]: c for c in json.loads(printed.call_args_list[0].args[0])}
+        related_calls = [v for q, v in calls if q == board.BOARD_ITEM_QUERY]
+        return code, payload, related_calls
+
+    def blocked(self, number=11, state="OPEN", reason=None, repo=None):
+        return linked(number, "client card", "Dev Priority", blocked_by=[(5, state, reason, repo or self.BACKEND)])
+
+    def test_a_merged_related_blocker_does_not_block(self):
+        code, payload, _ = self.listed([self.blocked()], [self.found("Merged")])
+        self.assertEqual(code, 0)
+        entry = payload[11]["blocked_by"][0]
+        self.assertEqual(entry["blocker_state"], "merged")
+        self.assertEqual(entry["related"], {"board": "example-org#7", "column": "Merged"})
+        self.assertIsNone(entry["column"])
+
+    def test_an_earlier_column_still_blocks(self):
+        _, payload, _ = self.listed([self.blocked()], [self.found("Backlog")])
+        entry = payload[11]["blocked_by"][0]
+        self.assertEqual(entry["blocker_state"], "open")
+        self.assertEqual(entry["related"]["column"], "Backlog")
+
+    def test_absent_merged_columns_uses_this_profiles_stages(self):
+        board.RELATED[self.BACKEND]["merged"] = None
+        _, payload, _ = self.listed([self.blocked()], [self.found("In Production")])
+        self.assertEqual(payload[11]["blocked_by"][0]["blocker_state"], "merged")
+        board.RELATED[self.BACKEND]["merged"] = ["Merged"]
+        board._RELATED_CARDS.clear()
+        _, payload, _ = self.listed([self.blocked()], [self.found("In Dev")])
+        self.assertEqual(payload[11]["blocked_by"][0]["blocker_state"], "open",
+                         "the related repo's merged columns replace this profile's stage columns")
+
+    def test_an_unreadable_board_still_blocks(self):
+        code, payload, _ = self.listed([self.blocked()], [board.BoardError("project example-org/#7 not visible")])
+        self.assertEqual(code, 0)
+        entry = payload[11]["blocked_by"][0]
+        self.assertEqual(entry["blocker_state"], "open")
+        self.assertEqual(entry["related"], {"board": "example-org#7", "column": None,
+                                            "error": "project example-org/#7 not visible"})
+
+    def test_no_card_there_still_blocks(self):
+        _, payload, _ = self.listed([self.blocked()], [self.found("Merged", number=50)])
+        entry = payload[11]["blocked_by"][0]
+        self.assertEqual(entry["blocker_state"], "open")
+        self.assertEqual(entry["related"], {"board": "example-org#7", "column": None})
+
+    def test_an_unlisted_repo_is_read_as_today(self):
+        _, payload, related_calls = self.listed([self.blocked(repo="other/repo")], [])
+        entry = payload[11]["blocked_by"][0]
+        self.assertNotIn("related", entry)
+        self.assertEqual(entry["blocker_state"], "open")
+        self.assertEqual(related_calls, [])
+
+    def test_the_other_boards_owner_and_number_are_asked(self):
+        _, _, related_calls = self.listed([self.blocked()], [self.found("Merged")])
+        self.assertEqual(related_calls, [{"org": "example-org", "number": 7, "q": "repo:example-org/backend #5"}])
+
+    def test_one_read_per_blocker(self):
+        _, payload, related_calls = self.listed([self.blocked(11), self.blocked(12)], [self.found("Merged")])
+        self.assertEqual(len(related_calls), 1)
+        self.assertEqual(payload[12]["blocked_by"][0]["blocker_state"], "merged")
+
+    def test_a_closed_related_blocker_needs_no_read(self):
+        _, payload, related_calls = self.listed([self.blocked(state="CLOSED", reason="COMPLETED")], [])
+        self.assertEqual(payload[11]["blocked_by"][0]["blocker_state"], "merged")
+        self.assertEqual(related_calls, [])
+
+    def test_show_names_the_other_board(self):
+        blockers = [{"number": 5, "state": "OPEN", "stateReason": None, "repository": {"nameWithOwner": self.BACKEND}}]
+        issue = {"title": "client card", "state": "OPEN", "url": "u",
+                 "blockedBy": {"totalCount": 1, "nodes": blockers}}
+        found = {"issue": issue, "card": {"id": "I", "isArchived": False, "fieldValueByName": {"name": "Dev Priority"}}}
+
+        def issue_card(number, repo):
+            return found if number == 11 else {"issue": {}, "card": None}
+        lines = []
+        for answer in (self.found("Merged"), self.found("Merged", number=50), board.BoardError("no access")):
+            board._RELATED_CARDS.clear()
+            self.board_page = {}
+            fake, _ = self.fake([answer])
+            out = io.StringIO()
+            with mock.patch.object(board, "issue_card", side_effect=issue_card), \
+                 mock.patch.object(board, "graphql", side_effect=fake), redirect_stdout(out):
+                self.assertEqual(board.cmd_show(Namespace(issue=11, repo=board.DEFAULT_REPO, expect=None)), 0)
+            lines.append(out.getvalue().splitlines()[-1])
+        self.assertEqual(lines, ["blocked by: example-org/backend#5 (merged, Merged on example-org#7)",
+                                 "blocked by: example-org/backend#5 (open, not on example-org#7)",
+                                 "blocked by: example-org/backend#5 (open, example-org#7 not readable)"])
 
 
 class FakeGh:

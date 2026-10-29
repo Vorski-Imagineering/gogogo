@@ -55,7 +55,10 @@ commands fix what is already there.
 ("blocked by", "blocking"). In `list --json` each `blocked_by` entry has its
 `column` on this board (or null) and its `blocker_state`: `open` while it
 still blocks, `merged` once it is closed as completed or its card is in a
-stage column, `dropped` when it closed as not planned or as a duplicate.
+stage column (for a blocker in a repo `related_repos` lists with a board, its
+card on that board in that entry's merged columns; such an entry also carries
+`related`: that board, the column there, and an `error` when it could not be
+read), `dropped` when it closed as not planned or as a duplicate.
 `block` sets one link and confirms it from the blocker's side; it never
 removes one.
 
@@ -115,6 +118,13 @@ class Column:
 #: "needs_human", and each stage's column name); values carry the live name.
 #: `fields --check` fails when the live board lacks one of these.
 COLUMNS: dict[str, Column] = {}
+
+#: Filled by configure() from the profile's `related_repos`: lower-case repo ->
+#: {"owner", "number", "merged"} for each entry with a valid board. A blocker in
+#: one of these repos is read from that board (gogogo#233).
+RELATED: dict[str, dict] = {}
+#: related_card() answers, by ref_key, for the life of the process.
+_RELATED_CARDS: dict[str, dict] = {}
 
 #: Two of the standard columns `/gogogo:setup` gives every board. They mean the
 #: same on every board, so they are not profile settings.
@@ -188,6 +198,19 @@ def configure(profile_path: str | None = None) -> Path:
     for stage in settings.get("stages") or []:
         if isinstance(stage, dict) and stage.get("column"):
             COLUMNS[stage["column"]] = Column(stage["column"], f"stage: {stage.get('code_is', '')}")
+
+    RELATED.clear()
+    _RELATED_CARDS.clear()
+    for entry in settings.get("related_repos") or []:
+        if not isinstance(entry, dict) or not isinstance(entry.get("repo"), str):
+            continue
+        board = entry.get("board")
+        if not (isinstance(board, str) and profile_check.RELATED_BOARD.fullmatch(board)):
+            continue
+        owner, number = board.split("#")
+        merged = entry.get("merged_columns")
+        RELATED[entry["repo"].lower()] = {"owner": owner, "number": int(number),
+                                          "merged": merged if isinstance(merged, list) else None}
     return path
 
 
@@ -441,13 +464,15 @@ def stage_columns() -> list[str]:
     return [c.name for c in COLUMNS.values() if c.meaning.startswith("stage")]
 
 
-def blocker_state(entry: dict, cards_by_ref: dict, stages: list[str]) -> str:
+def blocker_state(entry: dict, cards_by_ref: dict, stages: list[str], related: dict | None = None) -> str:
     """`dropped`, `merged` or `open`: whether a `blocked_by` entry still blocks.
 
     Closed as not planned or as a duplicate is `dropped`: whether the blocked
     work still stands is a person's question. Closed otherwise, or open with its
-    card in a stage column, is `merged`. Everything else, an open blocker not on
-    this board included, is `open`.
+    card in a stage column, is `merged`. An open blocker in a repo the profile's
+    `related_repos` lists with a board is `merged` when its card on that board
+    is in that entry's `merged_columns` (absent: this profile's stage columns).
+    Everything else, an open blocker not on this board included, is `open`.
     """
     if entry.get("state") == "CLOSED":
         return "dropped" if entry.get("state_reason") in ("NOT_PLANNED", "DUPLICATE") else "merged"
@@ -455,7 +480,37 @@ def blocker_state(entry: dict, cards_by_ref: dict, stages: list[str]) -> str:
     where = _bare((card or {}).get("status") or "")
     if where and where in {_bare(s) for s in stages}:
         return "merged"
+    if related and not related.get("error") and related.get("column"):
+        merged = RELATED.get((entry.get("repo") or "").lower(), {}).get("merged") or stages
+        if _bare(related["column"]) in {_bare(c) for c in merged}:
+            return "merged"
     return "open"
+
+
+def related_card(entry: dict) -> dict | None:
+    """The blocker's card on its own repo's board, when `related_repos` names one.
+
+    None for a closed blocker or one in a repo not listed with a board. Otherwise
+    `{"board": "<owner>#<n>", "column": <its Status, or None>}`, with an `error`
+    and no column when that board could not be read: the blocker then still
+    blocks, and the read never fails the command. One read per blocker per run.
+    """
+    if entry.get("state") != "OPEN":
+        return None
+    repo = entry.get("repo") or ""
+    target = RELATED.get(repo.lower())
+    if not target:
+        return None
+    key = ref_key(repo, entry.get("number"))
+    if key not in _RELATED_CARDS:
+        board = f"{target['owner']}#{target['number']}"
+        try:
+            node = board_side_card(entry["number"], repo, target["owner"], target["number"])
+            found = {"board": board, "column": ((node or {}).get("fieldValueByName") or {}).get("name")}
+        except (BoardError, subprocess.SubprocessError) as exc:
+            found = {"board": board, "column": None, "error": " ".join(str(exc).split())}
+        _RELATED_CARDS[key] = found
+    return _RELATED_CARDS[key]
 
 
 def annotate_blockers(cards: list[dict]) -> None:
@@ -466,7 +521,12 @@ def annotate_blockers(cards: list[dict]) -> None:
         for entry in card.get("blocked_by") or []:
             found = by_ref.get(ref_key(entry.get("repo"), entry.get("number")))
             entry["column"] = (found or {}).get("status")
-            entry["blocker_state"] = blocker_state(entry, by_ref, stages)
+            state = blocker_state(entry, by_ref, stages)
+            related = related_card(entry) if state == "open" else None
+            if related is not None:
+                entry["related"] = related
+                state = blocker_state(entry, by_ref, stages, related)
+            entry["blocker_state"] = state
 
 
 def flatten(item: dict) -> dict:
@@ -755,18 +815,20 @@ def on_this_board(node: dict) -> bool:
     return project.get("number") == PROJECT_NUMBER and login.lower() == ORG.lower()
 
 
-def board_side_card(number: int, repo: str) -> dict | None:
+def board_side_card(number: int, repo: str, org: str | None = None, project: int | None = None) -> dict | None:
     """The issue's card found from the board's side, archived or not, or None.
 
     GitHub's issue-side `projectItems` lists no board owned by another
     organisation, so a card there is only visible from the board. The search
     can return near misses (another repo, a longer number): the match is exact.
     """
-    data = graphql(BOARD_ITEM_QUERY, org=ORG, number=PROJECT_NUMBER, q=f"repo:{repo} #{number}")
-    project = ((data or {}).get("repositoryOwner") or {}).get("projectV2")
-    if not project:
-        raise BoardError(f"project {ORG}/#{PROJECT_NUMBER} not visible to this gh login")
-    for node in project["items"]["nodes"]:
+    org = ORG if org is None else org
+    project = PROJECT_NUMBER if project is None else project
+    data = graphql(BOARD_ITEM_QUERY, org=org, number=project, q=f"repo:{repo} #{number}")
+    board = ((data or {}).get("repositoryOwner") or {}).get("projectV2")
+    if not board:
+        raise BoardError(f"project {org}/#{project} not visible to this gh login")
+    for node in board["items"]["nodes"]:
         content = node.get("content") or {}
         found = (content.get("repository") or {}).get("nameWithOwner") or ""
         if content.get("number") == number and found.lower() == repo.lower():
@@ -847,8 +909,18 @@ def cmd_show(args: argparse.Namespace) -> int:
         where = ((blocker or {}).get("fieldValueByName") or {}).get("name")
         by_ref = {ref_key(entry["repo"], entry["number"]): {"status": where}} if where else {}
         state = blocker_state(entry, by_ref, stage_columns())
-        print(f"blocked by: {short_ref(entry['repo'], entry['number'], args.repo)} "
-              f"({state}, {where or 'not on this board'})")
+        related = related_card(entry) if state == "open" and entry.get("repo") else None
+        if related is not None:
+            state = blocker_state(entry, by_ref, stage_columns(), related)
+        if related is None:
+            place = where or "not on this board"
+        elif related.get("error"):
+            place = f"{related['board']} not readable"
+        elif related.get("column"):
+            place = f"{related['column']} on {related['board']}"
+        else:
+            place = f"not on {related['board']}"
+        print(f"blocked by: {short_ref(entry['repo'], entry['number'], args.repo)} ({state}, {place})")
     if args.expect and (current or "").lower() != column(args.expect).lower():
         # An exit status, not a name for the caller to grep: a grep for a
         # literal column silently matches nothing after a rename.
