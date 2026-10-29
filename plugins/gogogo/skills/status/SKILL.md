@@ -160,6 +160,28 @@ These rules apply, in order.
 - **REVERTED** follows the BOARD block, one line per line `reverts` printed,
   as it printed it, against the base as last fetched. It is left out when
   `reverts` found none, and when the board was not read.
+- **Related repos.** Only when the profile sets `related_repos` and Gather
+  step 2's `fields` and `list` both exited 0; otherwise there is no block. It
+  adds no command to *Gather*. For each `related_repos` entry, in profile
+  order, with `<R>` its `related_repos[].repo` (matched ignoring case against
+  a link's `repo`):
+  1. A heading line `  <R> (board <related_repos[].board>):`, or
+     `  <R> (no board):` when the entry has no board.
+  2. `    waiting there:  ` then one item per card whose `kind` is not
+     `PullRequest` and whose `state` is `OPEN`, in any column, with at least
+     one `blocked_by` entry in `<R>` whose `blocker_state` is `open`:
+     `<card ref> [<its column, or no status>] waits on <ref> (<place>)[, <ref> (<place>)…]`.
+     `<place>` is, from that entry: `<related.column> on <related.board>`;
+     `not on <related.board>` (a `related` with no column and no error);
+     `<related.board> not readable` (a `related` with an `error`); and, with
+     no `related`, its `column` here or `not on this board`.
+  3. `    waiting here:   ` then one item per open issue in `<R>` that one or
+     more of our open, non-pull-request cards list in `blocking` with `state`
+     `OPEN`: `<R>#<n> waits on <card ref> [<its column, or no status>][, <card ref> [<its column, or no status>]…]`.
+  4. Items are separated by ` · `, in `list --json` order (by its first card
+     for 3), at most 10, then `+N more`. An empty line reads `none`.
+     `<card ref>` is *A card*'s ref (`#n`, or `<repo>#n` when its repo is not
+     `tracker.issues_repo`), without the title.
 - **A pull request** reads `#<n> <headRefName>`, then ` → <issue>` when the
   branch name carries an issue number (next rule), then ` (draft)` if it is
   one. At most 10, then `+N more`, or `none`.
@@ -186,6 +208,8 @@ every rule above wins over it where the two differ: for example the first
 line's ending (Gather step 1), BOARD as its one line (step 2) and `+N more`.
 A section or listed column with nothing to show prints `none`.
 `Worktrees, detached:` and `Worktrees, sweep:` are left out when there are none.
+RELATED is left out when the profile has no `related_repos` or the board was
+not read.
 
 ```
 <repo> · <branch> @ <short sha> · <n> uncommitted · <a> ahead / <b> behind <upstream>, as last fetched
@@ -201,6 +225,11 @@ BOARD  <n> cards
 
 REVERTED
   #<n>: shipped by <sha7>, reverted by <sha7> (<subject>)
+
+RELATED
+  <repo> (board <board>):
+    waiting there:  #11 [Human!Help!] waits on <repo>#5 (Backlog on <board>) · …
+    waiting here:   <repo>#9 waits on #12 [In progress] · …
 
 CODE
   Pull requests:  <pr> · <pr> · …
