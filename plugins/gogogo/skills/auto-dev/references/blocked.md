@@ -9,14 +9,21 @@ them in the same board read §1 already makes.
 1. **What each row carries.** Every row of §1's `list --json` has a
    `blocked_by` list and a `blocking` list. Each `blocked_by` entry has the
    blocker's `number`, `repo`, `state`, its `column` on this board (null when
-   it has no card here) and its `blocker_state`:
+   it has no card here) and, for a blocker in a repo the profile's
+   `related_repos` lists with a board, `related`: that `board`, its `column`
+   there, and an `error` when that board could not be read; and its
+   `blocker_state`:
    - `open`: it still blocks;
    - `merged`: it is closed as completed, or its card is in one of the
-     profile's `stages` columns;
+     profile's `stages` columns, or, for such a blocker, its card on that
+     board is in that entry's `merged_columns` (absent: the profile's
+     `stages` columns);
    - `dropped`: it closed as not planned or as a duplicate.
 2. **Any `open` blocker: pass the row over.** List it as
-   `skip (blocked by <ref> (<column, or "not on this board">))`, one ref per
-   open blocker, where a ref is `#B`, or `owner/repo#B` for another repo.
+   `skip (blocked by <ref> (<where>))`, one ref per open blocker, where a
+   ref is `#B`, or `owner/repo#B` for another repo, and `<where>` is its
+   column on this board, or `<column> on <board>`, `not on <board>` or
+   `<board> not readable` for a blocker with `related`, or `not on this board`.
    Post no comment, move no card, write no marker and send no
    `issue_skipped`: the link on the card already says why, and writing it on
    every run would be noise. Show it in triage-only, and in §9's report under
