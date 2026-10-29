@@ -175,5 +175,19 @@ class Excess(unittest.TestCase):
         self.assertIn("`size`", text)
 
 
+
+class ShipWait(unittest.TestCase):
+    """gogogo#238: dev holds the merge for a ref the spec marks (shipped)."""
+
+    def test_dev_holds_a_merge_for_a_shipped_ref(self):
+        dev = DEV.read_text(encoding="utf-8")
+        paragraph = dev.split("**A blocked issue.**", 1)[1].split("\n\n", 1)[0]
+        self.assertIn("not shipped", paragraph)
+        hand_back = DEV_HAND_BACK.read_text(encoding="utf-8")
+        case = hand_back.split("- **blocked by another issue**", 1)[1].split("\n- **stopped for a person**", 1)[0]
+        self.assertIn("(shipped)", case)
+        self.assertIn("taken once <B> ships", case)
+
+
 if __name__ == "__main__":
     unittest.main()

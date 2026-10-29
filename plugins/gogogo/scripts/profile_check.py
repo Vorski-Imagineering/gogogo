@@ -70,7 +70,7 @@ FIELDS = {
                                     "Optional; absent means the in_progress column."),
     "environments": (list, SKILLS, "Where code runs: name, roles, and url/serves/reached_by/data/writes."),
     "stages": (list, (ONE, LOOP, TEST), "The path a change takes after it merges: code_is, column, environment."),
-    "related_repos": (list, (), "Other repos one product is built with: repo, board, merged_columns, half."),
+    "related_repos": (list, (), "Other repos one product is built with: repo, board, merged_columns, shipped_columns, half."),
     "hard_stops.source": (str, SKILLS, "Where the repo's Hard Stop rules live (file#anchor)."),
     "hard_stops.form": (str, (SPEC, ONE, LOOP), "categories | questions."),
     "hard_stops.items": (list, (SPEC, ONE, LOOP), "Names of the categories or questions, in order."),
@@ -209,7 +209,7 @@ COLUMN_ROLES = tuple(p.split(".", 2)[2] for p in FIELDS if p.startswith("tracker
 STAGE_KEYS = ("code_is", "environment", "column", "moved_by", "tag")
 
 # The keys a related repo may have (`related_repos` is a list too).
-RELATED_KEYS = ("repo", "board", "merged_columns", "half")
+RELATED_KEYS = ("repo", "board", "merged_columns", "shipped_columns", "half")
 RELATED_REPO = re.compile(r"^[A-Za-z0-9][A-Za-z0-9-]*/[A-Za-z0-9._-]+$")
 RELATED_BOARD = re.compile(r"^[A-Za-z0-9][A-Za-z0-9-]*#[1-9][0-9]*$")
 
@@ -426,6 +426,10 @@ def _check_related_repos(settings):
         if "merged_columns" in entry and not (isinstance(merged, list) and merged
                                               and all(isinstance(c, str) and c for c in merged)):
             errors.append(f"{where}: merged_columns must be a list of column names")
+        shipped = entry.get("shipped_columns")
+        if "shipped_columns" in entry and not (isinstance(shipped, list) and shipped
+                                               and all(isinstance(c, str) and c for c in shipped)):
+            errors.append(f"{where}: shipped_columns must be a list of column names")
         half = entry.get("half")
         if "half" in entry and not (isinstance(half, str) and half):
             errors.append(f"{where}: half must be a non-empty phrase")

@@ -272,5 +272,15 @@ class Authorisation(unittest.TestCase):
         self.assertIn("/gogogo:dev` §1", four)
 
 
+
+class ShipWait(unittest.TestCase):
+    """gogogo#238: a row whose spec waits on a blocker until shipped is passed over."""
+
+    def test_blocked_reference_waits_until_shipped(self):
+        text = (SKILL.parent / "references" / "blocked.md").read_text(encoding="utf-8")
+        for words in ("until shipped", "`shipped`", "no blocked-by link"):
+            self.assertIn(words, text)
+
+
 if __name__ == "__main__":
     unittest.main()

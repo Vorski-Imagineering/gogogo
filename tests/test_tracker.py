@@ -628,7 +628,7 @@ issues_repo = "someone/tracker"
 """)
         board.configure(path)
         self.assertEqual(board.RELATED, {"example-org/backend": {"owner": "example-org", "number": 7,
-                                                                 "merged": ["Merged"]}})
+                                                                 "merged": ["Merged"], "shipped": None}})
 
     def test_board_repo_and_columns_come_from_the_profile(self):
         path = self.write("""+++
@@ -1149,11 +1149,12 @@ class BlockedByLinks(unittest.TestCase):
         payload = {c["number"]: c for c in json.loads(printed.call_args_list[0].args[0])}
         self.assertEqual(payload[11]["blocked_by"], [{"number": 136, "repo": board.DEFAULT_REPO, "state": "OPEN",
                                                       "state_reason": None, "column": "Dev Priority",
-                                                      "blocker_state": "open"}])
+                                                      "blocker_state": "open", "shipped": False}])
         self.assertEqual([b["number"] for b in payload[136]["blocking"]], [11])
         self.assertEqual(payload[136]["blocked_by"], [])
         self.assertEqual(payload[12]["blocked_by"][0]["column"], "In Production")
         self.assertEqual(payload[12]["blocked_by"][0]["blocker_state"], "merged")
+        self.assertIs(payload[12]["blocked_by"][0]["shipped"], False, "this fixture names no production environment")
 
     def test_a_filtered_list_still_reads_the_blockers_column_from_the_whole_board(self):
         nodes = [linked(11, "go-live", "Dev Priority", blocked_by=[(140, "OPEN", None, None)]),
@@ -1213,7 +1214,7 @@ class BlockedByLinks(unittest.TestCase):
         at = lines.index("column: Dev Priority")
         self.assertEqual(lines[at + 1:], ["blocked by: #136 (open, Dev Priority)",
                                           "blocked by: x/y#4 (open, not on this board)",
-                                          "blocked by: #140 (merged, In Production)"])
+                                          "blocked by: #140 (merged, In Production, not shipped)"])
 
     def test_the_docstring_names_the_block_command(self):
         self.assertIn("block <issue> --by", board.__doc__)
@@ -1364,9 +1365,107 @@ class RelatedBoardBlockers(unittest.TestCase):
                  mock.patch.object(board, "graphql", side_effect=fake), redirect_stdout(out):
                 self.assertEqual(board.cmd_show(Namespace(issue=11, repo=board.DEFAULT_REPO, expect=None)), 0)
             lines.append(out.getvalue().splitlines()[-1])
-        self.assertEqual(lines, ["blocked by: example-org/backend#5 (merged, Merged on example-org#7)",
+        self.assertEqual(lines, ["blocked by: example-org/backend#5 (merged, Merged on example-org#7, not shipped)",
                                  "blocked by: example-org/backend#5 (open, not on example-org#7)",
                                  "blocked by: example-org/backend#5 (open, example-org#7 not readable)"])
+
+
+class ShippedBlockers(unittest.TestCase):
+    """gogogo#238: whether a blocker's change is in production, for a `(shipped)` wait."""
+
+    PROFILE = """+++
+profile = 1
+[tracker]
+project_owner = "someone"
+project_number = 7
+issues_repo = "someone/tracker"
+[[environments]]
+name = "dev"
+roles = ["pre-production"]
+[[environments]]
+name = "prod"
+roles = ["production"]
+[[stages]]
+code_is = "merged"
+environment = "dev"
+column = "In Dev"
+[[stages]]
+code_is = "deployed"
+environment = "prod"
+column = "In Production"
++++
+"""
+
+    def setUp(self):
+        saved = (board.ORG, board.PROJECT_NUMBER, board.DEFAULT_REPO, dict(board.COLUMNS), list(board.PRODUCTION))
+
+        def restore():
+            board.ORG, board.PROJECT_NUMBER, board.DEFAULT_REPO = saved[:3]
+            board.COLUMNS.clear()
+            board.COLUMNS.update(saved[3])
+            board.PRODUCTION[:] = saved[4]
+            board.RELATED.clear()
+            board._RELATED_CARDS.clear()
+        self.addCleanup(restore)
+
+    def configure(self, text):
+        import tempfile
+        with tempfile.NamedTemporaryFile("w", suffix=".md", delete=False) as tmp:
+            tmp.write(text)
+        self.addCleanup(Path(tmp.name).unlink)
+        board.configure(tmp.name)
+
+    def test_blocker_shipped_for_each_case(self):
+        board.PRODUCTION[:] = ["In Production"]
+        board.RELATED.clear()
+        board.RELATED["example-org/backend"] = {"owner": "example-org", "number": 7,
+                                                "merged": ["Merged"], "shipped": ["Released"]}
+        board.RELATED["example-org/plain"] = {"owner": "example-org", "number": 8, "merged": None, "shipped": None}
+        cards = {"acme/issues#5": {"status": "in production"}, "acme/issues#6": {"status": "In Dev"}}
+
+        def shipped(number=5, state="OPEN", reason=None, repo="acme/issues", related=None):
+            entry = {"number": number, "repo": repo, "state": state, "state_reason": reason}
+            return board.blocker_shipped(entry, cards, related)
+        self.assertTrue(shipped(state="CLOSED", reason="COMPLETED"))
+        self.assertTrue(shipped(state="CLOSED"))
+        self.assertFalse(shipped(state="CLOSED", reason="NOT_PLANNED"))
+        self.assertFalse(shipped(state="CLOSED", reason="DUPLICATE"))
+        self.assertTrue(shipped(5), "a production stage column, matched without regard to case")
+        self.assertFalse(shipped(6), "a stage column that serves no production environment")
+        backend = "example-org/backend"
+        self.assertTrue(shipped(9, repo=backend, related={"board": "example-org#7", "column": "Released"}))
+        self.assertFalse(shipped(9, repo=backend, related={"board": "example-org#7", "column": "Merged"}))
+        self.assertFalse(shipped(9, repo=backend, related={"board": "example-org#7", "column": None, "error": "no access"}))
+        self.assertFalse(shipped(9, repo="example-org/plain", related={"board": "example-org#8", "column": "Released"}))
+
+    def test_production_columns_come_from_the_environments_roles(self):
+        self.configure(self.PROFILE)
+        self.assertEqual(board.PRODUCTION, ["In Production"])
+        self.configure(self.PROFILE.split("[[environments]]")[0] + "+++\n")
+        self.assertEqual(board.PRODUCTION, [])
+
+    def test_shipped_needs_no_new_read(self):
+        def calls(shipped_columns):
+            board.RELATED.clear()
+            board._RELATED_CARDS.clear()
+            board.RELATED["example-org/backend"] = {"owner": "example-org", "number": 7, "merged": ["Merged"],
+                                                    "shipped": shipped_columns}
+            nodes = [linked(11, "client card", "Dev Priority", blocked_by=[(5, "OPEN", None, "example-org/backend")])]
+            seen = []
+
+            def graphql(query, **variables):
+                seen.append(query)
+                if query == board.BOARD_ITEM_QUERY:
+                    return RelatedBoardBlockers.found("Released")
+                return page(nodes, total=len(nodes))
+            args = Namespace(status=None, open_only=False, issues_only=False,
+                             json=True, repo=board.DEFAULT_REPO, no_crosscheck=True)
+            with mock.patch.object(board, "graphql", side_effect=graphql), mock.patch("builtins.print") as printed:
+                board.cmd_list(args)
+            entry = json.loads(printed.call_args_list[0].args[0])[0]["blocked_by"][0]
+            return len(seen), entry["shipped"]
+        self.assertEqual(calls(None), (2, False))
+        self.assertEqual(calls(["Released"]), (2, True))
 
 
 class FakeGh:

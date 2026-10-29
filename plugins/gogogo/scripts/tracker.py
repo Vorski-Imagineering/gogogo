@@ -58,7 +58,10 @@ still blocks, `merged` once it is closed as completed or its card is in a
 stage column (for a blocker in a repo `related_repos` lists with a board, its
 card on that board in that entry's merged columns; such an entry also carries
 `related`: that board, the column there, and an `error` when it could not be
-read), `dropped` when it closed as not planned or as a duplicate.
+read), `dropped` when it closed as not planned or as a duplicate. Each also
+carries `shipped`: true once the blocker is closed as completed or its card is
+in a production column (here, a stage serving a production environment; on a
+related board, that entry's `shipped_columns`).
 `block` sets one link and confirms it from the blocker's side; it never
 removes one.
 
@@ -123,6 +126,9 @@ COLUMNS: dict[str, Column] = {}
 #: {"owner", "number", "merged"} for each entry with a valid board. A blocker in
 #: one of these repos is read from that board (gogogo#233).
 RELATED: dict[str, dict] = {}
+#: Filled by configure(): the column of each stage whose environment has the
+#: `production` role. A blocker whose card is in one here has shipped.
+PRODUCTION: list[str] = []
 #: related_card() answers, by ref_key, for the life of the process.
 _RELATED_CARDS: dict[str, dict] = {}
 
@@ -208,9 +214,16 @@ def configure(profile_path: str | None = None) -> Path:
         if not (isinstance(board, str) and profile_check.RELATED_BOARD.fullmatch(board)):
             continue
         owner, number = board.split("#")
-        merged = entry.get("merged_columns")
+        merged, shipped = entry.get("merged_columns"), entry.get("shipped_columns")
         RELATED[entry["repo"].lower()] = {"owner": owner, "number": int(number),
-                                          "merged": merged if isinstance(merged, list) else None}
+                                          "merged": merged if isinstance(merged, list) else None,
+                                          "shipped": shipped if isinstance(shipped, list) else None}
+
+    environments = [e for e in settings.get("environments") or [] if isinstance(e, dict)]
+    production = {e.get("name") for e in environments if "production" in (e.get("roles") or [])}
+    PRODUCTION.clear()
+    PRODUCTION.extend(stage["column"] for stage in settings.get("stages") or []
+                      if isinstance(stage, dict) and stage.get("column") and stage.get("environment") in production)
     return path
 
 
@@ -487,6 +500,21 @@ def blocker_state(entry: dict, cards_by_ref: dict, stages: list[str], related: d
     return "open"
 
 
+def blocker_shipped(entry: dict, cards_by_ref: dict, related: dict | None = None) -> bool:
+    """Whether a `blocked_by` entry's change is in production: closed as completed,
+    its card here in a `PRODUCTION` column, or its card on a related board in that
+    entry's `shipped_columns`. Closed as not planned or a duplicate never shipped."""
+    if entry.get("state") == "CLOSED":
+        return entry.get("state_reason") not in ("NOT_PLANNED", "DUPLICATE")
+    card = cards_by_ref.get(ref_key(entry.get("repo"), entry.get("number")))
+    if _bare((card or {}).get("status") or "") in {_bare(c) for c in PRODUCTION}:
+        return True
+    if related and not related.get("error") and related.get("column"):
+        shipped = RELATED.get((entry.get("repo") or "").lower(), {}).get("shipped") or []
+        return _bare(related["column"]) in {_bare(c) for c in shipped}
+    return False
+
+
 def related_card(entry: dict) -> dict | None:
     """The blocker's card on its own repo's board, when `related_repos` names one.
 
@@ -527,6 +555,7 @@ def annotate_blockers(cards: list[dict]) -> None:
                 entry["related"] = related
                 state = blocker_state(entry, by_ref, stages, related)
             entry["blocker_state"] = state
+            entry["shipped"] = blocker_shipped(entry, by_ref, related)
 
 
 def flatten(item: dict) -> dict:
@@ -920,6 +949,8 @@ def cmd_show(args: argparse.Namespace) -> int:
             place = f"{related['column']} on {related['board']}"
         else:
             place = f"not on {related['board']}"
+        if state == "merged" and not blocker_shipped(entry, by_ref, related):
+            place += ", not shipped"
         print(f"blocked by: {short_ref(entry['repo'], entry['number'], args.repo)} ({state}, {place})")
     if args.expect and (current or "").lower() != column(args.expect).lower():
         # An exit status, not a name for the caller to grep: a grep for a

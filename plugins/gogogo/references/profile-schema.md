@@ -97,7 +97,7 @@ no skill requires it; a skill that finds it uses it.
 | `tracker.columns.needs_human` | str | optional | Column of an issue stopped for a person: an unreviewed fix, a decision or Hard Stop found mid-change, or verification that gave up. Optional; absent means the `in_progress` column. |
 | `environments` | list | all | Where code runs: name, roles, and url/serves/reached_by/data/writes. |
 | `stages` | list | `dev`, `auto-dev`, `auto-test` | The path a change takes after it merges: code_is, column, environment. |
-| `related_repos` | list | optional | Other repos one product is built with: repo, board, merged_columns, half. |
+| `related_repos` | list | optional | Other repos one product is built with: repo, board, merged_columns, shipped_columns, half. |
 | `hard_stops.source` | str | all | Where the repo's Hard Stop rules live (file#anchor). |
 | `hard_stops.form` | str | `spec`, `dev`, `auto-dev` | categories / questions. |
 | `hard_stops.items` | list | `spec`, `dev`, `auto-dev` | Names of the categories or questions, in order. |
@@ -295,6 +295,7 @@ not look the repos or boards up: it runs offline.
 repo = "example-org/client-repo"
 board = "example-org#7"
 merged_columns = ["In Dev"]
+shipped_columns = ["Released"]
 half = "client's half"
 ```
 
@@ -304,10 +305,15 @@ half = "client's half"
 - `merged_columns` (optional): that board's columns meaning the change is
   merged to its base branch, not that it is in production. Absent: the same
   names as this profile's `stages` columns.
+- `shipped_columns` (optional): that board's columns meaning the change is in
+  production. A `**Blocked by:**` ref marked `(shipped)` waits for one of them.
+  Absent: only closing the issue as completed counts as shipped. On this
+  repo's own board the same wait uses the columns of `stages` whose
+  `environment` has the `production` role.
 - `half` (optional): the phrase a spec here uses for the part of a change
   built in that repo.
 
-Read by: `tracker.py` reads `board` and `merged_columns` for blocker states; `/gogogo:spec` and `spec_lint.py` read `half`.
+Read by: `tracker.py` reads `board`, `merged_columns` and `shipped_columns` for blocker states; `/gogogo:spec` and `spec_lint.py` read `half`.
 
 ### Release
 

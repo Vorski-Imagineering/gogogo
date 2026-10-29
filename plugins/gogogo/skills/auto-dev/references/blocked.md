@@ -11,8 +11,10 @@ them in the same board read §1 already makes.
    blocker's `number`, `repo`, `state`, its `column` on this board (null when
    it has no card here) and, for a blocker in a repo the profile's
    `related_repos` lists with a board, `related`: that `board`, its `column`
-   there, and an `error` when that board could not be read; and its
-   `blocker_state`:
+   there, and an `error` when that board could not be read; its `shipped`
+   (true once its change is in production: closed as completed, its card in
+   a stage column serving a production environment, or on that related
+   board in that entry's `shipped_columns`); and its `blocker_state`:
    - `open`: it still blocks;
    - `merged`: it is closed as completed, or its card is in one of the
      profile's `stages` columns, or, for such a blocker, its card on that
@@ -34,12 +36,23 @@ them in the same board read §1 already makes.
    blocked work still stands is a person's question, and one they can answer
    now.
 4. **Every blocker `merged`**, or none: the row is taken as any other.
-5. **Order**, when the user gave none:
+   It goes on to §2, where one more check runs (rule 5).
+5. **A blocker the spec waits on until shipped.** Once §2 has read the
+   row's body, each ref on its `**Blocked by:**` line marked `(shipped)` is
+   matched to its `blocked_by` entry (`#B` is `tracker.issues_repo`,
+   `owner/repo#B` compared ignoring case). When that entry's `shipped` is
+   false, the row is passed over as rule 2 does, listed
+   `skip (blocked by <ref> (until shipped, <where>))`, with `<where>` as in
+   rule 2. When the ref has no entry, it is listed
+   `skip (blocked by <ref> (until shipped, no blocked-by link))`. No comment,
+   no move, no marker and no `issue_skipped`; the ready label is kept, and
+   rule 7 applies.
+6. **Order**, when the user gave none:
    - first, rows whose `blocking` list names an open issue, the row blocking
      the most open issues first;
    - then live user-facing bugs, refactors after, anything large last so it
      cannot absorb the run.
-6. **Read again each time.** A row passed over as blocked is checked again
+7. **Read again each time.** A row passed over as blocked is checked again
    every time §1's list is read in this run, and taken as soon as its
    blockers are out of the way: a blocker merged earlier in the same run
    unblocks it. "Not taken again in the same run" (§4) is about real skips,

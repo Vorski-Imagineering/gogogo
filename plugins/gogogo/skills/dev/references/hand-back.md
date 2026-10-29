@@ -20,7 +20,12 @@ and no further. Take the first case that fits:
   `<tracker.tool> show <B> --repo <its repo>`. B still blocks when it is
   `OPEN` with its card in no column of the profile's `stages` (or not on this
   board). Closed any other way than below (`COMPLETED`, or no reason), or its
-  card in a stage column: it has merged, and this case does not apply. Closed as `NOT_PLANNED` or `DUPLICATE`: take "stopped for
+  card in a stage column: it has merged, and this case does not apply. B
+  also still blocks when the spec marks it `(shipped)` and its `show` line
+  ends `, not shipped`: for such a B the merge is the step that cannot begin,
+  so it is checked right before merging, and this case applies instead of
+  the merge, with the report's first line ending `taken once <B> ships`.
+  Closed as `NOT_PLANNED` or `DUPLICATE`: take "stopped for
   a person" with `reason=decision`, naming B and how it closed. Not a stop, and not `tracker.columns.needs_human`:
   nobody can act on it until B lands. In order:
   1. When there is work: commit and push it, and leave its PR open, opening it
