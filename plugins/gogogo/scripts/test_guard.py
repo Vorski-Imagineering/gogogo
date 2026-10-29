@@ -30,7 +30,10 @@ licensed when a line of the body's `## Test cases` or `## Design` holds a
 backticked token and says "remove" or "rewrit": a token `path` licenses every
 item in that test file, and `path::name` the hunks whose enclosing lines,
 function context or removed lines contain `name` as a whole word; `name` may
-hold further `::`-separated parts, each of which must occur. For a file
+hold further `::`-separated parts, each of which must occur; a token ending in
+`/` licenses every item in a test file beneath that folder, from the repo root;
+one at or above the fixed part of a lane's `tests` pattern is too wide, printed
+as such, and licenses nothing. For a file
 renamed since the base, a token naming its old path covers it as one naming
 its new path does. It prints each
 `weaker` item as `licensed` or `NOT LICENSED`, then `test-guard: hunks=<n> same=<n> stronger=<n> weaker=<n>
@@ -213,6 +216,17 @@ def _same_file(path: str, named: str) -> bool:
     return path == named or path.endswith("/" + named)
 
 
+def _beneath(path: str, folder: str) -> bool:
+    return folder.endswith("/") and path.startswith(folder)
+
+
+def too_wide(token: str, globs: list[str]) -> bool:
+    """A folder token at or above the fixed part of a lane's `tests` pattern."""
+    if not token.endswith("/"):
+        return False
+    return any(re.split(r"[*?\[]", glob, maxsplit=1)[0].startswith(token) for glob in globs)
+
+
 def _has_word(text: str, word: str) -> bool:
     return re.search(rf"(?<![A-Za-z0-9_]){re.escape(word)}(?![A-Za-z0-9_])", text) is not None
 
@@ -227,6 +241,9 @@ def licensed(item: dict, tokens: list[str]) -> bool:
             texts = [item["context"], *item["enclosing"], *item["minus"]]
             if item["kind"] == "changed" and any(_same_file(p, named) for p in paths) and segments and all(
                     any(_has_word(t, part) for t in texts) for part in segments):
+                return True
+        elif token.endswith("/"):
+            if any(_beneath(p, token) for p in paths):
                 return True
         elif any(_same_file(p, token) for p in paths):
             return True
@@ -302,6 +319,8 @@ def main(argv=None) -> int:
             print(f"error: {line}", file=sys.stderr)
         return 2
     tokens = licences(body)
+    wide = list(dict.fromkeys(t for t in tokens if too_wide(t, globs)))
+    tokens = [t for t in tokens if t not in wide]
     counts = {v: 0 for v in VERDICTS}
     lic = unlic = 0
     weaker = []
@@ -317,8 +336,10 @@ def main(argv=None) -> int:
                f"weaker={counts['weaker']} licensed={lic} unlicensed={unlic}")
     if args.json:
         print(json.dumps({"items": found, "weaker": weaker, **counts, "licensed": lic,
-                          "unlicensed": unlic, "hunks": len(found)}, indent=2))
+                          "unlicensed": unlic, "hunks": len(found), "too_wide": wide}, indent=2))
     else:
+        for token in wide:
+            print(f"test-guard: too wide, licenses nothing: {token}")
         for w in weaker:
             print(f"{w['id']}  {'licensed' if w['licensed'] else 'NOT LICENSED'}  {w['reason']}")
         print(summary)

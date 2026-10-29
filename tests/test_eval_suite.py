@@ -33,7 +33,7 @@ CASES = {
     "dev-authorised-until-clean", "dev-authorised-model", "dev-correction-smallest-fix",
     "spec-declined-question", "spec-being-built", "spec-nothing-hits-today",
     "spec-no-argument-offers-new", "spec-pr-mentions-only",
-    "spec-reverses-tested-behaviour", "spec-unmet-precondition",
+    "spec-reverses-tested-behaviour", "spec-licenses-a-deleted-folder", "spec-unmet-precondition",
     "spec-public-tracker-reread",
     "roadmap-shared-checkout", "roadmap-milestones-ask-first",
     "status-sweep-lists-only", "status-shows-independence",
