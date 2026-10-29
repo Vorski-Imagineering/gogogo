@@ -419,11 +419,11 @@ report says "Suspected gogogo faults: none". No notify message and no stop.
 When the run's final PR is still open at the close, the report also gives its
 *After merging* list (§6, `run-branch-pr`): each card the run landed and where
 to move it once that PR is merged.
-When the profile sets `related_repos` and `tracker.tool` is `shared`, the report ends with the RELATED
-block as `/gogogo:status` (`skills/status/SKILL.md` in this plugin, § *Shape*, *Related repos*) draws it,
-from one read at the close, whose exit 0 stands for status's `fields` and `list`: `<tracker.tool> list --issues-only --open-only --json`.
-A non-zero exit puts `RELATED  unreadable: tracker.py exited <n>: <its last stderr line>`
-in its place, and the run closes as before. No read and no block otherwise.
+
+When the profile sets `related_repos` and `tracker.tool` is `shared`, the report ends with the RELATED block as
+`/gogogo:status` draws it (`skills/status/SKILL.md` in this plugin, § *Shape*, *Related repos*), from one close read
+whose exit 0 stands for status's `fields` and `list`: `<tracker.tool> list --issues-only --open-only --json`. A non-zero exit
+puts `RELATED  unreadable: tracker.py exited <n>: <its last stderr line>` in its place; no read and no block otherwise.
 
 ## Stop the whole run and ask when
 
