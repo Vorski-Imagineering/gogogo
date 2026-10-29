@@ -351,11 +351,17 @@ def lint(body, settings):
 
     # --- the part of the work in a related repo ---------------------------
     spec_lines = [line for title, _, lines in sections if title != REPORT for line in lines]
+    prose, fenced = [], False  # a part is named in prose, never inside a code block
+    for line in spec_lines:
+        if line.lstrip().startswith("```"):
+            fenced = not fenced
+        elif not fenced:
+            prose.append(line)
     for entry in settings.get("related_repos") or []:
         repo, half = (entry.get("repo"), entry.get("half")) if isinstance(entry, dict) else (None, None)
-        if not (isinstance(repo, str) and isinstance(half, str) and half.strip()):
+        if not (isinstance(repo, str) and isinstance(half, str) and norm(half)):
             continue
-        if not any(norm(half) in norm(text) for line in spec_lines for text in _labels(line)):
+        if not any(norm(half) in norm(text) for line in prose for text in _labels(line)):
             continue
         cited = re.compile(rf"(?:(?<![\w./-]){re.escape(repo)}#|github\.com/{re.escape(repo)}/issues/)\d+(?![\w-])",
                            re.I)

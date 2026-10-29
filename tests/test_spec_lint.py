@@ -440,6 +440,15 @@ class RelatedRepos(unittest.TestCase):
         self.assertEqual(run(HALF, settings)[2], NO_ISSUE)
         self.assertEqual(run(GOOD, settings)[2], None)
 
+    def test_a_code_block_is_not_read_for_a_part(self):
+        body = GOOD.replace("1. Change the filter.",
+                            "1. Change the filter.\n\n```bash\n# then the client's half runs\necho **client's half**\n```")
+        self.assertEqual(run(body, RELATED)[2], None)
+
+    def test_a_phrase_of_punctuation_matches_nothing(self):
+        settings = dict(SETTINGS, related_repos=[{"repo": "example-org/client-repo", "half": "—"}])
+        self.assertEqual(run(GOOD, settings)[2], None)
+
     def test_a_hard_stop_reason_comes_first(self):
         body = HALF.replace("| Schema | no |", "| Schema | yes |").replace(
             "implement directly.**", "proposal — Schema awaits approval.**")
