@@ -431,6 +431,15 @@ class RelatedRepos(unittest.TestCase):
             body = HALF.replace("the new field.", f"the new field. Filed as {cite}.")
             self.assertEqual(run(body, RELATED)[2], NO_ISSUE, cite)
 
+    def test_every_entry_is_checked(self):
+        settings = dict(SETTINGS, related_repos=[
+            {"repo": "example-org/no-half"},
+            {"repo": "example-org/server", "half": "server's half"},
+            {"repo": "example-org/client-repo", "half": "client's half"},
+        ])
+        self.assertEqual(run(HALF, settings)[2], NO_ISSUE)
+        self.assertEqual(run(GOOD, settings)[2], None)
+
     def test_a_hard_stop_reason_comes_first(self):
         body = HALF.replace("| Schema | no |", "| Schema | yes |").replace(
             "implement directly.**", "proposal — Schema awaits approval.**")
