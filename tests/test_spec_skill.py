@@ -432,7 +432,7 @@ class SignOff(unittest.TestCase):
             self.assertIn(words, self.text)
 
     def test_the_sentence_still_names_the_reference(self):
-        rounds = section(skill_text(), "Ask in rounds until no forks remain")
+        rounds = "\n".join(section(skill_text(), "## Ask in rounds"))
         self.assertIn("references/approval-questions.md", rounds)
         self.assertIn("sign-off", rounds)
 
