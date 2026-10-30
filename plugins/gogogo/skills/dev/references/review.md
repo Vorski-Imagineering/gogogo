@@ -107,7 +107,8 @@ Then the review, by these rules:
    not run per round (§6 runs it once, after the last round). Every round, tell the review where the
    spec is (the issue number) and to report only where the change fails the
    spec or a rule in `CLAUDE.md`, breaks something that worked, or has a bug
-   with a concrete triggering case, and to name any code, test or guard the
+   with a concrete triggering case, saying how a real user or run reaches it in
+   production, and to name any code, test or guard the
    change has that the spec does not need. From round 2, also give it the findings
    already declined, one line each, and tell it not to raise them again.
 2. **Which findings are applied.** Take the first test a finding meets. A
@@ -118,11 +119,11 @@ Then the review, by these rules:
    |---|---|---|---|
    | 1 | the change fails the spec or a rule in `CLAUDE.md` | applied | `spec` |
    | 2 | the change breaks something that worked before it | applied, with the case | `regression` |
-   | 3 | a bug, with a concrete case | applied. Code: write the test that fails first, see it fail, then fix. What no test reaches (prose, configuration, a script's output): the exact situation or input and the wrong result, reproduced or traced to a `file:line` | `bug` |
+   | 3 | a bug, with a concrete case a real run in production can reach (the reach line, below) | applied. Code: write the test that fails first, see it fail, then fix. What no test reaches (prose, configuration, a script's output): the exact situation or input and the wrong result, reproduced or traced to a `file:line` | `bug` |
    | 4 | a consequence that would be a security hole, lost or corrupted data, or a change the repo's Hard Stop rules require approval for that no Approvals row covers | no concrete case needed: fixed, or the issue stops for a person; an unapproved Hard Stop always stops (§4) | `risk` |
    | 5 | behaviour the spec does not have | applied only when small: touches no Hard Stop item, adds no new user-visible behaviour, setting or message, stays inside the files the spec lists, and has a test. Named in the report under *Added beyond the spec*. Otherwise declined and listed as a follow-up | `added`, or declined as `beyond` |
    | 6 | code, a test or a guard the change has that no spec item, `CLAUDE.md` rule or passing test needs | applied by removing it, when every spec item is still met and the lane's `focused` command for the modules that cover the files touched is still green; otherwise declined as `settled` with the item or test that needs it | `excess`, or declined as `settled` |
-   | 7 | anything else | declined, with one line saying why | `hypothetical` (a setup or input no real repo or run has), `style` (wording, naming, tidiness, speed with no wrong result), `settled` (the spec, an Approvals row or an earlier round decided it), `reversal`, `late` |
+   | 7 | anything else | declined, with one line saying why | `hypothetical` (a setup or input no real repo or run has, or a case the reach line finds nothing real can reach), `style` (wording, naming, tidiness, speed with no wrong result), `settled` (the spec, an Approvals row or an earlier round decided it), `reversal`, `late` |
 
    A removal under test 6 is a correction like any other: the next round
    reviews it, and rule 4 applies to it. Taking out what an earlier
@@ -132,6 +133,17 @@ Then the review, by these rules:
    Stop covers is not test 4 unless its consequence is. A finding that meets
    tests 1 to 4 and cannot be fixed stops the issue for a person (§8), except
    under `review=until-clean` (rule 8).
+
+   **The reach line.** Before changing anything for a finding that would be
+   test 3, write one line: how a real user or run reaches this in the
+   profile's production environment. When the line names a guarantee that
+   prevents it, with evidence a reader can open (a `file:line`, a documentation
+   link, a record), or a client nobody ships, the finding is test 7 and is
+   declined as `hypothetical`, and its Declined line in the report gives that
+   evidence. A guarantee with no evidence declines nothing: the finding stays
+   test 3. Tests 1, 2 and 4 are taken first and need no line, so "no client we
+   ship does that" never declines a security hole or lost data. The rule holds
+   under `review=until-clean`.
 3. **Three attempts per finding.** From round 2, a finding that meets tests 1
    to 4 means a correction was wrong; it belongs to the finding that
    correction was for. The second attempt says what the first got wrong and

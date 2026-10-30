@@ -349,7 +349,7 @@ Comment in the reporter's language, not the codebase's:
   or `declined`; *Recorded as* is the word from that table; *Re-fixes* is the id of the finding whose correction this
   one corrects (§5 rule 3), or `-`. **Added beyond the spec**, when anything was (§5 test 5).
   **Declined**: one line per declined finding, by its id, with its reason word from §5's
-  table, inside a `<details>` block when there are more than five. The
+  table, and, for a finding the reach line declined, the evidence that rules it out, inside a `<details>` block when there are more than five. The
   follow-ups. How the review ended (§5 rule 8). When §3 found that the bug
   this issue fixes was introduced by the change made for an earlier issue in
   this tracker, say so in one sentence. End the comment with the record on one

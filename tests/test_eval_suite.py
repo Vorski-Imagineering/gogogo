@@ -31,6 +31,7 @@ CASES = {
     "auto-dev-related-board-unreadable",
     "human-help-review-stop", "human-help-hard-stop-asks", "human-help-requeued-twice",
     "dev-authorised-until-clean", "dev-authorised-model", "dev-correction-smallest-fix",
+    "dev-reach-line-declines", "dev-reach-line-spares-security",
     "spec-declined-question", "spec-being-built", "spec-nothing-hits-today",
     "spec-no-argument-offers-new", "spec-pr-mentions-only",
     "spec-reverses-tested-behaviour", "spec-licenses-a-deleted-folder", "spec-unmet-precondition",

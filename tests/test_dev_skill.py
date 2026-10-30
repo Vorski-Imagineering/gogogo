@@ -158,6 +158,25 @@ class TakeTheCard(unittest.TestCase):
 
 
 
+class ReachLine(unittest.TestCase):
+    """gogogo#248: a bug finding says how production reaches it before anything changes."""
+
+    def setUp(self):
+        self.text = DEV_REVIEW.read_text(encoding="utf-8")
+        self.rows = {int(m.group(1)): line for line in self.text.splitlines()
+                     if (m := re.match(r"\s*\| (\d+) \|", line))}
+
+    def test_the_reach_line_is_in_the_review(self):
+        self.assertIn("**The reach line.**", self.text)
+        self.assertLess(self.text.index("| 7 | anything else"), self.text.index("**The reach line.**"))
+
+    def test_the_table_names_it_on_test_3_only(self):
+        for row in (3, 7):
+            self.assertIn("reach line", self.rows[row])
+        for row in (1, 2, 4):
+            self.assertNotIn("reach line", self.rows[row])
+
+
 class Excess(unittest.TestCase):
     """The review's table names only reasons review_stats.py counts, and the size is measured (gogogo#231)."""
 
