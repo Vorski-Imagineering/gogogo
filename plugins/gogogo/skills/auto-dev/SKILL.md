@@ -314,14 +314,14 @@ by the run* for §8 and §9.
   (*Claude-specific*).
 - **The review is the one place a turn may end**, and only when a `/goal` is
   active in this run (the launch's condition, *Claude-specific*) and the
-  review was started in the background, so there is nothing to wait on. Print
+  review was started in the background. Print
   exactly one line,
   `Waiting on the review (started <HH:MM>); the run resumes when it reports.`,
   and end the turn there and nowhere else. Take the issue up again at the
   review's result when it arrives. When the review returns its findings in the
   same turn, go on with them. With no goal active (the plain
-  `"/gogogo:auto-dev"` launch), print that line and wait for the review in the
-  foreground, without ending the turn (`references/review-wait.md`).
+  `"/gogogo:auto-dev"` launch), read `references/review-wait.md` before starting
+  the review: print that line and wait in the foreground, not ending the turn.
 
 ## 5. Gates
 

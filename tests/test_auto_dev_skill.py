@@ -189,9 +189,25 @@ class ReviewWait(unittest.TestCase):
         state.write_text('{"agentType":"x","finished":true}')
         self.assertEqual(self.bash(self.blocks[1].replace("<agent>", str(agent))), "finished")
         pattern = re.search(r"grep -Eq '([^']+)'", self.blocks[1]).group(1)
-        self.assertEqual(subprocess.run(["grep", "-Eq", pattern, str(state)]).returncode, 0)
         state.write_text('{"agentType":"x"}')
         self.assertEqual(subprocess.run(["grep", "-Eq", pattern, str(state)]).returncode, 1)
+
+    def test_the_commands_read_a_home_with_a_space(self):
+        folder = self.tmp / "first last"
+        folder.mkdir()
+        agent = folder / "agent-a"
+        agent.with_name("agent-a.meta.json").write_text('{"finished":true}')
+        agent.with_name("agent-a.jsonl").write_text(
+            json.dumps({"message": {"role": "assistant", "content": [{"type": "text", "text": "ok"}]}}) + "\n")
+        self.assertEqual(self.bash(self.blocks[1].replace("<agent>", str(agent))), "finished")
+        self.assertEqual(self.bash(self.blocks[2].replace("<agent>", str(agent))), "ok")
+
+    def test_the_stop_reason_is_one_the_tracker_accepts(self):
+        import tracker
+        reasons = re.findall(r"with reason `([a-z-]+)`", self.text)
+        self.assertTrue(reasons)
+        for reason in reasons:
+            self.assertIn(reason, tracker.STOP_REASONS)
 
     def test_the_reader_prints_the_last_assistant_text(self):
         def line(role, content):
