@@ -524,6 +524,43 @@ class ShippedReason(unittest.TestCase):
                 self.assertEqual(len(reason_warnings(with_context(*lines))), 1)
 
 
+TESTS_LANE = dict(SETTINGS, lanes=[{"name": "unit", "run": "make test", "tests": ["tests/*"]},
+                                   {"name": "live", "env": "dev"}])
+
+
+def bare_warnings(body):
+    return [w for w in run(body, TESTS_LANE)[1] if "licenses every change" in w]
+
+
+class BareLicence(unittest.TestCase):
+    """gogogo#252: a line that licenses a whole test file is named."""
+
+    CASE = "1. Automated: `test_pages_listed`, guards the empty list."
+
+    def test_a_bare_test_path_on_a_licence_line_warns(self):
+        errs, warns, withheld = run(GOOD.replace(self.CASE, "1. The file `tests/test_a.py` is removed."), TESTS_LANE)
+        self.assertEqual((errs, withheld), ([], None))
+        self.assertIn("## Test cases: `tests/test_a.py` licenses every change to that test file; "
+                      "name `path::name`, unless the Design deletes the file", warns)
+        body = GOOD.replace("1. Change the filter.", "1. The file `tests/test_a.py` is removed.")
+        self.assertEqual(bare_warnings(body), ["## Design: `tests/test_a.py` licenses every change to that test "
+                                               "file; name `path::name`, unless the Design deletes the file"])
+
+    def test_it_warns_once_per_token_per_section(self):
+        line = "1. The file `tests/test_a.py` is removed.\n2. The file `tests/test_a.py` is removed."
+        self.assertEqual(len(bare_warnings(GOOD.replace(self.CASE, line))), 1)
+
+    def test_quiet_cases(self):
+        for name, line in (("named test", "1. `tests/test_a.py::test_x` is removed."),
+                           ("folder", "1. `tests/old/` is removed."),
+                           ("not a test file", "1. `app/code.py` is removed."),
+                           ("no word", "1. `tests/test_a.py` gains a case.")):
+            with self.subTest(name):
+                self.assertEqual(bare_warnings(GOOD.replace(self.CASE, line)), [])
+        body = GOOD.replace(self.CASE, "1. The file `tests/test_a.py` is removed.")
+        self.assertFalse([w for w in run(body)[1] if "licenses every change" in w])
+
+
 class CommandLine(unittest.TestCase):
     def call(self, *argv):
         out, err = io.StringIO(), io.StringIO()

@@ -473,6 +473,13 @@ class Verify(unittest.TestCase):
         out = self.verify(answers, cases="1. `tests/test_a.py` gains a case")
         self.assertEqual(out.returncode, 1, out.stdout)
 
+    def test_a_name_holding_the_word_does_not_license_a_weakened_hunk(self):
+        self.two_hunks()
+        out = self.verify("H1\tweaker\tdropped\nH2\tsame\tok\n",
+                          cases="1. `tests/test_a.py` covers `test_when_removed`.")
+        self.assertEqual(out.returncode, 1, out.stdout)
+        self.assertIn("NOT LICENSED", out.stdout)
+
     def renamed(self):
         """test_a.py moved to test_moved.py with one assert dropped: git pairs them as a rename (gogogo#216)."""
         git(self.r.repo, "mv", "tests/test_a.py", "tests/test_moved.py")
@@ -606,6 +613,38 @@ class Verify(unittest.TestCase):
 
 def section(text, start):
     return text.split(f"\n## {start}")[1].split("\n## ")[0]
+
+
+class LicenceWords(unittest.TestCase):
+    """gogogo#252: a line licenses only when its own prose says the word."""
+
+    def tokens(self, line):
+        return guard.licences(body(cases=line))
+
+    def test_a_word_inside_a_name_licenses_nothing(self):
+        self.assertEqual(self.tokens("1. `tests/test_a.py` covers `test_when_removed`."), [])
+
+    def test_a_word_in_a_spaced_code_span_licenses_nothing(self):
+        self.assertEqual(self.tokens("1. `tests/test_a.py` and `remove me`"), [])
+
+    def test_a_word_joined_to_another_licenses_nothing(self):
+        for word in ("unremoved", "prewrite"):
+            with self.subTest(word):
+                self.assertEqual(self.tokens(f"1. `tests/test_a.py` is {word} here."), [])
+
+    def test_each_form_in_prose_licenses(self):
+        for word in ("remove", "removes", "Removed", "rewrite", "Rewrites", "rewritten", "rewriting"):
+            with self.subTest(word):
+                self.assertEqual(self.tokens(f"1. `tests/test_a.py::test_x` {word} here."), ["tests/test_a.py::test_x"])
+
+    def test_the_licence_form_still_licenses(self):
+        line = "1. **Rewrite licensed** (Approvals row 1): rewrite `tests/test_a.py::test_x`: it asserts y."
+        self.assertEqual(self.tokens(line), ["tests/test_a.py::test_x"])
+
+    def test_removing_and_removal_still_license_nothing(self):
+        for word in ("removing", "removal"):
+            with self.subTest(word):
+                self.assertEqual(self.tokens(f"1. `tests/test_a.py` needs {word}."), [])
 
 
 class Structure(unittest.TestCase):

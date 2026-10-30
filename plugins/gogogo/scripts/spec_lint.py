@@ -10,7 +10,8 @@ the human check names real URLs, that Design and Test cases number their items
 (`1.` or `**1.**` at the start of the line) and Files groups its paths, which
 `spec_check.py` reads, that a part of the work in a repo the profile's
 `related_repos` lists cites an issue there, and, as a warning, that each
-`(shipped)` ref on the `**Blocked by:**` line has its reason line. It cannot judge whether the design is right; the
+`(shipped)` ref on the `**Blocked by:**` line has its reason line, and that no
+line licenses a whole test file. It cannot judge whether the design is right; the
 skill's pre-post check does that.
 
 Output: one `error:` or `warning:` line per finding, then `label: apply` or
@@ -21,6 +22,7 @@ Exit codes: 0 no errors, 1 errors found, 2 the profile is missing or unusable.
 Standard library only.
 """
 import argparse
+import fnmatch
 import json
 import re
 import sys
@@ -69,6 +71,14 @@ GROUP = re.compile(r"^(?:-\s+)?\*\*(create|edit|explicitly not in scope)\b[^*]*\
 GROUP_KEYS = {"create": "create", "edit": "edit", "explicitly not in scope": "not_in_scope"}
 BLOCKED_BY = re.compile(r"^\*\*Blocked by:\*\*(.*)$", re.I)
 SHIPPED_REF = re.compile(r"\x60?((?:[\w.-]+/[\w.-]+)?#\d+)\x60?\s*\(shipped\)", re.I)
+LICENSING = re.compile(r"\b(?:remove[sd]?|rewrit(?:e|es|ten|ing))\b", re.I)
+LICENCE_TOKEN = re.compile(r"`([^`\s]+)`")
+CODE_SPAN = re.compile(r"`[^`]*`")
+
+
+def licence_tokens(line):
+    """The backticked tokens a line licenses: none unless its own prose says the word."""
+    return LICENCE_TOKEN.findall(line) if LICENSING.search(CODE_SPAN.sub("", line)) else []
 
 
 def norm(text):
@@ -391,6 +401,19 @@ def lint(body, settings):
         if not any(why.match(text) for text in context):
             warnings.append(f"## Context: {ref} is marked (shipped) with no \"**Why {ref} must ship "
                             "first:**\" line; say what needs it live in production, or drop the mark")
+
+    # --- a line that licenses a whole test file -----------------------------
+    patterns = [p for lane in settings.get("lanes", []) for p in lane.get("tests") or [] if isinstance(p, str)]
+    for title in ("Design", "Test cases"):
+        named = set()
+        for line in by_title.get(title, (0, []))[1]:
+            for token in licence_tokens(line):
+                if "::" in token or token.endswith("/") or token in named:
+                    continue
+                if any(fnmatch.fnmatchcase(token, p) for p in patterns):
+                    named.add(token)
+                    warnings.append(f"## {title}: `{token}` licenses every change to that test file; "
+                                    "name `path::name`, unless the Design deletes the file")
 
     if re.search(r"external unknown", approvals_text, re.I):
         label = label or "an external unknown is open"
