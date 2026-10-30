@@ -320,8 +320,8 @@ by the run* for §8 and §9.
   and end the turn there and nowhere else. Take the issue up again at the
   review's result when it arrives. When the review returns its findings in the
   same turn, go on with them. With no goal active (the plain
-  `"/gogogo:auto-dev"` launch), wait for the review in the foreground as for
-  any other job.
+  `"/gogogo:auto-dev"` launch), print that line and wait for the review in the
+  foreground, without ending the turn (`references/review-wait.md`).
 
 ## 5. Gates
 

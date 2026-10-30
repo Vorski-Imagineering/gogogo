@@ -8,13 +8,18 @@ sentences (CLAUDE.md § Tests); whether it behaves is a scenario run.
     python3 -m unittest tests.test_auto_dev_skill
 """
 
+import json
+import os
 import re
+import subprocess
 import sys
+import tempfile
 import unittest
 from pathlib import Path
 
 SKILL = Path(__file__).resolve().parents[1] / "plugins" / "gogogo" / "skills" / "auto-dev" / "SKILL.md"
 BRANCH = SKILL.parent / "references" / "branch.md"
+REVIEW_WAIT = SKILL.parent / "references" / "review-wait.md"
 sys.path.insert(0, str(SKILL.parents[2] / "scripts"))
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
@@ -135,6 +140,73 @@ class NeverWaits(unittest.TestCase):
         self.assertIn("/goal", rule)
         self.assertIn("background", rule)
         self.assertIn("foreground", rule)
+
+
+class ReviewWait(unittest.TestCase):
+    """gogogo#253: with no goal, a run waits on the forked review's own files."""
+
+    def setUp(self):
+        self.text = REVIEW_WAIT.read_text(encoding="utf-8")
+        self.blocks = re.findall(r"^```bash\n(.*?)^```$", self.text, re.M | re.S)
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        self.tmp = Path(tmp.name)
+
+    def bash(self, script, **env):
+        return subprocess.run(["bash", "-c", script], capture_output=True, text=True, timeout=30,
+                              env={**os.environ, **env}).stdout.strip()
+
+    def test_the_rule_names_the_reference(self):
+        rule = section(SKILL.read_text(encoding="utf-8"), "4. Change, test, review, verify")
+        rule = rule.split("**The review is the one place")[1].split("\n- ")[0]
+        self.assertIn("references/review-wait.md", rule)
+        self.assertIn("foreground", rule)
+
+    def test_the_reference_names_what_it_reads(self):
+        for name in ("forked-skill.json", ".meta.json", "finished", "CLAUDE_CODE_SESSION_ID", "silent"):
+            self.assertIn(name, self.text)
+
+    def test_the_find_command_picks_this_rounds_review(self):
+        folder = self.tmp / ".claude" / "projects" / "slug" / "sid" / "subagents"
+        folder.mkdir(parents=True)
+        older = folder / "agent-old.forked-skill.json"
+        older.write_text("{}")
+        os.utime(older, (1000, 1000))
+        start = self.tmp / "review-start"
+        start.write_text("")
+        os.utime(start, (2000, 2000))
+        script = self.blocks[0].replace("<scratch>", str(self.tmp))
+        self.assertEqual(self.bash(script, HOME=str(self.tmp), CLAUDE_CODE_SESSION_ID="sid"), "")
+        newer = folder / "agent-new.forked-skill.json"
+        newer.write_text("{}")
+        os.utime(newer, (3000, 3000))
+        self.assertEqual(self.bash(script, HOME=str(self.tmp), CLAUDE_CODE_SESSION_ID="sid"),
+                         str(folder / "agent-new"))
+
+    def test_the_wait_command_sees_finished(self):
+        agent = self.tmp / "agent-a"
+        state = agent.with_name("agent-a.meta.json")
+        state.write_text('{"agentType":"x","finished":true}')
+        self.assertEqual(self.bash(self.blocks[1].replace("<agent>", str(agent))), "finished")
+        pattern = re.search(r"grep -Eq '([^']+)'", self.blocks[1]).group(1)
+        self.assertEqual(subprocess.run(["grep", "-Eq", pattern, str(state)]).returncode, 0)
+        state.write_text('{"agentType":"x"}')
+        self.assertEqual(subprocess.run(["grep", "-Eq", pattern, str(state)]).returncode, 1)
+
+    def test_the_reader_prints_the_last_assistant_text(self):
+        def line(role, content):
+            return json.dumps({"message": {"role": role, "content": content}})
+        agent = self.tmp / "agent-a"
+        transcript = agent.with_name("agent-a.jsonl")
+        script = self.blocks[2].replace("<agent>", str(agent))
+        transcript.write_text("\n".join([
+            line("user", [{"type": "tool_result", "content": "x"}]),
+            line("assistant", [{"type": "text", "text": "the findings"}]),
+            line("user", [{"type": "text", "text": "not the findings"}]),
+        ]) + "\n")
+        self.assertEqual(self.bash(script), "the findings")
+        transcript.write_text(line("assistant", [{"type": "tool_use", "name": "Bash"}]) + "\n")
+        self.assertEqual(self.bash(script), "")
 
 
 class Independence(unittest.TestCase):
