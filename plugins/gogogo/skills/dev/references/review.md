@@ -119,7 +119,7 @@ Then the review, by these rules:
    |---|---|---|---|
    | 1 | the change fails the spec or a rule in `CLAUDE.md` | applied | `spec` |
    | 2 | the change breaks something that worked before it | applied, with the case | `regression` |
-   | 3 | a bug, with a concrete case a real run can reach (the reach line, below) | applied. Code: write the test that fails first, see it fail, then fix. What no test reaches (prose, configuration, a script's output): the exact situation or input and the wrong result, reproduced or traced to a `file:line` | `bug` |
+   | 3 | a bug, with a concrete case, unless the reach line below rules it out with evidence | applied. Code: write the test that fails first, see it fail, then fix. What no test reaches (prose, configuration, a script's output): the exact situation or input and the wrong result, reproduced or traced to a `file:line` | `bug` |
    | 4 | a consequence that would be a security hole, lost or corrupted data, or a change the repo's Hard Stop rules require approval for that no Approvals row covers | no concrete case needed: fixed, or the issue stops for a person; an unapproved Hard Stop always stops (§4) | `risk` |
    | 5 | behaviour the spec does not have | applied only when small: touches no Hard Stop item, adds no new user-visible behaviour, setting or message, stays inside the files the spec lists, and has a test. Named in the report under *Added beyond the spec*. Otherwise declined and listed as a follow-up | `added`, or declined as `beyond` |
    | 6 | code, a test or a guard the change has that no spec item, `CLAUDE.md` rule or passing test needs | applied by removing it, when every spec item is still met and the lane's `focused` command for the modules that cover the files touched is still green; otherwise declined as `settled` with the item or test that needs it | `excess`, or declined as `settled` |
@@ -141,10 +141,10 @@ Then the review, by these rules:
    ships, with evidence a reader can open (a `file:line`, a documentation link,
    a record), the finding is test 7 and is declined as `hypothetical`, and its
    Declined line in the report gives that evidence. A claim with no evidence,
-   or simply finding no path, declines nothing: the finding stays test 3. The
-   line never declines a finding that also meets test 1, 2 or 4, so "no client
-   we ship does that" never declines a security hole or lost data. The rule
-   holds under `review=until-clean`.
+   or simply finding no path, declines nothing: the finding stays test 3. A
+   finding that also meets test 1, 2 or 4 needs no line and is never declined
+   by one, so "no client we ship does that" never declines a security hole or
+   lost data. The rule holds under `review=until-clean`.
 3. **Three attempts per finding.** From round 2, a finding that meets tests 1
    to 4 means a correction was wrong; it belongs to the finding that
    correction was for. The second attempt says what the first got wrong and
