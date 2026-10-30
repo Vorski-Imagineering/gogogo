@@ -1,5 +1,5 @@
 ---
 type: regex
 flags: i
-pattern: 'reach line|test 4\b'
+pattern: 'reach[ -]line|\btests? 4\b|\btests? 1\b'
 ---
