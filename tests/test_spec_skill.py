@@ -429,6 +429,14 @@ class ShipWait(unittest.TestCase):
         sentence = " ".join(skill_text().split("A chain across issues", 1)[1].split("Posting sets", 1)[0].split())
         self.assertIn("`references/posting.md` step 7", sentence)
 
+    def test_posting_step_7_names_the_reason_line(self):
+        """gogogo#250: the template of the line a marked ref carries, and the mark where a spec is written."""
+        step = POSTING.read_text(encoding="utf-8").split("\n7. **", 1)[1].split("\n8. **", 1)[0]
+        self.assertIn("**Why <ref> must ship first:**", step)
+        sentence = " ".join(skill_text().split("A chain across issues", 1)[1].split("Posting sets", 1)[0].split())
+        self.assertIn("(shipped)", sentence)
+        self.assertIn("`references/posting.md` step 7", sentence)
+
 
 if __name__ == "__main__":
     unittest.main()

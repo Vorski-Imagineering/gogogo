@@ -122,7 +122,7 @@ order, checking each step before starting the next:
    ```bash
    python3 "${CLAUDE_PLUGIN_ROOT}/scripts/spec_lint.py" <composed file>
    ```
-   Fix every error it reports. A lint error is a rewrite, not a judgement call.
+   Fix every error it reports, and any warning that a `(shipped)` ref has no reason line. A lint error is a rewrite, not a judgement call.
    Once the lint passes:
    1. List the open issues whose body has a command that reads `<N>`:
       ```bash
@@ -172,12 +172,24 @@ order, checking each step before starting the next:
 5. `gh issue edit <N> --body-file <composed file>`.
 6. **Re-read the description** and confirm both the report and the spec are
    there.
-7. **Set the blocked-by links.** A condition that this issue must not merge,
-   or reach an environment, before another issue ships is that issue's ref on
-   the `**Blocked by:**` line followed by `(shipped)`, such as
-   `**Blocked by:** example-org/client-repo#5 (shipped)`. It is never a stop
-   in `## Verification`, an Approvals row, or a step waiting for a person's
-   comment: a gate is for a person's judgement only. For each ref on the
+7. **Set the blocked-by links.** A ref on the spec's `**Blocked by:**` line
+   is marked `(shipped)`, such as
+   `**Blocked by:** example-org/client-repo#5 (shipped)`, only when the
+   blocked work needs that issue live in production: a production
+   measurement, a production data step, a vendor's release on production,
+   or a change here that must not merge, or reach an environment, before
+   that issue is in production. A person saying it must wait for
+   production is enough, and their words are the reason. Work that needs
+   only the blocker's code leaves the ref unmarked, which waits for its
+   merge: shared files, a shared table, "build on top of it", or a check
+   on a pre-merge environment after it merges. Read what the work needs,
+   not the word "ships". When the issue's text leaves it unclear, it is a
+   product choice (`SKILL.md` § *Who decides*). Directly under that line,
+   each marked ref has its own line,
+   `**Why <ref> must ship first:** <what needs it live in production>`,
+   with `<ref>` written as on the `**Blocked by:**` line. Either wait is
+   never a stop in `## Verification`, an Approvals row, or a step waiting
+   for a person's comment: a gate is for a person's judgement only. For each ref on the
    spec's `**Blocked by:**` line in `## Context` (none: skip this step without
    a word), run `<tracker.tool> block <N> --by <ref>`, the ref without its
    `(shipped)` mark (for `shared`,
