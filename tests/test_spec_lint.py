@@ -207,6 +207,19 @@ class HardStopCheck(unittest.TestCase):
         body = GOOD.replace("implement directly.**", "proposal — Schema awaits approval.**")
         self.assertTrue(any("calls the spec a proposal, but every item is answered no" in e for e in errors(body)))
 
+    def test_a_post_first_spec_is_withheld(self):
+        body = GOOD.replace("| Schema | no | no field changes |", "| Schema | yes | the design adds a field |").replace(
+            "implement directly.**", "proposal — Schema awaits approval.**").replace(
+            "| 2026-09-30 | None — every Hard Stop item is no, implement directly. | — | — |",
+            "| 2026-09-30 | Formal sign-off | Post first, not approved yet | Approve |").replace(
+            "Not approved: none", "Not approved: Schema")
+        errs, _, withheld = run(body)
+        self.assertEqual(errs, [])
+        self.assertEqual(withheld, "a Hard Stop awaits approval")
+        errs, _, withheld = run(body.replace("the design adds a field", "see row 1"))
+        self.assertEqual(errs, [])
+        self.assertIsNone(withheld)
+
     def test_proposal_is_valid_and_withholds_the_label(self):
         body = GOOD.replace("| Schema | no |", "| Schema | yes |").replace(
             "implement directly.**", "proposal — Schema awaits approval.**")

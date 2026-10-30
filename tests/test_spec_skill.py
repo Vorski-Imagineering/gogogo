@@ -419,6 +419,27 @@ class GivenNothing(unittest.TestCase):
 
 
 
+class SignOff(unittest.TestCase):
+    """gogogo#247: a person who has decided gets a sign-off, not a go/no-go."""
+
+    def setUp(self):
+        self.text = (SKILL.parent / "references" / "approval-questions.md").read_text(encoding="utf-8")
+
+    def test_the_reference_holds_both_forms(self):
+        numbers = [int(n) for n in re.findall(r"^(\d+)\. \*\*", self.text, re.M)]
+        self.assertEqual(numbers, list(range(1, 11)))
+        for words in ("Formal sign-off", "Post the spec first", "don't approve", "run time", "/gogogo:spec <N>"):
+            self.assertIn(words, self.text)
+
+    def test_the_sentence_still_names_the_reference(self):
+        rounds = section(skill_text(), "Ask in rounds until no forks remain")
+        self.assertIn("references/approval-questions.md", rounds)
+        self.assertIn("sign-off", rounds)
+
+    def test_the_rule_names_no_other_reference(self):
+        self.assertNotIn("references/", self.text)
+
+
 class ShipWait(unittest.TestCase):
     """gogogo#238: "must not merge before X ships" is a marked Blocked-by ref, never a gate."""
 

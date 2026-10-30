@@ -1,4 +1,4 @@
-# /gogogo:spec: an approval question lists its edge cases
+# /gogogo:spec: how an approval question is asked
 
 Part of `/gogogo:spec`. Read it in full. Section names and § numbers here are `SKILL.md`'s.
 
@@ -25,3 +25,27 @@ before they answer.
    cell, so what stays unfixed is in the issue body and not only in the chat.
    A table row is one line: write it there as `Edge cases: <case>; <case>`,
    with no line break and no `|`.
+7. **A sign-off or a go/no-go.** The question is a sign-off only when the
+   person has decided the feature, in their own words on record: in this
+   session, or in the issue's report as their own request to build it. An
+   agent-filed follow-up is not, and neither is a report saying a person
+   agreed to file it. A change that adds run time is never a sign-off: the
+   time is the decision. Anything else is a go/no-go, with "don't approve"
+   as a choice, and rules 8 to 10 do not apply.
+8. **The sign-off's opening and choices.** It opens: "Formal sign-off this
+   repo's rules require, not whether to build <the feature>." Then the
+   decided design, then the edge cases as above. The first choice approves.
+   The second is "Post the spec first, I'll approve after reading". A third
+   may offer a real alternative in the design. None offers not building;
+   a person can still type that.
+9. **Post first.** Its row's Chosen says "Post first, not approved yet". The
+   verdict is the proposal form, the item's Why cell does not use the word
+   "row", and `Not approved:` names the item. Posting then withholds the
+   label and leaves the card. The reply says to run `/gogogo:spec <N>` after
+   reading.
+10. **The return.** `/gogogo:spec <N>` on an issue whose verdict is a
+    proposal from rule 9 asks only the sign-off of rule 8, with its first
+    two choices, and this is not another question round. On approval: add a
+    row, make the verdict `approved` citing it, take the item off
+    `Not approved:`, correct the spec as Posting says, then run Posting
+    steps 8 and 9. On anything else, the proposal stands and nothing moves.
