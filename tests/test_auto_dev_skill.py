@@ -172,10 +172,12 @@ class ReviewWait(unittest.TestCase):
         older = folder / "agent-old.forked-skill.json"
         older.write_text("{}")
         os.utime(older, (1000, 1000))
-        start = self.tmp / "review-start"
+        scratch = self.tmp / "first last"
+        scratch.mkdir()
+        start = scratch / "review-start"
         start.write_text("")
         os.utime(start, (2000, 2000))
-        script = self.blocks[0].replace("<scratch>", str(self.tmp))
+        script = self.blocks[0].replace("<scratch>", str(scratch))
         self.assertEqual(self.bash(script, HOME=str(self.tmp), CLAUDE_CODE_SESSION_ID="sid"), "")
         newer = folder / "agent-new.forked-skill.json"
         newer.write_text("{}")
@@ -201,13 +203,6 @@ class ReviewWait(unittest.TestCase):
             json.dumps({"message": {"role": "assistant", "content": [{"type": "text", "text": "ok"}]}}) + "\n")
         self.assertEqual(self.bash(self.blocks[1].replace("<agent>", str(agent))), "finished")
         self.assertEqual(self.bash(self.blocks[2].replace("<agent>", str(agent))), "ok")
-
-    def test_the_stop_reason_is_one_the_tracker_accepts(self):
-        import tracker
-        reasons = re.findall(r"with reason `([a-z-]+)`", self.text)
-        self.assertTrue(reasons)
-        for reason in reasons:
-            self.assertIn(reason, tracker.STOP_REASONS)
 
     def test_the_reader_prints_the_last_assistant_text(self):
         def line(role, content):

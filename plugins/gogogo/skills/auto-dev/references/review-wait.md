@@ -2,19 +2,21 @@
 
 Part of `/gogogo:auto-dev`. Read it in full. Section names and § numbers here are `SKILL.md`'s. `${CLAUDE_PLUGIN_ROOT}` below is not filled in for you: it is the plugin's folder, the one whose `scripts/` `SKILL.md` names in full.
 
-1. **When.** No goal is active, and the review command returned saying it runs
-   in the background. A review that returns its findings in the same turn needs
-   none of this. These are Claude Code's own files, read here because it gives
-   a forked skill no other handle.
-2. **Before each review round and each restart**, `touch <scratch>/review-start`, then start the
+1. **When.** No goal is active. Rule 2's marker comes first, every time; the rest
+   applies once the review command returned saying it runs in the background. A
+   review that returns its findings in the same turn needs no more of this.
+   These are Claude Code's own files, read here because it gives a forked skill
+   no other handle.
+2. **Before each review round and each restart**, `touch "<scratch>/review-start"`, then start the
    review, then print
    `Waiting on the review (started <HH:MM>); the run resumes when it reports.`
    and go on in the same turn.
-3. **Find the review**, repeated every 15 seconds for at most 2 minutes:
+3. **Find the review**, repeated every 15 seconds for at most 2 minutes, until it
+   prints an `<agent>` whose `<agent>.meta.json` exists:
 
 ```bash
 d="$(ls -d "$HOME"/.claude/projects/*/"$CLAUDE_CODE_SESSION_ID"/subagents 2>/dev/null | head -1)"
-f="$(find "$d" -name 'agent-*.forked-skill.json' -newer <scratch>/review-start 2>/dev/null | head -1)"
+f="$(find "$d" -name 'agent-*.forked-skill.json' -newer "<scratch>/review-start" 2>/dev/null | head -1)"
 echo "${f%.forked-skill.json}"
 ```
 
@@ -33,7 +35,8 @@ sh -c 'n=0; while [ $n -lt 36 ] && ! grep -Eq "\"finished\": *true" "<agent>.met
 ```
 
    Repeat until it says `finished`. After each `waiting`, apply `/gogogo:dev`
-   §5 rule 9, the silent-review check, to `<agent>.jsonl`'s last write time.
+   §5 rule 9, the silent-review check, to `<agent>.jsonl`'s last write time. Its
+   stop also uses reason `review`: the tracker refuses `silent`.
 6. **Read the result**, the last assistant text in the transcript:
 
 ```bash
