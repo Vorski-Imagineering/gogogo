@@ -169,7 +169,7 @@ asking until pre-post check question 1 answers *"none"*.
   option says what changes for people. Name no files, flags or exit codes in a question.
 - An approval question also lists its edge cases and what stays unfixed, and is a sign-off or a go/no-go.
   **REQUIRED REFERENCE:** read `references/approval-questions.md` (in this
-  skill's folder) before asking one.
+  skill's folder) before asking one, and first on an issue whose verdict is a proposal.
 - **Never post a spec that lists open questions.** A spec whose own status is
   "blocked on Q1-Q5" is a questionnaire wearing a deliverable's clothes. The
   forks are not findings to report; they are work you have not finished.
