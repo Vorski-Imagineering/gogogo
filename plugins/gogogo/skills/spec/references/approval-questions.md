@@ -42,15 +42,16 @@ before they answer.
 9. **Post first.** Its row's Chosen says "Post first, not approved yet". The
    verdict is the proposal form, the item's Why cell does not use the word
    "row", and `Not approved:` names the item. Posting then withholds the
-   label and leaves the card. When the card is already in the queue, a run
-   hands it back to a person, since no row approves it, and the reply says so.
-   The reply says to run `/gogogo:spec <N>` after
+   label and leaves the card; an issue already carrying the label has it
+   removed, since the approval promised no run takes it. When the card is in
+   the queue, a run hands it back to a person, and the reply says so. The
+   reply says to run `/gogogo:spec <N>` after
    reading.
 10. **The return.** `/gogogo:spec <N>` on an issue whose verdict is a
     proposal from rule 9 asks only the sign-off of rule 8, with "Not yet, keep
     it as a proposal" as its second choice, and this is not another question
-    round. Read the body again first, and show the person anything changed
-    since it was posted. On approval: add a row, make the verdict `approved`
+    round. Read the body again first: when it no longer meets rule 7, the
+    question is a go/no-go. On approval: add a row, make the verdict `approved`
     citing it, take the item off `Not approved:` (`none` when it was the only
     one), correct the spec as Posting says, then run Posting steps 8 and 9. A
     change the person asks for is made, and rule 7 decides the next question
