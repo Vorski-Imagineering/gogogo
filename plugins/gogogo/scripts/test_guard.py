@@ -27,7 +27,8 @@ the base list nothing. The last line is `test-guard: hunks=<n>`.
 `verify` reads ANSWERS_FILE, one line per item, `H<k><TAB><same|stronger|
 weaker><TAB><reason>`, and the issue body in BODY_FILE. A `weaker` item is
 licensed when a line of the body's `## Test cases` or `## Design` holds a
-backticked token and says "remove" or "rewrit": a token `path` licenses every
+backticked token and says "remove" or "rewrite" (or a form of them) as a whole
+word outside backticks: a token `path` licenses every
 item in that test file, and `path::name` the hunks whose enclosing lines,
 function context or removed lines contain `name` as a whole word; `name` may
 hold further `::`-separated parts, each of which must occur; a token ending in
@@ -60,12 +61,10 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import profile_check  # noqa: E402
-from spec_lint import split_sections  # noqa: E402
+from spec_lint import licence_tokens, split_sections  # noqa: E402
 
 VERDICTS = ("same", "stronger", "weaker")
 HUNK = re.compile(r"^@@ -(\d+)(?:,\d+)? \+\d+(?:,\d+)? @@ ?(.*)$")
-TOKEN = re.compile(r"`([^`\s]+)`")
-LICENSING = re.compile(r"remove|rewrit", re.I)
 
 
 class GitError(Exception):
@@ -207,8 +206,7 @@ def licences(body: str) -> list[str]:
         if title not in ("Test cases", "Design"):
             continue
         for line in lines:
-            if LICENSING.search(line):
-                tokens += TOKEN.findall(line)
+            tokens += licence_tokens(line)
     return tokens
 
 
