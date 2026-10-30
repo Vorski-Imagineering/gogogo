@@ -273,8 +273,8 @@ instead that the step is licensed by Approvals row N, and point at the
 profile's procedure for it. If the user declines the apply row, say so in the
 row and keep the stop in Verification: that is a real answer, not a gap.
 
-A chain across issues is a `**Blocked by:** <ref>, <ref>` line in `## Context`,
-never a gate (`references/posting.md` step 7); Posting sets each link.
+A chain across issues is a `**Blocked by:** <ref>, <ref>` line in `## Context`, never a gate; a ref
+is `(shipped)` only when the work needs it live in production (`references/posting.md` step 7); Posting sets each link.
 
 ## Test cases
 

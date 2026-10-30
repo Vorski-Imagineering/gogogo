@@ -8,8 +8,9 @@ It checks what can be checked mechanically: the sections and their order, the
 Approvals table, that the Hard-stop verdict agrees with its own answers, that
 the human check names real URLs, that Design and Test cases number their items
 (`1.` or `**1.**` at the start of the line) and Files groups its paths, which
-`spec_check.py` reads, and that a part of the work in a repo the profile's
-`related_repos` lists cites an issue there. It cannot judge whether the design is right; the
+`spec_check.py` reads, that a part of the work in a repo the profile's
+`related_repos` lists cites an issue there, and, as a warning, that each
+`(shipped)` ref on the `**Blocked by:**` line has its reason line. It cannot judge whether the design is right; the
 skill's pre-post check does that.
 
 Output: one `error:` or `warning:` line per finding, then `label: apply` or
@@ -66,6 +67,8 @@ AWAITS = re.compile(r"\bproposal\b|\bawaits? approval\b|\bnot approved\b", re.I)
 ITEM = re.compile(r"^\*{0,2}(\d+)[.)]\*{0,2}\s+\S")
 GROUP = re.compile(r"^(?:-\s+)?\*\*(create|edit|explicitly not in scope)\b[^*]*\*\*:?\s*", re.I)
 GROUP_KEYS = {"create": "create", "edit": "edit", "explicitly not in scope": "not_in_scope"}
+BLOCKED_BY = re.compile(r"^\*\*Blocked by:\*\*(.*)$", re.I)
+SHIPPED_REF = re.compile(r"\x60?((?:[\w.-]+/[\w.-]+)?#\d+)\x60?\s*\(shipped\)", re.I)
 
 
 def norm(text):
@@ -368,6 +371,26 @@ def lint(body, settings):
         if not any(cited.search(line) for line in spec_lines):
             label = label or "cross-repo half without an issue"
             warnings.append(f"## Design: {half} has no {repo}#<n> cited; file it in {repo} and cite it")
+
+    # --- the reason for each wait on production ----------------------------
+    # A warning, never an error: dev, auto-dev and human-help run this check on
+    # older specs, which were never asked for the line.
+    context, fenced = [], False
+    for line in by_title.get("Context", (0, []))[1]:
+        if line.lstrip().startswith("```"):
+            fenced = not fenced
+        elif not fenced:
+            context.append(line)
+    refs = {}
+    for line in context:
+        match = BLOCKED_BY.match(line)
+        for ref in SHIPPED_REF.findall(match.group(1)) if match else []:
+            refs.setdefault(ref.lower(), ref)
+    for ref in refs.values():
+        why = re.compile(rf"^\*\*Why \x60?{re.escape(ref)}\x60? must ship first:\*\*\s*\S", re.I)
+        if not any(why.match(text) for text in context):
+            warnings.append(f"## Context: {ref} is marked (shipped) with no \"**Why {ref} must ship "
+                            "first:**\" line; say what needs it live in production, or drop the mark")
 
     if re.search(r"external unknown", approvals_text, re.I):
         label = label or "an external unknown is open"

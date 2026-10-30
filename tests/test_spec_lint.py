@@ -455,6 +455,75 @@ class RelatedRepos(unittest.TestCase):
         self.assertEqual(run(body, RELATED)[2], "a Hard Stop awaits approval")
 
 
+CONTEXT_LINE = "The view filters on the wrong flag (`views.py:12`). Trap: a dead view looks like the path.\n"
+
+
+def with_context(*lines):
+    return GOOD.replace(CONTEXT_LINE, CONTEXT_LINE + "\n" + "\n".join(lines) + "\n")
+
+
+def reason_warnings(body):
+    return [w for w in run(body)[1] if "must ship first" in w]
+
+
+class ShippedReason(unittest.TestCase):
+    """gogogo#250: a `(shipped)` ref says what needs it live in production."""
+
+    def test_a_marked_ref_with_no_reason_warns(self):
+        errs, warns, withheld = run(with_context("**Blocked by:** #5 (shipped)"))
+        self.assertEqual((errs, withheld), ([], None))
+        self.assertIn('## Context: #5 is marked (shipped) with no "**Why #5 must ship first:**" line; '
+                      "say what needs it live in production, or drop the mark", warns)
+
+    def test_a_marked_ref_with_its_reason_is_quiet(self):
+        body = with_context("**Blocked by:** #5 (shipped)",
+                            "**Why #5 must ship first:** the query runs on production data.")
+        self.assertEqual(reason_warnings(body), [])
+
+    def test_an_unmarked_ref_needs_no_reason(self):
+        self.assertEqual(reason_warnings(with_context("**Blocked by:** #5")), [])
+
+    def test_each_marked_ref_needs_its_own_reason(self):
+        body = with_context("**Blocked by:** #5 (shipped), example-org/client-repo#6 (shipped), #7",
+                            "**Why #5 must ship first:** the query runs on production data.")
+        found = reason_warnings(body)
+        self.assertEqual(len(found), 1, found)
+        self.assertIn("example-org/client-repo#6", found[0])
+
+    def test_an_empty_reason_counts_as_none(self):
+        body = with_context("**Blocked by:** #5 (shipped)", "**Why #5 must ship first:**")
+        self.assertEqual(len(reason_warnings(body)), 1)
+
+    def test_only_a_context_line_is_read(self):
+        marked = "**Blocked by:** #5 (shipped)"
+        for name, body in (
+            ("fence in Context", with_context("```", marked, "```")),
+            ("Design", GOOD.replace("1. Change the filter.", f"1. Change the filter.\n\n{marked}")),
+            ("quoted report", GOOD.replace("> The list is empty.", f"> {marked}")),
+            ("mid-sentence", with_context(f"Specs write {marked} for this.")),
+        ):
+            with self.subTest(name):
+                self.assertEqual(reason_warnings(body), [])
+        elsewhere = with_context(marked).replace(
+            "1. Change the filter.", "1. Change the filter.\n\n**Why #5 must ship first:** it measures production.")
+        self.assertEqual(len(reason_warnings(elsewhere)), 1)
+
+    def test_backticks_and_case_still_match(self):
+        body = with_context("**Blocked by:** `Example-Org/Client-Repo#5` (shipped)",
+                            "**Why example-org/client-repo#5 must ship first:** x")
+        self.assertEqual(reason_warnings(body), [])
+        self.assertEqual(len(reason_warnings(with_context("**Blocked by:** `#5` (shipped)"))), 1)
+        body = with_context("**Blocked by:** #5 (shipped)", "**Why `#5` must ship first:** x")
+        self.assertEqual(reason_warnings(body), [])
+
+    def test_a_ref_named_twice_warns_once(self):
+        for lines in (["**Blocked by:** #5 (shipped), #5 (shipped)"],
+                      ["**Blocked by:** #5 (shipped)", "**Blocked by:** #5 (shipped)"],
+                      ["**Blocked by:** Org/Repo#5 (shipped), org/repo#5 (shipped)"]):
+            with self.subTest(lines):
+                self.assertEqual(len(reason_warnings(with_context(*lines))), 1)
+
+
 class CommandLine(unittest.TestCase):
     def call(self, *argv):
         out, err = io.StringIO(), io.StringIO()
@@ -482,6 +551,18 @@ class CommandLine(unittest.TestCase):
             code, _, err = self.call(str(good), "--profile", str(Path(tmp) / "nope.md"))
             self.assertEqual(code, 2)
             self.assertIn("no file at", err)
+
+    def test_a_missing_reason_changes_neither_exit_nor_label(self):
+        """What dev, auto-dev and human-help read: an older spec is not handed back for this line."""
+        with tempfile.TemporaryDirectory() as tmp:
+            profile = Path(tmp) / "dev-process.md"
+            profile.write_text(COMPLETE.replace('items = ["schema", "auth"]', 'items = ["Schema", "Auth / permissions"]'))
+            body = Path(tmp) / "body.md"
+            body.write_text(with_context("**Blocked by:** #5 (shipped)"))
+            code, out, _ = self.call(str(body), "--profile", str(profile))
+            self.assertEqual(code, 0)
+            self.assertIn("warning: ## Context: #5 is marked (shipped)", out)
+            self.assertEqual(out.strip().splitlines()[-1], "label: apply")
 
 
 if __name__ == "__main__":
