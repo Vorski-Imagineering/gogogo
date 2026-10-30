@@ -168,7 +168,7 @@ class ReachLine(unittest.TestCase):
 
     def test_the_reach_line_is_in_the_review(self):
         self.assertIn("**The reach line.**", self.text)
-        self.assertLess(self.text.index("| 7 | anything else"), self.text.index("**The reach line.**"))
+        self.assertLess(self.text.index(self.rows[7]), self.text.index("**The reach line.**"))
 
     def test_the_table_names_it_on_test_3_only(self):
         for row in (3, 7):
