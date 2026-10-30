@@ -73,7 +73,7 @@ BLOCKED_BY = re.compile(r"^\*\*Blocked by:\*\*(.*)$", re.I)
 SHIPPED_REF = re.compile(r"\x60?((?:[\w.-]+/[\w.-]+)?#\d+)\x60?\s*\(shipped\)", re.I)
 LICENSING = re.compile(r"\b(?:remove[sd]?|rewrit(?:e|es|ten|ing))\b", re.I)
 LICENCE_TOKEN = re.compile(r"`([^`\s]+)`")
-CODE_SPAN = re.compile(r"`[^`]*`")
+CODE_SPAN = re.compile(r"``.*?``|`[^`]*`")
 
 
 def licence_tokens(line):

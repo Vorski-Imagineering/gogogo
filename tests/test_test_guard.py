@@ -627,6 +627,9 @@ class LicenceWords(unittest.TestCase):
     def test_a_word_in_a_spaced_code_span_licenses_nothing(self):
         self.assertEqual(self.tokens("1. `tests/test_a.py` and `remove me`"), [])
 
+    def test_a_word_in_a_double_backtick_span_licenses_nothing(self):
+        self.assertEqual(self.tokens("1. `` The file `tests/test_a.py` is removed. ``"), [])
+
     def test_a_word_joined_to_another_licenses_nothing(self):
         for word in ("unremoved", "prewrite"):
             with self.subTest(word):
