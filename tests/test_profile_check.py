@@ -968,6 +968,11 @@ class SchemaDoc(unittest.TestCase):
             row = next(line for line in doc.splitlines() if line.startswith(f"| `{path}` |"))
             self.assertEqual(row.split("|")[4].strip(), pc.FIELDS[path][2], path)
 
+    def test_doc_and_checker_describe_environments_the_same(self):
+        doc = (PLUGIN / "references" / "profile-schema.md").read_text()
+        row = next(line for line in doc.splitlines() if line.startswith("| `environments` |"))
+        self.assertEqual(row.split("|")[4].strip(), pc.FIELDS["environments"][2])
+
     def test_doc_and_checker_describe_independence_the_same(self):
         doc = (PLUGIN / "references" / "profile-schema.md").read_text()
         row = next(line for line in doc.splitlines() if line.startswith("| `independence` |"))

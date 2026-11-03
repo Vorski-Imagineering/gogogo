@@ -122,6 +122,12 @@ class LocalSkillsAndClaudeMd(unittest.TestCase):
         self.assertEqual(levels(rep, "local skills"), ["WARN"])
         self.assertIn("auto-test", rep.rows[0]["detail"])
 
+    def test_a_local_roadmap_skill_warns(self):
+        rep = sc.Report()
+        sc.check_local_skills(repo({".claude/skills/roadmap/SKILL.md": "x"}), rep)
+        self.assertEqual(levels(rep, "local skills"), ["WARN"])
+        self.assertIn("roadmap", rep.rows[0]["detail"])
+
     def test_a_local_log_review_skill_warns(self):
         rep = sc.Report()
         sc.check_local_skills(repo({".claude/skills/log-review/SKILL.md": "x"}), rep)
