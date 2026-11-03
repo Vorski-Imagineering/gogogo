@@ -122,6 +122,18 @@ class LocalSkillsAndClaudeMd(unittest.TestCase):
         self.assertEqual(levels(rep, "local skills"), ["WARN"])
         self.assertIn("auto-test", rep.rows[0]["detail"])
 
+    def test_a_local_roadmap_skill_warns(self):
+        rep = sc.Report()
+        sc.check_local_skills(repo({".claude/skills/roadmap/SKILL.md": "x"}), rep)
+        self.assertEqual(levels(rep, "local skills"), ["WARN"])
+        self.assertIn("roadmap", rep.rows[0]["detail"])
+
+    def test_a_local_log_review_skill_warns(self):
+        rep = sc.Report()
+        sc.check_local_skills(repo({".claude/skills/log-review/SKILL.md": "x"}), rep)
+        self.assertEqual(levels(rep, "local skills"), ["WARN"])
+        self.assertIn("log-review", rep.rows[0]["detail"])
+
     def test_claude_md_without_a_pointer_warns(self):
         rep = sc.Report()
         sc.check_claude_md(repo({"CLAUDE.md": "# x\n"}), rep)
@@ -161,6 +173,27 @@ class ProfileSkills(unittest.TestCase):
         # The table alone fails the profile check: the hint names the section it also needs.
         for word in ("[sentry]", "## Sentry", "§ Sentry"):
             self.assertIn(word, hint)
+
+    def test_a_profile_without_production_logs_is_info_not_fail(self):
+        # log-review is opt-in by the production environment's logs, not by a table.
+        import profile_check
+        from test_profile_check import COMPLETE
+        settings, sections = profile_check.split_profile(COMPLETE)
+        for env in settings["environments"]:
+            env.pop("logs", None)
+        rows = self.rows(settings, sections)
+        row = [r for r in rows if r["check"] == "profile for /gogogo:log-review"]
+        self.assertEqual([r["level"] for r in row], ["INFO"])
+        self.assertNotIn("FAIL", [r["level"] for r in rows])
+        for word in ("logs", "§ Environments"):
+            self.assertIn(word, row[0]["detail"])
+
+    def test_a_profile_with_production_logs_checks_log_review(self):
+        import profile_check
+        from test_profile_check import COMPLETE
+        settings, sections = profile_check.split_profile(COMPLETE)
+        rows = self.rows(settings, sections)
+        self.assertEqual([r["level"] for r in rows if r["check"] == "profile for /gogogo:log-review"], ["PASS"])
 
     def test_a_profile_with_auto_test_is_checked(self):
         import profile_check
