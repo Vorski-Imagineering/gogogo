@@ -8,10 +8,10 @@ lines (the settings), followed by `## ` sections (project knowledge the skills
 point at). A skill runs this before doing anything else, so a missing setting
 is a named error instead of a guess.
 
-With no --for it checks what every skill needs, except that each opt-in skill
-in `OPT_IN` is checked only when the profile has that skill's table: `auto-test`
-with [auto_test], and the other with the table `OPT_IN` names for it. A repo
-that never adopted one still passes.
+With no --for it checks what every skill needs, except an opt-in skill, which
+is checked only once the profile adopts it (`adopted`): `auto-test` and the
+other skills in `OPT_IN` by their table, and `log-review` by a `logs` entry on
+the production environment. A repo that never adopted one still passes.
 
 Exit codes: 0 ok (warnings allowed), 2 no profile file, 3 profile unreadable or
 incomplete. Problems go to stderr, one per line, each naming the field.
@@ -45,9 +45,10 @@ STATUS = "status"
 IDEA = "idea"
 HUMAN = "human-help"
 SENTRY = "sentry-debug"
-SKILLS = (SPEC, ONE, LOOP, TEST, TECH, ROADMAP, STATUS, IDEA, HUMAN, SENTRY)
+LOG = "log-review"
+SKILLS = (SPEC, ONE, LOOP, TEST, TECH, ROADMAP, STATUS, IDEA, HUMAN, SENTRY, LOG)
 # Skills a repo adopts by adding a table: checked with no --for only when the
-# profile has it.
+# profile has it. log-review is adopted by an environment's `logs`; see adopted().
 OPT_IN = {TEST: "auto_test", SENTRY: "sentry"}
 
 # Dotted path -> (type, skills that require it, one-line meaning).
@@ -68,7 +69,7 @@ FIELDS = {
     "tracker.columns.needs_human": (str, (), "Column of an issue stopped for a person: an unreviewed fix, "
                                     "a decision or Hard Stop found mid-change, or verification that gave up. "
                                     "Optional; absent means the in_progress column."),
-    "environments": (list, SKILLS, "Where code runs: name, roles, and url/serves/reached_by/data/writes."),
+    "environments": (list, SKILLS, "Where code runs: name, roles, and url/serves/reached_by/data/writes/logs."),
     "stages": (list, (ONE, LOOP, TEST), "The path a change takes after it merges: code_is, column, environment."),
     "related_repos": (list, (), "Other repos one product is built with: repo, board, merged_columns, shipped_columns, half."),
     "hard_stops.source": (str, SKILLS, "Where the repo's Hard Stop rules live (file#anchor)."),
@@ -318,6 +319,9 @@ def _check_environments(settings):
             if role not in ROLES:
                 errors.append(f"environments[{i}] ({name}): '{role}' is not one of {', '.join(ROLES)}")
         roles_seen.update(roles)
+        if "logs" in env and not (isinstance(env["logs"], str) and env["logs"].strip()):
+            errors.append(f"environments[{i}] ({name}): logs must be text: a command, a log path, "
+                          "or the repo doc that says how to read them")
     # A repo may have no pre-production environment; it always has the other two.
     for role in ("pre-merge", "production"):
         if names and role not in roles_seen:
@@ -383,6 +387,24 @@ def _check_stages(settings):
     if handback.get("reporter") == "trailer" and not tags:
         warnings.append("handback.reporter: 'trailer', but no stage has a tag, so nothing assigns the reporter")
     return errors, warnings
+
+
+def production_logs(settings):
+    """The `logs` of the environment with the production role, or None."""
+    environments = settings.get("environments")
+    for env in environments if isinstance(environments, list) else []:
+        if isinstance(env, dict) and "production" in (env.get("roles") or []) and env.get("logs"):
+            return env["logs"]
+    return None
+
+
+def adopted(skill, settings):
+    """True when the profile has taken up this skill. Only the opt-in ones can be False."""
+    if skill in OPT_IN:
+        return OPT_IN[skill] in settings
+    if skill == LOG:
+        return production_logs(settings) is not None
+    return True
 
 
 def environment(settings, name):
@@ -475,7 +497,7 @@ def check(settings, sections, skill=None, root=None):
     if skill:
         wanted = (skill,)
     else:
-        wanted = tuple(s for s in SKILLS if s not in OPT_IN or OPT_IN[s] in settings)
+        wanted = tuple(s for s in SKILLS if adopted(s, settings))
 
     raw, settings = settings, effective(settings)
     for path, (_, issue) in DEFAULTS.items():
@@ -554,6 +576,9 @@ def check(settings, sections, skill=None, root=None):
         errors.append("release.major: must be 1 or more")
     if TEST in wanted:
         errors.extend(_check_auto_test(settings, sections))
+    if LOG in wanted and production_logs(settings) is None:
+        errors.append("environments: the production environment has no logs. log-review reads "
+                      "production's logs as that setting says (a command, a log path, or a repo doc)")
 
     for path in _leaf_paths(settings):
         if path in RETIRED:
@@ -591,7 +616,7 @@ def main(argv=None):
     parser.add_argument("--for", dest="skill", choices=SKILLS,
                         help="check only what this skill needs (default: every skill, and "
                              + ", ".join(f"{s} only when the profile has [{t}]" for s, t in OPT_IN.items())
-                             + ")")
+                             + f", {LOG} only when the production environment has logs)")
     parser.add_argument("--path", help=f"profile file (default: the nearest {DEFAULT_PATH} at or "
                                        "above this folder, within the repo)")
     parser.add_argument("--show", action="store_true", help="print the settings as JSON on stdout")

@@ -78,6 +78,7 @@ name = "production"
 roles = ["production"]
 url = "https://app.example.org"
 writes = "only through the app's own UI, inside the sandbox"
+logs = "docs/ops/logs.md"
 
 [[stages]]
 code_is = "merged to main"
@@ -588,6 +589,8 @@ class Environments(unittest.TestCase):
                 continue  # auto-test is opt-in; this repo has not opted in
             if skill == pc.SENTRY and "sentry" not in settings:
                 continue  # so is sentry-debug, by a [sentry] table (gogogo#204)
+            if skill == pc.LOG and not pc.adopted(pc.LOG, settings):
+                continue  # and log-review, by production's logs
             self.assertEqual(pc.check(settings, sections, skill), ([], []), skill)
 
 
@@ -797,6 +800,55 @@ class Sentry(unittest.TestCase):
         rest = {k: v for k, v in sections.items() if k != "Sentry"}
         self.assertIn("section '## Sentry': missing", pc.check(settings, rest)[0])
         self.assertIn("section '## Sentry': missing", pc.check(settings, rest, pc.SENTRY)[0])
+
+
+class LogReview(unittest.TestCase):
+    """/gogogo:log-review reads the production environment's `logs`; a repo without it never adopted it."""
+
+    def production(self, settings):
+        return next(e for e in settings["environments"] if "production" in e["roles"])
+
+    def without_logs(self):
+        settings, sections = parse()
+        self.production(settings).pop("logs")
+        return settings, sections
+
+    def test_without_logs_every_check_passes_but_log_review_is_not_adopted(self):
+        settings, sections = self.without_logs()
+        self.assertFalse(pc.adopted(pc.LOG, settings))
+        self.assertEqual(pc.check(settings, sections), ([], []))
+
+    def test_for_log_review_without_logs_names_the_production_environment(self):
+        settings, sections = self.without_logs()
+        errors, _ = pc.check(settings, sections, pc.LOG)
+        self.assertEqual(len(errors), 1, errors)
+        self.assertTrue(errors[0].startswith("environments: the production environment has no logs"), errors)
+
+    def test_logs_on_another_environment_do_not_adopt_it(self):
+        settings, sections = self.without_logs()
+        settings["environments"][0]["logs"] = "journalctl -u app"
+        self.assertFalse(pc.adopted(pc.LOG, settings))
+        self.assertTrue(pc.check(settings, sections, pc.LOG)[0])
+
+    def test_logs_must_be_text(self):
+        settings, sections = parse()
+        self.assertEqual(pc.production_logs(settings), "docs/ops/logs.md")
+        for bad in ("  ", ["a.log"], 3):
+            self.production(settings)["logs"] = bad
+            errors, _ = pc.check(settings, sections)
+            self.assertTrue(any(e.startswith("environments[1] (production): logs must be text") for e in errors),
+                            (bad, errors))
+
+    def test_show_keeps_logs(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            profile = Path(tmp) / "dev-process.md"
+            profile.write_text(COMPLETE)
+            out = io.StringIO()
+            with redirect_stdout(out), redirect_stderr(io.StringIO()):
+                code = pc.main(["--for", "log-review", "--path", str(profile), "--show"])
+        self.assertEqual(code, pc.EXIT_OK)
+        shown = json.loads(out.getvalue())["settings"]["environments"]
+        self.assertEqual([e.get("logs") for e in shown], [None, "docs/ops/logs.md"])
 
 
 class FrontMatter(unittest.TestCase):

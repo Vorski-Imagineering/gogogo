@@ -48,7 +48,7 @@ BRANCH_RULES_CHECK = "code repo: branch rules"
 REPLACED_LOCAL_SKILLS = [
     "spec-to-issue", "spec", "dev", "auto-dev", "fix-issue", "fix-reported-issue",
     "gogogo-auto-dev", "auto-issue-gogo", "wrap-up", "gogogo-auto-test",
-    "auto-test", "roadmap", "update-milestone-doc",
+    "auto-test", "roadmap", "update-milestone-doc", "log-review",
 ]
 
 
@@ -853,7 +853,7 @@ def check_board_origin(cards, own_repos, queue, rep):
 
 
 def check_profile_skills(settings, sections, rep):
-    """One row per skill. An opt-in skill (profile_check.OPT_IN) whose table the profile lacks is INFO."""
+    """One row per skill. An opt-in skill the profile has not adopted (profile_check.adopted) is INFO."""
     for skill in profile_check.SKILLS:
         table = profile_check.OPT_IN.get(skill)
         if table and table not in settings:
@@ -863,6 +863,11 @@ def check_profile_skills(settings, sections, rep):
             rep.info(f"profile for /gogogo:{skill}",
                      f"not set up: add [{table}] and {' and '.join(f'## {t}' for t in own)} to use it "
                      f"(references/profile-schema.md § {anchor})")
+            continue
+        if not profile_check.adopted(skill, settings):
+            rep.info(f"profile for /gogogo:{skill}",
+                     "not set up: give the production environment logs, saying how to read them, to use it "
+                     "(references/profile-schema.md § Environments)")
             continue
         errors, warnings = profile_check.check(settings, sections, skill)
         if errors:
