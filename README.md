@@ -328,6 +328,7 @@ rebased.
 | `/gogogo:roadmap` | Keeps a roadmap document's status marks in step with the board: re-derives every row's mark from the issue's state and column, fixes the notes the change made stale, and commits the document, opening a PR for it when the roadmap shares the repo. A section whose heading links a GitHub milestone is kept in step with it: it proposes the milestone changes, and applies only the ones you approve. |
 | `/gogogo:auto-test` | Tests each shipped issue on the environment where a person confirms fixes, and records PASS, FAIL or NEEDS HUMAN on the issue. `--triage-only` lists what it would test or skip and changes nothing. |
 | `/gogogo:sentry-debug` | Read-only Sentry debugging and weekly report through the Sentry MCP, with each repo's org, projects and release format from its profile's `[sentry]` table. |
+| `/gogogo:log-review` | Reads production's logs, as its environment's `logs` setting says, and turns them into tracker issues: one per root cause, a verdict on every open one each run, nothing closed, and a dated run log. Read-only. |
 
 A session started or resumed in a repo with a profile opens with a one-line
 status from the plugin's own hook (the repo's independence level, coloured in
