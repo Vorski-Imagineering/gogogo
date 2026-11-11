@@ -10,7 +10,9 @@ guards**.
 
 When a lane reads a page, it reads back real content: text, an attribute, an
 element's presence or absence. A screenshot is never an assertion. Nobody diffs
-it and it passes forever.
+it and it passes forever. A layout case also checks overflow: whether a child's
+extent reaches outside its box, or a box of zero or near-zero width with
+visible overflow, so the value check catches what the eye would.
 
 ## "No evidence" must fail, not pass
 

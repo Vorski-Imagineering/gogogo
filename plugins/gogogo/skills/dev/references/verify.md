@@ -9,6 +9,7 @@ Part of `/gogogo:dev`. Read it in full. Section names and § numbers here are `S
 - A lane passes on its command's own exit status
 - The tests the change touched, compared
 - The real thing, on real data
+- Look at layout too
 
 Work through the profile's `verify.rungs` in order, in the environments
 `verify.agent` names. Each rung sees something the one below it cannot. Two are
@@ -89,5 +90,15 @@ pre-merge environment and confirm the reported behaviour is gone. Hard-reload
 rather than trusting a cached bundle. Read back real content (text, an
 attribute, an element's presence), never a screenshot. Close anything you
 opened that holds a resource (a room, a camera, a browser left running).
+
+**Look at layout too.** When the change touches a stylesheet (`.css`, `.scss`,
+`.sass`, `.less`) or a file that renders a page's markup (`.html`, `.htm`, or a
+template or component file, named in the report), also look at the screenshot
+of each browser case after its values pass; a case whose runner kept none is
+reported as having none. Something wrong in a screenshot is a defect: fix it,
+add a value check that fails without the fix, and run the case again. A
+screenshot never passes a case on its own; the value read is still the check.
+Screenshots stay in the run's folder and are never committed or posted. The
+report's **Screenshots looked at** part says what each one showed.
 
 "Done" means an executed path. A green suite alone is "written", not "done".
