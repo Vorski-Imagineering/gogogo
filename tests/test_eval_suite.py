@@ -45,6 +45,7 @@ CASES = {
     "setup-connected-message", "setup-leaves-out-plugin-steps",
     "setup-machine-has-bot",
     "idea-files-upstream-checked",
+    "idea-keeps-a-committed-link-path",
     "auto-dev-sends-event-json",
     "auto-dev-resends-refused-event",
     "auto-dev-waits-until-shipped", "dev-shipped-ref-goes-to-queue", "dev-shipped-ref-without-link",

@@ -107,7 +107,11 @@ draft, and again on the whole draft after every change. Remove:
 
 - any path outside this checkout: absolute (`/Users/`, `/home/`, `/tmp/`,
   `/private/`, `C:\`), home-relative (`~/`), or into another checkout. A path
-  inside this checkout is written relative to its root, and is kept;
+  inside this checkout is written relative to its root, and is kept. So is a
+  path through a link this repo commits: one whose first segment, or any
+  leading folder, `git ls-files -s` lists with mode `120000`. Every segment of
+  such a path still answers to the names rule below. A link git does not list
+  is a path into another checkout;
 - every repo, project, client, product or folder name from outside this
   checkout, in any form (`owner/repo`, a bare name, a folder), except
   `tracker.issues_repo`, `tracker.code_repo`, and tools and products anyone

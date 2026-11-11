@@ -122,5 +122,14 @@ class Skill(unittest.TestCase):
         self.assertIsNone(re.search(PROJECT_NAMES, skill_text(), re.I))
 
 
+
+class CommittedLink(unittest.TestCase):
+    def test_public_trackers_keep_a_path_through_a_committed_link(self):
+        # gogogo#262 case 1
+        step = SKILL.read_text(encoding="utf-8").split("\n## 3. Public trackers")[1].split("\n## ")[0]
+        for name in ("git ls-files -s", "120000"):
+            self.assertIn(name, step)
+
+
 if __name__ == "__main__":
     unittest.main()
