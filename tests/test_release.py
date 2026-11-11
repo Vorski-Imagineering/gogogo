@@ -295,6 +295,7 @@ class Announce(ReleaseRepo):
             if not dry_run:
                 print("acme/issues#7: In Dev -> In Production")
                 print("acme/issues#9: no linked commit; left in In Dev")
+                print("acme/issues#10: reporter not assigned")
             return self.sync_code
         self.sync_code = 0
 
@@ -511,7 +512,8 @@ class Announce(ReleaseRepo):
         self.releases.clear()
         self.fail.add("edit")
         code, lines, _ = self.announce(profile=self.messages_on())
-        self.assertEqual(lines[2], "notify: sent; not marked (edit refused)")
+        self.assertEqual((lines[2], lines[-1]), ("notify: sent; not marked (edit refused)",
+                                                  "announce: deploy-3 release=created sync=moved 1 notify=sent"))
         self.fail.discard("edit")
         self.releases.clear()
         self.sync_code = 2
@@ -536,9 +538,9 @@ class Announce(ReleaseRepo):
         self.assertIn("nothing to compare with", self.sent[-1])
 
     def test_stdin_is_given_back_and_a_tag_is_required(self):
-        saved = sys.stdin
-        self.announce(profile=self.messages_on())
-        self.assertIs(sys.stdin, saved)
+        with mock.patch.object(sys, "stdin", io.StringIO("")) as saved:
+            self.announce(profile=self.messages_on())
+            self.assertIs(sys.stdin, saved)
         code, _, err = self.run_main("announce")
         self.assertEqual(code, 2)
         self.assertIn("the following arguments are required: --tag", err)
