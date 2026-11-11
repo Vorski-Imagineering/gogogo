@@ -172,7 +172,7 @@ class DocsCheck(unittest.TestCase):
                                        "ftp://mirror.example.org/tmp/p, http://[::1]/tmp/x and pkg@beta.rc.1.\n"
                                        "[Guide](/docs/home/index.md), GET /api/v1/Users/{id}, /srv/www/tmp/uploads/, "
                                        "https://en.wikipedia.org/wiki/X_(y)/tmp/z\n"
-                                       "${HOME}/tmp/build, {project}/tmp/cache, %TEMP%/tmp/x, GET /users/42/orders, /Home/Index/, ABC:\\x\n",
+                                       "${HOME}/tmp/build, {project}/tmp/cache, %TEMP%/tmp/x, GET /users/42/orders, /Home/Index/, ABC:\\x, abc:\\x, 1c:\\x\n",
                    "docs/home/index.md": "x\n"},
                   docs='[docs]\npublic = "docs/public"\n')
         code, lines, _ = self.run_it()
