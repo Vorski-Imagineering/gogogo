@@ -171,7 +171,9 @@ class DocsCheck(unittest.TestCase):
                                        "Edit `src/home/page.tsx`, [Home](../home/index.md), app/Users/list.tsx, "
                                        "ftp://mirror.example.org/tmp/p, http://[::1]/tmp/x and pkg@beta.rc.1.\n"
                                        "[Guide](/docs/home/index.md), GET /api/v1/Users/{id}, /srv/www/tmp/uploads/, "
-                                       "https://en.wikipedia.org/wiki/X_(y)/tmp/z\n",
+                                       "https://en.wikipedia.org/wiki/X_(y)/tmp/z\n"
+                                       "${HOME}/tmp/build, {project}/tmp/cache, %TEMP%/tmp/x, **/tmp/, src/**/home/, "
+                                       "https://x.example/c++/tmp/\n",
                    "docs/home/index.md": "x\n"},
                   docs='[docs]\npublic = "docs/public"\n')
         code, lines, _ = self.run_it()
@@ -180,11 +182,11 @@ class DocsCheck(unittest.TestCase):
     def test_an_absolute_path_under_another_folder(self):
         self.repo({"docs/public/p.md": "Cache in /private/tmp/x\nLogs in /var/tmp/x\nOpen /mnt/c/Users/me\n"
                                        "[/home/me/app](setup.md)\n**/home/me/app**\n_/var/tmp/x_\n{/tmp/x}\n"
-                                       "https://x.example/?dir=/home/me\n"},
+                                       "https://x.example/?dir=/home/me\n*/tmp/cache*\n"},
                   docs='[docs]\npublic = "docs/public"\n')
         code, lines, _ = self.run_it()
         self.assertEqual(self.findings(lines, "public"), [
-            f"public docs/public/p.md:{n}: holds an absolute path" for n in range(1, 9)])
+            f"public docs/public/p.md:{n}: holds an absolute path" for n in range(1, 10)])
 
     def test_a_docs_folder_outside_the_repo_is_reported_not_a_crash(self):
         outside = Path(tempfile.mkdtemp())
