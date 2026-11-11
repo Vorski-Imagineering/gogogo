@@ -71,7 +71,7 @@ class DocsCheck(unittest.TestCase):
         self.assertEqual(self.findings(lines, "index"), ["index docs/b.md:1: not linked from docs/README.md"])
 
     def test_a_missing_backticked_path_but_not_a_placeholder_or_glob(self):
-        self.repo({"docs/a.md": "See `plugins/x/gone.py`, `<scratch>/x`, `tests/*`, `plugins/` and `/gogogo:dev`.\n"
+        self.repo({"docs/a.md": "See `plugins/x/gone.py`, `plugins/<name>.py`, `plugins/*.py`, `plugins/` and `/gogogo:dev`.\n"
                                 "```\n`plugins/in/a/fence.py`\n```\n"})
         code, lines, _ = self.run_it()
         self.assertEqual(code, 1)
@@ -113,8 +113,9 @@ class DocsCheck(unittest.TestCase):
         plain_code, plain, _ = self.run_it()
         code, lines, _ = self.run_it("--json")
         data = json.loads("\n".join(lines))
-        self.assertEqual(code, plain_code)
+        self.assertEqual((code, plain_code), (1, 1))
         self.assertEqual(data["files"], 2)
+        self.assertEqual(len(data["findings"]), 1)
         self.assertEqual([f"{f['kind']} {f['file']}:{f['line']}: {f['detail']}" for f in data["findings"]], plain[:-1])
 
     def test_an_unreadable_profile_stops(self):
