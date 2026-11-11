@@ -241,7 +241,7 @@ def _texts(item: dict) -> list[str]:
 
 def bare_matches(found: list[dict], tokens: list[str]) -> dict[str, list[str]]:
     """Each bare test name, and the ids of the changed hunks that hold it as a whole word."""
-    return {t: [i["id"] for i in found if any(_has_word(x, t) for x in _texts(i))]
+    return {t: [i["id"] for i in found if i["kind"] == "changed" and any(_has_word(x, t) for x in _texts(i))]
             for t in dict.fromkeys(tokens) if BARE.match(t)}
 
 

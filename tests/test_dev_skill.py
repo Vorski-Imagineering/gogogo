@@ -92,7 +92,7 @@ class ExitStatus(unittest.TestCase):
         step = re.search(r"^5\. Exit 1:.*?(?=^6\. )", moved(DEV_VERIFY), re.S | re.M).group(0)
         stop, _, rest = step.partition("Otherwise")
         self.assertIn("restore what the test guarded", rest)
-        for name in ("`tests`", "§8"):
+        for name in ("`tests`", "§8", "quot"):
             self.assertIn(name, stop, "the quoted stop comes before the restore, not after it")
 
     def test_do_not_chain_a_commit_on_piped_output(self):

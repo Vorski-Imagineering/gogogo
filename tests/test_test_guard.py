@@ -689,6 +689,16 @@ class Verify(unittest.TestCase):
         self.assertEqual(out.returncode, 1, out.stdout + out.stderr)
         self.assertEqual(out.stdout.count("(bare name test_parse matches 2 tests)"), 2, out.stdout)
 
+    def test_a_bare_file_name_never_licenses_its_deleted_file(self):
+        # Design 2.2: a bare token never licenses a deleted item, even one it names as a file.
+        self.r.at_base("tests/smoke", "check one\n")
+        (self.r.repo / "tests/smoke").unlink()
+        self.r.commit("drop the runner")
+        out = self.verify_bare("1. `smoke` removed", 1)
+        self.assertEqual(out.returncode, 1, out.stdout + out.stderr)
+        self.assertIn("H1  NOT LICENSED", out.stdout)
+
+
 def section(text, start):
     return text.split(f"\n## {start}")[1].split("\n## ")[0]
 
