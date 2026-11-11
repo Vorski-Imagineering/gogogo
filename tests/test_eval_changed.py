@@ -11,6 +11,7 @@ return a given exit code, and records the arguments it was called with.
 import contextlib
 import io
 import json
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -240,10 +241,14 @@ class Lane(unittest.TestCase):
             if list(args[:3]) == ["git", "worktree", "remove"]:
                 return subprocess.CompletedProcess(args, 128, "", "locked")
             return real(args, *rest, **kw)
+        other = Path(self.tmp.name + "-other")
+        real(["git", "worktree", "add", "--detach", "--quiet", str(other)], cwd=self.root, check=True)
+        shutil.rmtree(other)  # someone else's worktree, its folder missing for now: not this run's to clear
         with mock.patch.object(eval_changed.subprocess, "run", run):
             self.run_lane(result=self.failing(), code=1, base=self.base_run(0.33))
         listed = real(["git", "worktree", "list"], cwd=self.root, capture_output=True, text=True).stdout
-        self.assertEqual(len(listed.splitlines()), 1, listed)
+        self.assertEqual(len(listed.splitlines()), 2, listed)
+        self.assertIn(str(other), listed)
 
     def test_the_base_worktree_is_taken_down(self):
         write(self.root, "plugins/gogogo/skills/dev/SKILL.md", "changed\n")

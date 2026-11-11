@@ -118,8 +118,8 @@ def base_score(root: Path, fork: str, name: str) -> tuple[float | None, float]:
         tree, out = Path(tmp) / "base", Path(tmp) / "base.json"
         try:
             _git(["worktree", "add", "--detach", "--quiet", str(tree), fork], root)
+            admin = Path(_git(["rev-parse", "--absolute-git-dir"], tree).strip())
         except subprocess.CalledProcessError:
-            subprocess.run(["git", "worktree", "prune"], cwd=root, capture_output=True)  # a half-made entry
             return None, 0.0
         try:
             _run_eval(["claude", "plugin", "eval", str(tree / PLUGIN), *FIXED, "--ablation", "none",
@@ -128,8 +128,7 @@ def base_score(root: Path, fork: str, name: str) -> tuple[float | None, float]:
         finally:
             if subprocess.run(["git", "worktree", "remove", "--force", str(tree)], cwd=root,
                               capture_output=True).returncode != 0:
-                shutil.rmtree(tree, ignore_errors=True)  # then the entry is stale, and prune clears it
-                subprocess.run(["git", "worktree", "prune"], cwd=root, capture_output=True)
+                shutil.rmtree(admin, ignore_errors=True)  # this worktree's own entry, and no other
     if doc is None:
         return None, 0.0
     cost = float(doc.get("costUsd") or 0)
