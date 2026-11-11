@@ -17,6 +17,12 @@ ROOT = Path(__file__).resolve().parents[1]
 class DocsIndex(unittest.TestCase):
     """docs_check.py, on this repo's own profile (`[docs] index`), finds no broken link and no unlisted doc."""
 
+    def test_the_profile_names_the_index(self):
+        sys.path.insert(0, str(ROOT / "plugins" / "gogogo" / "scripts"))
+        import profile_check
+        settings, _ = profile_check.split_profile((ROOT / ".agents" / "dev-process.md").read_text())
+        self.assertEqual((settings.get("docs") or {}).get("index"), "docs/README.md")
+
     def test_every_doc_is_listed_and_every_link_resolves(self):
         run = subprocess.run([sys.executable, str(ROOT / "plugins" / "gogogo" / "scripts" / "docs_check.py"),
                               "--profile", str(ROOT / ".agents" / "dev-process.md"), "--json"],
