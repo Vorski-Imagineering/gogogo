@@ -82,6 +82,10 @@ reporter = "none"
 # cut by .github/workflows/release.yml on every push to main that passes the tests.
 [release]
 major = 1
+
+# docs/README.md lists every doc; /gogogo:docs and tests/test_docs_index.py check it.
+[docs]
+index = "docs/README.md"
 +++
 
 # Process profile: gogogo
