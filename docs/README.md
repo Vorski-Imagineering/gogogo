@@ -1,15 +1,13 @@
 # gogogo's docs
 
-Every document about gogogo, in two groups by who is reading, with one line on
-what each holds and when to read it. The skills themselves are listed in the
-[README's skills table](../README.md).
+Every document about gogogo, in two groups by who is reading, with what each holds and when to read it.
 
 ## Adopting gogogo
 
 - [Branches, pull requests and merges](git-process.md): how the skills use git in your repo, from the branch to the merge and the release it reaches. Read it when you set up a repo, or when a branch or merge did something you did not expect.
 - [Independence](independence-mode.md): the `independence` setting, which decisions Claude asks you about and which it takes. Read it when you choose a level, or when Claude asked too much or too little.
 - [Where gogogo came from](history.md): the products it grew out of and the rules that earned their place. Read it when you want to know why a rule exists.
-- [gogogo: process skills for when Human Ideas Move Faster Than Coding Agents](gogogo%20process%20skills%20for%20when%20Human%20Ideas%20move%20faster%20than%20Coding%20Agents.md): the essay on why gogogo exists and how it splits human thinking from agent work. Read it before you adopt gogogo, to see whether its way of working is yours.
+- [gogogo: process skills for when Human Ideas Move Faster Than Coding Agents](gogogo%20process%20skills%20for%20when%20Human%20Ideas%20move%20faster%20than%20Coding%20Agents.md): the essay on why gogogo exists and how it splits human thinking from agent work. Read it when you are deciding whether gogogo's way of working is yours, before you adopt it.
 
 ## Changing gogogo
 
