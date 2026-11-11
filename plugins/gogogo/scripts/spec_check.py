@@ -57,12 +57,10 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from spec_lint import _expand, file_groups, numbered_items, split_sections, table_rows  # noqa: E402
+from spec_lint import line_paths, file_groups, numbered_items, split_sections, table_rows  # noqa: E402
 
 STATUSES = ("met", "missing", "differs", "na")
 NEEDS_EVIDENCE = ("D", "T", "A")
-PATH = re.compile(r"`([^`\s]+)`")
-PARENS = re.compile(r"\([^()]*\)")
 BULLET = re.compile(r"^[-*]\s+(\S.*)")
 NOT_APPROVED = re.compile(r"^\**\s*not approved\s*:\**\s*(.*)", re.I)
 
@@ -88,17 +86,13 @@ def _tree() -> list[str]:
     return [p for p in out.split("\0") if p]
 
 
-
-
 def _paths(lines: list[str], tree=None) -> list[str]:
     """Backticked paths in lines. With tree (a callable listing the working tree's
     files, called at most once), a name with no `/` is kept only when a file
     equals it or ends with `/` + it."""
     found, files = [], None
     for line in lines:
-        while PARENS.search(line):
-            line = PARENS.sub("", line)
-        for path in (p for found_path in PATH.findall(line) for p in _expand(found_path)):
+        for path in line_paths(line):
             if tree is not None and "/" not in path:
                 if files is None:
                     files = tree()

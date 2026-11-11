@@ -550,6 +550,8 @@ class WideFolder(unittest.TestCase):
         # A folder named only in parentheses is not an entry; a brace group is expanded first.
         self.assertEqual(self.wide("tests/test_x.py` (in the unit lane's `tests/` folder) `views.py"), [])
         self.assertEqual(len(self.wide("{tests,docs}/")), 1)
+        self.assertEqual(self.wide("tests/x.py` (see (a) `tests/`) `views.py"), [])
+        self.assertEqual(len(self.wide("{tests/,docs/}")), 1)
 
     def test_the_command_still_exits_0_on_the_warning(self):
         with tempfile.TemporaryDirectory() as tmp:

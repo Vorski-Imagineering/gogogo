@@ -80,7 +80,7 @@ CODE_SPAN = re.compile(r"``.*?``|`[^`]*`")
 BRACES = re.compile(r"\{([^{}]*,[^{}]*)\}")
 
 
-def _expand(path: str) -> list[str]:
+def expand(path: str) -> list[str]:
     """Every combination of the `{a,b}` groups in path, the first group varying
     slowest. A path with no group, an unmatched or nested brace, or a group
     with no comma comes back as it is."""
@@ -92,6 +92,18 @@ def _expand(path: str) -> list[str]:
         out = [o + path[last:m.start()] + alt for o in out for alt in m.group(1).split(",")]
         last = m.end()
     return [o + path[last:] for o in out]
+
+
+PATH = re.compile(r"`([^`\s]+)`")
+PARENS = re.compile(r"\([^()]*\)")
+
+
+def line_paths(line: str) -> list[str]:
+    """The backticked names in a Files line, as spec_check reads them: parenthesised
+    text (nested too) dropped, each `{a,b}` group expanded."""
+    while PARENS.search(line):
+        line = PARENS.sub("", line)
+    return [p for found in PATH.findall(line) for p in expand(found)]
 
 
 def licence_tokens(line):
@@ -295,8 +307,7 @@ def lint(body, settings):
         fixed = [re.split(r"[*?\[]", p, maxsplit=1)[0] for lane in settings.get("lanes", [])
                  for p in lane.get("tests") or [] if isinstance(p, str)]
         for line in groups.get("create", []) + groups.get("edit", []):
-            line = re.sub(r"\([^()]*\)", "", line)  # as spec_check reads it: no parenthesised text
-            for entry in (e for raw in re.findall(r"`([^`\s]*/)`", line) for e in _expand(raw)):
+            for entry in (e for e in line_paths(line) if e.endswith("/")):
                 if entry in ("/", "./") or any(f.startswith(entry) for f in fixed):
                     warnings.append(f"## Files: `{entry}` covers every file under it, so nothing there can be "
                                     "outside the spec; name a narrower folder")

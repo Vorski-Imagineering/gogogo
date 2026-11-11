@@ -294,8 +294,8 @@ class Items(unittest.TestCase):
     def test_a_long_folder_entry_is_judged_on_its_whole_path(self):
         self.FOLDER = "plugins/gogogo/evals/" + "a-very-long-eval-case-name-" * 3 + "x/graders/fixtures/"
         self.assertGreater(len(self.FOLDER), 100)
-        status, outside = self.folder([self.FOLDER + "a.md"])
-        self.assertEqual([v for k, v in status.items() if k.startswith("F:plugins/gogogo/evals/a-very")], ["met"])
+        status, _ = self.folder([self.FOLDER + "a.md"])
+        self.assertEqual(status["F:" + self.FOLDER], "met")
 
     def test_unexpandable_braces_stay_as_written(self):
         # Guards Design 1's unchanged cases.
