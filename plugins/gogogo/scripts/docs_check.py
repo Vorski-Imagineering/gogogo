@@ -16,7 +16,8 @@ folder that holds the profile's `.agents/`. Each finding is one line,
           (no space, `<` or `*`, and its first segment exists at the root)
           and does not exist; a trailing `:<line>` or `::<test>` is dropped;
   public  with `docs.public` set, a line in a file under it holding an
-          absolute path (`/home/`, `/Users/`, `/tmp/`, `C:\\`), an IPv4
+          absolute path (`/home/`, `/Users/`, `/tmp/` at any depth, as in
+          `/var/tmp/`, or `C:\\`), an IPv4
           address, an email address, or a `publish.private_names` entry
           (a whole word, any case).
 
@@ -44,8 +45,22 @@ import profile_check  # noqa: E402
 EXIT_OK, EXIT_FINDINGS, EXIT_STOP = 0, 1, 2
 LINK = re.compile(r"\[[^\]]*\]\(([^)\s]+)(?:\s+\"[^\"]*\")?\)")
 TICKED = re.compile(r"`([^`\n]+)`")
-# Not inside a relative path or a web address (`src/home/`, `../home/`, `x.example/tmp/`).
-ABSOLUTE = re.compile(r"(?<![\w.~-])(?:/home/|/Users/|/tmp/)|(?<!\w)C:\\")
+# A path is read whole: split at spaces, quotes and brackets; a web address is skipped
+# whole; the rest is split at `=` and `:` (`PATH=…:/home/…`). Absolute when it starts
+# with one `/` (`file:///home/…` too) and has a `home`, `Users` or `tmp` folder anywhere.
+CHUNK = re.compile(r"[^\s`\"'()<>,;|]+")
+WEB = re.compile(r"^[A-Za-z][\w+.-]*://")
+WINDOWS = re.compile(r"(?<!\w)C:\\")
+
+
+def absolute_path(line):
+    for chunk in CHUNK.findall(line):
+        if WEB.match(chunk) and not chunk.lower().startswith("file://"):
+            continue
+        for piece in re.split(r"[=:]", chunk):
+            if re.match(r"/(?!/)|///", piece) and {"home", "Users", "tmp"} & set(piece.split("/")[:-1]):
+                return True
+    return bool(WINDOWS.search(line))
 IPV4 = re.compile(r"(?<![\d.])(?:\d{1,3}\.){3}\d{1,3}(?![\d.])")
 # A domain ending in letters, not a version pin (`react@18.3.1`) or an scp-style remote (`git@host:`).
 EMAIL = re.compile(r"[\w.+-]+@[\w-]+(?:\.[\w-]+)*\.[A-Za-z]{2,}\b(?![:\w-]|\.\w)")
@@ -86,7 +101,7 @@ def link_target(raw, folder, root):
     return (root / target.lstrip("/")).resolve() if target.startswith("/") else (folder / target).resolve()
 
 
-def read(path, root):
+def read(path):
     try:
         return path.read_text(encoding="utf-8")
     except (OSError, UnicodeDecodeError) as exc:
@@ -124,9 +139,9 @@ def check(root, settings):
         raise Stop(f"docs.public names {docs['public']}, which does not exist")
 
     def add(kind, path, line, detail):
-        findings.append({"kind": kind, "file": str(path.relative_to(root)), "line": line, "detail": detail})
+        findings.append({"kind": kind, "file": str(path.relative_to(root) if path.is_relative_to(root) else path), "line": line, "detail": detail})
 
-    texts = {path: read(path, root) for path in files}
+    texts = {path: read(path) for path in files}
     for path, text in texts.items():
         for number, line in prose_lines(text):
             for raw in LINK.findall(line):
@@ -136,7 +151,7 @@ def check(root, settings):
 
     if index is not None:
         listed = {link_target(raw, index.parent, root)
-                  for raw in LINK.findall(texts[index] if index in texts else read(index, root))}
+                  for raw in LINK.findall(texts[index] if index in texts else read(index))}
         for path in files:
             if path.resolve() != index.resolve() and folder in path.parents and path.resolve() not in listed:
                 add("index", path, 1, f"not linked from {docs['index']}")
@@ -155,8 +170,10 @@ def check(root, settings):
             if path != public and public not in path.parents:
                 continue
             for number, line in enumerate(text.splitlines(), 1):
-                for pattern, what in ((ABSOLUTE, "an absolute path"), (IPV4, "an IP address"),
-                                      (EMAIL, "an email address"), *((p, "a private name") for p in private)):
+                if absolute_path(line):
+                    add("public", path, number, "holds an absolute path")
+                for pattern, what in ((IPV4, "an IP address"), (EMAIL, "an email address"),
+                                      *((p, "a private name") for p in private)):
                     if pattern.search(line):
                         add("public", path, number, f"holds {what}")
     return notes, len(files), findings

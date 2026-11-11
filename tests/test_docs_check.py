@@ -169,10 +169,26 @@ class DocsCheck(unittest.TestCase):
         self.repo({"docs/public/p.md": "Install `react@18.3.1`, clone git@github.com:o/r.git, "
                                        "see https://x.example/tmp/y and ~/x.\n"
                                        "Edit `src/home/page.tsx`, [Home](../home/index.md), app/Users/list.tsx, "
-                                       "ftp://mirror.example.org/tmp/p and pkg@beta.rc.1.\n"},
+                                       "ftp://mirror.example.org/tmp/p, http://[::1]/tmp/x and pkg@beta.rc.1.\n",
+                   "docs/home/index.md": "x\n"},
                   docs='[docs]\npublic = "docs/public"\n')
         code, lines, _ = self.run_it()
-        self.assertEqual(self.findings(lines, "public"), [])
+        self.assertEqual((code, self.findings(lines, "public")), (0, []))
+
+    def test_an_absolute_path_under_another_folder(self):
+        self.repo({"docs/public/p.md": "Cache in /private/tmp/x\nLogs in /var/tmp/x\nOpen /mnt/c/Users/me\n"},
+                  docs='[docs]\npublic = "docs/public"\n')
+        code, lines, _ = self.run_it()
+        self.assertEqual(self.findings(lines, "public"), [
+            f"public docs/public/p.md:{n}: holds an absolute path" for n in (1, 2, 3)])
+
+    def test_a_docs_folder_outside_the_repo_is_reported_not_a_crash(self):
+        outside = Path(tempfile.mkdtemp())
+        self.addCleanup(shutil.rmtree, outside)
+        (outside / "a.md").write_text("[x](gone.md)\n")
+        self.repo({}, docs=f'[docs]\ndir = "{outside}"\n')
+        code, lines, _ = self.run_it()
+        self.assertEqual((code, self.findings(lines, "link")), (1, [f"link {outside / 'a.md'}:1: gone.md does not exist"]))
 
     def test_an_unreadable_profile_stops(self):
         out, err = io.StringIO(), io.StringIO()
