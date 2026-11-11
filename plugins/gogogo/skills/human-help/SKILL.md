@@ -36,8 +36,9 @@ python3 "${CLAUDE_PLUGIN_ROOT}/scripts/human_help.py" list --json
 
 Exit 0 gives each card, oldest first: its number, title, `reason` (the stop
 reason, or `skip`, or `none`), its `needs_you` line, the `branch` it names,
-its `answers` (comments by someone with write access after the stop), and its
-`requeued` count for that same reason. Exit 2 means the board or an issue could
+its `answers` (comments by someone with write access after the stop, leaving
+out any with a line starting `<!-- gogogo:`), its `requeued` count for that
+same reason, and its open blockers, `blocked_by`. Exit 2 means the board or an issue could
 not be read: **stop and report it.** A failed read is never an empty column.
 
 Say the list in one line per card before working any of them: number, reason,
@@ -59,9 +60,11 @@ For each card, in this order:
 1. **An answer already given settles the question**, without asking. An
    answer is a writer's comment after the stop with no gogogo marker (the
    list's `answers`). In this order:
-   1. Record it (see *Record an answer*).
+   1. Record it (see *Record an answer*), unless the body already holds a row
+      citing that comment's link.
    2. The card has an open blocker in the list's `blocked_by`: **Leave**, the
-      comment naming each blocker.
+      comment naming each blocker; when the issue's newest comment is already
+      this skill's Leave naming the same blockers, post nothing.
    3. The answer says the remaining steps are a person's, or that the card
       stays: **Leave**, the comment quoting the answer's line that says so.
    4. Otherwise requeue.
@@ -72,10 +75,11 @@ For each card, in this order:
    sentence, the evidence (the commit, the survivor's line, the missing
    approval), and your recommendation. Each option says what changes for
    people. Name no files, flags or exit codes in the question.
-4. **A declined question** leaves the card where it is. Say so in the report and
-   go on to the next card.
+4. **A declined question** leaves the card where it is, with no comment. Say
+   so in the report and go on to the next card.
 5. **With no person to ask** (the question tool errors, or `claude -p`), every
-   card that needs a question stays in the column, and the run goes on.
+   card that needs a question stays in the column, with no comment, and the run
+   goes on.
 
 A card's `requeued` count is at least 1 for the same reason it stopped on
 again: that is a question, never another requeue, so a loop cannot run forever.
