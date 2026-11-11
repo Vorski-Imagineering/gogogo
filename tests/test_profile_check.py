@@ -584,8 +584,8 @@ class Environments(unittest.TestCase):
     def test_this_repos_own_profile_is_clean_for_every_skill(self):
         settings, sections = pc.split_profile((ROOT / ".agents" / "dev-process.md").read_text(encoding="utf-8"))
         for skill in (None, *pc.SKILLS):
-            if skill == pc.TEST and "auto_test" not in settings:
-                continue  # auto-test is opt-in; this repo has not opted in
+            if skill in (pc.TEST, pc.GUIDED) and "auto_test" not in settings:
+                continue  # auto-test and guided-review are opt-in; this repo has not opted in (gogogo#263)
             if skill == pc.SENTRY and "sentry" not in settings:
                 continue  # so is sentry-debug, by a [sentry] table (gogogo#204)
             self.assertEqual(pc.check(settings, sections, skill), ([], []), skill)
@@ -774,6 +774,25 @@ class AutoTest(unittest.TestCase):
         self.assertEqual(code, pc.EXIT_OK, err)
         errors, _ = pc.check(drop(settings, "auto_test.pass_column"), sections)
         self.assertTrue(any(e.startswith("auto_test.pass_column: missing") for e in errors), errors)
+
+
+class GuidedReview(unittest.TestCase):
+    """/gogogo:guided-review is opted into by auto-test's table and section (gogogo#263)."""
+
+    def test_without_auto_test_only_its_own_check_refuses(self):
+        settings, sections = parse()
+        bare = drop(settings, "auto_test")
+        rest = {k: v for k, v in sections.items() if k != "Test data"}
+        self.assertEqual(pc.check(bare, rest), ([], []))
+        errors, _ = pc.check(bare, rest, pc.GUIDED)
+        self.assertTrue(any(e.startswith("auto_test.pass_column: missing") for e in errors), errors)
+        self.assertIn("section '## Test data': missing", errors)
+
+    def test_the_walk_needs_the_human_environments_url(self):
+        settings, sections = parse()
+        settings["environments"][1].pop("url")
+        self.assertIn("verify.human: environment 'production' has no url",
+                      pc.check(settings, sections, pc.GUIDED)[0])
 
 
 class Sentry(unittest.TestCase):

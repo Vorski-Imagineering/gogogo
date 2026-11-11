@@ -327,6 +327,7 @@ rebased.
 | `/gogogo:status` | Where things stand in this repo: cards per board column, what is queued, in progress and released, open pull requests, and branches and worktrees holding work. Each listed card names the open issues it is blocked by and the ones it blocks. With related repos, a RELATED block lists, per repo, what this repo waits on there and what waits on it here. Reads only; gives no verdicts. |
 | `/gogogo:roadmap` | Keeps a roadmap document's status marks in step with the board: re-derives every row's mark from the issue's state and column, fixes the notes the change made stale, and commits the document, opening a PR for it when the roadmap shares the repo. A section whose heading links a GitHub milestone is kept in step with it: it proposes the milestone changes, and applies only the ones you approve. |
 | `/gogogo:auto-test` | Tests each shipped issue on the environment where a person confirms fixes, and records PASS, FAIL or NEEDS HUMAN on the issue. `--triage-only` lists what it would test or skip and changes nothing. |
+| `/gogogo:guided-review` | Walks a person through several shipped issues, or a release, in one sitting: gathers their *Verify by hand* steps into one ordered walk, prepares the data, gives one link and one sentence per step, checks the system side, and records each issue's outcome. Needs auto-test set up. `--plan-only` prints the walk and changes nothing. |
 | `/gogogo:sentry-debug` | Read-only Sentry debugging and weekly report through the Sentry MCP, with each repo's org, projects and release format from its profile's `[sentry]` table. |
 
 A session started or resumed in a repo with a profile opens with a one-line
@@ -357,7 +358,7 @@ Scripts the skills call, all in `plugins/gogogo/scripts/`:
 - `roadmap_status.py`: compares a roadmap document's marks with the tracker, and rewrites the ones that disagree with `--write`.
 - `roadmap_milestones.py`: plans, as JSON, the milestone changes that keep a roadmap's linked sections and GitHub's milestones in step, and applies only the ids it is given. It never deletes a milestone.
 - `session_status.py`: the plugin's session-start hook; prints that one-line status, or nothing outside a repo with a profile.
-- `record_outcome.py`: renders and records an auto-test outcome: comment first, then labels, close and card, then reads the issue back.
+- `record_outcome.py`: renders and records an auto-test outcome: comment first, then labels, close and card, then reads the issue back; with `--walk`, a guided-review outcome, which is a comment only off the confirming environment.
 
 Agents the skills start, in `plugins/gogogo/agents/`: `build-high`, `build-xhigh` and `build-max` each run one issue's build at that effort, when the issue's Approvals authorise it.
 

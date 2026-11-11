@@ -44,8 +44,8 @@ python3 "${CLAUDE_PLUGIN_ROOT}/scripts/profile_check.py" --show                 
 
 Exit 0 is ok, 2 means there is no profile, 3 means it is unreadable or
 incomplete. Each problem is one line on stderr that starts with the field.
-With no `--for` it checks every skill, `auto-test` only when the profile has
-an `[auto_test]` table, and `sentry-debug` only when it has a `[sentry]` table,
+With no `--for` it checks every skill, `auto-test` and `guided-review` only
+when the profile has an `[auto_test]` table, and `sentry-debug` only when it has a `[sentry]` table,
 so a repo that never adopted either still passes.
 
 ## Versions and defaults
@@ -89,14 +89,14 @@ no skill requires it; a skill that finds it uses it.
 | `tracker.code_repo` | str | all | owner/repo that holds the code. |
 | `tracker.public` | bool | all | True if the tracker is readable by the public. |
 | `tracker.ready_marker` | str | `spec`, `auto-dev`, `human-help` | Label that marks an issue as specced and pickable. |
-| `tracker.tool` | str | `dev`, `auto-dev`, `auto-test`, `roadmap`, `human-help` | 'shared' for the plugin's tracker.py, or a command for the repo's own tool meeting references/tracker-contract.md. |
+| `tracker.tool` | str | `dev`, `auto-dev`, `auto-test`, `guided-review`, `roadmap`, `human-help` | 'shared' for the plugin's tracker.py, or a command for the repo's own tool meeting references/tracker-contract.md. |
 | `tracker.project_owner` | str | optional | Owner of the GitHub project board. |
 | `tracker.project_number` | int | optional | Number of the GitHub project board. |
 | `tracker.queue` | str | `auto-dev`, `human-help` | Board column the loop works. |
 | `tracker.columns.in_progress` | str | `dev`, `auto-dev` | Column of an issue being worked now. |
 | `tracker.columns.needs_human` | str | optional | Column of an issue stopped for a person: an unreviewed fix, a decision or Hard Stop found mid-change, or verification that gave up. Optional; absent means the `in_progress` column. |
 | `environments` | list | all | Where code runs: name, roles, and url/serves/reached_by/data/writes. |
-| `stages` | list | `dev`, `auto-dev`, `auto-test` | The path a change takes after it merges: code_is, column, environment. |
+| `stages` | list | `dev`, `auto-dev`, `auto-test`, `guided-review` | The path a change takes after it merges: code_is, column, environment. |
 | `related_repos` | list | optional | Other repos one product is built with: repo, board, merged_columns, shipped_columns, half. |
 | `hard_stops.source` | str | all | Where the repo's Hard Stop rules live (file#anchor). |
 | `hard_stops.form` | str | `spec`, `dev`, `auto-dev` | categories / questions. |
@@ -108,7 +108,7 @@ no skill requires it; a skill that finds it uses it.
 | `release.major` | int | optional | Hand-set major version. A production release is tagged `deploy-<build>` and versioned `<major>.0.<build>`; see `references/versioning.md`. |
 | `lanes` | list | `spec`, `dev`, `auto-dev` | Test lanes: name, plus run/focused/tests/env/ci. |
 | `verify.agent` | list | `dev`, `auto-dev` | Environments where the implementing agent checks its work. |
-| `verify.human` | str | `spec`, `auto-test` | Environment where a person confirms a fix. |
+| `verify.human` | str | `spec`, `auto-test`, `guided-review` | Environment where a person confirms a fix. |
 | `verify.rungs` | list | `dev`, `auto-dev` | Ordered verification steps. |
 | `state.read` | str | optional | How to read a safe copy of real state. |
 | `state.forbidden` | list | `dev`, `auto-dev` | What must never be written or run. |
@@ -130,11 +130,11 @@ no skill requires it; a skill that finds it uses it.
 | `review.coverage` | str | optional | precise / broad / exhaustive. Optional; absent means broad. How wide a net the first review round casts; correction rounds are always precise. |
 | `independence` | str | optional | junior-dev / tech-lead / product-owner. Optional; absent means junior-dev. Which decisions Claude asks about and which it takes itself; see docs/independence-mode.md. |
 | `publish.private_names` | list | optional | Optional; absent means []. Extra names the name check removes before filing on gogogo's tracker. |
-| `auto_test.pass_column` | str | `auto-test` | Column a card moves to on PASS. |
-| `auto_test.fail_column` | str | `auto-test` | Column a card moves to on FAIL. |
-| `auto_test.fail_label` | str | `auto-test` | Label added on FAIL. |
-| `auto_test.human_label` | str | `auto-test` | Label added on NEEDS HUMAN. |
-| `auto_test.pass_closes` | bool | `auto-test` | True if PASS closes the issue. |
+| `auto_test.pass_column` | str | `auto-test`, `guided-review` | Column a card moves to on PASS. |
+| `auto_test.fail_column` | str | `auto-test`, `guided-review` | Column a card moves to on FAIL. |
+| `auto_test.fail_label` | str | `auto-test`, `guided-review` | Label added on FAIL. |
+| `auto_test.human_label` | str | `auto-test`, `guided-review` | Label added on NEEDS HUMAN. |
+| `auto_test.pass_closes` | bool | `auto-test`, `guided-review` | True if PASS closes the issue. |
 | `sentry.org` | str | `sentry-debug` | Sentry organisation slug. |
 | `sentry.region_url` | str | `sentry-debug` | Sentry region URL: https://sentry.io, or the regional host the org lives on. |
 | `sentry.projects` | list | `sentry-debug` | Sentry project slugs this repo reports to. |
@@ -361,7 +361,9 @@ pass_closes = true
 The table is the opt-in. A profile without it is not checked for `auto-test`
 when `profile_check.py` runs with no `--for`, and `/gogogo:setup` reports it
 as not set up rather than as a failure. A profile with it also needs a
-`## Test data` section (below).
+`## Test data` section (below). The `[auto_test]` table and `## Test data` also
+opt a repo into `/gogogo:guided-review`, which reads `environments[].writes`
+for the environment it walks.
 
 ### Sentry
 
@@ -450,7 +452,7 @@ independence = "tech-lead"
 | `## superpowers boundary` | all |
 | `## Technology evaluation` | `tech-eval` (optional) |
 | `## Wrap-up checks` | `wrap-up` (optional) |
-| `## Test data` | `auto-test` |
+| `## Test data` | `auto-test`, `guided-review` |
 | `## Sentry` | `sentry-debug` |
 
 - **Recon traps**: what this codebase hides. The table of traps and the worked

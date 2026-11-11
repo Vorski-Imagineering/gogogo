@@ -50,6 +50,7 @@ CASES = {
     "spec-ship-wait-is-a-link", "spec-merge-wait-stays-unmarked", "spec-shipped-states-why",
     "spec-approval-lists-edge-cases", "human-help-approval-lists-edge-cases",
     "sentry-debug-quiet-week", "sentry-debug-no-sentry-settings",
+    "guided-review-disagreement-not-pass", "guided-review-staging-comment-only", "guided-review-needs-auto-test",
 }
 TAGS = re.compile(r"^tags:\s*\[([^\]]*)\]\s*$", re.M)
 TYPE = re.compile(r"^type:\s*(\S+)\s*$", re.M)

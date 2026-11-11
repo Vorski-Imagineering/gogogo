@@ -147,6 +147,20 @@ class ProfileSkills(unittest.TestCase):
         self.assertEqual({r["check"] for r in rows if r["check"].startswith("profile for ")},
                          {f"profile for /gogogo:{s}" for s in profile_check.SKILLS})
 
+    def test_both_auto_test_skills_are_info_without_the_table(self):
+        # Guards gogogo#263: ## Test data is read by two opt-in skills, so neither owns it alone.
+        import profile_check
+        from test_profile_check import COMPLETE
+        settings, sections = profile_check.split_profile(COMPLETE)
+        del settings["auto_test"]
+        del sections["Test data"]
+        rows = self.rows(settings, sections)
+        for skill in ("auto-test", "guided-review"):
+            row = [r for r in rows if r["check"] == f"profile for /gogogo:{skill}"]
+            self.assertEqual([r["level"] for r in row], ["INFO"], skill)
+            self.assertIn("[auto_test] and ## Test data", row[0]["detail"])
+            self.assertIn("§ Auto-test", row[0]["detail"])
+
     def test_a_profile_without_sentry_is_info_not_fail(self):
         # Guards gogogo#204: sentry-debug is opt-in by its [sentry] table, as auto-test is.
         import profile_check
