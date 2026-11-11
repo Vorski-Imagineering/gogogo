@@ -52,7 +52,7 @@ TICKED = re.compile(r"`([^`\n]+)`")
 # matched in either case, and the folders as the spec spells them (`/users/` is an API route).
 # A glob (`**/tmp/`) holds `/tmp/` and is flagged too.
 ABSOLUTE = re.compile(r"(?<![A-Za-z0-9.~)\]}%-])/(?:home|Users|tmp|private/tmp|var/tmp|mnt/[A-Za-z]/Users)/"
-                      r"|(?<![^\W_])[Cc]:\\")
+                      r"|(?<![A-Za-z0-9])[Cc]:\\")
 IPV4 = re.compile(r"(?<![\d.])(?:\d{1,3}\.){3}\d{1,3}(?![\d.])")
 # A domain ending in letters, not a version pin (`react@18.3.1`) or an scp-style remote (`git@host:`).
 EMAIL = re.compile(r"[\w.+-]+@[\w-]+(?:\.[\w-]+)*\.[A-Za-z]{2,}\b(?![:\w-]|\.\w)")
