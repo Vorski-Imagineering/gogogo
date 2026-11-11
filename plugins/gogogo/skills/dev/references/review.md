@@ -182,10 +182,11 @@ Then the review, by these rules:
    rules 3 to 6. Under `review=until-clean`, a prose file gets as many rounds
    as it takes, and its fixes are reviewed as code's are (rules 3 to 6),
    unless three of its rounds in a row each apply more re-fixes than new fixes
-   (`refix` above `applied - refix` for that file's round). Then the review
-   ends `prose` and the issue stops for a person, the report naming the three
-   rounds and their counts: a page that cannot be run tends to fix its own
-   fixes.
+   (`refix` above `applied - refix` for that file's round). Then the file
+   changes no more, and once the code files' review has ended the review ends
+   `prose` and the issue stops for a person, its last corrections marked
+   unreviewed and the report naming the three rounds and their counts: a page
+   that cannot be run tends to fix its own fixes.
 8. **How a review ends.** `clean`: a round applies nothing. For a person
    (§8): `third-attempt` (rule 3), `reversal` (rule 4), `unfixable` (a
    finding that meets tests 1 to 4 and cannot be fixed), `prose` (rule 7).
