@@ -94,12 +94,11 @@ opened that holds a resource (a room, a camera, a browser left running).
 **Look at layout too.** When the change touches a stylesheet (`.css`, `.scss`,
 `.sass`, `.less`) or a file that renders a page's markup (`.html`, `.htm`, or a
 template or component file, named in the report), also look at the screenshot
-of each browser case after its values pass, taking one when the runner kept
-none. Something wrong in a screenshot is a defect and a verification failure,
-bounded as any other (`/gogogo:auto-dev` §4, stop reason `verify`): fix it, add
-a value check that fails without the fix, and run the lanes again. A screenshot
-never passes a case on its own; the value read is still the check. Screenshots
-are kept in `<scratch>`, never in the working tree, and never posted. The
+of each browser case after its values pass; a case whose runner kept none is
+reported as having none. Something wrong in a screenshot is a defect: fix it,
+add a value check that fails without the fix, and run the case again. A
+screenshot never passes a case on its own; the value read is still the check.
+Screenshots stay in the run's folder and are never committed or posted. The
 report's **Screenshots looked at** part says what each one showed.
 
 "Done" means an executed path. A green suite alone is "written", not "done".

@@ -144,6 +144,7 @@ class LayoutLook(unittest.TestCase):
     def test_verify_looks_at_layout_and_a_screenshot_never_passes(self):
         text = moved(DEV_VERIFY)
         start = text.index("**The real thing, on real data.**")
+        self.assertIn("**Screenshots looked at**", text[start:], "the look names the report part")
         real = text[start:text.index("**Screenshots looked at**", start)]
         for name in (".css", "screenshot", "never a screenshot", "never passes a case"):
             self.assertIn(name, real)
