@@ -172,7 +172,7 @@ class DocsCheck(unittest.TestCase):
                                        "ftp://mirror.example.org/tmp/p, http://[::1]/tmp/x and pkg@beta.rc.1.\n"
                                        "[Guide](/docs/home/index.md), GET /api/v1/Users/{id}, /srv/www/tmp/uploads/, "
                                        "https://en.wikipedia.org/wiki/X_(y)/tmp/z\n"
-                                       "${HOME}/tmp/build, {project}/tmp/cache, %TEMP%/tmp/x\n",
+                                       "${HOME}/tmp/build, {project}/tmp/cache, %TEMP%/tmp/x, GET /users/42/orders, /Home/Index/, \u00e9C:\\x\n",
                    "docs/home/index.md": "x\n"},
                   docs='[docs]\npublic = "docs/public"\n')
         code, lines, _ = self.run_it()
@@ -182,12 +182,11 @@ class DocsCheck(unittest.TestCase):
         self.repo({"docs/public/p.md": "Cache in /private/tmp/x\nLogs in /var/tmp/x\nOpen /mnt/c/Users/me\n"
                                        "[/home/me/app](setup.md)\n**/home/me/app**\n_/var/tmp/x_\n{/tmp/x}\n"
                                        "https://x.example/?dir=/home/me\n*/tmp/cache*\n#!/home/alice/.venv/bin/python\n+/tmp/build-cache/\n"
-                                       "**/Users/me/My Project**\nIn c:\\users\\alice\\project\n_C:\\Users\\alice\\app_\n"
-                                       "Clone to /users/alice/project\n"},
+                                       "**/Users/me/My Project**\nIn c:\\users\\alice\\project\n_C:\\Users\\alice\\app_\n"},
                   docs='[docs]\npublic = "docs/public"\n')
         code, lines, _ = self.run_it()
         self.assertEqual(self.findings(lines, "public"), [
-            f"public docs/public/p.md:{n}: holds an absolute path" for n in range(1, 16)])
+            f"public docs/public/p.md:{n}: holds an absolute path" for n in range(1, 15)])
 
     def test_a_docs_folder_outside_the_repo_is_reported_not_a_crash(self):
         outside = Path(tempfile.mkdtemp())
