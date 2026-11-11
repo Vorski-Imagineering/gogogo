@@ -1,5 +1,5 @@
 ---
 type: regex
-pattern: '^\W*Next\W+fix\W*$(?![\s\S]*\S)'
+pattern: '^(?=[\s\S]*^\W*Next\W+fix\W*$)(?![\s\S]*^\W*Next\W+done\W*$)'
 flags: im
 ---
