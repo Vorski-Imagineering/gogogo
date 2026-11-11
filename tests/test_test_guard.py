@@ -391,6 +391,10 @@ OLD_X = "def test_x():\n    assert x() == 1\n    assert x() != 2\n"
 OLD_Y = "def test_y():\n    assert y() == 1\n"
 
 
+PARSE = "def test_parse():\n    assert parse(1) == 1\n    assert parse(2) == 2\n"
+OTHER = "def test_other():\n    assert other(1) == 1\n    assert other(2) == 2\n"
+
+
 class Verify(unittest.TestCase):
     def setUp(self):
         self.r = Repo()
@@ -610,23 +614,6 @@ class Verify(unittest.TestCase):
         self.assertEqual(out.returncode, 0, out.stdout + out.stderr)
         self.assertIn("H1  licensed", out.stdout)
 
-
-def section(text, start):
-    return text.split(f"\n## {start}")[1].split("\n## ")[0]
-
-
-PARSE = "def test_parse():\n    assert parse(1) == 1\n    assert parse(2) == 2\n"
-OTHER = "def test_other():\n    assert other(1) == 1\n    assert other(2) == 2\n"
-
-
-class BareNames(unittest.TestCase):
-    """gogogo#260: "delete" licenses, and a bare test name licenses its one changed test."""
-
-    def setUp(self):
-        self.r = Repo()
-        self.addCleanup(self.r.close)
-        self.r.branch()
-
     def loosen(self, files):
         for path, text in files.items():
             self.r.at_base(path, text)
@@ -638,28 +625,28 @@ class BareNames(unittest.TestCase):
         out = self.r.run("list").stdout
         return {line.split()[2].split(":")[0]: line.split()[0] for line in out.splitlines() if line.startswith("H")}
 
-    def verify(self, line, n):
+    def verify_bare(self, line, n):
         answers = "".join(f"H{k}\tweaker\tdropped\n" for k in range(1, n + 1))
         return self.r.run("verify", body=body(cases=line), answers=answers)
 
     def test_a_deleted_module_is_licensed_by_delete(self):
         (self.r.repo / "tests/test_a.py").unlink()
         self.r.commit("drop the module")
-        out = self.verify("1. `tests/test_a.py` deleted with the old parser", 1)
+        out = self.verify_bare("1. `tests/test_a.py` deleted with the old parser", 1)
         self.assertEqual(out.returncode, 0, out.stdout + out.stderr)
         self.assertIn("H1  licensed", out.stdout)
 
     def test_a_bare_name_licenses_only_its_test(self):
         self.loosen({"tests/test_p.py": PARSE, "tests/test_o.py": OTHER})
         ids = self.ids()
-        out = self.verify("1. `test_parse` removed", 2)
+        out = self.verify_bare("1. `test_parse` removed", 2)
         self.assertEqual(out.returncode, 1, out.stdout + out.stderr)
         self.assertIn(f"{ids['tests/test_p.py']}  licensed", out.stdout)
         self.assertIn(f"{ids['tests/test_o.py']}  NOT LICENSED", out.stdout)
 
     def test_a_bare_name_in_two_files_licenses_neither(self):
         self.loosen({"tests/test_p.py": PARSE, "tests/test_q.py": PARSE})
-        out = self.verify("1. `test_parse` removed", 2)
+        out = self.verify_bare("1. `test_parse` removed", 2)
         self.assertEqual(out.returncode, 1, out.stdout + out.stderr)
         self.assertEqual(out.stdout.count("NOT LICENSED  dropped (bare name test_parse matches 2 tests)"), 2)
 
@@ -667,14 +654,36 @@ class BareNames(unittest.TestCase):
         self.r.at_base("tests/test_one.py", "def test_a():\n    assert one() == 1\n")
         (self.r.repo / "tests/test_one.py").unlink()
         self.r.commit("drop it")
-        out = self.verify("1. `test_a` removed", 1)
+        out = self.verify_bare("1. `test_a` removed", 1)
         self.assertEqual(out.returncode, 1, out.stdout + out.stderr)
         self.assertIn("H1  NOT LICENSED", out.stdout)
 
     def test_a_bare_name_matches_as_a_whole_word(self):
         self.loosen({"tests/test_p.py": PARSE})
-        out = self.verify("1. `test_parse_v2` removed", 1)
+        out = self.verify_bare("1. `test_parse_v2` removed", 1)
         self.assertIn("H1  NOT LICENSED", out.stdout)
+
+    def test_one_test_changed_in_two_places_is_one_test(self):
+        # gogogo#260 Approvals row 1: "exactly one changed test", not one hunk.
+        self.r.at_base("tests/test_p.py", "def test_parse():\n    assert parse(1) == 1\n    x = 1\n    y = 2\n"
+                                          "    assert parse(2) == 2\n")
+        self.r.write("tests/test_p.py", "def test_parse():\n    x = 1\n    y = 2\n")
+        self.r.commit("loosen twice")
+        n = len([ln for ln in self.r.run("list").stdout.splitlines() if ln.startswith("H")])
+        self.assertEqual(n, 2)
+        out = self.verify_bare("1. `test_parse` removed", 2)
+        self.assertEqual(out.returncode, 0, out.stdout + out.stderr)
+
+    def test_a_bare_file_name_still_licenses_its_changed_file(self):
+        self.r.at_base("tests/smoke", "check one\ncheck two\n")
+        self.r.write("tests/smoke", "check one\n")
+        self.r.commit("drop a check")
+        out = self.verify_bare("1. `smoke` rewritten", 1)
+        self.assertEqual(out.returncode, 0, out.stdout + out.stderr)
+
+
+def section(text, start):
+    return text.split(f"\n## {start}")[1].split("\n## ")[0]
 
 
 class LicenceWords(unittest.TestCase):

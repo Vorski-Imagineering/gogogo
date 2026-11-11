@@ -35,8 +35,10 @@ hold further `::`-separated parts, each of which must occur; a token ending in
 `/` licenses every item in a test file beneath that folder, from the repo root;
 one at or above the fixed part of a lane's `tests` pattern is too wide, printed
 as such, and licenses nothing. A bare test name (`test_parse`, no path)
-licenses the one changed hunk that holds it as a whole word, and nothing when
-two or more do (their NOT LICENSED lines say how many), nor a deleted file. For a file
+licenses the changed hunks of the one test that holds it as a whole word (a
+test is its file and the line naming it, so one test changed in two places is
+one), and nothing when two or more tests do (their NOT LICENSED lines say how
+many), nor a deleted file; a bare file name still licenses its file. For a file
 renamed since the base, a token naming its old path covers it as one naming
 its new path does. It prints each
 `weaker` item as `licensed` or `NOT LICENSED`, then `test-guard: hunks=<n> same=<n> stronger=<n> weaker=<n>
@@ -238,20 +240,32 @@ def _texts(item: dict) -> list[str]:
     return [item["context"], *item["enclosing"], *item["minus"]]
 
 
-def bare_matches(found: list[dict], tokens: list[str]) -> dict[str, list[str]]:
-    """Each bare test name, and the ids of the changed hunks that hold it as a whole word."""
-    return {t: [i["id"] for i in found if i["kind"] == "changed" and any(_has_word(x, t) for x in _texts(i))]
-            for t in dict.fromkeys(tokens) if BARE.match(t)}
+def bare_matches(found: list[dict], tokens: list[str]) -> dict[str, dict[str, tuple[str, str]]]:
+    """Each bare test name, and for each hunk that holds it as a whole word, the test it is in.
+
+    A test is its file and the first line of the hunk holding the name, so one
+    test changed in two places is one test.
+    """
+    out = {}
+    for t in dict.fromkeys(tokens):
+        if BARE.match(t):
+            out[t] = {i["id"]: (i["path"], line) for i in found
+                      for line in [next((x for x in _texts(i) if _has_word(x, t)), None)] if line is not None}
+    return out
 
 
-def licensed(item: dict, tokens: list[str], bare: dict[str, list[str]] | None = None) -> bool:
-    # A bare test name licenses the one changed hunk that holds it, and nothing when it is in several.
-    if any(ids == [item["id"]] for ids in (bare or {}).values()):
+def tests_named(hunks: dict[str, tuple[str, str]]) -> int:
+    return len(set(hunks.values()))
+
+
+def licensed(item: dict, tokens: list[str], bare: dict[str, dict[str, tuple[str, str]]] | None = None) -> bool:
+    # A bare test name licenses the hunks of the one test that holds it, and nothing when several tests do.
+    if any(item["id"] in hunks and tests_named(hunks) == 1 for hunks in (bare or {}).values()):
         return True
     # A renamed file is named by its old path or its new one.
     paths = [item["path"]] + ([item["renamed_from"]] if item.get("renamed_from") else [])
     for token in tokens:
-        if BARE.match(token):
+        if BARE.match(token) and item["kind"] != "changed":
             continue
         if "::" in token:
             named, rest = token.split("::", 1)
@@ -351,8 +365,8 @@ def main(argv=None) -> int:
             lic += ok
             unlic += not ok
             if not ok:
-                reason += "".join(f" (bare name {t} matches {len(ids)} tests)" for t, ids in bare.items()
-                                  if len(ids) > 1 and item["id"] in ids)
+                reason += "".join(f" (bare name {t} matches {tests_named(hunks)} tests)"
+                                  for t, hunks in bare.items() if tests_named(hunks) > 1 and item["id"] in hunks)
             weaker.append({"id": item["id"], "licensed": ok, "reason": reason, "item": describe(item)})
     summary = (f"test-guard: hunks={len(found)} same={counts['same']} stronger={counts['stronger']} "
                f"weaker={counts['weaker']} licensed={lic} unlicensed={unlic}")

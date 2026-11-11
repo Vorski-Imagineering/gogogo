@@ -73,8 +73,8 @@ that the change did not get there by weakening a test. In order:
    Test cases that, in its own words, takes away or replaces the test of an
    item the guard refused, the issue stops for a person at once (§8), with the
    stop marker's reason `tests` and a Needs-you line naming each such item and
-   quoting that line; no restore is attempted for it. For each other
-   `NOT LICENSED` item, restore what the test guarded (put
+   quoting that line; nothing is restored, for that item or any other.
+   Otherwise, for each `NOT LICENSED` item, restore what the test guarded (put
    back the base version of that hunk, or the deleted file) and make the change
    pass with it. Then run the lanes and steps 1 to 4 again. Up to three
    attempts, each naming a hypothesis different from the last. After the
