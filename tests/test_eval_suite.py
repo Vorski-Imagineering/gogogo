@@ -30,6 +30,7 @@ CASES = {
     "dev-deletes-merged-local-branch", "dev-blocked-goes-to-queue", "auto-dev-skips-blocked",
     "auto-dev-related-board-unreadable",
     "human-help-review-stop", "human-help-hard-stop-asks", "human-help-requeued-twice",
+    "human-help-answer-but-blocked",
     "dev-authorised-until-clean", "dev-authorised-model", "dev-correction-smallest-fix",
     "dev-reach-line-declines", "dev-reach-line-spares-security",
     "spec-declined-question", "spec-being-built", "spec-nothing-hits-today",
