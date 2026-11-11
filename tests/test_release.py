@@ -420,6 +420,9 @@ class Announce(ReleaseRepo):
         self.releases["deploy-3"] = f"notes\n\n{release.ANNOUNCED}\n"
         code, lines, _ = self.announce("--dry-run", profile=self.messages_on())
         self.assertEqual((lines[0], lines[2]), ("release: exists", "notify: already sent"))
+        self.releases["deploy-3"] = "notes\n"
+        code, lines, _ = self.announce("--dry-run", profile=self.messages_on())
+        self.assertEqual((lines[0], lines[2]), ("release: exists", "notify: would send"))
 
     def test_the_release_is_made_only_from_the_tag_on_the_remote(self):
         self.announce()
