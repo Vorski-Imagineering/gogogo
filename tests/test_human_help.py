@@ -163,13 +163,15 @@ class Permissions(unittest.TestCase):
 
     def test_only_open_blockers_are_listed(self):
         # gogogo#261 case 4
-        board = [{"number": 7, "title": "t", "url": "u", "status_since": "2026-10-05T00:00:00Z", "labels": [],
+        board = [{"number": 7, "title": "t", "url": "u", "status_since": "2026-10-05T00:00:00Z",
+                  "labels": ["dev ready"],
                   "blocked_by": [{"number": 5, "state": "OPEN"}, {"number": 6, "state": "CLOSED"}]},
                  {"number": 8, "title": "t", "url": "u", "status_since": "2026-10-06T00:00:00Z", "labels": []}]
         gh = FakeGh([gh_comment("bot", STOP_REVIEW)], {"bot": "admin"})
         code, out, err = self.run_list(gh, board)
         self.assertEqual(code, 0, err)
         self.assertEqual([c["blocked_by"] for c in json.loads(out)], [[{"number": 5, "state": "OPEN"}], []])
+        self.assertEqual([c["labels"] for c in json.loads(out)], [["dev ready"], []])
 
     def test_the_board_is_read_from_the_profile(self):
         # Live run, 2026-10-05: list read "project /#0" because the tracker was never configured.
