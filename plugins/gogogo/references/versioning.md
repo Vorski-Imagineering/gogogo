@@ -106,10 +106,21 @@ alone (`--only <job>`), and the next job still runs: the announcement never
 fails the deploy.
 
 ```yaml
+tag-name:
+  runs-on: ubuntu-latest
+  outputs:
+    tag: ${{ steps.name.outputs.tag }}
+  steps:
+    - uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+    - id: name
+      run: echo "tag=deploy-$(python3 <vendored scripts>/release.py build)" >> "$GITHUB_OUTPUT"
 deploy:
+  needs: tag-name
   runs-on: ubuntu-latest
   concurrency:
-    group: announce-${{ github.sha }}   # one commit is one deploy-<build> tag
+    group: announce-${{ needs.tag-name.outputs.tag }}
   permissions:
     contents: write
   steps:
@@ -130,8 +141,10 @@ deploy:
 
 `STAGE_SYNC_TOKEN` is the token stage sync already uses (it can read and
 move the board and create a Release). The `concurrency` group, keyed by the
-commit and so by its tag, keeps two runs for one tag from both sending:
-reading the mark and sending are two steps. The tag reaches the command through
+tag, keeps two runs for one tag from both sending: reading the mark and
+sending are two steps. The tag is only cut inside the deploy job, so the
+`tag-name` job works out its name first, with `release.py build`, and the
+group reads it from that job's output. The tag reaches the command through
 the shell, never interpolated into the workflow. `release.py` imports its
 neighbours from its own folder: vendor all five, `release.py`,
 `profile_check.py`, `stage_sync.py`, `tracker.py` and `notify.py`, from **one**
