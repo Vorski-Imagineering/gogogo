@@ -37,9 +37,9 @@ one at or above the fixed part of a lane's `tests` pattern is too wide, printed
 as such, and licenses nothing. A bare test name (`test_parse`, no path)
 licenses the changed hunks of the one test that holds it as a whole word in
 their context, enclosing or removed lines (a test is its file and the base line
-naming it, so
-one test changed in two places is one, and two tests of one name are two), and
-nothing when two or more tests do (their NOT LICENSED lines say how many), nor
+naming it, so one test changed in two places is one, and two tests of one name
+are two; a hunk whose naming line cannot be found counts as a test of its own),
+and nothing when two or more tests do (their NOT LICENSED lines say how many), nor
 a deleted file; a bare file name still licenses its changed file. For a file
 renamed since the base, a token naming its old path covers it as one naming
 its new path does. It prints each
@@ -142,10 +142,14 @@ def enclosing_at(old_lines: list[str], line: int, content_indent: int) -> list[t
     return found
 
 
-def _context_at(old_lines: list[str], line: int, context: str) -> int | None:
-    """The base line number of git's `@@` context: the nearest line above the hunk with that text."""
-    for number in range(min(max(line - 1, 0), len(old_lines)), 0, -1):
-        if context and old_lines[number - 1].strip() == context:
+def _context_at(old_lines: list[str], line: int, removes: bool, context: str) -> int | None:
+    """The base line number of git's `@@` context, found as git finds it: the nearest
+    line above the hunk's first removed line, or at or above `line` for a hunk that only
+    adds. Git cuts a long context, so a line that starts with it counts."""
+    if not context:
+        return None
+    for number in range(min(max(line - 1 if removes else line, 0), len(old_lines)), 0, -1):
+        if old_lines[number - 1].strip().startswith(context):
             return number
     return None
 
@@ -200,7 +204,7 @@ def items(base: str, globs: list[str]) -> list[dict]:
             at = enclosing_at(old_lines, hunk["line"], _content_indent(hunk))
             hunk["enclosing"] = [text for _, text in at]
             hunk["enclosing_lines"] = [number for number, _ in at]
-            hunk["context_line"] = _context_at(old_lines, hunk["line"], hunk["context"])
+            hunk["context_line"] = _context_at(old_lines, hunk["line"], bool(hunk["minus"]), hunk["context"])
             found.append({"kind": "changed", "path": new, "renamed_from": renamed_from, **hunk})
     for k, item in enumerate(found, 1):
         item["id"] = f"H{k}"
@@ -256,11 +260,11 @@ def _texts(item: dict) -> list[str]:
 
 def _naming_line(item: dict, name: str) -> int | str | None:
     """Where a changed hunk names `name` as a whole word, as a base line number: an
-    enclosing line, innermost first, then a removed line, then git's `@@` context
-    (its text when that line cannot be found)."""
+    enclosing line, innermost first, then a removed line, then git's `@@` context.
+    A context whose line cannot be found gives the hunk's own id: a test of its own."""
     lines = [*zip(item["enclosing_lines"], item["enclosing"]),
              *((item["line"] + k, text) for k, text in enumerate(item["minus"])),
-             (item["context_line"] or item["context"], item["context"])]
+             (item["context_line"] or item["id"], item["context"])]
     return next((number for number, text in lines if _has_word(text, name)), None)
 
 
