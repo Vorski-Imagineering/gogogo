@@ -324,17 +324,17 @@ class Enclosing(unittest.TestCase):
 
 
 class EnclosingFunction(unittest.TestCase):
-    """`enclosing()` on its own, for the edges the repository cases do not reach."""
+    """`enclosing_at()` on its own (its texts), for the edges the repository cases do not reach."""
 
     def setUp(self):
         import test_guard
-        self.enclosing = test_guard.enclosing
+        self.enclosing_at = lambda *args: [text for _, text in test_guard.enclosing_at(*args)]
 
     def test_an_addition_at_the_top_has_no_enclosing_line(self):
-        self.assertEqual(self.enclosing(["def f():", "    x"], 0, 4), [])
+        self.assertEqual(self.enclosing_at(["def f():", "    x"], 0, 4), [])
 
     def test_blank_lines_are_passed_over(self):
-        self.assertEqual(self.enclosing(["class T:", "    def f():", "", "        x"], 4, 8),
+        self.assertEqual(self.enclosing_at(["class T:", "    def f():", "", "        x"], 4, 8),
                          ["def f():", "class T:"])
 
     def test_a_failed_base_read_raises_gits_message(self):
@@ -364,7 +364,7 @@ class EnclosingFunction(unittest.TestCase):
         self.assertIn("fatal", str(raised.exception))
 
     def test_the_walk_goes_on_to_indentation_0(self):
-        self.assertEqual(self.enclosing(["a:", " b:", "  c"], 3, 2), ["b:", "a:"])
+        self.assertEqual(self.enclosing_at(["a:", " b:", "  c"], 3, 2), ["b:", "a:"])
 
 
 class NotChecked(unittest.TestCase):
@@ -681,18 +681,14 @@ class Verify(unittest.TestCase):
         out = self.verify_bare("1. `smoke` rewritten", 1)
         self.assertEqual(out.returncode, 0, out.stdout + out.stderr)
 
-    def test_a_hunk_git_heads_with_the_name_is_not_its_test(self):
-        # Round 2: deleting the next test gets the header `def test_parse():`; it is another test.
-        self.r.at_base("tests/test_p.py", "def test_parse():\n    assert parse(1) == 1\n    assert parse(2) == 2\n"
-                                          "\n\ndef test_other():\n    assert other(1) == 1\n")
-        self.r.write("tests/test_p.py", "def test_parse():\n    assert parse(2) == 2\n")
-        self.r.commit("loosen one, drop the next")
-        heads = [ln for ln in self.r.run("list").stdout.splitlines() if ln.startswith("H")]
-        self.assertEqual(len(heads), 2, heads)
-        self.assertTrue(heads[1].endswith("  def test_parse():"), heads)
-        out = self.verify_bare("1. `test_parse` removed", 2)
-        self.assertEqual(out.returncode, 1, out.stdout + out.stderr)
-        self.assertEqual(out.stdout.count("NOT LICENSED"), 1, out.stdout)
+    def test_a_hunk_headed_by_the_name_is_licensed_by_it(self):
+        # Design 1: the hunk's context counts; one test loosened and a new one appended after it.
+        self.r.at_base("tests/test_p.py", "def test_parse():\n    assert parse(1) == 1\n    assert parse(2) == 2\n")
+        self.r.write("tests/test_p.py", "def test_parse():\n    assert parse(1) == 1\n    assert parse(2) >= 0\n"
+                                        "\n\ndef test_new():\n    assert 1\n")
+        self.r.commit("loosen and append")
+        out = self.verify_bare("1. `test_parse` rewritten", 1)
+        self.assertEqual(out.returncode, 0, out.stdout + out.stderr)
 
     def test_two_tests_of_one_name_in_one_file_are_two(self):
         method = "    def test_parse(self):\n        assert parse(1) == 1\n        assert parse(2) == 2\n"
