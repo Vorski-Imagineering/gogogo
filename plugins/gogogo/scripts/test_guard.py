@@ -27,14 +27,16 @@ the base list nothing. The last line is `test-guard: hunks=<n>`.
 `verify` reads ANSWERS_FILE, one line per item, `H<k><TAB><same|stronger|
 weaker><TAB><reason>`, and the issue body in BODY_FILE. A `weaker` item is
 licensed when a line of the body's `## Test cases` or `## Design` holds a
-backticked token and says "remove" or "rewrite" (or a form of them) as a whole
-word outside backticks: a token `path` licenses every
+backticked token and says "remove", "delete" or "rewrite" (or a form of them) as
+a whole word outside backticks: a token `path` licenses every
 item in that test file, and `path::name` the hunks whose enclosing lines,
 function context or removed lines contain `name` as a whole word; `name` may
 hold further `::`-separated parts, each of which must occur; a token ending in
 `/` licenses every item in a test file beneath that folder, from the repo root;
 one at or above the fixed part of a lane's `tests` pattern is too wide, printed
-as such, and licenses nothing. For a file
+as such, and licenses nothing. A bare test name (`test_parse`, no path)
+licenses the one changed hunk that holds it as a whole word, and nothing when
+two or more do (their NOT LICENSED lines say how many), nor a deleted file. For a file
 renamed since the base, a token naming its old path covers it as one naming
 its new path does. It prints each
 `weaker` item as `licensed` or `NOT LICENSED`, then `test-guard: hunks=<n> same=<n> stronger=<n> weaker=<n>
@@ -229,14 +231,32 @@ def _has_word(text: str, word: str) -> bool:
     return re.search(rf"(?<![A-Za-z0-9_]){re.escape(word)}(?![A-Za-z0-9_])", text) is not None
 
 
-def licensed(item: dict, tokens: list[str]) -> bool:
+BARE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
+
+
+def _texts(item: dict) -> list[str]:
+    return [item["context"], *item["enclosing"], *item["minus"]]
+
+
+def bare_matches(found: list[dict], tokens: list[str]) -> dict[str, list[str]]:
+    """Each bare test name, and the ids of the changed hunks that hold it as a whole word."""
+    return {t: [i["id"] for i in found if i["kind"] == "changed" and any(_has_word(x, t) for x in _texts(i))]
+            for t in dict.fromkeys(tokens) if BARE.match(t)}
+
+
+def licensed(item: dict, tokens: list[str], bare: dict[str, list[str]] | None = None) -> bool:
+    # A bare test name licenses the one changed hunk that holds it, and nothing when it is in several.
+    if any(ids == [item["id"]] for ids in (bare or {}).values()):
+        return True
     # A renamed file is named by its old path or its new one.
     paths = [item["path"]] + ([item["renamed_from"]] if item.get("renamed_from") else [])
     for token in tokens:
+        if BARE.match(token):
+            continue
         if "::" in token:
             named, rest = token.split("::", 1)
             segments = [part for part in rest.split("::") if part]
-            texts = [item["context"], *item["enclosing"], *item["minus"]]
+            texts = _texts(item)
             if item["kind"] == "changed" and any(_same_file(p, named) for p in paths) and segments and all(
                     any(_has_word(t, part) for t in texts) for part in segments):
                 return True
@@ -322,13 +342,17 @@ def main(argv=None) -> int:
     counts = {v: 0 for v in VERDICTS}
     lic = unlic = 0
     weaker = []
+    bare = bare_matches(found, tokens)
     for item in found:
         verdict, reason = answers[item["id"]]
         counts[verdict] += 1
         if verdict == "weaker":
-            ok = licensed(item, tokens)
+            ok = licensed(item, tokens, bare)
             lic += ok
             unlic += not ok
+            if not ok:
+                reason += "".join(f" (bare name {t} matches {len(ids)} tests)" for t, ids in bare.items()
+                                  if len(ids) > 1 and item["id"] in ids)
             weaker.append({"id": item["id"], "licensed": ok, "reason": reason, "item": describe(item)})
     summary = (f"test-guard: hunks={len(found)} same={counts['same']} stronger={counts['stronger']} "
                f"weaker={counts['weaker']} licensed={lic} unlicensed={unlic}")

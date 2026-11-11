@@ -615,6 +615,68 @@ def section(text, start):
     return text.split(f"\n## {start}")[1].split("\n## ")[0]
 
 
+PARSE = "def test_parse():\n    assert parse(1) == 1\n    assert parse(2) == 2\n"
+OTHER = "def test_other():\n    assert other(1) == 1\n    assert other(2) == 2\n"
+
+
+class BareNames(unittest.TestCase):
+    """gogogo#260: "delete" licenses, and a bare test name licenses its one changed test."""
+
+    def setUp(self):
+        self.r = Repo()
+        self.addCleanup(self.r.close)
+        self.r.branch()
+
+    def loosen(self, files):
+        for path, text in files.items():
+            self.r.at_base(path, text)
+        for path, text in files.items():
+            self.r.write(path, text.replace("    assert parse(2) == 2\n", "").replace("    assert other(2) == 2\n", ""))
+        self.r.commit("loosen")
+
+    def ids(self):
+        out = self.r.run("list").stdout
+        return {line.split()[2].split(":")[0]: line.split()[0] for line in out.splitlines() if line.startswith("H")}
+
+    def verify(self, line, n):
+        answers = "".join(f"H{k}\tweaker\tdropped\n" for k in range(1, n + 1))
+        return self.r.run("verify", body=body(cases=line), answers=answers)
+
+    def test_a_deleted_module_is_licensed_by_delete(self):
+        (self.r.repo / "tests/test_a.py").unlink()
+        self.r.commit("drop the module")
+        out = self.verify("1. `tests/test_a.py` deleted with the old parser", 1)
+        self.assertEqual(out.returncode, 0, out.stdout + out.stderr)
+        self.assertIn("H1  licensed", out.stdout)
+
+    def test_a_bare_name_licenses_only_its_test(self):
+        self.loosen({"tests/test_p.py": PARSE, "tests/test_o.py": OTHER})
+        ids = self.ids()
+        out = self.verify("1. `test_parse` removed", 2)
+        self.assertEqual(out.returncode, 1, out.stdout + out.stderr)
+        self.assertIn(f"{ids['tests/test_p.py']}  licensed", out.stdout)
+        self.assertIn(f"{ids['tests/test_o.py']}  NOT LICENSED", out.stdout)
+
+    def test_a_bare_name_in_two_files_licenses_neither(self):
+        self.loosen({"tests/test_p.py": PARSE, "tests/test_q.py": PARSE})
+        out = self.verify("1. `test_parse` removed", 2)
+        self.assertEqual(out.returncode, 1, out.stdout + out.stderr)
+        self.assertEqual(out.stdout.count("NOT LICENSED  dropped (bare name test_parse matches 2 tests)"), 2)
+
+    def test_a_bare_name_never_licenses_a_deleted_file(self):
+        self.r.at_base("tests/test_one.py", "def test_a():\n    assert one() == 1\n")
+        (self.r.repo / "tests/test_one.py").unlink()
+        self.r.commit("drop it")
+        out = self.verify("1. `test_a` removed", 1)
+        self.assertEqual(out.returncode, 1, out.stdout + out.stderr)
+        self.assertIn("H1  NOT LICENSED", out.stdout)
+
+    def test_a_bare_name_matches_as_a_whole_word(self):
+        self.loosen({"tests/test_p.py": PARSE})
+        out = self.verify("1. `test_parse_v2` removed", 1)
+        self.assertIn("H1  NOT LICENSED", out.stdout)
+
+
 class LicenceWords(unittest.TestCase):
     """gogogo#252: a line licenses only when its own prose says the word."""
 
@@ -636,7 +698,8 @@ class LicenceWords(unittest.TestCase):
                 self.assertEqual(self.tokens(f"1. `tests/test_a.py` is {word} here."), [])
 
     def test_each_form_in_prose_licenses(self):
-        for word in ("remove", "removes", "Removed", "rewrite", "Rewrites", "rewritten", "rewriting"):
+        for word in ("remove", "removes", "Removed", "rewrite", "Rewrites", "rewritten", "rewriting",
+                     "delete", "deletes", "Deleted"):
             with self.subTest(word):
                 self.assertEqual(self.tokens(f"1. `tests/test_a.py::test_x` {word} here."), ["tests/test_a.py::test_x"])
 
@@ -645,7 +708,7 @@ class LicenceWords(unittest.TestCase):
         self.assertEqual(self.tokens(line), ["tests/test_a.py::test_x"])
 
     def test_removing_and_removal_still_license_nothing(self):
-        for word in ("removing", "removal"):
+        for word in ("removing", "removal", "deleting", "deletion"):
             with self.subTest(word):
                 self.assertEqual(self.tokens(f"1. `tests/test_a.py` needs {word}."), [])
 
