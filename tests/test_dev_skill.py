@@ -90,10 +90,10 @@ class ExitStatus(unittest.TestCase):
     def test_a_refusal_the_spec_contradicts_stops_before_any_restore(self):
         # gogogo#260: step 5 stops at once, reason `tests`, quoting the spec line, before it restores.
         step = re.search(r"^5\. Exit 1:.*?(?=^6\. )", moved(DEV_VERIFY), re.S | re.M).group(0)
-        restore = step.find("restore what the test guarded")
-        self.assertNotEqual(-1, restore)
+        first = re.split(r"\.\s", step[3:], maxsplit=1)[0]
+        self.assertNotIn("restore what the test guarded", first)
         for name in ("`tests`", "§8"):
-            self.assertIn(name, step[:restore])
+            self.assertIn(name, first, "the quoted stop is step 5's first sentence")
 
     def test_do_not_chain_a_commit_on_piped_output(self):
         lines = section(self.dev, "Do not").splitlines()

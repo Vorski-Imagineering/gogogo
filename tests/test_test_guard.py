@@ -681,6 +681,38 @@ class Verify(unittest.TestCase):
         out = self.verify_bare("1. `smoke` rewritten", 1)
         self.assertEqual(out.returncode, 0, out.stdout + out.stderr)
 
+    def test_a_hunk_git_heads_with_the_name_is_not_its_test(self):
+        # Round 2: deleting the next test gets the header `def test_parse():`; it is another test.
+        self.r.at_base("tests/test_p.py", "def test_parse():\n    assert parse(1) == 1\n    assert parse(2) == 2\n"
+                                          "\n\ndef test_other():\n    assert other(1) == 1\n")
+        self.r.write("tests/test_p.py", "def test_parse():\n    assert parse(2) == 2\n")
+        self.r.commit("loosen one, drop the next")
+        heads = [ln for ln in self.r.run("list").stdout.splitlines() if ln.startswith("H")]
+        self.assertEqual(len(heads), 2, heads)
+        self.assertTrue(heads[1].endswith("  def test_parse():"), heads)
+        out = self.verify_bare("1. `test_parse` removed", 2)
+        self.assertEqual(out.returncode, 1, out.stdout + out.stderr)
+        self.assertEqual(out.stdout.count("NOT LICENSED"), 1, out.stdout)
+
+    def test_two_tests_of_one_name_in_one_file_are_two(self):
+        method = "    def test_parse(self):\n        assert parse(1) == 1\n        assert parse(2) == 2\n"
+        self.r.at_base("tests/test_p.py", f"class A:\n{method}\n\nclass B:\n{method}")
+        loose = method.replace("        assert parse(2) == 2\n", "")
+        self.r.write("tests/test_p.py", f"class A:\n{loose}\n\nclass B:\n{loose}")
+        self.r.commit("loosen both")
+        out = self.verify_bare("1. `test_parse` removed", 2)
+        self.assertEqual(out.returncode, 1, out.stdout + out.stderr)
+        self.assertEqual(out.stdout.count("(bare name test_parse matches 2 tests)"), 2, out.stdout)
+
+    def test_a_method_changed_in_its_def_line_and_body_is_one_test(self):
+        self.r.at_base("tests/test_p.py", "class A:\n    def test_parse(self):\n        x = 1\n        y = 2\n"
+                                          "        assert parse(2) == 2\n")
+        self.r.write("tests/test_p.py", "class A:\n    def test_parse(self, tmp):\n        x = 1\n        y = 2\n")
+        self.r.commit("new signature, one assert less")
+        self.assertEqual(len([ln for ln in self.r.run("list").stdout.splitlines() if ln.startswith("H")]), 2)
+        out = self.verify_bare("1. `test_parse` rewritten", 2)
+        self.assertEqual(out.returncode, 0, out.stdout + out.stderr)
+
 
 def section(text, start):
     return text.split(f"\n## {start}")[1].split("\n## ")[0]
