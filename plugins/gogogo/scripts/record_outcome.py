@@ -68,10 +68,8 @@ MARKERS = ("<!-- auto-test ", "<!-- gogogo-auto-test ")
 WALK_MARKER = "<!-- guided-review "
 REQUIRED = ("n", "verdict", "kind", "summary", "role", "commits", "checks")
 BY_VERDICT = {"FAIL": ("repro",), "NEEDS_HUMAN": ("human", "blocked")}
-# A walk's comment names no label to remove, so it has no `blocked` sentence; and it says
-# what it read, created and left out, since auto-test's defaults for those are not a walk's.
+# A walk's comment names no label to remove, so it has no `blocked` sentence.
 WALK_BY_VERDICT = {"FAIL": ("repro",), "NEEDS_HUMAN": ("human",)}
-WALK_REQUIRED = REQUIRED + ("signals", "data", "not_tested")
 
 # What a published comment may not hold (tracker.public): a URL with a query
 # string, a URL with a user:password part, a bare IPv4 address.
@@ -212,12 +210,14 @@ def _check_spec(spec, public, issue, hosts=(), walk=False):
     verdict = spec.get("verdict")
     if verdict not in VERDICTS:
         raise Stop(f"spec: verdict must be one of {', '.join(VERDICTS)}, found {verdict!r}")
-    for key in (WALK_REQUIRED + WALK_BY_VERDICT.get(verdict, ()) if walk else REQUIRED + BY_VERDICT.get(verdict, ())):
+    for key in REQUIRED + (WALK_BY_VERDICT if walk else BY_VERDICT).get(verdict, ()):
         if spec.get(key) in (None, ""):
             raise Stop(f"spec: {key} is missing" + (" (record the role preflight saw; never guess it)"
                                                     if key == "role" else ""))
     if issue_number(spec["n"]) != issue:
         raise Stop(f"spec: n is {spec['n']!r}, but this is issue {issue}")
+    if spec.get("mention") and walk:
+        raise Stop("spec: mention is for auto-test; a walk's comment mentions nobody")
     if spec.get("mention") and verdict != "PASS":
         raise Stop(f"spec: mention is for a PASS only, and this is {verdict}")
     if not isinstance(spec["commits"], list):
@@ -343,8 +343,9 @@ def render_walk(settings, sections, run_dir, issue, build, model, spec, plugin_r
             "| # | Criterion | Source | Steps (route · action) | Expected | Observed | |",
             "|---|---|---|---|---|---|---|"]
     out += [f"| {i} | " + " | ".join(cell(v) for v in c) + " |" for i, c in enumerate(spec["checks"], 1)]
-    out += ["", f"Signals: {spec['signals']}", "", "### Test data", spec["data"], "",
-            "### Not tested", spec["not_tested"]]
+    # Auto-test's defaults would claim checks a walk never made: an omitted key says so instead.
+    out += ["", f"Signals: {spec.get('signals', 'not recorded')}", "", "### Test data",
+            spec.get("data", "Not recorded."), "", "### Not tested", spec.get("not_tested", "Not recorded.")]
     if verdict == "FAIL":
         out += ["", "### Reproduce", spec["repro"]]
     if verdict == "NEEDS_HUMAN":

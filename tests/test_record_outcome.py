@@ -551,14 +551,19 @@ class Walk(unittest.TestCase):
         walk_comment(self.dir, 7, verdict, env)
         return call(world, "--profile", path, "apply", self.dir, 7, verdict, "--walk", "--repo", repo)
 
-    def test_a_walk_says_what_it_read_created_and_left_out(self):
-        for key in ("signals", "data", "not_tested"):
-            with self.subTest(key):
-                spec = {k: v for k, v in WALK_SPEC.items() if k != key}
-                code, _, err = self.render(spec)
-                self.assertEqual(code, 2)
-                self.assertIn(f"spec: {key} is missing", err)
-                self.assertFalse((self.dir / "comment-7.md").exists())
+    def test_a_walk_never_claims_auto_tests_defaults(self):
+        code, _, err = self.render(SPEC)
+        self.assertEqual(code, 0, err)
+        comment = (self.dir / "comment-7.md").read_text()
+        for claim in ("no console errors", "None created", "Nothing."):
+            self.assertNotIn(claim, comment)
+        self.assertEqual(comment.count("Not recorded."), 2)
+
+    def test_a_walk_comment_mentions_nobody(self):
+        code, _, err = self.render({**WALK_SPEC, "mention": "someone"})
+        self.assertEqual(code, 2)
+        self.assertIn("mention", err)
+        self.assertFalse((self.dir / "comment-7.md").exists())
 
     def test_walk_mode_needs_the_issues_repo(self):
         path = profile(self.tmp)
