@@ -328,6 +328,7 @@ rebased.
 | `/gogogo:roadmap` | Keeps a roadmap document's status marks in step with the board: re-derives every row's mark from the issue's state and column, fixes the notes the change made stale, and commits the document, opening a PR for it when the roadmap shares the repo. A section whose heading links a GitHub milestone is kept in step with it: it proposes the milestone changes, and applies only the ones you approve. |
 | `/gogogo:auto-test` | Tests each shipped issue on the environment where a person confirms fixes, and records PASS, FAIL or NEEDS HUMAN on the issue. `--triage-only` lists what it would test or skip and changes nothing. |
 | `/gogogo:sentry-debug` | Read-only Sentry debugging and weekly report through the Sentry MCP, with each repo's org, projects and release format from its profile's `[sentry]` table. |
+| `/gogogo:docs` | Audits a repo's docs against its code and, on your yes, files one issue per out-of-date doc; `write <N>` updates the docs a shipped issue touched in a pull request it never merges. |
 
 A session started or resumed in a repo with a profile opens with a one-line
 status from the plugin's own hook (the repo's independence level, coloured in
@@ -350,6 +351,7 @@ Scripts the skills call, all in `plugins/gogogo/scripts/`:
 - `human_help.py`: reads the cards in the Human!Help! column (each one's stop reason, its Needs-you line, the answers written after it, and how many times it was requeued) and prints an issue body's `authorised:` settings. Read-only.
 - `issue_work.py`: finds an issue's earlier work (open pull requests that claim it, branches named for it, the branch its stop marker names), so dev and auto-dev continue on it rather than start again.
 - `name_check.py`: checks a draft's title and body for the names of the repo it came from (the profile's repos, git remotes, folder names, environment hosts and `publish.private_names`) before `/gogogo:idea` files it on gogogo's tracker. Read-only; exit 0 clean, 1 a hit (printed by file and line), 2 it cannot check.
+- `docs_check.py`: checks a repo's docs, read-only, for broken relative links, docs the index does not link, backticked paths that do not exist, and internal detail in public docs.
 - `notify.py`: sends a run's messages by the profile's `notify` (Telegram today). A message is a JSON event (`send --event`) that this script formats: a status mark, the repo in bold, issue numbers as links, and the board's counts on the first line of a run's start and end. With no `notify` line, messages are on whenever the machine has bot credentials (per user, or in the repo's own git-ignored `.claude/gogogo/notify.env`); `notify = "none"` turns a repo off. Off, or no credentials on the machine, sends nothing.
 - `review_stats.py`: reads back the review record on each issue and sums them up: rounds, why findings were applied or declined, how each review ended and what became of the issue, plus phase times, session ids, stops by reason, triage skips, and each session's issues taken, handed back and skipped.
 - `require_unattended.sh`: refuses to start the loop unless the session can run without prompts.

@@ -142,6 +142,11 @@ projects = ["my-project"]
 release_format = "the full commit SHA"
 report_dir = "reports"
 evidence_command = "make evidence"
+
+[docs]
+dir = "docs"
+index = "docs/README.md"
+public = "docs/public"
 +++
 
 # Process profile
@@ -774,6 +779,22 @@ class AutoTest(unittest.TestCase):
         self.assertEqual(code, pc.EXIT_OK, err)
         errors, _ = pc.check(drop(settings, "auto_test.pass_column"), sections)
         self.assertTrue(any(e.startswith("auto_test.pass_column: missing") for e in errors), errors)
+
+
+class Docs(unittest.TestCase):
+    """/gogogo:docs reads an optional [docs] table and is not an opt-in skill (gogogo#270)."""
+
+    def test_the_table_is_optional_and_its_values_are_not_empty(self):
+        self.assertIn(pc.DOCS, pc.SKILLS)
+        self.assertNotIn(pc.DOCS, pc.OPT_IN)
+        settings, sections = parse()
+        self.assertEqual(pc.check(drop(settings, "docs"), sections, pc.DOCS), ([], []))
+        for path in ("docs.dir", "docs.index", "docs.public"):
+            with self.subTest(path):
+                settings, sections = parse()
+                settings["docs"][path.split(".")[1]] = " "
+                errors, _ = pc.check(settings, sections, pc.DOCS)
+                self.assertTrue(any(e.startswith(f"{path}: empty") for e in errors), errors)
 
 
 class Sentry(unittest.TestCase):

@@ -147,6 +147,25 @@ class ProfileSkills(unittest.TestCase):
         self.assertEqual({r["check"] for r in rows if r["check"].startswith("profile for ")},
                          {f"profile for /gogogo:{s}" for s in profile_check.SKILLS})
 
+    def test_the_docs_row(self):
+        # Guards gogogo#270: what /gogogo:docs would read, found on disk or named by [docs].
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "docs" / "public").mkdir(parents=True)
+            (root / "docs" / "README.md").write_text("x")
+            for settings, level, words in (
+                ({}, "INFO", ("not set up", "docs/ found", "index docs/README.md", "public docs/public")),
+                ({"docs": {"dir": "docs", "index": "docs/gone.md"}}, "FAIL", ("index names docs/gone.md",)),
+                ({"docs": {"dir": "docs", "index": "docs/README.md", "public": "docs/public"}}, "PASS",
+                 ("docs, index docs/README.md, public docs/public",)),
+            ):
+                with self.subTest(level):
+                    rep = sc.Report()
+                    sc.check_docs(root, settings, rep)
+                    self.assertEqual(levels(rep, "docs"), [level])
+                    for word in words:
+                        self.assertIn(word, rep.rows[0]["detail"])
+
     def test_a_profile_without_sentry_is_info_not_fail(self):
         # Guards gogogo#204: sentry-debug is opt-in by its [sentry] table, as auto-test is.
         import profile_check
@@ -2083,7 +2102,7 @@ class Independence(unittest.TestCase):
         from test_profile_check import COMPLETE
         root = repo({".agents/dev-process.md": COMPLETE.replace('independence = "junior-dev"\n', extra, 1)})
         quiet = ("check_git_state", "check_settings", "check_profile_skills", "check_release_shape",
-                 "check_release", "check_hard_stop_source", "check_tracker", "check_notify",
+                 "check_release", "check_hard_stop_source", "check_tracker", "check_notify", "check_docs",
                  "check_local_skills", "check_claude_md", "config_header")
         out = io.StringIO()
         cwd = os.getcwd()
