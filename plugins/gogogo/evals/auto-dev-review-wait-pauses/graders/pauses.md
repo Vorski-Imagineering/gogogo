@@ -1,5 +1,5 @@
 ---
 type: regex
 flags: i
-pattern: '2 seconds|sleep 2'
+pattern: '\b2(?: more| extra)? seconds?\b|\bsleeps? 2\b|\b2-second\b'
 ---
