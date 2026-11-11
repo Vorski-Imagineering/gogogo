@@ -153,7 +153,8 @@ gogogo commit, as `references/stage-sync.md` § Vendoring describes.
 
 A repo that also runs `references/stage-sync.md`'s workflow on `push: tags`
 takes the `deploy-*` glob out of that trigger when it adds this step, and keeps
-any other stage's glob and `workflow_dispatch`: with both, a deploy tag pushed
+any other stage's glob and `workflow_dispatch`; when `deploy-*` was its only
+glob, the `push:` trigger comes out with it. With both, a deploy tag pushed
 with a token that starts workflows would be synced and announced twice. Its
 `reverts` step still runs from `/gogogo:auto-dev`'s preflight.
 

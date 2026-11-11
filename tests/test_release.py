@@ -396,8 +396,8 @@ class Announce(ReleaseRepo):
         code, lines, _ = self.announce(profile=self.messages_on())
         self.assertEqual(code, 0)
         self.assertTrue(lines[0].startswith("release: failed: HTTP 401"), lines)
-        self.assertEqual(lines[2], "notify: sent; not marked (HTTP 401: Bad credentials)")
-        self.assertEqual(len(self.sent), 1)
+        self.assertTrue(lines[2].startswith("notify: failed: HTTP 401"), lines)
+        self.assertEqual(self.sent, [])
         self.assertNotIn(("release", "create"), self.calls)
 
     def test_a_profile_with_no_production_fails_notify_rather_than_sending(self):
