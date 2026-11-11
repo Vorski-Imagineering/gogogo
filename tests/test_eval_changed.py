@@ -226,6 +226,25 @@ class Lane(unittest.TestCase):
         self.assertEqual(rc, 1)
         self.assertIn("evals: dev-third-attempt base re-run gave no result", out)
 
+    def test_a_base_that_cannot_be_read_gives_no_result_not_a_crash(self):
+        rc, out = self.run_lane(["--skill", "dev", "--base", "no-such-ref"], code=1, result=self.failing())
+        self.assertEqual(rc, 1)
+        self.assertIn("evals: dev-third-attempt base re-run gave no result", out)
+        self.assertIn("evals: cases=2 passed=1 base_failed=0", out)
+
+    def test_a_worktree_that_cannot_be_removed_leaves_no_entry(self):
+        write(self.root, "plugins/gogogo/skills/dev/SKILL.md", "changed\n")
+        real = subprocess.run
+
+        def run(args, *rest, **kw):
+            if list(args[:3]) == ["git", "worktree", "remove"]:
+                return subprocess.CompletedProcess(args, 128, "", "locked")
+            return real(args, *rest, **kw)
+        with mock.patch.object(eval_changed.subprocess, "run", run):
+            self.run_lane(result=self.failing(), code=1, base=self.base_run(0.33))
+        listed = real(["git", "worktree", "list"], cwd=self.root, capture_output=True, text=True).stdout
+        self.assertEqual(len(listed.splitlines()), 1, listed)
+
     def test_the_base_worktree_is_taken_down(self):
         write(self.root, "plugins/gogogo/skills/dev/SKILL.md", "changed\n")
         self.run_lane(result=self.failing(), code=1, base=self.base_run(0.33))

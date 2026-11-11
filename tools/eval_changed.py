@@ -125,6 +125,7 @@ def base_score(root: Path, fork: str, name: str) -> tuple[float | None, float]:
             doc = _read(out)
         finally:
             subprocess.run(["git", "worktree", "remove", "--force", str(tree)], cwd=root, capture_output=True)
+    subprocess.run(["git", "worktree", "prune"], cwd=root, capture_output=True)  # an entry a failed remove left
     if doc is None:
         return None, 0.0
     cost = float(doc.get("costUsd") or 0)
@@ -200,8 +201,14 @@ def main(argv=None, root: Path = ROOT) -> int:
             continue
         below.add(c.get("name"))
         if at_fork is None:
-            fork = fork_point(root, a.base)
-            at_fork = case_tags_at(root, fork)
+            try:
+                fork = fork_point(root, a.base)
+                at_fork = case_tags_at(root, fork)
+            except subprocess.CalledProcessError:
+                fork, at_fork = None, {}
+        if fork is None:
+            on_base.append(f"evals: {c['name']} base re-run gave no result")
+            continue
         if c.get("name") not in at_fork:
             continue
         there, spent = base_score(root, fork, c["name"])
