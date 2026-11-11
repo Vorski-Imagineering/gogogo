@@ -74,8 +74,9 @@ it.
   deployed, then the issues the release ships since the previous `deploy-*`
   tag, read from the `Ships-issue` trailers (`stage_sync.py`), and a count of
   commits with no linked issue.
-- **A GitHub Release** with issue titles, created by CI on the tag push from
-  `release.py notes --tag <tag> --titles` (below).
+- **A GitHub Release** with issue titles, created in the deploy job by
+  `release.py announce --tag <tag>` from `release.py notes --tag <tag> --titles`
+  (below).
 - Issue comments and card moves stay with `stage_sync.py sync` on a stage with
   `tag = "deploy-*"` (`references/stage-sync.md`).
 
@@ -86,46 +87,60 @@ of its own. A re-run of the same commit reuses the tag name: a database dump
 named `deploy-<build>` alone would be overwritten by the dump of a
 half-migrated database after a failed migrate.
 
-## 7. GitHub Release from each tag
+## 7. The announcement, in the deploy job
+
+After the deploy succeeds and `release.py tag --push origin` has pushed the
+tag, the same job runs `release.py announce` for it. That one command does the
+three things a deploy announces, in order, each once per tag:
+
+1. **release**: the GitHub Release, created with issue titles when it is
+   missing;
+2. **sync**: the cards the tag ships, moved as `stage_sync.py sync` moves them,
+   when a stage's `tag` glob takes the tag (otherwise it says so and goes on);
+3. **notify**: one `deployed` message through `notify.py`. When it went, the
+   Release's notes are marked with a hidden line, so a re-run does not send it
+   again.
+
+Each job prints one line. A failed job prints the command that retries it
+alone (`--only <job>`), and the next job still runs: the announcement never
+fails the deploy.
 
 ```yaml
-name: Release
-on:
-  push:
-    tags: ['deploy-*']
-permissions:
-  contents: write
-jobs:
-  release:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-      - uses: actions/setup-python@v5
-        with:
-          python-version: '3.12'
-      - name: Create the release
-        env:
-          TAG: ${{ github.ref_name }}
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          if gh release view "$TAG" >/dev/null 2>&1; then
-            echo "release $TAG exists"; exit 0
-          fi
-          python3 <vendored scripts>/release.py notes --tag "$TAG" --titles > notes.txt
-          gh release create "$TAG" --title "$TAG" --notes-file notes.txt
+deploy:
+  runs-on: ubuntu-latest
+  concurrency:
+    group: announce-${{ github.sha }}   # one commit is one deploy-<build> tag
+  permissions:
+    contents: write
+  steps:
+    - uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+    # ... the deploy itself ...
+    - name: Tag and announce
+      env:
+        GH_TOKEN: ${{ secrets.STAGE_SYNC_TOKEN }}
+        TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+        TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+      run: |
+        python3 <vendored scripts>/release.py tag --push origin
+        TAG=$(git describe --tags --exact-match --match 'deploy-*' HEAD)
+        python3 <vendored scripts>/release.py announce --tag "$TAG"
 ```
 
-The tag reaches the script through `env:`, never interpolated into it.
-`release.py` imports `profile_check.py` and `stage_sync.py` (which imports
-`tracker.py`) from its own folder: vendor all four from one gogogo commit, as
-`references/stage-sync.md` § Vendoring describes.
+`STAGE_SYNC_TOKEN` is the token stage sync already uses (it can read and
+move the board and create a Release). The `concurrency` group, keyed by the
+commit and so by its tag, keeps two runs for one tag from both sending:
+reading the mark and sending are two steps. The tag reaches the command through
+the shell, never interpolated into the workflow. `release.py` imports its
+neighbours from its own folder: vendor all five, `release.py`,
+`profile_check.py`, `stage_sync.py`, `tracker.py` and `notify.py`, from **one**
+gogogo commit, as `references/stage-sync.md` § Vendoring describes.
 
-**A tag pushed with CI's default `GITHUB_TOKEN` starts no other workflow.** If
-the job that deploys also cuts the tag with that token, this workflow and stage
-sync never run. Push the tag with a token that does trigger workflows, or run
-these steps in the same job.
+**Why in the deploy job.** A tag pushed with CI's default `GITHUB_TOKEN`
+starts no other workflow, so a separate workflow that waits for the tag never
+runs when the deploy job cuts it. Running the announcement in the job that
+pushed the tag needs no other trigger.
 
 ## 8. Straight to production
 

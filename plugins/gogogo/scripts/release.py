@@ -5,11 +5,17 @@
     release.py [--profile FILE] version [--ref REF]
     release.py [--profile FILE] tag [--ref REF] [--push REMOTE] [--dry-run]
     release.py [--profile FILE] notes --tag TAG [--titles]
+    release.py [--profile FILE] announce --tag TAG [--main-ref REF] [--only release|sync|notify] [--dry-run]
 
 `build` prints the commit count of REF, the number people say; `version` prints
 `<release.major>.0.<build>`; `tag` cuts the annotated `deploy-<build>` tag with
 generated notes, after the deploy has succeeded; `notes` prints those notes for
-an existing tag. The standard is references/versioning.md.
+an existing tag. `announce` is the deploy's one announcement for a tag, in
+three jobs: the GitHub Release (created when missing), the cards the tag ships
+(moved as `stage_sync.py sync` moves them), and one `deployed` message, sent
+once: the Release's notes are marked when it went. Each job says one line; a
+failed one prints the command that retries it alone, and the next still runs.
+The standard is references/versioning.md.
 
 The build needs full history and the base branch: a shallow clone counts only
 what it has, and a commit on another branch can share a count with one on the
@@ -17,8 +23,10 @@ base. Both are refused. A re-run on an already tagged commit creates nothing;
 with --push it pushes the existing tag again, so a retry after a failed push
 still reaches the remote, and a remote that already has it is left as it is.
 
-Exit codes: 0 ok (including "already tagged"); 2 profile or usage error;
-3 refused; 4 the tag exists here but not on the remote.
+Exit codes: 0 ok (including "already tagged", and `announce` whatever its jobs
+did: it never fails the deploy); 2 profile or usage error, or `announce` for a
+tag this clone does not have; 3 refused; 4 the tag exists here but not on the
+remote.
 
 Standard library only; the notes come from stage_sync.py's readers, imported.
 """
@@ -26,6 +34,9 @@ Standard library only; the notes come from stage_sync.py's readers, imported.
 from __future__ import annotations
 
 import argparse
+import contextlib
+import io
+import json
 import subprocess
 import sys
 import tempfile
@@ -34,12 +45,15 @@ from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
+import notify  # noqa: E402
 import profile_check  # noqa: E402
 import stage_sync  # noqa: E402
 
 EXIT_OK, EXIT_PROFILE, EXIT_REFUSED, EXIT_NOT_PUSHED = 0, 2, 3, 4
 GLOB = "deploy-*"
 FIRST = f"first {GLOB} release; nothing to compare with"
+ANNOUNCED = "<!-- gogogo:announced -->"
+JOBS = ("release", "sync", "notify")
 
 
 class Refused(Exception):
@@ -194,6 +208,132 @@ def cmd_notes(args, profile_path) -> int:
     return EXIT_OK
 
 
+def gh(*args: str) -> subprocess.CompletedProcess:
+    """Every `gh` call `announce` makes (the tests replace it)."""
+    return subprocess.run(["gh", *args], capture_output=True, text=True)
+
+
+def release_notes(tag: str) -> str | None:
+    """The Release's notes, or None when there is no Release for `tag`."""
+    view = gh("release", "view", tag, "--json", "body", "-q", ".body")
+    return view.stdout if view.returncode == 0 else None
+
+
+def write_notes(text: str) -> str:
+    with tempfile.NamedTemporaryFile("w", suffix=".md", delete=False, encoding="utf-8") as fh:
+        fh.write(text)
+    return fh.name
+
+
+def job_release(tag: str, sha: str, profile: stage_sync.Profile, dry_run: bool) -> tuple[str, str]:
+    if release_notes(tag) is not None:
+        return "exists", "release: exists"
+    if dry_run:
+        return "would create", "release: would create"
+    path = write_notes(body(tag, sha, profile, titles=True))
+    try:
+        made = gh("release", "create", tag, "--title", tag, "--notes-file", path)
+    finally:
+        Path(path).unlink(missing_ok=True)
+    if made.returncode != 0:
+        raise RuntimeError(made.stderr.strip() or f"gh release create exited {made.returncode}")
+    return "created", "release: created"
+
+
+def job_sync(tag: str, profile: stage_sync.Profile, main_ref: str, dry_run: bool) -> tuple[str, str]:
+    if not stage_sync.matching_stages(profile, tag):
+        return "skipped", f"sync: no stage takes {tag}; skipped"
+    out = io.StringIO()
+    with contextlib.redirect_stdout(out):
+        code = stage_sync.sync(profile, tag, main_ref, dry_run)
+    if code == 2:
+        raise RuntimeError("a card's comment failed, so it was not moved")
+    lines = out.getvalue().splitlines()
+    if dry_run:
+        n = sum(1 for line in lines if line.split(" ", 1)[0] == stage_sync.MOVE)
+        return f"would move {n}", f"sync: would move {n} card(s)"
+    n = sum(1 for line in lines if " -> " in line and ": " in line)
+    return f"moved {n}", f"sync: {n} card(s) moved"
+
+
+def deployed_event(tag: str, sha: str, profile: stage_sync.Profile) -> dict:
+    """The `deployed` event `stage_sync.py shipped --json` builds, from the same notes as `notes`."""
+    environment = production(profile)
+    prev = previous(tag, sha)
+    if prev is None:
+        return {"event": "deployed", "tag": tag, "environment": environment, "first": True}
+    result = stage_sync.shipped(sha, prev, profile.known, profile.issues_repo)
+    return stage_sync.shipped_event(tag, environment, result, stage_sync.fetch_titles(result.links))
+
+
+def send(profile: stage_sync.Profile, event: dict) -> tuple[int, str]:
+    """`notify.py send --event`, in this process: its exit code and what it printed."""
+    out = io.StringIO()
+    with contextlib.redirect_stdout(out), _stdin(json.dumps(event)):
+        code = notify.main(["--profile", str(profile.path), "send", "--event"])
+    return code, out.getvalue().strip()
+
+
+@contextlib.contextmanager
+def _stdin(text: str):
+    saved, sys.stdin = sys.stdin, io.StringIO(text)
+    try:
+        yield
+    finally:
+        sys.stdin = saved
+
+
+def job_notify(tag: str, sha: str, profile: stage_sync.Profile, dry_run: bool) -> tuple[str, str]:
+    notes = release_notes(tag)
+    if notes is not None and ANNOUNCED in notes:
+        return "already sent", "notify: already sent"
+    if dry_run:
+        return "would send", "notify: would send"
+    code, said = send(profile, deployed_event(tag, sha, profile))
+    if code != 0:
+        raise RuntimeError(said or f"notify.py exited {code}")
+    if said != "sent":
+        return "off", "notify: off; not marked"
+    notes = release_notes(tag)
+    if notes is None:
+        return "sent", "notify: sent; not marked (no Release)"
+    path = write_notes(notes.rstrip("\n") + f"\n\n{ANNOUNCED}\n")
+    try:
+        edited = gh("release", "edit", tag, "--notes-file", path)
+    finally:
+        Path(path).unlink(missing_ok=True)
+    if edited.returncode != 0:
+        return "sent", f"notify: sent; not marked ({edited.stderr.strip() or 'gh release edit failed'})"
+    return "sent", "notify: sent"
+
+
+def cmd_announce(args, profile_path) -> int:
+    profile = load(profile_path)
+    try:
+        sha = stage_sync.resolve_tag(args.tag)
+    except stage_sync.SyncError:
+        print(f"error: no tag {args.tag} in this clone; nothing announced", file=sys.stderr)
+        return EXIT_PROFILE
+    run = {
+        "release": lambda: job_release(args.tag, sha, profile, args.dry_run),
+        "sync": lambda: job_sync(args.tag, profile, args.main_ref, args.dry_run),
+        "notify": lambda: job_notify(args.tag, sha, profile, args.dry_run),
+    }
+    summary = []
+    for job in JOBS:
+        if args.only and job != args.only:
+            continue
+        try:
+            value, line = run[job]()
+        except Exception as exc:  # noqa: BLE001 - a failed job never fails the deploy
+            value, line = "failed", (f"{job}: failed: {exc}; retry: python3 {Path(__file__).resolve()} "
+                                     f"announce --tag {args.tag} --only {job}")
+        print(line, flush=True)
+        summary.append(f"{job}={value}")
+    print(f"announce: {args.tag} {' '.join(summary)}")
+    return EXIT_OK
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     parser.add_argument("--profile",
@@ -209,12 +349,18 @@ def main(argv: list[str] | None = None) -> int:
     notes = sub.add_parser("notes", help="print the notes for an existing tag")
     notes.add_argument("--tag", required=True)
     notes.add_argument("--titles", action="store_true", help="add issue titles (needs gh)")
+    announce = sub.add_parser("announce", help="the Release, the cards and one message for a deploy tag")
+    announce.add_argument("--tag", required=True)
+    announce.add_argument("--main-ref", default="origin/main", help="where the merged trailers are read")
+    announce.add_argument("--only", choices=JOBS, help="run this job alone (a retry)")
+    announce.add_argument("--dry-run", action="store_true", help="say what each job would do; write nothing")
     try:
         args = parser.parse_args(argv)
     except SystemExit as exc:
         return EXIT_OK if exc.code == 0 else EXIT_PROFILE
 
-    handler = {"build": cmd_build, "version": cmd_version, "tag": cmd_tag, "notes": cmd_notes}[args.command]
+    handler = {"build": cmd_build, "version": cmd_version, "tag": cmd_tag, "notes": cmd_notes,
+               "announce": cmd_announce}[args.command]
     try:
         return handler(args, args.profile)
     except ProfileProblem as exc:

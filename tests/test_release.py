@@ -16,6 +16,7 @@ import sys
 import tempfile
 import unittest
 from contextlib import redirect_stderr, redirect_stdout
+from unittest import mock
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -239,6 +240,156 @@ class Reference(unittest.TestCase):
         text = (PLUGIN / "references" / "versioning.md").read_text(encoding="utf-8")
         self.assertIsNone(re.search(PROJECT_NAMES, text, re.I))
 
+
+
+class Announce(ReleaseRepo):
+    """gogogo#268: `announce` makes the Release, moves the cards and sends one message per tag."""
+
+    commits = 2
+
+    def setUp(self):
+        super().setUp()
+        self.repo.git("tag", "-a", "deploy-2", "-m", "deploy-2", self.shas[1])
+        self.repo.commit("Fix the thing\n\nShips-issue: acme/issues#7\n")
+        self.repo.git("tag", "-a", "deploy-3", "-m", "deploy-3")
+        self.push_main()
+        self.releases, self.calls, self.sent, self.fail = {}, [], [], set()
+        world = self
+
+        class Transport:
+            def __init__(self, root):
+                self.token = "x"
+
+            def missing(self):
+                return []
+
+            def send(self, text, markup=False):
+                world.sent.append(text)
+
+        def gh(*args):
+            self.calls.append(args[:2])
+            verb, tag = args[1], args[2]
+            if verb in self.fail:
+                return subprocess.CompletedProcess(args, 1, "", f"{verb} refused")
+            if verb == "view":
+                found = tag in self.releases
+                return subprocess.CompletedProcess(args, 0 if found else 1, self.releases.get(tag, ""), "")
+            self.releases[tag] = Path(args[args.index("--notes-file") + 1]).read_text()
+            return subprocess.CompletedProcess(args, 0, "", "")
+
+        def sync(profile, tag, main_ref, dry_run):
+            self.calls.append(("sync", tag, dry_run))
+            print("MOVE      acme/issues#7  abc")
+            if not dry_run:
+                print("acme/issues#7: In Dev -> In Production")
+            return 0
+
+        for target, name, fake in ((release, "gh", gh), (release.stage_sync, "sync", sync),
+                                   (release.stage_sync, "fetch_titles",
+                                    lambda links: {("acme/issues", 7): "Fix the thing"}),
+                                   (release.notify, "TRANSPORTS", {"telegram": Transport})):
+            patcher = mock.patch.object(target, name, fake)
+            patcher.start()
+            self.addCleanup(patcher.stop)
+
+    def messages_on(self, text=None):
+        text = text or profile_text()
+        tmp = tempfile.TemporaryDirectory(prefix="release-profile-")
+        self.addCleanup(tmp.cleanup)
+        path = Path(tmp.name) / "dev-process.md"
+        path.write_text(text.replace('notify = "none"', 'notify = "telegram"'))
+        return str(path)
+
+    def announce(self, *extra, profile=None):
+        code, out, err = self.run_main("announce", "--tag", "deploy-3", *extra, profile=profile)
+        return code, out.splitlines(), err
+
+    def test_a_tag_this_clone_does_not_have(self):
+        code, lines, err = self.announce_tag("deploy-99")
+        self.assertEqual((code, lines, len(err.strip().splitlines())), (2, [], 1))
+        self.assertEqual((self.calls, self.sent), ([], []))
+
+    def announce_tag(self, tag):
+        code, out, err = self.run_main("announce", "--tag", tag)
+        return code, out.splitlines(), err
+
+    def test_the_release_is_made_with_the_titles(self):
+        code, lines, err = self.announce()
+        self.assertEqual(code, 0, err)
+        self.assertIn("release: created", lines)
+        self.assertEqual(self.calls.count(("release", "create")), 1)
+        self.assertIn("Fix the thing", self.releases["deploy-3"])
+
+    def test_an_existing_release_is_not_made_again(self):
+        self.releases["deploy-3"] = "notes\n"
+        code, lines, _ = self.announce()
+        self.assertIn("release: exists", lines)
+        self.assertNotIn(("release", "create"), self.calls)
+
+    def test_sync_runs_for_a_stage_that_takes_the_tag_and_is_skipped_without_one(self):
+        code, lines, _ = self.announce()
+        self.assertIn(("sync", "deploy-3", False), self.calls)
+        self.assertIn("sync: 1 card(s) moved", lines)
+        untagged = profile_text().replace('tag = "deploy-*"\n', "")
+        self.assertNotEqual(untagged, profile_text())
+        self.calls.clear()
+        code, lines, _ = self.announce(profile=self.messages_on(untagged))
+        self.assertEqual(code, 0)
+        self.assertIn("sync: no stage takes deploy-3; skipped", lines)
+        self.assertFalse([c for c in self.calls if c[0] == "sync"])
+        self.assertTrue(any(line.startswith("notify: ") for line in lines))
+
+    def test_one_message_per_tag(self):
+        profile = self.messages_on()
+        code, lines, err = self.announce(profile=profile)
+        self.assertEqual(code, 0, err)
+        self.assertIn("notify: sent", lines)
+        self.assertEqual(len(self.sent), 1)
+        self.assertTrue(self.releases["deploy-3"].rstrip().endswith(release.ANNOUNCED))
+        code, lines, _ = self.announce(profile=profile)
+        self.assertIn("notify: already sent", lines)
+        self.assertEqual(len(self.sent), 1)
+
+    def test_messages_off_marks_nothing(self):
+        code, lines, _ = self.announce()
+        self.assertIn("notify: off; not marked", lines)
+        self.assertNotIn(("release", "edit"), self.calls)
+        self.assertNotIn(release.ANNOUNCED, self.releases.get("deploy-3", ""))
+
+    def test_a_failed_release_names_its_retry_and_the_rest_still_run(self):
+        self.fail.add("create")
+        code, lines, _ = self.announce(profile=self.messages_on())
+        self.assertEqual(code, 0)
+        failed = next(line for line in lines if line.startswith("release: failed"))
+        self.assertIn("announce --tag deploy-3 --only release", failed)
+        self.assertIn(("sync", "deploy-3", False), self.calls)
+        self.assertEqual(len(self.sent), 1)
+        self.assertIn("notify: sent; not marked (no Release)", lines)
+        self.assertTrue(lines[-1].startswith("announce: deploy-3 release=failed"))
+
+    def test_a_dry_run_writes_nothing(self):
+        code, lines, _ = self.announce("--dry-run", profile=self.messages_on())
+        self.assertEqual(code, 0)
+        self.assertEqual(lines[:3], ["release: would create", "sync: would move 1 card(s)", "notify: would send"])
+        self.assertFalse([c for c in self.calls if c[1] in ("create", "edit")])
+        self.assertIn(("sync", "deploy-3", True), self.calls)
+        self.assertEqual(self.sent, [])
+
+    def test_only_one_job(self):
+        code, lines, _ = self.announce("--only", "notify")
+        self.assertEqual(code, 0)
+        self.assertEqual(len(lines), 2)
+        self.assertTrue(lines[0].startswith("notify: "))
+        self.assertTrue(lines[1].startswith("announce: deploy-3 notify="))
+        self.assertFalse([c for c in self.calls if c[0] == "sync" or c[1] == "create"])
+
+
+class VersioningDoc(unittest.TestCase):
+    def test_the_deploy_job_announces_and_no_tag_workflow_is_left(self):
+        doc = (PLUGIN / "references" / "versioning.md").read_text(encoding="utf-8")
+        part = doc.split("\n## 7")[1].split("\n## ")[0]
+        self.assertIn("release.py announce", part)
+        self.assertIsNone(re.search(r"^\s*on:\s*$[\s\S]*?^\s*tags:", part, re.M))
 
 if __name__ == "__main__":
     unittest.main()
