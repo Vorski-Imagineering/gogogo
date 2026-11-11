@@ -561,7 +561,7 @@ def check(settings, sections, skill=None, root=None):
         errors.append("release.major: must be 1 or more")
     if TEST in wanted:
         errors.extend(_check_auto_test(settings, sections))
-    for path in DOCS_PATHS:
+    for path in DOCS_PATHS if DOCS in wanted else ():
         value, present = _lookup(settings, path)
         if present and isinstance(value, str) and not value.strip():
             errors.append(f"{path}: empty. {FIELDS[path][2]}")

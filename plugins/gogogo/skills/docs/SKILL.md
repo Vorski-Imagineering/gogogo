@@ -83,22 +83,25 @@ its own.
 1. **The change.** Find the merged pull request that claims `<N>` (by its
    branch, `#<N>` in its title, or a `Refs`/`Fixes`/`Closes`/`Resolves` line
    in its body, as `issue_work.py` claims one):
-   `gh pr list --repo <tracker.code_repo> --state merged --search "<N>" --json number,title,headRefName,body`.
-   None merged: say so, and stop.
+   `gh pr list --repo <tracker.code_repo> --state merged --search "<N>" --limit 200 --json number,title,headRefName,body`.
+   A pull request whose branch starts `docs/` is this mode's own, never the
+   change. None merged: say so, and stop.
 2. **The docs to change.** Read the issue's `## Design` and the pull request's
    changed files (`gh pr view <pr> --json files`). The docs in scope that name
    a changed path, setting, script or skill are the candidates. A new skill,
    script or setting that no doc names is added to the doc that already lists
    things of its kind.
-3. **Never in the person's checkout**: another session may be using it. From
+3. **Never in the person's checkout**: another session may be using it. The
+   base is `integration.base`, else the repo's default branch
+   (`gh repo view <tracker.code_repo> --json defaultBranchRef -q .defaultBranchRef.name`). From
    the main worktree (the first entry of `git worktree list --porcelain`):
-   `git fetch origin && git worktree add -b docs/<N>-<slug> <its parent>/<its folder name>-wt-docs-<N> origin/<integration.base>`
+   `git fetch origin && git worktree add -b docs/<N>-<slug> <its parent>/<its folder name>-wt-docs-<N> origin/<base>`
    (the slug: two to five lowercase words from the issue's title). Edit there.
 4. **Check it.** Add any new doc to `docs.index` when it is set. Run the
    check and each `gates.always` command in the worktree; each passes on its
-   own exit status.
+   own exit status. With no `gates.always`, say that no gate ran.
 5. **Open the pull request**: commit, push the branch, and
-   `gh pr create --base <integration.base> --body-file <file>`, the body
+   `gh pr create --base <base> --body-file <file>`, the body
    saying what changed in each doc and ending `Refs #<N>`. **Never merge it.**
    Report its link.
 

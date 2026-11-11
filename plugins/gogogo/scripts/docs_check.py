@@ -33,6 +33,7 @@ the reason is on stderr. No evidence never passes. Standard library only.
 import argparse
 import json
 import re
+import subprocess
 import sys
 from pathlib import Path
 from urllib.parse import unquote
@@ -44,9 +45,11 @@ import profile_check  # noqa: E402
 EXIT_OK, EXIT_FINDINGS, EXIT_STOP = 0, 1, 2
 LINK = re.compile(r"\[[^\]]*\]\(([^)\s]+)(?:\s+\"[^\"]*\")?\)")
 TICKED = re.compile(r"`([^`\n]+)`")
-ABSOLUTE = re.compile(r"(?:/home/|/Users/|/tmp/|C:\\)")
+# A path on a disk, not part of a URL: nothing word-like or URL-like right before it.
+ABSOLUTE = re.compile(r"(?<![\w.:/~-])(?:/home/|/Users/|/tmp/)|(?<!\w)C:\\")
 IPV4 = re.compile(r"(?<![\d.])(?:\d{1,3}\.){3}\d{1,3}(?![\d.])")
-EMAIL = re.compile(r"[\w.+-]+@[\w-]+(?:\.[\w-]+)+")
+# A domain ending in letters, not a version pin (`react@18.3.1`) or an scp-style remote (`git@host:`).
+EMAIL = re.compile(r"[\w.+-]+@[\w-]+(?:\.[\w-]+)*\.[A-Za-z]{2,}\b(?![:\w.-])")
 
 
 class Stop(Exception):
@@ -73,14 +76,20 @@ def prose_lines(text):
             yield number, line
 
 
-def link_target(raw, folder):
-    """The path a relative link points at, or None when it is not a relative file link."""
+def link_target(raw, folder, root):
+    """The path a relative link points at, or None when it is not a relative file link.
+    A link starting `/` is from the repo root, as GitHub reads it."""
     if "://" in raw or raw.startswith("mailto:"):
         return None
     target = unquote(raw.split("#", 1)[0])
     if not target:
         return None
-    return (folder / target).resolve()
+    return (root / target.lstrip("/")).resolve() if target.startswith("/") else (folder / target).resolve()
+
+
+def ignored(root, name):
+    """Whether git ignores this path: a file made per machine or per run, not a stale claim."""
+    return subprocess.run(["git", "-C", str(root), "check-ignore", "-q", name], capture_output=True).returncode == 0
 
 
 def path_token(token):
@@ -100,7 +109,7 @@ def check(root, settings):
 
     files = [readme] if readme.is_file() else []
     if folder.is_dir():
-        files += sorted(folder.rglob("*.md"))
+        files += sorted(p for p in folder.rglob("*.md") if p.is_file())
     elif files:
         notes.append(f"docs: no {docs.get('dir', 'docs')}/ folder; README.md only")
     if not files:
@@ -116,16 +125,21 @@ def check(root, settings):
     def add(kind, path, line, detail):
         findings.append({"kind": kind, "file": str(path.relative_to(root)), "line": line, "detail": detail})
 
-    texts = {path: path.read_text(encoding="utf-8") for path in files}
+    texts = {}
+    for path in files:
+        try:
+            texts[path] = path.read_text(encoding="utf-8")
+        except (OSError, UnicodeDecodeError) as exc:
+            raise Stop(f"cannot read {path.relative_to(root)}: {exc}") from None
     for path, text in texts.items():
         for number, line in prose_lines(text):
             for raw in LINK.findall(line):
-                target = link_target(raw, path.parent)
+                target = link_target(raw, path.parent, root)
                 if target is not None and not target.exists():
                     add("link", path, number, f"{raw} does not exist")
 
     if index is not None:
-        listed = {link_target(raw, index.parent) for raw in LINK.findall(index.read_text(encoding="utf-8"))}
+        listed = {link_target(raw, index.parent, root) for raw in LINK.findall(texts.get(index, index.read_text(encoding="utf-8")))}
         for path in files:
             if path.resolve() != index.resolve() and folder in path.parents and path.resolve() not in listed:
                 add("index", path, 1, f"not linked from {docs['index']}")
@@ -134,7 +148,8 @@ def check(root, settings):
         for number, line in prose_lines(text):
             for token in TICKED.findall(line):
                 name = path_token(token)
-                if name and (root / name.split("/")[0]).exists() and not (root / name).exists():
+                if name and (root / name.split("/")[0]).exists() and not (root / name).exists() \
+                        and not ignored(root, name):
                     add("path", path, number, f"`{token}` does not exist")
 
     if public is not None:

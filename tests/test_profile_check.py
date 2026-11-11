@@ -795,6 +795,7 @@ class Docs(unittest.TestCase):
                 settings["docs"][path.split(".")[1]] = " "
                 errors, _ = pc.check(settings, sections, pc.DOCS)
                 self.assertTrue(any(e.startswith(f"{path}: empty") for e in errors), errors)
+                self.assertFalse([e for e in pc.check(settings, sections, pc.ONE)[0] if e.startswith("docs.")])
 
 
 class Sentry(unittest.TestCase):

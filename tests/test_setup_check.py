@@ -166,6 +166,27 @@ class ProfileSkills(unittest.TestCase):
                     for word in words:
                         self.assertIn(word, rep.rows[0]["detail"])
 
+    def test_the_docs_row_reads_from_the_profiles_repo(self):
+        # Guards gogogo#270: in a monorepo, [docs] paths are relative to the app holding the profile.
+        from test_profile_check import COMPLETE
+        root = repo({"apps/web/.agents/dev-process.md": COMPLETE, "apps/web/docs/README.md": "x",
+                     "apps/web/docs/public/p.md": "x"})
+        quiet = ("check_git_state", "check_settings", "check_profile_skills", "check_workspace", "check_release_shape",
+                 "check_release", "check_hard_stop_source", "check_tracker", "check_notify", "check_independence",
+                 "check_local_skills", "check_claude_md", "check_session_hook", "config_header")
+        out, cwd = io.StringIO(), os.getcwd()
+        os.chdir(root / "apps" / "web")
+        try:
+            with contextlib.ExitStack() as stack:
+                for name in quiet:
+                    stack.enter_context(mock.patch.object(sc, name))
+                stack.enter_context(contextlib.redirect_stdout(out))
+                sc.main(["--json"])
+        finally:
+            os.chdir(cwd)
+        rows = [r for r in json.loads(out.getvalue()) if r["check"] == "docs"]
+        self.assertEqual([r["level"] for r in rows], ["PASS"], rows)
+
     def test_a_profile_without_sentry_is_info_not_fail(self):
         # Guards gogogo#204: sentry-debug is opt-in by its [sentry] table, as auto-test is.
         import profile_check

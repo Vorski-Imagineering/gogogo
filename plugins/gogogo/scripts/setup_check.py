@@ -1228,7 +1228,7 @@ def main(argv=None):
         check_hard_stop_source(root, (settings.get("hard_stops") or {}).get("source"), rep)
         check_tracker(root, settings, rep)
         check_notify(path, rep)
-        check_docs(root, settings, rep)
+        check_docs(path.resolve().parent.parent, settings, rep)
         check_independence(settings, rep)
     check_local_skills(root, rep)
     check_claude_md(root, rep)

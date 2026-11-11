@@ -10,6 +10,7 @@ on it, and reads its findings and exit code.
 import io
 import json
 import shutil
+import subprocess
 import sys
 import tempfile
 import unittest
@@ -117,6 +118,37 @@ class DocsCheck(unittest.TestCase):
         self.assertEqual(data["files"], 2)
         self.assertEqual(len(data["findings"]), 1)
         self.assertEqual([f"{f['kind']} {f['file']}:{f['line']}: {f['detail']}" for f in data["findings"]], plain[:-1])
+
+    def test_a_missing_path_git_ignores_is_not_reported(self):
+        subprocess.run(["git", "init", "-q", str(self.root)], check=True)
+        self.repo({".gitignore": "plugins/cache/\n", "docs/a.md": "See `plugins/cache/x` and `plugins/gone.py`.\n"})
+        code, lines, _ = self.run_it()
+        self.assertEqual(self.findings(lines, "path"), ["path docs/a.md:1: `plugins/gone.py` does not exist"])
+
+    def test_a_doc_that_cannot_be_read_stops(self):
+        self.repo({"README.md": "x\n"})
+        (self.root / "docs").mkdir()
+        (self.root / "docs" / "a.md").write_bytes(b"caf\xe9\n")
+        code, _, err = self.run_it()
+        self.assertEqual(code, 2)
+        self.assertIn("docs/a.md", err)
+
+    def test_a_folder_named_like_a_doc_is_not_one(self):
+        self.repo({"README.md": "x\n", "docs/a.md": "a\n"})
+        (self.root / "docs" / "dir.md").mkdir()
+        code, lines, _ = self.run_it()
+        self.assertEqual((code, lines[-1]), (0, "docs: files=2 findings=0"))
+
+    def test_a_root_relative_link_resolves_from_the_repo_root(self):
+        self.repo({"docs/a.md": "[x](/plugins/here.md) [y](/plugins/gone.md)\n", "plugins/here.md": "x\n"})
+        code, lines, _ = self.run_it()
+        self.assertEqual(self.findings(lines, "link"), ["link docs/a.md:1: /plugins/gone.md does not exist"])
+
+    def test_public_text_that_only_looks_internal(self):
+        self.repo({"docs/public/p.md": "Install `react@18.3.1`, clone git@github.com:o/r.git, "
+                                       "see https://x.example/tmp/y and ~/x.\n"}, docs='[docs]\npublic = "docs/public"\n')
+        code, lines, _ = self.run_it()
+        self.assertEqual((code, self.findings(lines, "public")), (0, []))
 
     def test_an_unreadable_profile_stops(self):
         out, err = io.StringIO(), io.StringIO()
