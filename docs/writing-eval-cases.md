@@ -91,11 +91,18 @@ The case should fail there and pass in your working tree.
 
 ## Reading the result
 
-`tools/eval_changed.py` prints `evals: cases=<n> passed=<n> cost=$<x>`, then one
-line per case, `evals: <name> score=<score>`, with ` without=<score>` added
-under `--baseline`. A case that was meant to run and is not in the result
-(a grader file that failed to load, for example) is printed as
+`tools/eval_changed.py` prints `evals: cases=<n> passed=<n> base_failed=<k>
+cost=$<x>`, then one line per case, `evals: <name> score=<score>`, with
+` without=<score>` added under `--baseline`. A case that was meant to run and is
+not in the result (a grader file that failed to load, for example) is printed as
 `evals: <name> did not run` and fails the lane.
+
+A case below the gate is run again on the base, from the base's own files. When
+it fails there too, the lane prints `evals: <name> fails on <base> too
+score=<s>; not this change`, counts it in `base_failed`, and does not fail the
+change: the change did not cause it. Fix such a case in an issue of its own.
+When it passes on the base (`passes on <base>`), or the base run gives no
+result, its failure stands. A case the base does not have is not re-run.
 
 Each run's own scores are in `aggregate-result.json` in the run's report folder
 under `plugins/gogogo/evals/results/` (not committed).
@@ -120,10 +127,6 @@ says nothing about your change.
   in two of three runs, so a case that loses one of three graders can still
   count as passed. The per-case score line exists so a lowered score is
   visible without opening the report.
-- **A case already failing on the base.** A case below the gate is run again
-  on the base, from the base's own files. When it fails there too, the lane
-  reports it as failing on the base and does not fail the change: the change
-  did not cause it. Fix such a case in an issue of its own.
 - **`--baseline` is a floor, not a margin.** It fails only a case that does as
   well without the plugin, not one that is only a little worse. A prompt that
   gives the answer away therefore passes without the plugin; the neutral

@@ -115,13 +115,16 @@ def base_score(root: Path, fork: str, name: str) -> tuple[float | None, float]:
     taken down afterwards: (its score, or None for no result; what the run cost)."""
     with tempfile.TemporaryDirectory() as tmp:
         tree, out = Path(tmp) / "base", Path(tmp) / "base.json"
-        _git(["worktree", "add", "--detach", "--quiet", str(tree), fork], root)
+        try:
+            _git(["worktree", "add", "--detach", "--quiet", str(tree), fork], root)
+        except subprocess.CalledProcessError:
+            return None, 0.0
         try:
             _run_eval(["claude", "plugin", "eval", str(tree / PLUGIN), *FIXED, "--ablation", "none",
                        "--trust-plugin", "--no-publish", "--json", str(out), "--case", name], tree)
             doc = _read(out)
         finally:
-            _git(["worktree", "remove", "--force", str(tree)], root)
+            subprocess.run(["git", "worktree", "remove", "--force", str(tree)], cwd=root, capture_output=True)
     if doc is None:
         return None, 0.0
     cost = float(doc.get("costUsd") or 0)
@@ -151,12 +154,13 @@ def main(argv=None, root: Path = ROOT) -> int:
     ap.add_argument("--baseline", action="store_true")
     a = ap.parse_args(argv)
 
-    cases = case_tags(root)
-    fork = fork_point(root, a.base)
+    cases, fork, at_fork = case_tags(root), None, None
     if a.skill:
         skills = set(a.skill)
     else:
-        skills = skills_touched(changed_files(root, fork), cases, case_tags_at(root, fork))
+        fork = fork_point(root, a.base)
+        at_fork = case_tags_at(root, fork)
+        skills = skills_touched(changed_files(root, fork), cases, at_fork)
     if not skills:
         print("evals: no skill changed")
         return 0
@@ -189,11 +193,16 @@ def main(argv=None, root: Path = ROOT) -> int:
     listed = doc.get("cases") or []
     # A case below the gate is run again on the base: failing there too, it is an old failure
     # and does not fail this change. A case the base does not have keeps its failure.
-    cost, on_base, base_failed = float(doc.get("costUsd") or 0), [], set()
-    at_fork = case_tags_at(root, fork)
+    cost, on_base, base_failed, below = float(doc.get("costUsd") or 0), [], set(), set()
     for c in listed:
         score = (c.get("aggregates") or {}).get("score")
-        if score is None or float(score) >= THRESHOLD or c.get("name") not in at_fork:
+        if score is None or float(score) >= THRESHOLD:
+            continue
+        below.add(c.get("name"))
+        if at_fork is None:
+            fork = fork_point(root, a.base)
+            at_fork = case_tags_at(root, fork)
+        if c.get("name") not in at_fork:
             continue
         there, spent = base_score(root, fork, c["name"])
         cost += spent
@@ -227,9 +236,9 @@ def main(argv=None, root: Path = ROOT) -> int:
             if delta is None or delta <= 0:
                 flat.append(c.get("name"))
                 print(f"evals: {c.get('name')} does as well without the plugin")
-    below = {c.get("name") for c in listed if (c.get("aggregates") or {}).get("score") is not None
-             and float(c["aggregates"]["score"]) < THRESHOLD} - base_failed
-    ok = (code == 0 or (base_failed and not below)) and not below
+    # The eval's own count of failed cases must all be old failures for its exit code to be set aside.
+    eval_failed = int(agg.get("casesTotal") or 0) - int(agg.get("casesPassed") or 0)
+    ok = not (below - base_failed) and (code == 0 or (base_failed and eval_failed <= len(base_failed)))
     return 0 if ok and not flat and not missing else 1
 
 

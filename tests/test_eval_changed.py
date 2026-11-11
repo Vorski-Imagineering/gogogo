@@ -199,6 +199,33 @@ class Lane(unittest.TestCase):
         self.assertEqual(rc, 1)
         self.assertIn("evals: dev-third-attempt base re-run gave no result", out)
 
+    def test_an_old_failure_does_not_excuse_another_case_the_eval_failed(self):
+        write(self.root, "plugins/gogogo/skills/dev/SKILL.md", "changed\n")
+        result = doc(total=2, passed=0, scores={"dev-reversal": {"score": None},
+                                                "dev-third-attempt": {"score": 0.33}})
+        rc, out = self.run_lane(result=result, code=1, base=self.base_run(0.33))
+        self.assertIn("base_failed=1", out)
+        self.assertEqual(rc, 1)
+
+    def test_skill_mode_with_every_case_passing_needs_no_base(self):
+        rc, out = self.run_lane(["--skill", "dev", "--base", "no-such-ref"],
+                                result=doc(total=2, passed=2, scores={"dev-reversal": {"score": 1},
+                                                                     "dev-third-attempt": {"score": 1}}))
+        self.assertEqual(rc, 0, out)
+
+    def test_a_worktree_that_cannot_be_made_gives_no_result(self):
+        write(self.root, "plugins/gogogo/skills/dev/SKILL.md", "changed\n")
+        real = eval_changed._git
+
+        def git(args, cwd):
+            if args[:2] == ["worktree", "add"]:
+                raise subprocess.CalledProcessError(128, ["git", *args])
+            return real(args, cwd)
+        with mock.patch.object(eval_changed, "_git", git):
+            rc, out = self.run_lane(result=self.failing(), code=1, base=self.base_run(0.33))
+        self.assertEqual(rc, 1)
+        self.assertIn("evals: dev-third-attempt base re-run gave no result", out)
+
     def test_the_base_worktree_is_taken_down(self):
         write(self.root, "plugins/gogogo/skills/dev/SKILL.md", "changed\n")
         self.run_lane(result=self.failing(), code=1, base=self.base_run(0.33))
