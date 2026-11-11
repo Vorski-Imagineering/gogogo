@@ -586,6 +586,12 @@ class BareLicence(unittest.TestCase):
 
     CASE = "1. Automated: `test_pages_listed`, guards the empty list."
 
+    def test_a_deleted_test_file_gets_the_whole_file_warning(self):
+        # gogogo#260: "deleted" licenses as "removed" does, so the lint names it too.
+        self.assertEqual(bare_warnings(GOOD.replace(self.CASE, "1. `tests/test_a.py` deleted")),
+                         ["## Test cases: `tests/test_a.py` licenses every change to that test file; "
+                          "name `path::name`, unless the Design deletes the file"])
+
     def test_a_bare_test_path_on_a_licence_line_warns(self):
         errs, warns, withheld = run(GOOD.replace(self.CASE, "1. The file `tests/test_a.py` is removed."), TESTS_LANE)
         self.assertEqual((errs, withheld), ([], None))
