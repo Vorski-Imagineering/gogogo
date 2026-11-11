@@ -214,9 +214,14 @@ def gh(*args: str) -> subprocess.CompletedProcess:
 
 
 def release_notes(tag: str) -> str | None:
-    """The Release's notes, or None when there is no Release for `tag`."""
+    """The Release's notes, or None when there is no Release for `tag`. Any other
+    failure to read it raises, so a Release that exists is never taken as missing."""
     view = gh("release", "view", tag, "--json", "body", "-q", ".body")
-    return view.stdout if view.returncode == 0 else None
+    if view.returncode == 0:
+        return view.stdout
+    if "release not found" in view.stderr:
+        return None
+    raise RuntimeError(view.stderr.strip() or f"gh release view exited {view.returncode}")
 
 
 def write_notes(text: str) -> str:
@@ -232,7 +237,7 @@ def job_release(tag: str, sha: str, profile: stage_sync.Profile, dry_run: bool) 
         return "would create", "release: would create"
     path = write_notes(body(tag, sha, profile, titles=True))
     try:
-        made = gh("release", "create", tag, "--title", tag, "--notes-file", path)
+        made = gh("release", "create", tag, "--verify-tag", "--title", tag, "--notes-file", path)
     finally:
         Path(path).unlink(missing_ok=True)
     if made.returncode != 0:
@@ -257,13 +262,22 @@ def job_sync(tag: str, profile: stage_sync.Profile, main_ref: str, dry_run: bool
 
 
 def deployed_event(tag: str, sha: str, profile: stage_sync.Profile) -> dict:
-    """The `deployed` event `stage_sync.py shipped --json` builds, from the same notes as `notes`."""
-    environment = production(profile)
-    prev = previous(tag, sha)
-    if prev is None:
-        return {"event": "deployed", "tag": tag, "environment": environment, "first": True}
-    result = stage_sync.shipped(sha, prev, profile.known, profile.issues_repo)
-    return stage_sync.shipped_event(tag, environment, result, stage_sync.fetch_titles(result.links))
+    """The `deployed` event `stage_sync.py shipped --json` builds: the matching stage's
+    environment and glob, else production's and deploy-*. When it cannot be built, the
+    event the stage-sync workflow sends then: the issue list unavailable."""
+    try:
+        matched = stage_sync.matching_stages(profile, tag)
+        if matched:
+            environment, glob = profile.environment(matched[0][1])[0], matched[0][1]["tag"]
+            prev = stage_sync.previous_tag(tag, glob)
+        else:
+            environment, prev = production(profile), previous(tag, sha)
+        if prev is None:
+            return {"event": "deployed", "tag": tag, "environment": environment, "first": True}
+        result = stage_sync.shipped(sha, prev, profile.known, profile.issues_repo)
+        return stage_sync.shipped_event(tag, environment, result, stage_sync.fetch_titles(result.links))
+    except Exception:  # noqa: BLE001 - the message still goes, without its list
+        return {"event": "deployed", "tag": tag, "unavailable": True}
 
 
 def send(profile: stage_sync.Profile, event: dict) -> tuple[int, str]:
@@ -294,7 +308,10 @@ def job_notify(tag: str, sha: str, profile: stage_sync.Profile, dry_run: bool) -
         raise RuntimeError(said or f"notify.py exited {code}")
     if said != "sent":
         return "off", "notify: off; not marked"
-    notes = release_notes(tag)
+    try:
+        notes = release_notes(tag)
+    except RuntimeError as exc:
+        return "sent", f"notify: sent; not marked ({exc})"
     if notes is None:
         return "sent", "notify: sent; not marked (no Release)"
     path = write_notes(notes.rstrip("\n") + f"\n\n{ANNOUNCED}\n")
@@ -308,12 +325,16 @@ def job_notify(tag: str, sha: str, profile: stage_sync.Profile, dry_run: bool) -
 
 
 def cmd_announce(args, profile_path) -> int:
-    profile = load(profile_path)
-    try:
-        sha = stage_sync.resolve_tag(args.tag)
-    except stage_sync.SyncError:
+    found = subprocess.run(["git", "rev-parse", "--verify", "--quiet", f"refs/tags/{args.tag}^{{commit}}"],
+                           capture_output=True, text=True)
+    if found.returncode != 0:
         print(f"error: no tag {args.tag} in this clone; nothing announced", file=sys.stderr)
         return EXIT_PROFILE
+    sha = found.stdout.strip()
+    try:
+        profile, problem = load(profile_path), None
+    except ProfileProblem as exc:  # the tag exists, so each job fails and the deploy does not
+        profile, problem = None, exc
     run = {
         "release": lambda: job_release(args.tag, sha, profile, args.dry_run),
         "sync": lambda: job_sync(args.tag, profile, args.main_ref, args.dry_run),
@@ -324,6 +345,8 @@ def cmd_announce(args, profile_path) -> int:
         if args.only and job != args.only:
             continue
         try:
+            if problem is not None:
+                raise problem
             value, line = run[job]()
         except Exception as exc:  # noqa: BLE001 - a failed job never fails the deploy
             value, line = "failed", (f"{job}: failed: {exc}; retry: python3 {Path(__file__).resolve()} "

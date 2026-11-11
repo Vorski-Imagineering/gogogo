@@ -133,9 +133,9 @@ deploy:
         GH_TOKEN: ${{ secrets.STAGE_SYNC_TOKEN }}
         TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
         TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+        TAG: ${{ needs.tag-name.outputs.tag }}
       run: |
         python3 <vendored scripts>/release.py tag --push origin
-        TAG=$(git describe --tags --exact-match --match 'deploy-*' HEAD)
         python3 <vendored scripts>/release.py announce --tag "$TAG"
 ```
 
@@ -143,8 +143,15 @@ deploy:
 move the board and create a Release). The `concurrency` group, keyed by the
 tag, keeps two runs for one tag from both sending: reading the mark and
 sending are two steps. The tag is only cut inside the deploy job, so the
-`tag-name` job works out its name first, with `release.py build`, and the
-group reads it from that job's output. The tag reaches the command through
+`tag-name` job works out its name first, with `release.py build`; the group
+and the announce step both read it from that job's output, so the tag announced
+is the tag the group holds.
+
+A repo that also runs `references/stage-sync.md`'s workflow on `push: tags`
+takes that trigger out when it adds this step, keeping `workflow_dispatch`:
+with both, a tag pushed with a token that starts workflows would be synced and
+announced twice. Its `reverts` step still runs from `/gogogo:auto-dev`'s
+preflight. The tag reaches the command through
 the shell, never interpolated into the workflow. `release.py` imports its
 neighbours from its own folder: vendor all five, `release.py`,
 `profile_check.py`, `stage_sync.py`, `tracker.py` and `notify.py`, from **one**

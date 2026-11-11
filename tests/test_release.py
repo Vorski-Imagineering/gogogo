@@ -254,6 +254,7 @@ class Announce(ReleaseRepo):
         self.repo.git("tag", "-a", "deploy-3", "-m", "deploy-3")
         self.push_main()
         self.releases, self.calls, self.sent, self.fail = {}, [], [], set()
+        self.view_error, self.created = "", ()
         world = self
 
         class Transport:
@@ -271,9 +272,14 @@ class Announce(ReleaseRepo):
             verb, tag = args[1], args[2]
             if verb in self.fail:
                 return subprocess.CompletedProcess(args, 1, "", f"{verb} refused")
+            if verb == "view" and self.view_error:
+                return subprocess.CompletedProcess(args, 1, "", self.view_error)
             if verb == "view":
                 found = tag in self.releases
-                return subprocess.CompletedProcess(args, 0 if found else 1, self.releases.get(tag, ""), "")
+                return subprocess.CompletedProcess(args, 0 if found else 1, self.releases.get(tag, ""),
+                                                   "" if found else "release not found")
+            if verb == "create":
+                self.created = args
             self.releases[tag] = Path(args[args.index("--notes-file") + 1]).read_text()
             return subprocess.CompletedProcess(args, 0, "", "")
 
@@ -382,6 +388,44 @@ class Announce(ReleaseRepo):
         self.assertTrue(lines[0].startswith("notify: "))
         self.assertTrue(lines[1].startswith("announce: deploy-3 notify="))
         self.assertFalse([c for c in self.calls if c[0] == "sync" or c[1] == "create"])
+
+
+    def test_a_release_that_cannot_be_read_is_not_taken_as_missing(self):
+        self.releases["deploy-3"] = f"notes\n\n{release.ANNOUNCED}\n"
+        self.view_error = "HTTP 401: Bad credentials"
+        code, lines, _ = self.announce(profile=self.messages_on())
+        self.assertEqual(code, 0)
+        self.assertTrue(lines[0].startswith("release: failed: HTTP 401"), lines)
+        self.assertTrue(lines[2].startswith("notify: failed: HTTP 401"), lines)
+        self.assertEqual(self.sent, [])
+
+    def test_the_release_is_made_only_from_the_tag_on_the_remote(self):
+        self.announce()
+        self.assertIn("--verify-tag", self.created)
+
+    def test_a_branch_or_sha_is_not_a_tag(self):
+        for name in ("main", self.shas[0]):
+            with self.subTest(name):
+                code, lines, err = self.announce_tag(name)
+                self.assertEqual((code, lines, self.calls), (2, [], []))
+
+    def test_a_profile_problem_fails_each_job_not_the_deploy(self):
+        code, lines, _ = self.announce(profile=self.messages_on(profile_text().replace("[release]", "[release")))
+        self.assertEqual(code, 0)
+        self.assertEqual([line.split(":")[0] + ":" + line.split(":")[1] for line in lines[:3]],
+                         ["release: failed", "sync: failed", "notify: failed"])
+
+    def test_the_message_names_the_stage_environment_or_says_the_list_is_unavailable(self):
+        staged = profile_text().replace('environment = "production"\ncolumn = "In Production"',
+                                        'environment = "dev"\ncolumn = "In Production"')
+        self.assertNotEqual(staged, profile_text())
+        self.announce(profile=self.messages_on(staged))
+        self.assertIn("to dev", self.sent[-1])
+        with mock.patch.object(release.stage_sync, "shipped", side_effect=RuntimeError("git log failed")):
+            self.releases.clear()
+            code, lines, _ = self.announce(profile=self.messages_on())
+        self.assertTrue(lines[2].startswith("notify: sent"), lines)
+        self.assertIn("issue list unavailable", self.sent[-1])
 
 
 class VersioningDoc(unittest.TestCase):
