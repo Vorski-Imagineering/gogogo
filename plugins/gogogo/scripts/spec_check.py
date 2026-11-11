@@ -23,6 +23,7 @@ touches that file and `missing` when it does not, and each changed file no
 `F:` item names is printed as `outside:` (not when Files is unlisted: there is
 no list to be outside of). A file the change renames away counts as touched
 under its old path too, and only its new path is checked for `outside:`.
+A Files entry ending `/` is a folder: it covers every file beneath it.
 
 `verify` reads a reader's answers, one line per `V`, `A`, `D`, `T` and `N`
 item: `<id> | <met|missing|differs|na> | <evidence> | <note>`. Evidence is
@@ -165,14 +166,20 @@ def list_items(body: str, changed: list[str] | None = None, tree=None, renamed_a
     for path in paths:
         add(f"F:{path}", path)
     if changed is not None:
+        def covers(path, f):
+            # A path ending `/` is a folder: it covers every file beneath it, at any depth.
+            if path.endswith("/"):
+                return ("/" + path) in ("/" + f)
+            return f == path or f.endswith("/" + path)
+
         def touches(path):
             # A file renamed away is touched under its old path too; only `changed` is checked for outside.
-            return [f for f in [*changed, *renamed_away] if f == path or f.endswith("/" + path)]
+            return [f for f in [*changed, *renamed_away] if covers(path, f)]
         for item in items:
             if item["id"].startswith("F:"):
                 item["status"] = "met" if touches(item["text"]) else "missing"
         if paths:
-            outside = [f for f in changed if not any(f == p or f.endswith("/" + p) for p in paths)]
+            outside = [f for f in changed if not any(covers(p, f) for p in paths)]
     return {"items": items, "unlisted": unlisted, "outside": outside}
 
 

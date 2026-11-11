@@ -10,8 +10,9 @@ the human check names real URLs, that Design and Test cases number their items
 (`1.` or `**1.**` at the start of the line) and Files groups its paths, which
 `spec_check.py` reads, that a part of the work in a repo the profile's
 `related_repos` lists cites an issue there, and, as a warning, that each
-`(shipped)` ref on the `**Blocked by:**` line has its reason line, and that no
-line licenses a whole test file. It cannot judge whether the design is right; the
+`(shipped)` ref on the `**Blocked by:**` line has its reason line, that no
+line licenses a whole test file, and that no Files folder entry is the root or
+at or above a lane's tests folder. It cannot judge whether the design is right; the
 skill's pre-post check does that.
 
 Output: one `error:` or `warning:` line per finding, then `label: apply` or
@@ -273,6 +274,14 @@ def lint(body, settings):
             errors.append("## Files: no **Create** or **Edit** group naming a file in backticks")
         if "not_in_scope" not in groups:
             errors.append("## Files: no **Explicitly not in scope** group")
+        # A folder entry covers every file under it; at the root or a lane's tests folder, nothing is outside.
+        fixed = [re.split(r"[*?\[]", p, maxsplit=1)[0] for lane in settings.get("lanes", [])
+                 for p in lane.get("tests") or [] if isinstance(p, str)]
+        for line in groups.get("create", []) + groups.get("edit", []):
+            for entry in re.findall(r"`([^`\s]*/)`", line):
+                if entry in ("/", "./") or any(f.startswith(entry) for f in fixed):
+                    warnings.append(f"## Files: `{entry}` covers every file under it, so nothing there can be "
+                                    "outside the spec; name a narrower folder")
 
     # --- Test cases -------------------------------------------------------
     if "Test cases" in by_title:

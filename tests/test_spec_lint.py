@@ -528,6 +528,25 @@ TESTS_LANE = dict(SETTINGS, lanes=[{"name": "unit", "run": "make test", "tests":
                                    {"name": "live", "env": "dev"}])
 
 
+class WideFolder(unittest.TestCase):
+    """gogogo#276: a Files folder entry so wide nothing can be outside the spec is named."""
+
+    def wide(self, entry):
+        errs, warns, withheld = run(GOOD.replace("**Edit:** `views.py`.", f"**Edit:** `views.py`, `{entry}`."),
+                                    TESTS_LANE)
+        self.assertEqual((errs, withheld), ([], None))
+        return [w for w in warns if "covers every file under it" in w]
+
+    def test_a_folder_at_or_above_a_lanes_tests_or_the_root_warns(self):
+        for entry in ("tests/", "/", "./"):
+            with self.subTest(entry):
+                self.assertEqual(self.wide(entry), [f"## Files: `{entry}` covers every file under it, so nothing "
+                                                    "there can be outside the spec; name a narrower folder"])
+
+    def test_a_narrow_folder_does_not_warn(self):
+        self.assertEqual(self.wide("plugins/gogogo/evals/x/graders/"), [])
+
+
 def bare_warnings(body):
     return [w for w in run(body, TESTS_LANE)[1] if "licenses every change" in w]
 
