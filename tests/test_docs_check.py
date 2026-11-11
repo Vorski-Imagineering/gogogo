@@ -169,18 +169,22 @@ class DocsCheck(unittest.TestCase):
         self.repo({"docs/public/p.md": "Install `react@18.3.1`, clone git@github.com:o/r.git, "
                                        "see https://x.example/tmp/y and ~/x.\n"
                                        "Edit `src/home/page.tsx`, [Home](../home/index.md), app/Users/list.tsx, "
-                                       "ftp://mirror.example.org/tmp/p, http://[::1]/tmp/x and pkg@beta.rc.1.\n",
+                                       "ftp://mirror.example.org/tmp/p, http://[::1]/tmp/x and pkg@beta.rc.1.\n"
+                                       "[Guide](/docs/home/index.md), GET /api/v1/Users/{id}, /srv/www/tmp/uploads/, "
+                                       "https://en.wikipedia.org/wiki/X_(y)/tmp/z\n",
                    "docs/home/index.md": "x\n"},
                   docs='[docs]\npublic = "docs/public"\n')
         code, lines, _ = self.run_it()
         self.assertEqual((code, self.findings(lines, "public")), (0, []))
 
     def test_an_absolute_path_under_another_folder(self):
-        self.repo({"docs/public/p.md": "Cache in /private/tmp/x\nLogs in /var/tmp/x\nOpen /mnt/c/Users/me\n"},
+        self.repo({"docs/public/p.md": "Cache in /private/tmp/x\nLogs in /var/tmp/x\nOpen /mnt/c/Users/me\n"
+                                       "[/home/me/app](setup.md)\n**/home/me/app**\n_/var/tmp/x_\n{/tmp/x}\n"
+                                       "https://x.example/?dir=/home/me\n"},
                   docs='[docs]\npublic = "docs/public"\n')
         code, lines, _ = self.run_it()
         self.assertEqual(self.findings(lines, "public"), [
-            f"public docs/public/p.md:{n}: holds an absolute path" for n in (1, 2, 3)])
+            f"public docs/public/p.md:{n}: holds an absolute path" for n in range(1, 9)])
 
     def test_a_docs_folder_outside_the_repo_is_reported_not_a_crash(self):
         outside = Path(tempfile.mkdtemp())

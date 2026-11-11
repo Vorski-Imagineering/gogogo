@@ -16,8 +16,8 @@ folder that holds the profile's `.agents/`. Each finding is one line,
           (no space, `<` or `*`, and its first segment exists at the root)
           and does not exist; a trailing `:<line>` or `::<test>` is dropped;
   public  with `docs.public` set, a line in a file under it holding an
-          absolute path (`/home/`, `/Users/`, `/tmp/` at any depth, as in
-          `/var/tmp/`, or `C:\\`), an IPv4
+          absolute path (`/home/`, `/Users/`, `/tmp/`, `/private/tmp/`,
+          `/var/tmp/`, `/mnt/<drive>/Users/`, `C:\\`), an IPv4
           address, an email address, or a `publish.private_names` entry
           (a whole word, any case).
 
@@ -45,22 +45,11 @@ import profile_check  # noqa: E402
 EXIT_OK, EXIT_FINDINGS, EXIT_STOP = 0, 1, 2
 LINK = re.compile(r"\[[^\]]*\]\(([^)\s]+)(?:\s+\"[^\"]*\")?\)")
 TICKED = re.compile(r"`([^`\n]+)`")
-# A path is read whole: split at spaces, quotes and brackets; a web address is skipped
-# whole; the rest is split at `=` and `:` (`PATH=…:/home/…`). Absolute when it starts
-# with one `/` (`file:///home/…` too) and has a `home`, `Users` or `tmp` folder anywhere.
-CHUNK = re.compile(r"[^\s`\"'()<>,;|]+")
-WEB = re.compile(r"^[A-Za-z][\w+.-]*://")
-WINDOWS = re.compile(r"(?<!\w)C:\\")
-
-
-def absolute_path(line):
-    for chunk in CHUNK.findall(line):
-        if WEB.match(chunk) and not chunk.lower().startswith("file://"):
-            continue
-        for piece in re.split(r"[=:]", chunk):
-            if re.match(r"/(?!/)|///", piece) and {"home", "Users", "tmp"} & set(piece.split("/")[:-1]):
-                return True
-    return bool(WINDOWS.search(line))
+# The prefixes Design 1.4 names, and the three a person added; not when the character
+# before shows a relative path, a host or an address goes on (`src/home/`, `x.example/tmp/`,
+# `[::1]/tmp/`, `X_(y)/tmp/`). `_` is left out, so `_/var/tmp/x_` (italics) is caught.
+ABSOLUTE = re.compile(r"(?<![A-Za-z0-9.~)\]-])/(?:home|Users|tmp|private/tmp|var/tmp|mnt/[A-Za-z]/Users)/"
+                      r"|(?<!\w)C:\\")
 IPV4 = re.compile(r"(?<![\d.])(?:\d{1,3}\.){3}\d{1,3}(?![\d.])")
 # A domain ending in letters, not a version pin (`react@18.3.1`) or an scp-style remote (`git@host:`).
 EMAIL = re.compile(r"[\w.+-]+@[\w-]+(?:\.[\w-]+)*\.[A-Za-z]{2,}\b(?![:\w-]|\.\w)")
@@ -170,10 +159,8 @@ def check(root, settings):
             if path != public and public not in path.parents:
                 continue
             for number, line in enumerate(text.splitlines(), 1):
-                if absolute_path(line):
-                    add("public", path, number, "holds an absolute path")
-                for pattern, what in ((IPV4, "an IP address"), (EMAIL, "an email address"),
-                                      *((p, "a private name") for p in private)):
+                for pattern, what in ((ABSOLUTE, "an absolute path"), (IPV4, "an IP address"),
+                                      (EMAIL, "an email address"), *((p, "a private name") for p in private)):
                     if pattern.search(line):
                         add("public", path, number, f"holds {what}")
     return notes, len(files), findings
