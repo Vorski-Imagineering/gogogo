@@ -48,10 +48,8 @@ TICKED = re.compile(r"`([^`\n]+)`")
 # The prefixes Design 1.4 names, and the three a person added; not when the character
 # before shows a relative path, a host, an address or a placeholder goes on (`src/home/`,
 # `x.example/tmp/`, `[::1]/tmp/`, `X_(y)/tmp/`, `${HOME}/tmp/`, `%TEMP%/tmp/`). `_` is left out,
-# so `_/var/tmp/x_` (italics) is caught. After `*`, only with a closing `*` in the same word
-# (`**/home/me**` is bold; `**/tmp/` and `src/**/home/` are globs).
-_PREFIX = r"/(?:home|Users|tmp|private/tmp|var/tmp|mnt/[A-Za-z]/Users)/"
-ABSOLUTE = re.compile(rf"(?<![A-Za-z0-9.~)\]}}%+!*-]){_PREFIX}|(?<=\*)(?<!/\*)(?<!/\*\*){_PREFIX}(?=[^\s*]*\*)"
+# so `_/var/tmp/x_` (italics) is caught. A glob (`**/tmp/`) holds `/tmp/` and is flagged too.
+ABSOLUTE = re.compile(r"(?<![A-Za-z0-9.~)\]}%-])/(?:home|Users|tmp|private/tmp|var/tmp|mnt/[A-Za-z]/Users)/"
                       r"|(?<!\w)C:\\")
 IPV4 = re.compile(r"(?<![\d.])(?:\d{1,3}\.){3}\d{1,3}(?![\d.])")
 # A domain ending in letters, not a version pin (`react@18.3.1`) or an scp-style remote (`git@host:`).
