@@ -81,7 +81,10 @@ become *not reached*):
 
 1. Write `<walk folder>/<owner>__<name>/spec-<n>.json` with auto-test's spec
    keys (`n`, `verdict`, `kind`, `summary`, `role`, `commits`, `checks`, and
-   `repro` for a FAIL, `human` for a NEEDS_HUMAN). One `checks` row per step:
+   `repro` for a FAIL, `human` for a NEEDS_HUMAN), and always `signals` (what
+   the system side read), `data` (this issue's ledger objects, kept or
+   deleted, or "None created.") and `not_tested` (its held, not reached and
+   not on this environment steps, or "Nothing."). One `checks` row per step:
    `[criterion, source, steps, expected, observed, mark]`, where *source* is
    `<repo>#<n> step <k>` and *observed* holds the person's words and the
    system side, both.

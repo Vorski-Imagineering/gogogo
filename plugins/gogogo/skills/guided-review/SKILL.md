@@ -86,9 +86,9 @@ you never do it in their place, and you never act as their account.
 3. **Stamp and model.** The script's `version --walk` prints the walk's stamp
    (on stderr, where the plugin came from). Record both, and the **model id**,
    in `walk.md`.
-4. **The browser**, for the system side: load the `claude-in-chrome` tools
-   (*Claude-specific*), open the walk environment's `url`, and note the
-   account's **role**, never its name. A login page is not a stop here: it
+4. **The browser**, for the system side, except with `--plan-only`: load the
+   `claude-in-chrome` tools (*Claude-specific*), open the walk environment's
+   `url`, and note the account's **role**, never its name. A login page is not a stop here: it
    goes on Prepare's list of what only the person can do.
 
 ## Gather

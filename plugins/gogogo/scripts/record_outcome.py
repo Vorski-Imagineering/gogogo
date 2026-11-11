@@ -68,8 +68,10 @@ MARKERS = ("<!-- auto-test ", "<!-- gogogo-auto-test ")
 WALK_MARKER = "<!-- guided-review "
 REQUIRED = ("n", "verdict", "kind", "summary", "role", "commits", "checks")
 BY_VERDICT = {"FAIL": ("repro",), "NEEDS_HUMAN": ("human", "blocked")}
-# A walk's comment names no label to remove, so it has no `blocked` sentence.
+# A walk's comment names no label to remove, so it has no `blocked` sentence; and it says
+# what it read, created and left out, since auto-test's defaults for those are not a walk's.
 WALK_BY_VERDICT = {"FAIL": ("repro",), "NEEDS_HUMAN": ("human",)}
+WALK_REQUIRED = REQUIRED + ("signals", "data", "not_tested")
 
 # What a published comment may not hold (tracker.public): a URL with a query
 # string, a URL with a user:password part, a bare IPv4 address.
@@ -210,7 +212,7 @@ def _check_spec(spec, public, issue, hosts=(), walk=False):
     verdict = spec.get("verdict")
     if verdict not in VERDICTS:
         raise Stop(f"spec: verdict must be one of {', '.join(VERDICTS)}, found {verdict!r}")
-    for key in REQUIRED + (WALK_BY_VERDICT if walk else BY_VERDICT).get(verdict, ()):
+    for key in (WALK_REQUIRED + WALK_BY_VERDICT.get(verdict, ()) if walk else REQUIRED + BY_VERDICT.get(verdict, ())):
         if spec.get(key) in (None, ""):
             raise Stop(f"spec: {key} is missing" + (" (record the role preflight saw; never guess it)"
                                                     if key == "role" else ""))
@@ -327,9 +329,6 @@ def render_walk(settings, sections, run_dir, issue, build, model, spec, plugin_r
 
     out = [f"{WALK_MARKER}v1 run={walk} issue={n} verdict={verdict} build={build} env={env_name} skill={skill} -->",
            f"## Guided review: {VERDICTS[verdict]}", "", spec["summary"]]
-    if spec.get("mention"):
-        out.append(f"@{spec['mention'].lstrip('@')}: this passed a guided review on {env_name}; "
-                   "reopen if it still isn't what you reported.")
     out += ["", "### Build tested", "| | |", "|---|---|",
             f"| Environment | {cell(env_name)} |",
             f"| Running build | `{cell(build, code=True)}` |"]
@@ -344,9 +343,8 @@ def render_walk(settings, sections, run_dir, issue, build, model, spec, plugin_r
             "| # | Criterion | Source | Steps (route · action) | Expected | Observed | |",
             "|---|---|---|---|---|---|---|"]
     out += [f"| {i} | " + " | ".join(cell(v) for v in c) + " |" for i, c in enumerate(spec["checks"], 1)]
-    out += ["", f"Signals: {spec.get('signals', 'no console errors, no 4xx/5xx')}", "",
-            "### Test data", spec.get("data", "None created. No fixtures used."), "",
-            "### Not tested", spec.get("not_tested", "Nothing.")]
+    out += ["", f"Signals: {spec['signals']}", "", "### Test data", spec["data"], "",
+            "### Not tested", spec["not_tested"]]
     if verdict == "FAIL":
         out += ["", "### Reproduce", spec["repro"]]
     if verdict == "NEEDS_HUMAN":
@@ -546,16 +544,16 @@ def main(argv=None):
                 spec = json.load(sys.stdin)
             except json.JSONDecodeError as exc:
                 raise Stop(f"spec: not valid JSON ({exc})") from None
-            if args.walk is None and (args.env or args.repo):
-                raise Stop("render: --env and --repo are for --walk")
-            if args.walk is not None and not args.env:
-                raise Stop("render: --walk needs --env")
+            if args.walk is not None and not (args.env and args.repo):
+                raise Stop("render: --walk needs --env and --repo")
             if args.walk is None:
                 print(render(settings, sections, args.run_dir, args.issue, args.build, args.model, spec, plugin_root))
             else:
                 print(render_walk(settings, sections, args.run_dir, args.issue, args.build, args.model, spec,
                                   plugin_root, args.walk, args.env, repo))
         elif args.command == "apply":
+            if args.walk and not args.repo:
+                raise Stop("apply: --walk needs --repo")
             apply(settings, path, args.run_dir, args.issue, args.verdict, repo, args.walk)
     except Stop as exc:
         for line in str(exc).splitlines():
