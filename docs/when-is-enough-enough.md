@@ -19,8 +19,16 @@ later round reviews only the corrections, at `precise`. A finding is applied
 when it shows one of these:
 - the change fails the spec or a `CLAUDE.md` rule;
 - it breaks something that worked;
-- a bug, with a concrete case;
+- a bug, with a concrete case that a real user or run in production can reach;
 - a security, data-loss or unapproved-Hard-Stop risk.
+
+Before fixing a bug, the build writes one line saying how production reaches
+it. When that line names a guarantee that prevents it, or a client nobody
+ships, with evidence a reader can open (a `file:line`, a documentation link, a
+record), the finding is declined as `hypothetical` and the report gives that
+evidence. A claim with no evidence declines nothing, and a finding that is also
+a spec failure, a regression, or a security or data-loss risk is never declined
+this way.
 
 A small addition the spec does not have may be applied, with a test.
 Everything else is declined with a reason word. Each finding gets three
@@ -199,6 +207,15 @@ Decided on 2026-10-02 and specified in
    next; the reviewer names what the spec does not need; and the record keeps
    the size and the reasons per round. A gate on what later rounds may apply
    waits for the `v=3` numbers.
+
+9. **A bug says how production reaches it** (2026-10-30). One build ran about
+   fifteen rounds on findings that a concrete failing case made bugs but that
+   nothing real could reach, such as a write failure the runtime answers by
+   resetting the object. Two rounds went on a wrong approach to one of them,
+   and one such fix caused a regression. So a bug finding now carries one line
+   on how a real user or run reaches it, and evidence of a guarantee that
+   prevents it declines the finding as `hypothetical`. Security, lost data, a
+   spec failure and a regression are never declined this way.
 
 Not taken: a fixed round limit as the rule, depth presets, a setting for the
 reviewer's model (the record notes the models instead), and a second agent to
