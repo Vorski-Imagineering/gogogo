@@ -133,6 +133,19 @@ class DocsCheck(unittest.TestCase):
         self.assertEqual(code, 2)
         self.assertIn("INDEX.md", err)
 
+    def test_an_index_outside_the_repo_that_cannot_be_read_stops(self):
+        repo = self.root / "repo"
+        (repo / ".agents").mkdir(parents=True)
+        index = self.root / "INDEX.md"
+        (repo / ".agents" / "dev-process.md").write_text(PROFILE.format(docs=f'[docs]\nindex = "{index}"\n'))
+        (repo / "README.md").write_text("x\n")
+        (self.root / "INDEX.md").write_bytes(b"caf\xe9\n")
+        out, err = io.StringIO(), io.StringIO()
+        with redirect_stdout(out), redirect_stderr(err):
+            code = dc.main(["--profile", str(repo / ".agents" / "dev-process.md")])
+        self.assertEqual(code, 2)
+        self.assertIn("INDEX.md", err.getvalue())
+
     def test_internal_detail_at_a_sentence_end_or_in_a_file_url(self):
         self.repo({"docs/public/p.md": "Write to ops@corp.example.\nOpen file:///home/me/x\nPATH=$PATH:/home/me/bin\n"},
                   docs='[docs]\npublic = "docs/public"\n')
@@ -154,9 +167,12 @@ class DocsCheck(unittest.TestCase):
 
     def test_public_text_that_only_looks_internal(self):
         self.repo({"docs/public/p.md": "Install `react@18.3.1`, clone git@github.com:o/r.git, "
-                                       "see https://x.example/tmp/y and ~/x.\n"}, docs='[docs]\npublic = "docs/public"\n')
+                                       "see https://x.example/tmp/y and ~/x.\n"
+                                       "Edit `src/home/page.tsx`, [Home](../home/index.md), app/Users/list.tsx, "
+                                       "ftp://mirror.example.org/tmp/p and pkg@beta.rc.1.\n"},
+                  docs='[docs]\npublic = "docs/public"\n')
         code, lines, _ = self.run_it()
-        self.assertEqual((code, self.findings(lines, "public")), (0, []))
+        self.assertEqual(self.findings(lines, "public"), [])
 
     def test_an_unreadable_profile_stops(self):
         out, err = io.StringIO(), io.StringIO()

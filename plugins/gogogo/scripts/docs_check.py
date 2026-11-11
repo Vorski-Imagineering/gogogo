@@ -44,12 +44,11 @@ import profile_check  # noqa: E402
 EXIT_OK, EXIT_FINDINGS, EXIT_STOP = 0, 1, 2
 LINK = re.compile(r"\[[^\]]*\]\(([^)\s]+)(?:\s+\"[^\"]*\")?\)")
 TICKED = re.compile(r"`([^`\n]+)`")
-ABSOLUTE = re.compile(r"(?:/home/|/Users/|/tmp/|C:\\)")
-# A web link's path is not a path on a disk: it is left out before ABSOLUTE is looked for.
-WEB = re.compile(r"https?://\S+")
+# Not inside a relative path or a web address (`src/home/`, `../home/`, `x.example/tmp/`).
+ABSOLUTE = re.compile(r"(?<![\w.~-])(?:/home/|/Users/|/tmp/)|(?<!\w)C:\\")
 IPV4 = re.compile(r"(?<![\d.])(?:\d{1,3}\.){3}\d{1,3}(?![\d.])")
 # A domain ending in letters, not a version pin (`react@18.3.1`) or an scp-style remote (`git@host:`).
-EMAIL = re.compile(r"[\w.+-]+@[\w-]+(?:\.[\w-]+)*\.[A-Za-z]{2,}\b(?![:\w-])")
+EMAIL = re.compile(r"[\w.+-]+@[\w-]+(?:\.[\w-]+)*\.[A-Za-z]{2,}\b(?![:\w-]|\.\w)")
 
 
 class Stop(Exception):
@@ -91,7 +90,7 @@ def read(path, root):
     try:
         return path.read_text(encoding="utf-8")
     except (OSError, UnicodeDecodeError) as exc:
-        raise Stop(f"cannot read {path.relative_to(root)}: {exc}") from None
+        raise Stop(f"cannot read {path}: {exc}") from None
 
 
 def path_token(token):
@@ -158,7 +157,7 @@ def check(root, settings):
             for number, line in enumerate(text.splitlines(), 1):
                 for pattern, what in ((ABSOLUTE, "an absolute path"), (IPV4, "an IP address"),
                                       (EMAIL, "an email address"), *((p, "a private name") for p in private)):
-                    if pattern.search(WEB.sub("", line) if pattern is ABSOLUTE else line):
+                    if pattern.search(line):
                         add("public", path, number, f"holds {what}")
     return notes, len(files), findings
 
