@@ -553,6 +553,16 @@ class WideFolder(unittest.TestCase):
         self.assertEqual(self.wide("tests/x.py` (see (a) `tests/`) `views.py"), [])
         self.assertEqual(len(self.wide("{tests/,docs/}")), 1)
 
+    def test_a_create_entry_is_read_too(self):
+        errs, warns, _ = run(GOOD.replace("**Edit:** `views.py`.", "**Create:** `tests/`.\n\n**Edit:** `views.py`."),
+                             TESTS_LANE)
+        self.assertEqual(len([w for w in warns if "covers every file under it" in w]), 1)
+
+    def test_only_the_fixed_part_of_a_lane_pattern_counts(self):
+        lane = dict(SETTINGS, lanes=[{"name": "unit", "run": "make test", "tests": ["tests/*/x.py"]}])
+        errs, warns, _ = run(GOOD.replace("**Edit:** `views.py`.", "**Edit:** `views.py`, `tests/*/`."), lane)
+        self.assertEqual([w for w in warns if "covers every file under it" in w], [])
+
     def test_the_command_still_exits_0_on_the_warning(self):
         with tempfile.TemporaryDirectory() as tmp:
             profile = Path(tmp) / "dev-process.md"
@@ -639,6 +649,21 @@ class CommandLine(unittest.TestCase):
             self.assertEqual(code, 0)
             self.assertIn("warning: ## Context: #5 is marked (shipped)", out)
             self.assertEqual(out.strip().splitlines()[-1], "label: apply")
+
+
+class LinePaths(unittest.TestCase):
+    """How a Files line is read, by spec_check and the lint alike (gogogo#276)."""
+
+    def test_brace_groups_expand_and_malformed_ones_stay(self):
+        self.assertEqual(sl.expand("x/{a,b}.py"), ["x/a.py", "x/b.py"])
+        for path in ("a/{b.py", "a/{b}.py", "a}/{b,c}", "a{/{b,c}"):
+            with self.subTest(path):
+                self.assertEqual(sl.expand(path), [path])
+
+    def test_parenthesised_text_is_dropped(self):
+        self.assertEqual(sl.line_paths("`a.py`(x)`b.py` (see `c.py`)"), ["a.py", "b.py"])
+        # Inside a name too, as spec_check always has: a folder named in parentheses is a follow-up of #276.
+        self.assertEqual(sl.line_paths("`docs/(old)/a.py`"), ["docs//a.py"])
 
 
 if __name__ == "__main__":
