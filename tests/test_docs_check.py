@@ -230,7 +230,7 @@ class DocsCheck(unittest.TestCase):
         self.assertIn("no README.md and no docs/ folder", err)
 
     def test_an_empty_private_name_matches_nothing(self):
-        self.repo({"docs/public/p.md": "plain words\n"})
+        self.repo({"docs/public/p.md": "plain words.\n"})
         (self.root / ".agents" / "dev-process.md").write_text(
             PROFILE.format(docs='[docs]\npublic = "docs/public"\n').replace('["Acme Internal"]', '["", "Acme Internal"]'))
         code, lines, _ = self.run_it()
