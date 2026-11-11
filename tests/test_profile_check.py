@@ -779,6 +779,9 @@ class AutoTest(unittest.TestCase):
 class GuidedReview(unittest.TestCase):
     """/gogogo:guided-review is opted into by auto-test's table and section (gogogo#263)."""
 
+    def test_both_skills_are_opted_into_by_the_auto_test_table(self):
+        self.assertEqual((pc.OPT_IN[pc.TEST], pc.OPT_IN[pc.GUIDED]), ("auto_test", "auto_test"))
+
     def test_without_auto_test_only_its_own_check_refuses(self):
         settings, sections = parse()
         bare = drop(settings, "auto_test")

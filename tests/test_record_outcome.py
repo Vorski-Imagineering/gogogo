@@ -577,6 +577,67 @@ class Walk(unittest.TestCase):
         self.assertEqual((code, world.verbs()), (2, []))
         self.assertIn("--repo", err)
 
+    def test_the_whole_walk_comment(self):
+        settings, sections = pc.split_profile(COMPLETE)
+        stamp = ro.walk_stamp(PLUGIN, sections["Test data"])
+        for verdict, extra, tail in (
+            ("PASS", {}, []),
+            ("FAIL", {"repro": "Open it.", "checks": [[*SPEC["checks"][0][:5], "❌"]]}, ["", "### Reproduce", "Open it."]),
+            ("NEEDS_HUMAN", {"human": "Look at it."}, ["", "### For the human tester", "Look at it."]),
+        ):
+            with self.subTest(verdict):
+                spec = {**WALK_SPEC, "verdict": verdict, **extra}
+                self.assertEqual(self.render(spec)[0], 0)
+                lines = (self.dir / "comment-7.md").read_text().split("\n")
+                self.assertEqual(lines[-1], "")
+                self.assertRegex(lines[16], rf"^\| Tester \| `guided-review` @ `{stamp}` \(.+\) · claude-test \|$")
+                self.assertRegex(lines[19], rf"^\| When \| finished \d{{4}}-\d{{2}}-\d{{2}} \d{{2}}:\d{{2}} UTC · walk `{WALK}` \|$")
+                row = " | ".join(spec["checks"][0])
+                self.assertEqual(lines[:16] + lines[17:19] + lines[20:-1], [
+                    f"<!-- guided-review v1 run={WALK} issue=7 verdict={verdict} build=deploy-2 env=dev skill={stamp} -->",
+                    f"## Guided review: {ro.VERDICTS[verdict]}", "", SPEC["summary"], "",
+                    "### Build tested", "| | |", "|---|---|", "| Environment | dev |", "| Running build | `deploy-2` |",
+                    f"| Change under test | {SPEC['commits'][0]} |", "| Kind | behaviour |", "",
+                    "### How it was tested", "| | |", "|---|---|",
+                    "| Account role | staff |",
+                    "| Method | A person checked each step on screen; the agent checked the system side |",
+                    "", "### Checks",
+                    "| # | Criterion | Source | Steps (route · action) | Expected | Observed | |",
+                    "|---|---|---|---|---|---|---|", f"| 1 | {row} |", "",
+                    "Signals: the stored row read back", "", "### Test data", "None created.", "",
+                    "### Not tested", "Nothing.", *tail])
+
+    def test_no_commits_and_a_build_with_a_newline(self):
+        path = profile(self.tmp)
+        code, _, err = call(FakeWorld(), "--profile", path, "render", self.dir, 7, "--walk", WALK, "--env", "dev",
+                            "--repo", "acme/issues", "--build", "deploy\n2", "--model", "m",
+                            stdin=json.dumps({**WALK_SPEC, "commits": []}))
+        self.assertEqual(code, 0, err)
+        comment = (self.dir / "comment-7.md").read_text()
+        self.assertIn("| Running build | `deploy 2` |", comment)
+        self.assertIn("| Change under test | none found |", comment)
+
+    def test_a_failed_or_open_walk_needs_its_section(self):
+        for verdict, key in (("FAIL", "repro"), ("NEEDS_HUMAN", "human")):
+            with self.subTest(verdict):
+                checks = [[*SPEC["checks"][0][:5], "❌" if verdict == "FAIL" else "⏭"]]
+                code, _, err = self.render({**WALK_SPEC, "verdict": verdict, "checks": checks})
+                self.assertEqual(code, 2)
+                self.assertIn(f"spec: {key} is missing", err)
+
+    def test_a_host_with_no_scheme_is_still_kept_out(self):
+        bare = COMPLETE.replace('url = "https://dev.example.org"', 'url = "dev.example.org"')
+        self.assertNotEqual(bare, COMPLETE)
+        check = [*SPEC["checks"][0][:4], "loaded dev.example.org/board", "✅"]
+        code, _, err = self.render({**WALK_SPEC, "checks": [check]}, text=bare)
+        self.assertEqual(code, 2)
+        self.assertIn("dev.example.org", err)
+
+    def test_version_prints_the_walk_stamp(self):
+        _, sections = pc.split_profile(COMPLETE)
+        code, out, _ = call(subprocess_run, "--profile", profile(self.tmp), "version", "--walk")
+        self.assertEqual((code, out.strip()), (0, ro.walk_stamp(PLUGIN, sections["Test data"])))
+
     def test_a_walk_comment_is_not_auto_tests(self):
         for verdict, extra in (("PASS", {}), ("FAIL", {"repro": "Open it.", "checks": [[*SPEC["checks"][0][:5], "❌"]]}),
                                ("NEEDS_HUMAN", {"human": "Look at it."})):
@@ -635,6 +696,10 @@ class Walk(unittest.TestCase):
                 self.assertEqual((world.issue["labels"], world.issue["state"], world.issue["column"]),
                                  (labels, state, column))
                 self.assertEqual(len(world.issue["comments"]), 1)
+                repo = kw.get("repo", "acme/issues")
+                self.assertEqual([cmd for verb, cmd in world.calls if verb in ("comment", "comments")], [
+                    ["gh", "issue", "comment", "7", "--repo", repo, "--body-file", str(self.dir / "comment-7.md")],
+                    ["gh", "issue", "view", "7", "--repo", repo, "--json", "comments"]])
 
     def test_a_comment_not_read_back_stops(self):
         for comments in ([], [{"body": "thanks!"}]):
