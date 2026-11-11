@@ -276,6 +276,8 @@ def deployed_event(tag: str, sha: str, profile: stage_sync.Profile) -> dict:
             return {"event": "deployed", "tag": tag, "environment": environment, "first": True}
         result = stage_sync.shipped(sha, prev, profile.known, profile.issues_repo)
         return stage_sync.shipped_event(tag, environment, result, stage_sync.fetch_titles(result.links))
+    except ProfileProblem:
+        raise
     except Exception:  # noqa: BLE001 - the message still goes, without its list
         return {"event": "deployed", "tag": tag, "unavailable": True}
 
@@ -298,7 +300,10 @@ def _stdin(text: str):
 
 
 def job_notify(tag: str, sha: str, profile: stage_sync.Profile, dry_run: bool) -> tuple[str, str]:
-    notes = release_notes(tag)
+    try:
+        notes, unread = release_notes(tag), None
+    except RuntimeError as exc:  # the message still goes when the Release cannot be read (Approvals row 1)
+        notes, unread = None, str(exc)
     if notes is not None and ANNOUNCED in notes:
         return "already sent", "notify: already sent"
     if dry_run:
@@ -308,6 +313,8 @@ def job_notify(tag: str, sha: str, profile: stage_sync.Profile, dry_run: bool) -
         raise RuntimeError(said or f"notify.py exited {code}")
     if said != "sent":
         return "off", "notify: off; not marked"
+    if unread is not None:
+        return "sent", f"notify: sent; not marked ({unread})"
     try:
         notes = release_notes(tag)
     except RuntimeError as exc:

@@ -396,7 +396,17 @@ class Announce(ReleaseRepo):
         code, lines, _ = self.announce(profile=self.messages_on())
         self.assertEqual(code, 0)
         self.assertTrue(lines[0].startswith("release: failed: HTTP 401"), lines)
-        self.assertTrue(lines[2].startswith("notify: failed: HTTP 401"), lines)
+        self.assertEqual(lines[2], "notify: sent; not marked (HTTP 401: Bad credentials)")
+        self.assertEqual(len(self.sent), 1)
+        self.assertNotIn(("release", "create"), self.calls)
+
+    def test_a_profile_with_no_production_fails_notify_rather_than_sending(self):
+        broken = profile_text().replace('roles = ["production"]', 'roles = ["pre-production"]') \
+                               .replace('tag = "deploy-*"\n', "")
+        self.assertNotEqual(broken, profile_text())
+        code, lines, _ = self.announce(profile=self.messages_on(broken))
+        self.assertEqual(code, 0)
+        self.assertTrue(lines[2].startswith("notify: failed: environments: no environment"), lines)
         self.assertEqual(self.sent, [])
 
     def test_the_release_is_made_only_from_the_tag_on_the_remote(self):

@@ -145,17 +145,17 @@ tag, keeps two runs for one tag from both sending: reading the mark and
 sending are two steps. The tag is only cut inside the deploy job, so the
 `tag-name` job works out its name first, with `release.py build`; the group
 and the announce step both read it from that job's output, so the tag announced
-is the tag the group holds.
-
-A repo that also runs `references/stage-sync.md`'s workflow on `push: tags`
-takes that trigger out when it adds this step, keeping `workflow_dispatch`:
-with both, a tag pushed with a token that starts workflows would be synced and
-announced twice. Its `reverts` step still runs from `/gogogo:auto-dev`'s
-preflight. The tag reaches the command through
+is the tag the group holds. The tag reaches the command through
 the shell, never interpolated into the workflow. `release.py` imports its
 neighbours from its own folder: vendor all five, `release.py`,
 `profile_check.py`, `stage_sync.py`, `tracker.py` and `notify.py`, from **one**
 gogogo commit, as `references/stage-sync.md` § Vendoring describes.
+
+A repo that also runs `references/stage-sync.md`'s workflow on `push: tags`
+takes the `deploy-*` glob out of that trigger when it adds this step, and keeps
+any other stage's glob and `workflow_dispatch`: with both, a deploy tag pushed
+with a token that starts workflows would be synced and announced twice. Its
+`reverts` step still runs from `/gogogo:auto-dev`'s preflight.
 
 **Why in the deploy job.** A tag pushed with CI's default `GITHUB_TOKEN`
 starts no other workflow, so a separate workflow that waits for the tag never
