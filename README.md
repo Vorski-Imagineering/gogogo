@@ -479,6 +479,7 @@ Read [`CLAUDE.md`](CLAUDE.md) first: skills hold only what is the same in every
 repo, and changes to skill behaviour, the profile format or what a script
 writes need approval.
 
+- [`docs/README.md`](docs/README.md): the index of every doc, with what each holds and when to read it. Start here.
 - [`docs/history.md`](docs/history.md): where gogogo came from.
 - [`docs/process-review-2026-10.md`](docs/process-review-2026-10.md): the process checked against current practice, every merge shape traced, and the ranked findings.
 - [`docs/process-measures.md`](docs/process-measures.md): what to measure about the process (quality, speed, tokens) and where the data is.
