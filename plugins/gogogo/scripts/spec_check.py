@@ -57,7 +57,7 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from spec_lint import file_groups, numbered_items, split_sections, table_rows  # noqa: E402
+from spec_lint import _expand, file_groups, numbered_items, split_sections, table_rows  # noqa: E402
 
 STATUSES = ("met", "missing", "differs", "na")
 NEEDS_EVIDENCE = ("D", "T", "A")
@@ -88,21 +88,6 @@ def _tree() -> list[str]:
     return [p for p in out.split("\0") if p]
 
 
-BRACES = re.compile(r"\{([^{}]*,[^{}]*)\}")
-
-
-def _expand(path: str) -> list[str]:
-    """Every combination of the `{a,b}` groups in path, the first group varying
-    slowest. A path with no group, an unmatched or nested brace, or a group
-    with no comma comes back as it is."""
-    rest = BRACES.sub("", path)
-    if "{" in rest or "}" in rest or not BRACES.search(path):
-        return [path]
-    out, last = [""], 0
-    for m in BRACES.finditer(path):
-        out = [o + path[last:m.start()] + alt for o in out for alt in m.group(1).split(",")]
-        last = m.end()
-    return [o + path[last:] for o in out]
 
 
 def _paths(lines: list[str], tree=None) -> list[str]:
@@ -177,7 +162,7 @@ def list_items(body: str, changed: list[str] | None = None, tree=None, renamed_a
             return [f for f in [*changed, *renamed_away] if covers(path, f)]
         for item in items:
             if item["id"].startswith("F:"):
-                item["status"] = "met" if touches(item["text"]) else "missing"
+                item["status"] = "met" if touches(item["id"][2:]) else "missing"  # the id holds the whole path
         if paths:
             outside = [f for f in changed if not any(covers(p, f) for p in paths)]
     return {"items": items, "unlisted": unlisted, "outside": outside}

@@ -546,6 +546,24 @@ class WideFolder(unittest.TestCase):
     def test_a_narrow_folder_does_not_warn(self):
         self.assertEqual(self.wide("plugins/gogogo/evals/x/graders/"), [])
 
+    def test_the_folder_is_read_as_spec_check_reads_it(self):
+        # A folder named only in parentheses is not an entry; a brace group is expanded first.
+        self.assertEqual(self.wide("tests/test_x.py` (in the unit lane's `tests/` folder) `views.py"), [])
+        self.assertEqual(len(self.wide("{tests,docs}/")), 1)
+
+    def test_the_command_still_exits_0_on_the_warning(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            profile = Path(tmp) / "dev-process.md"
+            profile.write_text(COMPLETE.replace('items = ["schema", "auth"]', 'items = ["Schema", "Auth / permissions"]')
+                               .replace('run = "make test"\nci = true\n', 'run = "make test"\nci = true\ntests = ["tests/*"]\n'))
+            body = Path(tmp) / "body.md"
+            body.write_text(GOOD.replace("**Edit:** `views.py`.", "**Edit:** `views.py`, `tests/`."))
+            out = io.StringIO()
+            with redirect_stdout(out), redirect_stderr(io.StringIO()):
+                code = sl.main([str(body), "--profile", str(profile)])
+        self.assertEqual(code, 0)
+        self.assertIn("warning: ## Files: `tests/` covers every file under it", out.getvalue())
+
 
 def bare_warnings(body):
     return [w for w in run(body, TESTS_LANE)[1] if "licenses every change" in w]
