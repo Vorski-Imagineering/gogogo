@@ -626,7 +626,7 @@ class Walk(unittest.TestCase):
         self.assertEqual((code, world.verbs()), (2, []))
 
     def test_last_reads_no_walk_marker(self):
-        walk_comment(self.dir, 7, "FAIL")
+        self.assertEqual(self.render()[0], 0)
         body = (self.dir / "comment-7.md").read_text()
         code, out, _ = call(FakeWorld(comments=[{"body": body}]), "--profile", profile(self.tmp), "last", 7)
         self.assertEqual((code, out.strip()), (0, "none"))
