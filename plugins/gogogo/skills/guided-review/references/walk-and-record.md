@@ -100,9 +100,9 @@ become *not reached*):
    On `verify.human`, for an issue of this repo whose card is in the column
    under test and which is open, it does what auto-test's outcome does
    (labels, close, card). Anywhere else it posts the comment alone and prints
-   `comment only: <reason>`: the card stays where it is, and the issue still
-   waits for someone to confirm it on `verify.human`, even when every step
-   passed.
+   `comment only: <reason>`, and the card stays where it is. A PASS or
+   NEEDS_HUMAN commented only because the walk was `not the confirming
+   environment` still waits for someone to confirm it on `verify.human`.
 5. A non-zero exit from either **stops the walk** (`SKILL.md` *Stop the
    walk*): the comment may or may not be on the issue, and the person decides.
 
@@ -152,5 +152,6 @@ and were already recorded stay recorded.
 - **not on this environment**: the production-only steps;
 - ledger leftovers, and old test data seen and not touched;
 - **what the release still waits on**: held steps, production-only steps,
-  each ⚠, each FAIL, and each issue recorded as a comment only, which someone
-  still confirms on `verify.human`.
+  each ⚠, each FAIL, and each other issue commented only because the walk was
+  `not the confirming environment`, which someone still confirms on
+  `verify.human`.
