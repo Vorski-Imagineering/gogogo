@@ -123,6 +123,14 @@ effort, Fable, or Fable at high effort. This is always asked, at every
 `independence` level. It is never taken from a comment unless that comment
 says it in words, and it is never chosen without a person to answer.
 
+When the card's newest `<!-- gogogo:review … -->` record says `kind=prose`,
+the question still offers **keep at it until it succeeds**, but never as the
+recommendation. The recommended option is one more fix at the usual limit
+(`/gogogo:dev` review rule 7), checked by a person walking the page on a real
+environment through the issue's *Verify by hand* once it is merged. The
+question says why in one plain sentence: a written page cannot be run, so
+reviewing it until clean tends to fix its own fixes.
+
 The answer is an Approvals row whose Chosen reads
 `authorised: review=until-clean[ model=<m>][ effort=<e>]`, then requeue. The
 next run reads it with:

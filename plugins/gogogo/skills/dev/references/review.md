@@ -180,16 +180,22 @@ Then the review, by these rules:
    ended. No prose file gets a fourth round. Its other findings from the
    second round on are declined and listed as follow-ups. Code files follow
    rules 3 to 6. Under `review=until-clean`, a prose file gets as many rounds
-   as it takes, and its fixes are reviewed as code's are (rules 3 to 6).
+   as it takes, and its fixes are reviewed as code's are (rules 3 to 6),
+   unless three of its rounds in a row each apply more re-fixes than new fixes
+   (`refix` above `applied - refix` for that file's round). Then the review
+   ends `prose` and the issue stops for a person, the report naming the three
+   rounds and their counts: a page that cannot be run tends to fix its own
+   fixes.
 8. **How a review ends.** `clean`: a round applies nothing. For a person
    (§8): `third-attempt` (rule 3), `reversal` (rule 4), `unfixable` (a
    finding that meets tests 1 to 4 and cannot be fixed), `prose` (rule 7).
    And `breaker`: when round 13 ends and the review has not, the issue stops
    for a person and the report says the loop itself misbehaved. There is no
    other limit on rounds. Under `review=until-clean`, `third-attempt`,
-   `unfixable`, `prose` and `breaker` are not ends: the review ends `clean`,
-   `reversal`, or `silent` (rule 9), and a finding that cannot be fixed is
-   attempted again with a different approach.
+   `unfixable` and `breaker` are not ends, and `prose` is one only by rule 7's
+   re-fix brake: the review ends `clean`, `reversal`, `silent` (rule 9), or
+   `prose` by that brake, and a finding that cannot be fixed is attempted
+   again with a different approach.
 9. **A silent review.** A review whose transcript has not been written for 20
    minutes is stopped and started again once, on the same range; the issue's
    review section names the restart. A restart does not count toward round 13
