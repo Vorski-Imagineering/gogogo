@@ -56,8 +56,15 @@ as moved meanwhile.
 
 For each card, in this order:
 
-1. **An answer already given settles the question.** Record it (see *Record
-   an answer*) and requeue, without asking.
+1. **An answer already given settles the question**, without asking. An
+   answer is a writer's comment after the stop with no gogogo marker (the
+   list's `answers`). In this order:
+   1. Record it (see *Record an answer*).
+   2. The card has an open blocker in the list's `blocked_by`: **Leave**, the
+      comment naming each blocker.
+   3. The answer says the remaining steps are a person's, or that the card
+      stays: **Leave**, the comment quoting the answer's line that says so.
+   4. Otherwise requeue.
 2. **Otherwise the reason decides**, by `references/reasons.md`. That file holds
    the rule for each reason. Read the one for this card's reason before acting.
 3. **A question goes to the person** with `AskUserQuestion`, one card per
@@ -89,8 +96,10 @@ Read the body, add the row, and write it back with `gh issue edit <n> --repo
 
 ## Outcomes
 
-Each outcome posts one comment on the issue saying what was done and why.
-Confirm every move by its exit status.
+Each outcome posts one comment on the issue saying what was done and why,
+with its own line `<!-- gogogo:human-help v=1 outcome=<requeue|close|backlog|respec|leave> -->`,
+so the next run never reads it as an answer. Confirm every move by its exit
+status.
 
 - **Requeue.** Run the lint on the body:
   ```bash
@@ -98,7 +107,8 @@ Confirm every move by its exit status.
   ```
   On `label: apply`: add `tracker.ready_marker`
   (`gh issue edit <n> --repo <issues_repo> --add-label "<ready_marker>"`),
-  post a comment whose own line is `<!-- gogogo:requeue v=1 reason=<reason> -->`,
+  post a comment whose own lines are `<!-- gogogo:requeue v=1 reason=<reason> -->`
+  and the human-help marker,
   then `tracker.py move <n> --from needs_human --to "<tracker.queue>"`.
   A lint failure: no label, no move. The card stays, and the report gives the
   lint's first error.
@@ -108,7 +118,8 @@ Confirm every move by its exit status.
 - **Back to Backlog.** Remove the ready label, then move the card to
   `Backlog`. Offered only when `tracker.py fields` shows a Backlog column.
 - **Re-spec.** Run `/gogogo:spec <n>` in this session, then requeue as above.
-- **Leave.** Nothing changes. The report says why.
+- **Leave.** Nothing else changes: post a comment saying what was left and
+  why, and the report says why too.
 
 Do not move any card into `tracker.columns.needs_human` yourself. The tracker
 refuses a move there unless the issue's newest comment carries a stop marker,

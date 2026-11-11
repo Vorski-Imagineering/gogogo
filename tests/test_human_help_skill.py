@@ -67,5 +67,13 @@ class SkillSize(unittest.TestCase):
         self.assertLessEqual(len(SKILL_MD.splitlines()), 500)
 
 
+
+class AnswerButBlocked(unittest.TestCase):
+    def test_step_1_reads_blockers_and_comments_carry_the_marker(self):
+        # gogogo#261 case 5
+        for name in ("blocked_by", "<!-- gogogo:human-help v=1 outcome="):
+            self.assertIn(name, SKILL_MD)
+
+
 if __name__ == "__main__":
     unittest.main()
