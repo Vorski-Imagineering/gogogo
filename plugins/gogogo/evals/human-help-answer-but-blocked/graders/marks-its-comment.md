@@ -1,5 +1,5 @@
 ---
 type: regex
-pattern: 'gogogo:human-help v=1 outcome=leave'
+pattern: '<!--\s*gogogo:human-help\s+v=1\s+outcome=leave\s*-->'
 flags: i
 ---
