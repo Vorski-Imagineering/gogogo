@@ -35,12 +35,9 @@ hold further `::`-separated parts, each of which must occur; a token ending in
 `/` licenses every item in a test file beneath that folder, from the repo root;
 one at or above the fixed part of a lane's `tests` pattern is too wide, printed
 as such, and licenses nothing. A bare test name (`test_parse`, no path)
-licenses the changed hunks of the one test that holds it as a whole word in
-their context, enclosing or removed lines (a test is its file and the base line
-naming it, so one test changed in two places is one, and two tests of one name
-are two; a hunk whose naming line cannot be found counts as a test of its own),
-and nothing when two or more tests do (their NOT LICENSED lines say how many), nor
-a deleted file; a bare file name still licenses its changed file. For a file
+licenses the one changed hunk that holds it as a whole word, and nothing when
+two or more do (their NOT LICENSED lines say how many, even when they are one
+test), nor a deleted file; a bare file name still licenses its changed file. For a file
 renamed since the base, a token naming its old path covers it as one naming
 its new path does. It prints each
 `weaker` item as `licensed` or `NOT LICENSED`, then `test-guard: hunks=<n> same=<n> stronger=<n> weaker=<n>
@@ -125,33 +122,20 @@ def _indent(text: str) -> int:
     return len(text) - len(text.lstrip())
 
 
-def enclosing_at(old_lines: list[str], line: int, content_indent: int) -> list[tuple[int, str]]:
-    """The lines enclosing a hunk in the file at the base, innermost first, each with its
-    line number there: walking up from `line`, each non-blank line less indented than the
-    hunk's content and than every line already taken, up to one at indentation 0."""
+def enclosing(old_lines: list[str], line: int, content_indent: int) -> list[str]:
+    """The lines enclosing a hunk in the file at the base, innermost first: walking up
+    from `line`, each non-blank line less indented than the hunk's content and than
+    every line already taken, up to one at indentation 0."""
     found, limit = [], content_indent
-    for number in range(min(max(line, 0), len(old_lines)), 0, -1):
-        text = old_lines[number - 1]
+    for text in reversed(old_lines[:max(line, 0)]):
         if not text.strip():
             continue
         if _indent(text) < limit:
-            found.append((number, text.strip()))
+            found.append(text.strip())
             limit = _indent(text)
             if limit == 0:
                 break
     return found
-
-
-def _context_at(old_lines: list[str], line: int, removes: bool, context: str) -> int | None:
-    """The base line number of git's `@@` context, found as git finds it: the nearest
-    line above the hunk's first removed line, or at or above `line` for a hunk that only
-    adds. Git cuts a long context, so a line that starts with it counts."""
-    if not context:
-        return None
-    for number in range(min(max(line - 1 if removes else line, 0), len(old_lines)), 0, -1):
-        if old_lines[number - 1].strip().startswith(context):
-            return number
-    return None
 
 
 def _content_indent(hunk: dict) -> int:
@@ -201,10 +185,7 @@ def items(base: str, globs: list[str]) -> list[dict]:
         hunks = _hunks(fork, [old, new] if renamed_from else [new])
         old_lines = _base_lines(fork, old) if hunks else []
         for hunk in hunks:
-            at = enclosing_at(old_lines, hunk["line"], _content_indent(hunk))
-            hunk["enclosing"] = [text for _, text in at]
-            hunk["enclosing_lines"] = [number for number, _ in at]
-            hunk["context_line"] = _context_at(old_lines, hunk["line"], bool(hunk["minus"]), hunk["context"])
+            hunk["enclosing"] = enclosing(old_lines, hunk["line"], _content_indent(hunk))
             found.append({"kind": "changed", "path": new, "renamed_from": renamed_from, **hunk})
     for k, item in enumerate(found, 1):
         item["id"] = f"H{k}"
@@ -258,34 +239,15 @@ def _texts(item: dict) -> list[str]:
     return [item["context"], *item["enclosing"], *item["minus"]]
 
 
-def _naming_line(item: dict, name: str) -> int | str | None:
-    """Where a changed hunk names `name` as a whole word, as a base line number: an
-    enclosing line, innermost first, then a removed line, then git's `@@` context.
-    A context whose line cannot be found gives the hunk's own id: a test of its own."""
-    lines = [*zip(item["enclosing_lines"], item["enclosing"]),
-             *((item["line"] + k, text) for k, text in enumerate(item["minus"])),
-             (item["context_line"] or item["id"], item["context"])]
-    return next((number for number, text in lines if _has_word(text, name)), None)
+def bare_matches(found: list[dict], tokens: list[str]) -> dict[str, list[str]]:
+    """Each bare test name, and the ids of the changed hunks that hold it as a whole word."""
+    return {t: [i["id"] for i in found if any(_has_word(x, t) for x in _texts(i))]
+            for t in dict.fromkeys(tokens) if BARE.match(t)}
 
 
-def bare_matches(found: list[dict], tokens: list[str]) -> dict[str, tuple[set[str], int]]:
-    """Each bare test name: the ids of the hunks naming it, and how many tests those are.
-
-    A test is its file and the base line number of the line naming it, so one test
-    changed in two places is one test, and two tests of one name are two.
-    """
-    out = {}
-    for t in dict.fromkeys(tokens):
-        if BARE.match(t):
-            tests = {i["id"]: (i["path"], n) for i in found if i["kind"] == "changed"
-                     for n in [_naming_line(i, t)] if n is not None}
-            out[t] = (set(tests), len(set(tests.values())))
-    return out
-
-
-def licensed(item: dict, tokens: list[str], bare: dict[str, tuple[set[str], int]] | None = None) -> bool:
-    # A bare test name licenses the hunks of the one test that holds it, and nothing when several tests do.
-    if any(item["id"] in ids and n == 1 for ids, n in (bare or {}).values()):
+def licensed(item: dict, tokens: list[str], bare: dict[str, list[str]] | None = None) -> bool:
+    # A bare test name licenses the one changed hunk that holds it, and nothing when it is in several.
+    if any(ids == [item["id"]] for ids in (bare or {}).values()):
         return True
     # A renamed file is named by its old path or its new one.
     paths = [item["path"]] + ([item["renamed_from"]] if item.get("renamed_from") else [])
@@ -390,8 +352,8 @@ def main(argv=None) -> int:
             lic += ok
             unlic += not ok
             if not ok:
-                reason += "".join(f" (bare name {t} matches {n} tests)"
-                                  for t, (ids, n) in bare.items() if n > 1 and item["id"] in ids)
+                reason += "".join(f" (bare name {t} matches {len(ids)} tests)" for t, ids in bare.items()
+                                  if len(ids) > 1 and item["id"] in ids)
             weaker.append({"id": item["id"], "licensed": ok, "reason": reason, "item": describe(item)})
     summary = (f"test-guard: hunks={len(found)} same={counts['same']} stronger={counts['stronger']} "
                f"weaker={counts['weaker']} licensed={lic} unlicensed={unlic}")

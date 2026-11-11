@@ -324,17 +324,17 @@ class Enclosing(unittest.TestCase):
 
 
 class EnclosingFunction(unittest.TestCase):
-    """`enclosing_at()` on its own (its texts), for the edges the repository cases do not reach."""
+    """`enclosing()` on its own, for the edges the repository cases do not reach."""
 
     def setUp(self):
         import test_guard
-        self.enclosing_at = lambda *args: [text for _, text in test_guard.enclosing_at(*args)]
+        self.enclosing = test_guard.enclosing
 
     def test_an_addition_at_the_top_has_no_enclosing_line(self):
-        self.assertEqual(self.enclosing_at(["def f():", "    x"], 0, 4), [])
+        self.assertEqual(self.enclosing(["def f():", "    x"], 0, 4), [])
 
     def test_blank_lines_are_passed_over(self):
-        self.assertEqual(self.enclosing_at(["class T:", "    def f():", "", "        x"], 4, 8),
+        self.assertEqual(self.enclosing(["class T:", "    def f():", "", "        x"], 4, 8),
                          ["def f():", "class T:"])
 
     def test_a_failed_base_read_raises_gits_message(self):
@@ -364,7 +364,7 @@ class EnclosingFunction(unittest.TestCase):
         self.assertIn("fatal", str(raised.exception))
 
     def test_the_walk_goes_on_to_indentation_0(self):
-        self.assertEqual(self.enclosing_at(["a:", " b:", "  c"], 3, 2), ["b:", "a:"])
+        self.assertEqual(self.enclosing(["a:", " b:", "  c"], 3, 2), ["b:", "a:"])
 
 
 class NotChecked(unittest.TestCase):
@@ -663,17 +663,6 @@ class Verify(unittest.TestCase):
         out = self.verify_bare("1. `test_parse_v2` removed", 1)
         self.assertIn("H1  NOT LICENSED", out.stdout)
 
-    def test_one_test_changed_in_two_places_is_one_test(self):
-        # gogogo#260 Approvals row 1: "exactly one changed test", not one hunk.
-        self.r.at_base("tests/test_p.py", "def test_parse():\n    assert parse(1) == 1\n    x = 1\n    y = 2\n"
-                                          "    assert parse(2) == 2\n")
-        self.r.write("tests/test_p.py", "def test_parse():\n    x = 1\n    y = 2\n")
-        self.r.commit("loosen twice")
-        n = len([ln for ln in self.r.run("list").stdout.splitlines() if ln.startswith("H")])
-        self.assertEqual(n, 2)
-        out = self.verify_bare("1. `test_parse` removed", 2)
-        self.assertEqual(out.returncode, 0, out.stdout + out.stderr)
-
     def test_a_bare_file_name_still_licenses_its_changed_file(self):
         self.r.at_base("tests/smoke", "check one\ncheck two\n")
         self.r.write("tests/smoke", "check one\n")
@@ -690,33 +679,6 @@ class Verify(unittest.TestCase):
         out = self.verify_bare("1. `test_parse` rewritten", 1)
         self.assertEqual(out.returncode, 0, out.stdout + out.stderr)
 
-    def headed_twice(self, name):
-        # One test: its body loosened (keyed on its enclosing def line) and its last
-        # assert swapped for a new test after it (indent-0 content, keyed on the @@ context).
-        self.r.at_base("tests/test_p.py", f"def {name}():\n    assert parse(1) == 1\n    a = 1\n    b = 2\n"
-                                          "    c = 3\n    assert parse(3) == 3\n")
-        self.r.write("tests/test_p.py", f"def {name}():\n    a = 1\n    b = 2\n    c = 3\n"
-                                        "\n\ndef test_new():\n    assert 1\n")
-        self.r.commit("loosen and append")
-        heads = [ln for ln in self.r.run("list").stdout.splitlines() if ln.startswith("H")]
-        self.assertEqual(len(heads), 2, heads)
-        return self.verify_bare(f"1. `{name}` rewritten", 2)
-
-    def test_one_test_headed_in_one_hunk_and_enclosing_another_is_one_test(self):
-        out = self.headed_twice("test_parse")
-        self.assertEqual(out.returncode, 0, out.stdout + out.stderr)
-
-    def test_a_long_name_git_cuts_in_its_header_is_still_one_test(self):
-        out = self.headed_twice("test_parse_keeps_every_field_of_a_record_with_a_rather_long_descriptive_name")
-        self.assertEqual(out.returncode, 0, out.stdout + out.stderr)
-
-    def test_an_insertion_headed_by_the_name_is_the_same_test(self):
-        self.r.at_base("tests/test_p.py", "def test_parse():\n    assert parse(1) == 1\n    assert parse(2) == 2\n")
-        self.r.write("tests/test_p.py", "def test_parse():\nX = 1\n    assert parse(1) == 1\n")
-        self.r.commit("insert and drop")
-        out = self.verify_bare("1. `test_parse` rewritten", 2)
-        self.assertEqual(out.returncode, 0, out.stdout + out.stderr)
-
     def test_two_tests_of_one_name_in_one_file_are_two(self):
         method = "    def test_parse(self):\n        assert parse(1) == 1\n        assert parse(2) == 2\n"
         self.r.at_base("tests/test_p.py", f"class A:\n{method}\n\nclass B:\n{method}")
@@ -726,16 +688,6 @@ class Verify(unittest.TestCase):
         out = self.verify_bare("1. `test_parse` removed", 2)
         self.assertEqual(out.returncode, 1, out.stdout + out.stderr)
         self.assertEqual(out.stdout.count("(bare name test_parse matches 2 tests)"), 2, out.stdout)
-
-    def test_a_method_changed_in_its_def_line_and_body_is_one_test(self):
-        self.r.at_base("tests/test_p.py", "class A:\n    def test_parse(self):\n        x = 1\n        y = 2\n"
-                                          "        assert parse(2) == 2\n")
-        self.r.write("tests/test_p.py", "class A:\n    def test_parse(self, tmp):\n        x = 1\n        y = 2\n")
-        self.r.commit("new signature, one assert less")
-        self.assertEqual(len([ln for ln in self.r.run("list").stdout.splitlines() if ln.startswith("H")]), 2)
-        out = self.verify_bare("1. `test_parse` rewritten", 2)
-        self.assertEqual(out.returncode, 0, out.stdout + out.stderr)
-
 
 def section(text, start):
     return text.split(f"\n## {start}")[1].split("\n## ")[0]
