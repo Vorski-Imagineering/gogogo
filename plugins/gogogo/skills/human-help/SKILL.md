@@ -73,10 +73,12 @@ For each card, in this order:
    sentence, the evidence (the commit, the survivor's line, the missing
    approval), and your recommendation. Each option says what changes for
    people. Name no files, flags or exit codes in the question.
-4. **A declined question** leaves the card where it is. Say so in the report and
-   go on to the next card.
+4. **A declined question** leaves the card where it is. This is not the
+   *Leave* outcome: nothing is posted. Say so in the report and go on to the
+   next card.
 5. **With no person to ask** (the question tool errors, or `claude -p`), every
-   card that needs a question stays in the column, and the run goes on.
+   card that needs a question stays in the column with nothing posted, as in
+   step 4, and the run goes on.
 
 A card's `requeued` count is at least 1 for the same reason it stopped on
 again: that is a question, never another requeue, so a loop cannot run forever.
