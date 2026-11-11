@@ -137,6 +137,17 @@ class Authorisation(unittest.TestCase):
             self.assertIn("review=until-clean", rule[n], f"rule {n}")
         self.assertNotIn("review=until-clean", rule[4], "a reversal still stops an authorised review")
 
+    def test_until_clean_prose_has_a_refix_brake(self):
+        # gogogo#259: under until-clean, a prose file that keeps fixing its own fixes ends `prose`.
+        text = DEV_REVIEW.read_text(encoding="utf-8")
+        rule = {n: text.split(f"\n{n}. **")[1].split(f"\n{n + 1}. **")[0] for n in (7, 8)}
+        clean7 = rule[7][rule[7].index("review=until-clean"):]
+        for name in ("refix", "`prose`"):
+            self.assertIn(name, clean7)
+        clean8 = rule[8][rule[8].index("review=until-clean"):]
+        for name in ("`prose`", "rule 7"):
+            self.assertIn(name, clean8, "prose ends an until-clean review only by rule 7's brake")
+
 
 class TakeTheCard(unittest.TestCase):
     """§4 takes the card into In progress once the work has its place (gogogo#228)."""

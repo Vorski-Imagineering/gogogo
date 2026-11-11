@@ -221,6 +221,10 @@ class Authorised(unittest.TestCase):
         got = hh.authorised(self.body("authorised: review=until-clean", "authorised: effort=max"))
         self.assertEqual(got, {"effort": "max"})
 
+    def test_a_bare_newer_row_withdraws_an_earlier_one(self):
+        # gogogo#259: the usual-limit answer for a prose card withdraws an earlier until-clean.
+        self.assertEqual(hh.authorised(self.body("authorised: review=until-clean", "authorised:")), {})
+
     def test_no_row_is_empty(self):
         self.assertEqual(hh.authorised(self.body("approved; named the skill")), {})
 

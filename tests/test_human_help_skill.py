@@ -67,5 +67,13 @@ class SkillSize(unittest.TestCase):
         self.assertLessEqual(len(SKILL_MD.splitlines()), 500)
 
 
+
+class AuthorisedEffort(unittest.TestCase):
+    def test_a_prose_card_is_not_recommended_keep_at_it(self):
+        # gogogo#259: the question reads the review record's kind.
+        part = SKILL_MD.split("\n## Authorised effort")[1].split("\n## ")[0]
+        self.assertIn("kind=prose", part)
+
+
 if __name__ == "__main__":
     unittest.main()
