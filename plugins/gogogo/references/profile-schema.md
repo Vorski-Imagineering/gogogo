@@ -141,6 +141,9 @@ no skill requires it; a skill that finds it uses it.
 | `sentry.release_format` | str | `sentry-debug` | How a release string maps to a commit, such as 'the full commit SHA' or 'name@version+sha'. |
 | `sentry.report_dir` | str | optional | Folder for the weekly report. Optional; absent means the skill asks. |
 | `sentry.evidence_command` | str | optional | Command that writes the repo's own evidence brief. Optional. |
+| `docs.dir` | str | optional | Folder of the repo's docs. Optional; absent means docs. |
+| `docs.index` | str | optional | Page that links every doc in docs.dir. Optional; absent means no index check. |
+| `docs.public` | str | optional | Folder of the docs outsiders read. Optional; absent means no public-detail check. |
 
 ### Lanes
 
@@ -381,6 +384,23 @@ evidence_command = "make evidence"     # optional
 The table is the opt-in, as `[auto_test]` is: a profile without it is not
 checked for `sentry-debug` when `profile_check.py` runs with no `--for`. A
 profile with it also needs a `## Sentry` section (below).
+
+### Docs
+
+`/gogogo:docs` audits a repo's docs against its code, and updates the docs a
+shipped issue touched. The optional `[docs]` table says where they are:
+
+```toml
+[docs]
+dir = "docs"              # absent: docs/, plus README.md at the root
+index = "docs/README.md"  # absent: no check that the index links every doc
+public = "docs/public"    # absent: no check for internal detail in public docs
+```
+
+Each key, when present, names a path from the repo root and may not be empty.
+The table is not an opt-in: a profile without it still passes `--for docs`, and
+the skill uses the defaults. `/gogogo:setup` offers to write it from what it
+finds. The nav and tags files of public docs (#267) will join this table.
 
 ### Roadmap
 

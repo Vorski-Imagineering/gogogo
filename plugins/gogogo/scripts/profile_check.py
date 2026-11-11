@@ -45,7 +45,8 @@ STATUS = "status"
 IDEA = "idea"
 HUMAN = "human-help"
 SENTRY = "sentry-debug"
-SKILLS = (SPEC, ONE, LOOP, TEST, TECH, ROADMAP, STATUS, IDEA, HUMAN, SENTRY)
+DOCS = "docs"
+SKILLS = (SPEC, ONE, LOOP, TEST, TECH, ROADMAP, STATUS, IDEA, HUMAN, SENTRY, DOCS)
 # Skills a repo adopts by adding a table: checked with no --for only when the
 # profile has it.
 OPT_IN = {TEST: "auto_test", SENTRY: "sentry"}
@@ -125,7 +126,13 @@ FIELDS = {
                               "or 'name@version+sha'."),
     "sentry.report_dir": (str, (), "Folder for the weekly report. Optional; absent means the skill asks."),
     "sentry.evidence_command": (str, (), "Command that writes the repo's own evidence brief. Optional."),
+    "docs.dir": (str, (), "Folder of the repo's docs. Optional; absent means docs."),
+    "docs.index": (str, (), "Page that links every doc in docs.dir. Optional; absent means no index check."),
+    "docs.public": (str, (), "Folder of the docs outsiders read. Optional; absent means no public-detail check."),
 }
+
+# The [docs] table: each, when present, names a path, so it may not be empty.
+DOCS_PATHS = ("docs.dir", "docs.index", "docs.public")
 
 # Body sections (## headings) a skill reads, by skill.
 SECTIONS = {
@@ -554,6 +561,10 @@ def check(settings, sections, skill=None, root=None):
         errors.append("release.major: must be 1 or more")
     if TEST in wanted:
         errors.extend(_check_auto_test(settings, sections))
+    for path in DOCS_PATHS if DOCS in wanted else ():
+        value, present = _lookup(settings, path)
+        if present and isinstance(value, str) and not value.strip():
+            errors.append(f"{path}: empty. {FIELDS[path][2]}")
 
     for path in _leaf_paths(settings):
         if path in RETIRED:
