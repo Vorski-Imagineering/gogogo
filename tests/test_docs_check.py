@@ -182,11 +182,12 @@ class DocsCheck(unittest.TestCase):
         self.repo({"docs/public/p.md": "Cache in /private/tmp/x\nLogs in /var/tmp/x\nOpen /mnt/c/Users/me\n"
                                        "[/home/me/app](setup.md)\n**/home/me/app**\n_/var/tmp/x_\n{/tmp/x}\n"
                                        "https://x.example/?dir=/home/me\n*/tmp/cache*\n#!/home/alice/.venv/bin/python\n+/tmp/build-cache/\n"
-                                       "**/Users/me/My Project**\nIn c:\\users\\alice\\project\n"},
+                                       "**/Users/me/My Project**\nIn c:\\users\\alice\\project\n_C:\\Users\\alice\\app_\n"
+                                       "Clone to /users/alice/project\n"},
                   docs='[docs]\npublic = "docs/public"\n')
         code, lines, _ = self.run_it()
         self.assertEqual(self.findings(lines, "public"), [
-            f"public docs/public/p.md:{n}: holds an absolute path" for n in range(1, 14)])
+            f"public docs/public/p.md:{n}: holds an absolute path" for n in range(1, 16)])
 
     def test_a_docs_folder_outside_the_repo_is_reported_not_a_crash(self):
         outside = Path(tempfile.mkdtemp())
