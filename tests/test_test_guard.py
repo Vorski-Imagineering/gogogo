@@ -698,6 +698,31 @@ class Verify(unittest.TestCase):
         self.assertEqual(out.returncode, 1, out.stdout + out.stderr)
         self.assertIn("H1  NOT LICENSED", out.stdout)
 
+    def test_only_the_hunks_a_bare_name_matches_say_so(self):
+        self.loosen({"tests/test_p.py": PARSE, "tests/test_q.py": PARSE, "tests/test_o.py": OTHER})
+        ids = self.ids()
+        out = self.verify_bare("1. `test_parse` removed", 3)
+        self.assertIn(f"{ids['tests/test_o.py']}  NOT LICENSED  dropped\n", out.stdout)
+
+    def test_each_ambiguous_bare_name_is_said(self):
+        both = "def test_parse():\n    assert parse(1) == 1\n    assert other(2) == 2  # test_other\n"
+        paths = ("tests/test_p.py", "tests/test_q.py")
+        for path in paths:
+            self.r.at_base(path, both)
+        for path in paths:
+            self.r.write(path, both.replace("    assert other(2) == 2  # test_other\n", ""))
+        self.r.commit("loosen both")
+        out = self.verify_bare("1. `test_parse` and `test_other` removed", 2)
+        self.assertEqual(out.stdout.count("dropped (bare name test_parse matches 2 tests)"
+                                          " (bare name test_other matches 2 tests)\n"), 2, out.stdout + out.stderr)
+
+    def test_a_bare_name_before_the_path_still_lets_the_path_license(self):
+        self.r.at_base("tests/test_one.py", "def test_a():\n    assert one() == 1\n")
+        (self.r.repo / "tests/test_one.py").unlink()
+        self.r.commit("drop it")
+        out = self.verify_bare("1. `test_a` and `tests/test_one.py` deleted", 1)
+        self.assertEqual(out.returncode, 0, out.stdout + out.stderr)
+
 
 def section(text, start):
     return text.split(f"\n## {start}")[1].split("\n## ")[0]
