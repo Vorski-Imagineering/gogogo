@@ -169,7 +169,7 @@ def list_items(body: str, changed: list[str] | None = None, tree=None, renamed_a
         def covers(path, f):
             # A path ending `/` is a folder: it covers every file beneath it, at any depth.
             if path.endswith("/"):
-                return ("/" + path) in ("/" + f)
+                return f.startswith(path)
             return f == path or f.endswith("/" + path)
 
         def touches(path):
