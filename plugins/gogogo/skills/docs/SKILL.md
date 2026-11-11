@@ -84,7 +84,7 @@ its own.
    branch, `#<N>` in its title, or a `Refs`/`Fixes`/`Closes`/`Resolves` line
    in its body, as `issue_work.py` claims one):
    `gh pr list --repo <tracker.code_repo> --state merged --search "<N>" --limit 200 --json number,title,headRefName,body`.
-   A pull request whose branch starts `docs/` is this mode's own, never the
+   A pull request on a `docs/<N>-` branch is this mode's own, never the
    change. None merged: say so, and stop.
 2. **The docs to change.** Read the issue's `## Design` and the pull request's
    changed files (`gh pr view <pr> --json files`). The docs in scope that name

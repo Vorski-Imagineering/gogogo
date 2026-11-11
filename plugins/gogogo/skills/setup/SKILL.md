@@ -362,9 +362,6 @@ What each fix involves:
       `dir`, plus `index` and `public` when the row found them;
     - **use the defaults**: write `[docs]` with `dir = "docs"` only.
 
-    When the row says `no docs/ folder`, either answer writes an empty
-    `[docs]` table instead: a `dir` naming a folder that does not exist would
-    make the next check FAIL, and with none the README is audited alone.
     Commit it like setup's other profile changes; a later setup run then does
     not ask again. A decline writes nothing, and the row stays INFO.
   - `FAIL docs: <key> names <path>, which does not exist`: propose the

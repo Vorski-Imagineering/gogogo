@@ -10,7 +10,6 @@ on it, and reads its findings and exit code.
 import io
 import json
 import shutil
-import subprocess
 import sys
 import tempfile
 import unittest
@@ -119,12 +118,6 @@ class DocsCheck(unittest.TestCase):
         self.assertEqual(len(data["findings"]), 1)
         self.assertEqual([f"{f['kind']} {f['file']}:{f['line']}: {f['detail']}" for f in data["findings"]], plain[:-1])
 
-    def test_a_missing_path_git_ignores_is_not_reported(self):
-        subprocess.run(["git", "init", "-q", str(self.root)], check=True)
-        self.repo({".gitignore": "plugins/cache/\n", "docs/a.md": "See `plugins/cache/x` and `plugins/gone.py`.\n"})
-        code, lines, _ = self.run_it()
-        self.assertEqual(self.findings(lines, "path"), ["path docs/a.md:1: `plugins/gone.py` does not exist"])
-
     def test_a_doc_that_cannot_be_read_stops(self):
         self.repo({"README.md": "x\n"})
         (self.root / "docs").mkdir()
@@ -132,6 +125,21 @@ class DocsCheck(unittest.TestCase):
         code, _, err = self.run_it()
         self.assertEqual(code, 2)
         self.assertIn("docs/a.md", err)
+
+    def test_an_index_that_cannot_be_read_stops(self):
+        self.repo({"README.md": "x\n"}, docs='[docs]\nindex = "INDEX.md"\n')
+        (self.root / "INDEX.md").write_bytes(b"caf\xe9\n")
+        code, _, err = self.run_it()
+        self.assertEqual(code, 2)
+        self.assertIn("INDEX.md", err)
+
+    def test_internal_detail_at_a_sentence_end_or_in_a_file_url(self):
+        self.repo({"docs/public/p.md": "Write to ops@corp.example.\nOpen file:///home/me/x\nPATH=$PATH:/home/me/bin\n"},
+                  docs='[docs]\npublic = "docs/public"\n')
+        code, lines, _ = self.run_it()
+        self.assertEqual(self.findings(lines, "public"), [
+            "public docs/public/p.md:1: holds an email address", "public docs/public/p.md:2: holds an absolute path",
+            "public docs/public/p.md:3: holds an absolute path"])
 
     def test_a_folder_named_like_a_doc_is_not_one(self):
         self.repo({"README.md": "x\n", "docs/a.md": "a\n"})

@@ -33,7 +33,6 @@ the reason is on stderr. No evidence never passes. Standard library only.
 import argparse
 import json
 import re
-import subprocess
 import sys
 from pathlib import Path
 from urllib.parse import unquote
@@ -45,11 +44,12 @@ import profile_check  # noqa: E402
 EXIT_OK, EXIT_FINDINGS, EXIT_STOP = 0, 1, 2
 LINK = re.compile(r"\[[^\]]*\]\(([^)\s]+)(?:\s+\"[^\"]*\")?\)")
 TICKED = re.compile(r"`([^`\n]+)`")
-# A path on a disk, not part of a URL: nothing word-like or URL-like right before it.
-ABSOLUTE = re.compile(r"(?<![\w.:/~-])(?:/home/|/Users/|/tmp/)|(?<!\w)C:\\")
+ABSOLUTE = re.compile(r"(?:/home/|/Users/|/tmp/|C:\\)")
+# A web link's path is not a path on a disk: it is left out before ABSOLUTE is looked for.
+WEB = re.compile(r"https?://\S+")
 IPV4 = re.compile(r"(?<![\d.])(?:\d{1,3}\.){3}\d{1,3}(?![\d.])")
 # A domain ending in letters, not a version pin (`react@18.3.1`) or an scp-style remote (`git@host:`).
-EMAIL = re.compile(r"[\w.+-]+@[\w-]+(?:\.[\w-]+)*\.[A-Za-z]{2,}\b(?![:\w.-])")
+EMAIL = re.compile(r"[\w.+-]+@[\w-]+(?:\.[\w-]+)*\.[A-Za-z]{2,}\b(?![:\w-])")
 
 
 class Stop(Exception):
@@ -87,9 +87,11 @@ def link_target(raw, folder, root):
     return (root / target.lstrip("/")).resolve() if target.startswith("/") else (folder / target).resolve()
 
 
-def ignored(root, name):
-    """Whether git ignores this path: a file made per machine or per run, not a stale claim."""
-    return subprocess.run(["git", "-C", str(root), "check-ignore", "-q", name], capture_output=True).returncode == 0
+def read(path, root):
+    try:
+        return path.read_text(encoding="utf-8")
+    except (OSError, UnicodeDecodeError) as exc:
+        raise Stop(f"cannot read {path.relative_to(root)}: {exc}") from None
 
 
 def path_token(token):
@@ -125,12 +127,7 @@ def check(root, settings):
     def add(kind, path, line, detail):
         findings.append({"kind": kind, "file": str(path.relative_to(root)), "line": line, "detail": detail})
 
-    texts = {}
-    for path in files:
-        try:
-            texts[path] = path.read_text(encoding="utf-8")
-        except (OSError, UnicodeDecodeError) as exc:
-            raise Stop(f"cannot read {path.relative_to(root)}: {exc}") from None
+    texts = {path: read(path, root) for path in files}
     for path, text in texts.items():
         for number, line in prose_lines(text):
             for raw in LINK.findall(line):
@@ -139,7 +136,8 @@ def check(root, settings):
                     add("link", path, number, f"{raw} does not exist")
 
     if index is not None:
-        listed = {link_target(raw, index.parent, root) for raw in LINK.findall(texts.get(index, index.read_text(encoding="utf-8")))}
+        listed = {link_target(raw, index.parent, root)
+                  for raw in LINK.findall(texts[index] if index in texts else read(index, root))}
         for path in files:
             if path.resolve() != index.resolve() and folder in path.parents and path.resolve() not in listed:
                 add("index", path, 1, f"not linked from {docs['index']}")
@@ -148,8 +146,7 @@ def check(root, settings):
         for number, line in prose_lines(text):
             for token in TICKED.findall(line):
                 name = path_token(token)
-                if name and (root / name.split("/")[0]).exists() and not (root / name).exists() \
-                        and not ignored(root, name):
+                if name and (root / name.split("/")[0]).exists() and not (root / name).exists():
                     add("path", path, number, f"`{token}` does not exist")
 
     if public is not None:
@@ -161,7 +158,7 @@ def check(root, settings):
             for number, line in enumerate(text.splitlines(), 1):
                 for pattern, what in ((ABSOLUTE, "an absolute path"), (IPV4, "an IP address"),
                                       (EMAIL, "an email address"), *((p, "a private name") for p in private)):
-                    if pattern.search(line):
+                    if pattern.search(WEB.sub("", line) if pattern is ABSOLUTE else line):
                         add("public", path, number, f"holds {what}")
     return notes, len(files), findings
 
