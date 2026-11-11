@@ -224,6 +224,14 @@ def release_notes(tag: str) -> str | None:
     raise RuntimeError(view.stderr.strip() or f"gh release view exited {view.returncode}")
 
 
+def readable_notes(tag: str) -> str | None:
+    """For a dry run, which writes nothing: an unreadable Release reads as no Release."""
+    try:
+        return release_notes(tag)
+    except RuntimeError:
+        return None
+
+
 def write_notes(text: str) -> str:
     with tempfile.NamedTemporaryFile("w", suffix=".md", delete=False, encoding="utf-8") as fh:
         fh.write(text)
@@ -231,10 +239,11 @@ def write_notes(text: str) -> str:
 
 
 def job_release(tag: str, sha: str, profile: stage_sync.Profile, dry_run: bool) -> tuple[str, str]:
+    if dry_run:
+        return ("exists", "release: exists") if readable_notes(tag) is not None \
+            else ("would create", "release: would create")
     if release_notes(tag) is not None:
         return "exists", "release: exists"
-    if dry_run:
-        return "would create", "release: would create"
     path = write_notes(body(tag, sha, profile, titles=True))
     try:
         made = gh("release", "create", tag, "--verify-tag", "--title", tag, "--notes-file", path)
@@ -300,11 +309,13 @@ def _stdin(text: str):
 
 
 def job_notify(tag: str, sha: str, profile: stage_sync.Profile, dry_run: bool) -> tuple[str, str]:
+    if dry_run:
+        notes = readable_notes(tag)
+        return ("already sent", "notify: already sent") if notes is not None and ANNOUNCED in notes \
+            else ("would send", "notify: would send")
     notes = release_notes(tag)  # unreadable: it may be marked, so nothing is sent (Approvals row 1)
     if notes is not None and ANNOUNCED in notes:
         return "already sent", "notify: already sent"
-    if dry_run:
-        return "would send", "notify: would send"
     code, said = send(profile, deployed_event(tag, sha, profile))
     if code != 0:
         raise RuntimeError(said or f"notify.py exited {code}")

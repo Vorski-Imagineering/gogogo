@@ -409,6 +409,11 @@ class Announce(ReleaseRepo):
         self.assertTrue(lines[2].startswith("notify: failed: environments: no environment"), lines)
         self.assertEqual(self.sent, [])
 
+    def test_a_dry_run_that_cannot_read_the_release_still_says_what_it_would_do(self):
+        self.view_error = "HTTP 401: Bad credentials"
+        code, lines, _ = self.announce("--dry-run", profile=self.messages_on())
+        self.assertEqual((lines[0], lines[2]), ("release: would create", "notify: would send"))
+
     def test_the_release_is_made_only_from_the_tag_on_the_remote(self):
         self.announce()
         self.assertIn("--verify-tag", self.created)
