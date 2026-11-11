@@ -338,6 +338,9 @@ Comment in the reporter's language, not the codebase's:
     (then every count is 0 and `reader=none`).
 - **How it was verified**: which rungs ran, how many new tests went red, what
   the real run showed.
+- **Screenshots looked at**, only when §6's layout look applied: one line per
+  browser case, `<case>: <what was seen, or "nothing wrong">`, and any defect
+  it led to.
 - **How it was reviewed**: the kind (code, prose, or mixed: code with prose
   files, §5 rule 7), the coverage, and the size before round 1 as
   `+<insertions> −<deletions>` (§5 rule 11). One line per round: how many

@@ -138,6 +138,19 @@ class Authorisation(unittest.TestCase):
         self.assertNotIn("review=until-clean", rule[4], "a reversal still stops an authorised review")
 
 
+
+class LayoutLook(unittest.TestCase):
+    """A layout change's screenshots are looked at as well as its values read (gogogo#258)."""
+
+    def test_verify_looks_at_layout_and_a_screenshot_never_passes(self):
+        text = moved(DEV_VERIFY)
+        real = text[text.index("**The real thing, on real data.**"):]
+        for name in (".css", "screenshot", "never a screenshot", "never passes a case"):
+            self.assertIn(name, real)
+
+    def test_the_report_has_a_screenshots_part(self):
+        self.assertIn("Screenshots looked at", section(DEV.read_text(encoding="utf-8"), "7. "))
+
 class TakeTheCard(unittest.TestCase):
     """§4 takes the card into In progress once the work has its place (gogogo#228)."""
 
