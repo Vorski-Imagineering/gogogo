@@ -120,6 +120,10 @@ says nothing about your change.
   in two of three runs, so a case that loses one of three graders can still
   count as passed. The per-case score line exists so a lowered score is
   visible without opening the report.
+- **A case already failing on the base.** A case below the gate is run again
+  on the base, from the base's own files. When it fails there too, the lane
+  reports it as failing on the base and does not fail the change: the change
+  did not cause it. Fix such a case in an issue of its own.
 - **`--baseline` is a floor, not a margin.** It fails only a case that does as
   well without the plugin, not one that is only a little worse. A prompt that
   gives the answer away therefore passes without the plugin; the neutral

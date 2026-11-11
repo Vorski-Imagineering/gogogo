@@ -70,17 +70,21 @@ class Lane(unittest.TestCase):
         git(self.root, "add", "-A")
         git(self.root, "commit", "-q", "-m", "base")
         git(self.root, "switch", "-q", "-c", "work")
-        self.calls = []
+        self.calls, self.base_cwds = [], []
 
     def tearDown(self):
         self.tmp.cleanup()
 
-    def run_lane(self, argv=(), result=None, code=0):
+    def run_lane(self, argv=(), result=None, code=0, base=None):
         def fake(args, cwd):
             self.calls.append(args)
-            if result is not None:
-                Path(args[args.index("--json") + 1]).write_text(json.dumps(result), encoding="utf-8")
-            return code
+            here = args[3] == "plugins/gogogo"
+            if not here:
+                self.base_cwds.append(cwd)
+            answer = result if here else base
+            if answer is not None:
+                Path(args[args.index("--json") + 1]).write_text(json.dumps(answer), encoding="utf-8")
+            return code if here else (0 if answer and answer["aggregates"]["casesPassed"] else 1)
         out = io.StringIO()
         with mock.patch.object(eval_changed, "_run_eval", fake), contextlib.redirect_stdout(out):
             rc = eval_changed.main(["--base", "main", *argv], root=self.root)
@@ -140,17 +144,72 @@ class Lane(unittest.TestCase):
         self.assertEqual(rc, 1)
         self.assertIn("evals: no result (partial", out)
 
+    def failing(self, cost=1.5):
+        """The change's run: dev-third-attempt below the 0.66 gate, the other dev case passing."""
+        return doc(total=2, passed=1, cost=cost, scores={"dev-reversal": {"score": 1},
+                                                         "dev-third-attempt": {"score": 0.33}})
+
+    def base_run(self, score):
+        return doc(total=1, passed=1 if score >= 0.66 else 0, cost=0.5,
+                   scores={"dev-third-attempt": {"score": score}})
+
     def test_a_failing_case_fails_the_lane(self):
+        # Licensed rewrite (gogogo#277 Approvals row 1): a case that passes on the base still fails the change.
         write(self.root, "plugins/gogogo/skills/dev/SKILL.md", "changed\n")
-        rc, out = self.run_lane(result=doc(total=3, passed=2, cost=1.5), code=1)
+        rc, out = self.run_lane(result=self.failing(), code=1, base=self.base_run(1.0))
         self.assertEqual(rc, 1)
-        self.assertIn("evals: cases=3 passed=2 cost=$1.50", out)
+        self.assertIn("evals: cases=2 passed=1 base_failed=0 cost=$2.00", out)
+        self.assertIn("evals: dev-third-attempt passes on main score=1.00", out)
+
+    def test_a_case_failing_on_the_base_too_does_not_fail_the_change(self):
+        write(self.root, "plugins/gogogo/skills/dev/SKILL.md", "changed\n")
+        rc, out = self.run_lane(result=self.failing(), code=1, base=self.base_run(0.33))
+        self.assertEqual(rc, 0, out)
+        self.assertIn("evals: dev-third-attempt fails on main too score=0.33; not this change", out)
+        self.assertIn("evals: cases=2 passed=1 base_failed=1 cost=$2.00", out)
+
+    def test_the_base_run_uses_the_bases_own_files_and_one_case(self):
+        write(self.root, "plugins/gogogo/skills/dev/SKILL.md", "changed\n")
+        self.run_lane(result=self.failing(), code=1, base=self.base_run(0.33))
+        self.assertEqual(len(self.calls), 2)
+        args = self.calls[1]
+        self.assertTrue(args[3].endswith("/plugins/gogogo"))
+        self.assertNotEqual(Path(args[3]).resolve(), (self.root / "plugins" / "gogogo").resolve())
+        self.assertEqual(args[args.index("--case") + 1], "dev-third-attempt")
+        for flag, value in (("--runs", "3"), ("--threshold", "0.66"), ("--ablation", "none")):
+            self.assertEqual(args[args.index(flag) + 1], value)
+        self.assertEqual(Path(self.base_cwds[0]).resolve(), Path(args[3]).resolve().parents[1])
+
+    def test_a_new_case_that_fails_is_not_run_on_the_base(self):
+        case(self.root, "dev-new", "dev")
+        rc, out = self.run_lane(["--skill", "dev"], code=1, base=self.base_run(0.33), result=doc(
+            total=3, passed=2, scores={"dev-reversal": {"score": 1}, "dev-third-attempt": {"score": 1},
+                                       "dev-new": {"score": 0.33}}))
+        self.assertEqual((rc, len(self.calls)), (1, 1))
+
+    def test_a_case_that_did_not_run_is_not_run_on_the_base(self):
+        rc, out = self.run_lane(["--skill", "dev"], code=0, base=self.base_run(0.33),
+                                result=doc(total=1, passed=1, scores={"dev-reversal": {"score": 1}}))
+        self.assertEqual((rc, len(self.calls)), (1, 1))
+        self.assertIn("evals: dev-third-attempt did not run", out)
+
+    def test_a_base_run_with_no_result_leaves_the_failure(self):
+        write(self.root, "plugins/gogogo/skills/dev/SKILL.md", "changed\n")
+        rc, out = self.run_lane(result=self.failing(), code=1, base=None)
+        self.assertEqual(rc, 1)
+        self.assertIn("evals: dev-third-attempt base re-run gave no result", out)
+
+    def test_the_base_worktree_is_taken_down(self):
+        write(self.root, "plugins/gogogo/skills/dev/SKILL.md", "changed\n")
+        self.run_lane(result=self.failing(), code=1, base=self.base_run(0.33))
+        listed = subprocess.run(["git", "worktree", "list"], cwd=self.root, capture_output=True, text=True).stdout
+        self.assertEqual(len(listed.splitlines()), 1, listed)
 
     def test_every_case_passing_passes_the_lane(self):
         write(self.root, "plugins/gogogo/skills/dev/SKILL.md", "changed\n")
         rc, out = self.run_lane(result=doc(cost=1.234), code=0)
         self.assertEqual(rc, 0)
-        self.assertIn("evals: cases=3 passed=3 cost=$1.23", out)
+        self.assertIn("evals: cases=3 passed=3 base_failed=0 cost=$1.23", out)
 
     def test_skill_runs_those_cases_with_no_change(self):
         rc, _ = self.run_lane(["--skill", "spec"], result=doc())

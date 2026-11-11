@@ -18,9 +18,17 @@ No skill: prints `evals: no skill changed` and exits 0, running nothing. A
 skill with no case: prints `evals: no case for <s>; ...` and exits 1, running
 nothing. Otherwise it runs `claude plugin eval` on those skills' cases, three
 runs each, with the plugin only (`--ablation none`), and a case passes at 2 of
-3 runs. It prints `evals: cases=<n> passed=<n> cost=$<x>` and exits 0 only when
-every case passed. After that line it prints one line per case in the result,
-`evals: <name> score=<score>` (and ` without=<score>` under --baseline), and
+3 runs. A case below the gate is run again on the base, alone, from a worktree
+at the fork point taken down afterwards, with the base's own plugin and cases:
+failing there too, it is an old failure, printed `evals: <name> fails on <base>
+too score=<s>; not this change`, and does not fail the lane; passing there
+(`passes on <base>`), or with no result there (`base re-run gave no result`),
+its failure stands. A case the base does not have is not re-run. It prints
+`evals: cases=<n> passed=<n> base_failed=<k> cost=$<x>`, the cost including
+the re-runs, and exits 0 only when every case passed or failed on the base too.
+After that line it prints one line per case in the result,
+`evals: <name> score=<score>` (and ` without=<score>` under --baseline), the
+base re-run lines, and
 `evals: <name> did not run` for a case of those skills the result leaves out,
 which fails the run (docs/writing-eval-cases.md). A result it cannot read, with no case in it, or cut short
 (`partial`) is a failure, never a pass.
@@ -47,6 +55,7 @@ SKILLS = f"{PLUGIN}/skills/"
 EVALS = f"{PLUGIN}/evals/"
 TAGS = re.compile(r"^tags:\s*\[([^\]]*)\]\s*$", re.M)
 FIXED = ["--runs", "3", "--threshold", "0.66", "--concurrency", "3"]
+THRESHOLD = float(FIXED[FIXED.index("--threshold") + 1])
 
 
 def _git(args: list[str], cwd: Path) -> str:
@@ -93,6 +102,36 @@ def changed_files(root: Path, fork: str) -> list[str]:
     return files
 
 
+def _read(out: Path) -> dict | None:
+    try:
+        doc = json.loads(out.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return None
+    return None if doc.get("partial") else doc
+
+
+def base_score(root: Path, fork: str, name: str) -> tuple[float | None, float]:
+    """Run case `name` alone on the base's own plugin and case files, from a worktree at `fork`
+    taken down afterwards: (its score, or None for no result; what the run cost)."""
+    with tempfile.TemporaryDirectory() as tmp:
+        tree, out = Path(tmp) / "base", Path(tmp) / "base.json"
+        _git(["worktree", "add", "--detach", "--quiet", str(tree), fork], root)
+        try:
+            _run_eval(["claude", "plugin", "eval", str(tree / PLUGIN), *FIXED, "--ablation", "none",
+                       "--trust-plugin", "--no-publish", "--json", str(out), "--case", name], tree)
+            doc = _read(out)
+        finally:
+            _git(["worktree", "remove", "--force", str(tree)], root)
+    if doc is None:
+        return None, 0.0
+    cost = float(doc.get("costUsd") or 0)
+    for c in doc.get("cases") or []:
+        if c.get("name") == name:
+            score = (c.get("aggregates") or {}).get("score")
+            return (None if score is None else float(score)), cost
+    return None, cost
+
+
 def skills_touched(files: list[str], *case_maps: dict[str, list[str]]) -> set[str]:
     skills = set()
     for f in files:
@@ -113,10 +152,10 @@ def main(argv=None, root: Path = ROOT) -> int:
     a = ap.parse_args(argv)
 
     cases = case_tags(root)
+    fork = fork_point(root, a.base)
     if a.skill:
         skills = set(a.skill)
     else:
-        fork = fork_point(root, a.base)
         skills = skills_touched(changed_files(root, fork), cases, case_tags_at(root, fork))
     if not skills:
         print("evals: no skill changed")
@@ -147,14 +186,33 @@ def main(argv=None, root: Path = ROOT) -> int:
     if not agg.get("casesTotal"):
         print("evals: no result (no case ran)")
         return 1
-    print(f"evals: cases={agg['casesTotal']} passed={agg.get('casesPassed', 0)} "
-          f"cost=${float(doc.get('costUsd') or 0):.2f}")
     listed = doc.get("cases") or []
+    # A case below the gate is run again on the base: failing there too, it is an old failure
+    # and does not fail this change. A case the base does not have keeps its failure.
+    cost, on_base, base_failed = float(doc.get("costUsd") or 0), [], set()
+    at_fork = case_tags_at(root, fork)
+    for c in listed:
+        score = (c.get("aggregates") or {}).get("score")
+        if score is None or float(score) >= THRESHOLD or c.get("name") not in at_fork:
+            continue
+        there, spent = base_score(root, fork, c["name"])
+        cost += spent
+        if there is None:
+            on_base.append(f"evals: {c['name']} base re-run gave no result")
+        elif there < THRESHOLD:
+            base_failed.add(c["name"])
+            on_base.append(f"evals: {c['name']} fails on {a.base} too score={_score(there)}; not this change")
+        else:
+            on_base.append(f"evals: {c['name']} passes on {a.base} score={_score(there)}")
+    print(f"evals: cases={agg['casesTotal']} passed={agg.get('casesPassed', 0)} "
+          f"base_failed={len(base_failed)} cost=${cost:.2f}")
     for c in listed:
         aggregates = c.get("aggregates") or {}
         line = f"evals: {c.get('name')} score={_score(aggregates.get('score'))}"
         if aggregates.get("scoreWithout") is not None:
             line += f" without={_score(aggregates['scoreWithout'])}"
+        print(line)
+    for line in on_base:
         print(line)
     # The cases a run is meant to run are the tagged cases of its skills; a result that leaves
     # one out (a case file that failed to load, say) is a failed run.
@@ -169,7 +227,10 @@ def main(argv=None, root: Path = ROOT) -> int:
             if delta is None or delta <= 0:
                 flat.append(c.get("name"))
                 print(f"evals: {c.get('name')} does as well without the plugin")
-    return 0 if code == 0 and not flat and not missing else 1
+    below = {c.get("name") for c in listed if (c.get("aggregates") or {}).get("score") is not None
+             and float(c["aggregates"]["score"]) < THRESHOLD} - base_failed
+    ok = (code == 0 or (base_failed and not below)) and not below
+    return 0 if ok and not flat and not missing else 1
 
 
 if __name__ == "__main__":
