@@ -254,7 +254,7 @@ class Announce(ReleaseRepo):
         self.repo.git("tag", "-a", "deploy-3", "-m", "deploy-3")
         self.push_main()
         self.releases, self.calls, self.sent, self.fail = {}, [], [], set()
-        self.view_error, self.created = "", ()
+        self.view_error, self.created, self.argv, self.view_ok, self.main_refs = "", (), [], None, []
         world = self
 
         class Transport:
@@ -269,6 +269,11 @@ class Announce(ReleaseRepo):
 
         def gh(*args):
             self.calls.append(args[:2])
+            self.argv.append(args)
+            if args[1] == "view" and self.view_ok is not None:
+                self.view_ok -= 1
+                if self.view_ok < 0:
+                    return subprocess.CompletedProcess(args, 1, "", "HTTP 502")
             verb, tag = args[1], args[2]
             if verb in self.fail:
                 return subprocess.CompletedProcess(args, 1, "", f"{verb} refused")
@@ -285,10 +290,13 @@ class Announce(ReleaseRepo):
 
         def sync(profile, tag, main_ref, dry_run):
             self.calls.append(("sync", tag, dry_run))
+            self.main_refs.append(main_ref)
             print("MOVE      acme/issues#7  abc")
             if not dry_run:
                 print("acme/issues#7: In Dev -> In Production")
-            return 0
+                print("acme/issues#9: no linked commit; left in In Dev")
+            return self.sync_code
+        self.sync_code = 0
 
         for target, name, fake in ((release, "gh", gh), (release.stage_sync, "sync", sync),
                                    (release.stage_sync, "fetch_titles",
@@ -351,7 +359,7 @@ class Announce(ReleaseRepo):
         self.assertEqual(code, 0, err)
         self.assertIn("notify: sent", lines)
         self.assertEqual(len(self.sent), 1)
-        self.assertTrue(self.releases["deploy-3"].rstrip().endswith(release.ANNOUNCED))
+        self.assertTrue(self.releases["deploy-3"].rstrip().endswith("<!-- gogogo:announced -->"))
         code, lines, _ = self.announce(profile=profile)
         self.assertIn("notify: already sent", lines)
         self.assertEqual(len(self.sent), 1)
@@ -451,6 +459,89 @@ class Announce(ReleaseRepo):
             code, lines, _ = self.announce(profile=self.messages_on())
         self.assertTrue(lines[2].startswith("notify: sent"), lines)
         self.assertIn("issue list unavailable", self.sent[-1])
+
+
+    def test_the_summary_line_names_each_jobs_outcome(self):
+        # Guards gogogo#268 Design 1's last line, for every value a job can give.
+        on = self.messages_on()
+        untagged = self.messages_on(profile_text().replace('tag = "deploy-*"\n', ""))
+        runs = (
+            ((), on, "release=created sync=moved 1 notify=sent"),
+            ((), on, "release=exists sync=moved 1 notify=already sent"),
+            (("--dry-run",), on, "release=exists sync=would move 1 notify=already sent"),
+        )
+        for extra, profile, summary in runs:
+            with self.subTest(summary):
+                code, lines, _ = self.announce(*extra, profile=profile)
+                self.assertEqual((code, lines[-1]), (0, f"announce: deploy-3 {summary}"))
+        self.releases.clear()
+        for extra, profile, summary in (
+            (("--dry-run",), on, "release=would create sync=would move 1 notify=would send"),
+            ((), untagged, "release=created sync=skipped notify=sent"),
+        ):
+            with self.subTest(summary):
+                self.releases.clear()
+                code, lines, _ = self.announce(*extra, profile=profile)
+                self.assertEqual(lines[-1], f"announce: deploy-3 {summary}")
+        self.releases.clear()
+        code, lines, _ = self.announce()
+        self.assertEqual(lines[-1], "announce: deploy-3 release=created sync=moved 1 notify=off")
+
+    def test_what_is_handed_to_gh(self):
+        self.releases["deploy-3"] = "Fix X\n"
+        self.announce(profile=self.messages_on())
+        self.assertIn(("release", "view", "deploy-3", "--json", "body", "-q", ".body"), self.argv)
+        edit = next(a for a in self.argv if a[1] == "edit")
+        self.assertEqual((edit[:4], edit[4].endswith(".md")), (("release", "edit", "deploy-3", "--notes-file"), True))
+        self.assertEqual(self.releases["deploy-3"], "Fix X\n\n<!-- gogogo:announced -->\n")
+        self.assertEqual(self.main_refs, ["origin/main"])
+        self.releases.clear()
+        self.announce()
+        create = next(a for a in self.argv if a[1] == "create")
+        self.assertEqual(create[:7], ("release", "create", "deploy-3", "--verify-tag", "--title", "deploy-3",
+                                      "--notes-file"))
+
+    def test_each_failure_says_why(self):
+        self.fail.add("create")
+        code, lines, _ = self.announce(profile=self.messages_on())
+        self.assertTrue(lines[0].startswith("release: failed: create refused; retry: python3 "), lines[0])
+        self.assertTrue(lines[0].endswith("announce --tag deploy-3 --only release"), lines[0])
+        self.assertEqual(lines[-1], "announce: deploy-3 release=failed sync=moved 1 notify=sent")
+        self.fail.discard("create")
+        self.releases.clear()
+        self.fail.add("edit")
+        code, lines, _ = self.announce(profile=self.messages_on())
+        self.assertEqual(lines[2], "notify: sent; not marked (edit refused)")
+        self.fail.discard("edit")
+        self.releases.clear()
+        self.sync_code = 2
+        code, lines, _ = self.announce()
+        self.assertTrue(lines[1].startswith("sync: failed: a card's comment failed"), lines[1])
+        self.sync_code = 0
+        with mock.patch.object(release, "send", lambda profile, event: (1, "boom")):
+            code, lines, _ = self.announce(profile=self.messages_on())
+        self.assertTrue(lines[2].startswith("notify: failed: boom;"), lines[2])
+
+    def test_a_release_unreadable_after_the_send_is_left_unmarked(self):
+        self.releases["deploy-3"] = "notes\n"
+        self.view_ok = 2  # release's read and notify's first read; the read after the send fails
+        code, lines, _ = self.announce(profile=self.messages_on())
+        self.assertEqual((lines[2], lines[-1]), ("notify: sent; not marked (HTTP 502)",
+                                                  "announce: deploy-3 release=exists sync=moved 1 notify=sent"))
+
+    def test_the_first_deploy_tag_has_nothing_to_compare_with(self):
+        code, out, _ = self.run_main("announce", "--tag", "deploy-2", profile=self.messages_on())
+        self.assertIn("notify: sent", out.splitlines())
+        self.assertIn("deployed deploy-2 to", self.sent[-1])
+        self.assertIn("nothing to compare with", self.sent[-1])
+
+    def test_stdin_is_given_back_and_a_tag_is_required(self):
+        saved = sys.stdin
+        self.announce(profile=self.messages_on())
+        self.assertIs(sys.stdin, saved)
+        code, _, err = self.run_main("announce")
+        self.assertEqual(code, 2)
+        self.assertIn("the following arguments are required: --tag", err)
 
 
 class VersioningDoc(unittest.TestCase):
