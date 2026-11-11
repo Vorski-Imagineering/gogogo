@@ -786,6 +786,7 @@ class Docs(unittest.TestCase):
 
     def test_the_table_is_optional_and_its_values_are_not_empty(self):
         self.assertIn(pc.DOCS, pc.SKILLS)
+        self.assertTrue((ROOT / "plugins" / "gogogo" / "skills" / pc.DOCS / "SKILL.md").is_file())
         self.assertNotIn(pc.DOCS, pc.OPT_IN)
         settings, sections = parse()
         self.assertEqual(pc.check(drop(settings, "docs"), sections, pc.DOCS), ([], []))

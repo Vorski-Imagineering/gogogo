@@ -148,23 +148,41 @@ class ProfileSkills(unittest.TestCase):
                          {f"profile for /gogogo:{s}" for s in profile_check.SKILLS})
 
     def test_the_docs_row(self):
-        # Guards gogogo#270: what /gogogo:docs would read, found on disk or named by [docs].
+        # Guards gogogo#270: what /gogogo:docs would read, found on disk or named by [docs] (Design 5's rows).
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             (root / "docs" / "public").mkdir(parents=True)
             (root / "docs" / "README.md").write_text("x")
-            for settings, level, words in (
-                ({}, "INFO", ("not set up", "docs/ found", "index docs/README.md", "public docs/public")),
-                ({"docs": {"dir": "docs", "index": "docs/gone.md"}}, "FAIL", ("index names docs/gone.md",)),
+            (root / "guide").mkdir()
+            gone = ("FAIL", "correct [docs] in the profile")
+            for settings, level, detail, fix in (
+                ({}, "INFO", "not set up: docs/ found, index docs/README.md, public docs/public", ""),
+                ({"docs": {"dir": "docs", "index": "docs/gone.md"}}, *gone[:1],
+                 "index names docs/gone.md, which does not exist", gone[1]),
+                ({"docs": {"dir": "gone"}}, gone[0], "dir names gone, which does not exist", gone[1]),
+                ({"docs": {"public": "docs/nope"}}, gone[0], "public names docs/nope, which does not exist", gone[1]),
                 ({"docs": {"dir": "docs", "index": "docs/README.md", "public": "docs/public"}}, "PASS",
-                 ("docs, index docs/README.md, public docs/public",)),
+                 "docs, index docs/README.md, public docs/public", ""),
+                ({"docs": {}}, "PASS", "docs, index none, public none", ""),
+                ({"docs": {"dir": "guide"}}, "PASS", "guide, index none, public none", ""),
             ):
-                with self.subTest(level):
+                with self.subTest(detail):
                     rep = sc.Report()
                     sc.check_docs(root, settings, rep)
-                    self.assertEqual(levels(rep, "docs"), [level])
-                    for word in words:
-                        self.assertIn(word, rep.rows[0]["detail"])
+                    self.assertEqual([(r["level"], r["detail"], r["fix"]) for r in rep.rows if r["check"] == "docs"],
+                                     [(level, detail, fix)])
+
+    def test_the_docs_row_finds_an_index_md_or_nothing(self):
+        # Guards gogogo#270: the index candidate is <dir>/README.md or <dir>/index.md; no docs/ says so.
+        for files, detail in (({"docs/index.md": "x"}, "not set up: docs/ found, index docs/index.md, public none"),
+                              ({}, "not set up: no docs/ folder, index none, public none")):
+            with self.subTest(detail), tempfile.TemporaryDirectory() as tmp:
+                for name, text in files.items():
+                    (Path(tmp) / name).parent.mkdir(parents=True, exist_ok=True)
+                    (Path(tmp) / name).write_text(text)
+                rep = sc.Report()
+                sc.check_docs(Path(tmp), {}, rep)
+                self.assertEqual([r["detail"] for r in rep.rows], [detail])
 
     def test_the_docs_row_reads_from_the_profiles_repo(self):
         # Guards gogogo#270: in a monorepo, [docs] paths are relative to the app holding the profile.

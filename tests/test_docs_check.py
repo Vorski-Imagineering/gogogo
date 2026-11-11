@@ -197,6 +197,51 @@ class DocsCheck(unittest.TestCase):
         code, lines, _ = self.run_it()
         self.assertEqual((code, self.findings(lines, "link")), (1, [f"link {outside / 'a.md'}:1: gone.md does not exist"]))
 
+    def test_fenced_blocks_of_either_kind_are_skipped_and_reading_goes_on(self):
+        self.repo({"docs/a.md": "```\n[a](g1.md)\n```\n~~~\n[b](g2.md)\n~~~\n[c](g3.md)\n"})
+        code, lines, _ = self.run_it()
+        self.assertEqual(self.findings(lines, "link"), ["link docs/a.md:7: g3.md does not exist"])
+
+    def test_links_that_are_not_relative_files_or_carry_an_anchor(self):
+        self.repo({"docs/a.md": "[w](https://x.example/gone) [m](mailto:a@b.example) [s](here.md#part) "
+                                "[r](/Xroot.md)\n", "docs/here.md": "x\n", "Xroot.md": "x\n"})
+        code, lines, _ = self.run_it()
+        self.assertEqual((code, self.findings(lines, "link")), (0, []))
+
+    def test_a_path_with_a_space_is_not_a_path_and_line_or_test_suffixes_are_dropped(self):
+        self.repo({"docs/a.md": "`plugins/a b` `plugins/here.py::T.name` `plugins/here.py:12` `plugins/here.py:3-9`\n",
+                   "plugins/here.py": "x\n"})
+        code, lines, _ = self.run_it()
+        self.assertEqual((code, self.findings(lines, "path")), (0, []))
+
+    def test_the_configured_folder_is_named_when_it_is_missing(self):
+        self.repo({"README.md": "x\n"}, docs='[docs]\ndir = "guide"\n')
+        code, lines, _ = self.run_it()
+        self.assertEqual((code, lines[0]), (0, "docs: no guide/ folder; README.md only"))
+        (self.root / "README.md").unlink()
+        code, lines, err = self.run_it()
+        self.assertEqual(code, 2)
+        self.assertIn("no README.md and no guide/ folder", err)
+
+    def test_no_file_in_scope_names_the_default_folder_and_json_prints_an_empty_result(self):
+        self.repo({})
+        code, lines, err = self.run_it("--json")
+        self.assertEqual((code, lines), (2, ['{"files": 0, "findings": []}']))
+        self.assertIn("no README.md and no docs/ folder", err)
+
+    def test_an_empty_private_name_matches_nothing(self):
+        self.repo({"docs/public/p.md": "plain words\n"})
+        (self.root / ".agents" / "dev-process.md").write_text(
+            PROFILE.format(docs='[docs]\npublic = "docs/public"\n').replace('["Acme Internal"]', '["", "Acme Internal"]'))
+        code, lines, _ = self.run_it()
+        self.assertEqual((code, self.findings(lines, "public")), (0, []))
+
+    def test_it_runs_as_a_script(self):
+        import subprocess
+        run = subprocess.run([sys.executable, str(ROOT / "plugins" / "gogogo" / "scripts" / "docs_check.py"),
+                              "--profile", str(self.root / "nope.md")], capture_output=True, text=True)
+        self.assertEqual((run.returncode, run.stdout), (2, "docs: files=0 findings=0\n"))
+
     def test_an_unreadable_profile_stops(self):
         out, err = io.StringIO(), io.StringIO()
         with redirect_stdout(out), redirect_stderr(err):
