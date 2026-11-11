@@ -438,7 +438,6 @@ class ShipWait(unittest.TestCase):
         self.assertIn("`references/posting.md` step 7", sentence)
 
 
-
 class LayoutRule(unittest.TestCase):
     def test_a_layout_case_checks_overflow_and_a_screenshot_is_no_assertion(self):
         # gogogo#258
