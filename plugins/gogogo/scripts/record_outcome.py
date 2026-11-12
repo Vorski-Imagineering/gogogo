@@ -398,6 +398,18 @@ def _comment_only(run_dir, issue, verdict, repo, comment, first, reason):
     _append(run_dir, f"| #{issue} | {verdict} (comment only: {reason}) |")
 
 
+def _state(issue, repo):
+    """The issue's state as gh prints it (OPEN, CLOSED); stops when it cannot be read."""
+    state = run(["gh", "issue", "view", str(issue), "--repo", repo, "--json", "state"])
+    try:
+        current = json.loads(state.stdout).get("state") if state.returncode == 0 else None
+    except (json.JSONDecodeError, AttributeError):
+        current = None
+    if current is None:
+        raise Stop(f"#{issue}: could not read the issue's state: {state.stderr.strip()}")
+    return current
+
+
 def apply(settings, profile_path, run_dir, issue, verdict, repo, walk=False):
     auto = settings["auto_test"]
     issues_repo = settings["tracker"]["issues_repo"]
@@ -410,11 +422,14 @@ def apply(settings, profile_path, run_dir, issue, verdict, repo, walk=False):
     if fields is None or fields.get("verdict") != verdict or fields.get("issue") != str(issue):
         raise Stop(f"#{issue}: {comment.name} does not start with a {'guided-review ' if walk else ''}marker "
                    f"saying issue={issue} verdict={verdict}")
+    # A walk's reason says what the issue still waits on, so only an open issue of this repo, walked off
+    # verify.human, is "not the confirming environment" (gogogo#263).
     if walk:
-        if fields.get("env") != settings["verify"]["human"]:
-            return _comment_only(run_dir, issue, verdict, repo, comment, first, "not the confirming environment")
         if repo not in (issues_repo, settings["tracker"]["code_repo"]):
             return _comment_only(run_dir, issue, verdict, repo, comment, first, "other repo")
+        if fields.get("env") != settings["verify"]["human"]:
+            reason = "not the confirming environment" if _state(issue, repo) == "OPEN" else "closed"
+            return _comment_only(run_dir, issue, verdict, repo, comment, first, reason)
 
     tool = tracker_cmd(settings, profile_path)
     card_repo = ["--repo", repo] if repo != issues_repo else []
@@ -439,13 +454,7 @@ def apply(settings, profile_path, run_dir, issue, verdict, repo, walk=False):
     if shown.returncode != 0:
         raise Stop(f"#{issue}: could not read the card (tracker exit {shown.returncode}): {shown.stderr.strip()}")
 
-    state = run(["gh", "issue", "view", n, *gh, "--json", "state"])
-    try:
-        current = json.loads(state.stdout).get("state") if state.returncode == 0 else None
-    except (json.JSONDecodeError, AttributeError):
-        current = None
-    if current is None:
-        raise Stop(f"#{issue}: could not read the issue's state: {state.stderr.strip()}")
+    current = _state(issue, repo)
     if current != "OPEN":
         if walk:
             return _comment_only(run_dir, issue, verdict, repo, comment, first, "closed")

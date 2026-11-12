@@ -682,7 +682,10 @@ class Walk(unittest.TestCase):
 
     def test_anywhere_else_it_comments_only(self):
         for name, world, kw, verbs, reason in (
-            ("env", FakeWorld(), {"env": "dev"}, ["comment", "comments"], "not the confirming environment"),
+            ("env", FakeWorld(), {"env": "dev"}, ["state", "comment", "comments"], "not the confirming environment"),
+            # gogogo#263: only an open issue of this repo waits on verify.human, so off it these say why not.
+            ("env closed", FakeWorld(state="CLOSED"), {"env": "dev"}, ["state", "comment", "comments"], "closed"),
+            ("env repo", FakeWorld(), {"env": "dev", "repo": RELATED}, ["comment", "comments"], "other repo"),
             ("card", FakeWorld(column="In Dev"), {}, ["show", "comment", "comments"], f"card not in {COLUMN}"),
             ("closed", FakeWorld(state="CLOSED"), {}, ["show", "state", "comment", "comments"], "closed"),
             ("repo", FakeWorld(), {"repo": RELATED}, ["comment", "comments"], "other repo"),
@@ -700,6 +703,17 @@ class Walk(unittest.TestCase):
                 self.assertEqual([cmd for verb, cmd in world.calls if verb in ("comment", "comments")], [
                     ["gh", "issue", "comment", "7", "--repo", repo, "--body-file", str(self.dir / "comment-7.md")],
                     ["gh", "issue", "view", "7", "--repo", repo, "--json", "comments"]])
+
+    def test_a_state_not_read_stops_before_anything_is_written(self):
+        # Guards gogogo#263: off verify.human the reason needs the state, so an unread state posts nothing.
+        for kw in ({"env": "dev"}, {}):
+            with self.subTest(**kw):
+                world = FakeWorld()
+                world.fail["state"] = 1
+                code, _, err = self.apply(world, **kw)
+                self.assertEqual(code, 2)
+                self.assertIn("could not read the issue's state: fake state failed", err)
+                self.assertEqual(world.issue["comments"], [])
 
     def test_a_comment_not_read_back_stops(self):
         for comments in ([], [{"body": "thanks!"}]):
