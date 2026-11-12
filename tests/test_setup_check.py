@@ -161,6 +161,64 @@ class ProfileSkills(unittest.TestCase):
             self.assertIn("[auto_test] and ## Test data", row[0]["detail"])
             self.assertIn("§ Auto-test", row[0]["detail"])
 
+    def test_the_docs_row(self):
+        # Guards gogogo#270: what /gogogo:docs would read, found on disk or named by [docs] (Design 5's rows).
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "docs" / "public").mkdir(parents=True)
+            (root / "docs" / "README.md").write_text("x")
+            (root / "guide").mkdir()
+            gone = ("FAIL", "correct [docs] in the profile")
+            for settings, level, detail, fix in (
+                ({}, "INFO", "not set up: docs/ found, index docs/README.md, public docs/public", ""),
+                ({"docs": {"dir": "docs", "index": "docs/gone.md"}}, *gone[:1],
+                 "index names docs/gone.md, which does not exist", gone[1]),
+                ({"docs": {"dir": "gone"}}, gone[0], "dir names gone, which does not exist", gone[1]),
+                ({"docs": {"public": "docs/nope"}}, gone[0], "public names docs/nope, which does not exist", gone[1]),
+                ({"docs": {"dir": "docs", "index": "docs/README.md", "public": "docs/public"}}, "PASS",
+                 "docs, index docs/README.md, public docs/public", ""),
+                ({"docs": {}}, "PASS", "docs, index none, public none", ""),
+                ({"docs": {"dir": "guide"}}, "PASS", "guide, index none, public none", ""),
+            ):
+                with self.subTest(detail):
+                    rep = sc.Report()
+                    sc.check_docs(root, settings, rep)
+                    self.assertEqual([(r["level"], r["detail"], r["fix"]) for r in rep.rows if r["check"] == "docs"],
+                                     [(level, detail, fix)])
+
+    def test_the_docs_row_finds_an_index_md_or_nothing(self):
+        # Guards gogogo#270: the index candidate is <dir>/README.md or <dir>/index.md; no docs/ says so.
+        for files, detail in (({"docs/index.md": "x"}, "not set up: docs/ found, index docs/index.md, public none"),
+                              ({}, "not set up: no docs/ folder, index none, public none")):
+            with self.subTest(detail), tempfile.TemporaryDirectory() as tmp:
+                for name, text in files.items():
+                    (Path(tmp) / name).parent.mkdir(parents=True, exist_ok=True)
+                    (Path(tmp) / name).write_text(text)
+                rep = sc.Report()
+                sc.check_docs(Path(tmp), {}, rep)
+                self.assertEqual([r["detail"] for r in rep.rows], [detail])
+
+    def test_the_docs_row_reads_from_the_profiles_repo(self):
+        # Guards gogogo#270: in a monorepo, [docs] paths are relative to the app holding the profile.
+        from test_profile_check import COMPLETE
+        root = repo({"apps/web/.agents/dev-process.md": COMPLETE, "apps/web/docs/README.md": "x",
+                     "apps/web/docs/public/p.md": "x"})
+        quiet = ("check_git_state", "check_settings", "check_profile_skills", "check_workspace", "check_release_shape",
+                 "check_release", "check_hard_stop_source", "check_tracker", "check_notify", "check_independence",
+                 "check_local_skills", "check_claude_md", "check_session_hook", "config_header")
+        out, cwd = io.StringIO(), os.getcwd()
+        os.chdir(root / "apps" / "web")
+        try:
+            with contextlib.ExitStack() as stack:
+                for name in quiet:
+                    stack.enter_context(mock.patch.object(sc, name))
+                stack.enter_context(contextlib.redirect_stdout(out))
+                sc.main(["--json"])
+        finally:
+            os.chdir(cwd)
+        rows = [r for r in json.loads(out.getvalue()) if r["check"] == "docs"]
+        self.assertEqual([r["level"] for r in rows], ["PASS"], rows)
+
     def test_a_profile_without_sentry_is_info_not_fail(self):
         # Guards gogogo#204: sentry-debug is opt-in by its [sentry] table, as auto-test is.
         import profile_check
@@ -2097,7 +2155,7 @@ class Independence(unittest.TestCase):
         from test_profile_check import COMPLETE
         root = repo({".agents/dev-process.md": COMPLETE.replace('independence = "junior-dev"\n', extra, 1)})
         quiet = ("check_git_state", "check_settings", "check_profile_skills", "check_release_shape",
-                 "check_release", "check_hard_stop_source", "check_tracker", "check_notify",
+                 "check_release", "check_hard_stop_source", "check_tracker", "check_notify", "check_docs",
                  "check_local_skills", "check_claude_md", "config_header")
         out = io.StringIO()
         cwd = os.getcwd()

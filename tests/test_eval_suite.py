@@ -23,13 +23,15 @@ sys.path.insert(0, str(ROOT / "plugins" / "gogogo" / "scripts"))
 import profile_check as pc  # noqa: E402
 
 CASES = {
-    "dev-third-attempt", "dev-reversal", "dev-unlicensed-weaker-test",
+    "dev-third-attempt", "dev-reversal", "dev-unlicensed-weaker-test", "dev-guard-refuses-what-spec-says",
     "dev-round-checks-focused-tests", "dev-silent-review-restarts", "dev-mutate-key-not-read",
     "auto-dev-label-less-card", "auto-dev-open-decision", "auto-dev-list-fails",
-    "auto-dev-review-wait", "auto-dev-review-wait-no-goal", "auto-dev-late-run-pr", "dev-merge-refused",
+    "auto-dev-review-wait", "auto-dev-review-wait-no-goal", "auto-dev-review-wait-pauses",
+    "auto-dev-late-run-pr", "dev-merge-refused",
     "dev-deletes-merged-local-branch", "dev-blocked-goes-to-queue", "auto-dev-skips-blocked",
     "auto-dev-related-board-unreadable",
     "human-help-review-stop", "human-help-hard-stop-asks", "human-help-requeued-twice",
+    "human-help-answer-but-blocked",
     "dev-authorised-until-clean", "dev-authorised-model", "dev-correction-smallest-fix",
     "dev-reach-line-declines", "dev-reach-line-spares-security",
     "spec-declined-question", "spec-being-built", "spec-nothing-hits-today",
@@ -49,8 +51,10 @@ CASES = {
     "auto-dev-waits-until-shipped", "dev-shipped-ref-goes-to-queue", "dev-shipped-ref-without-link",
     "spec-ship-wait-is-a-link", "spec-merge-wait-stays-unmarked", "spec-shipped-states-why",
     "spec-approval-lists-edge-cases", "human-help-approval-lists-edge-cases",
+    "spec-signoff-when-decided", "spec-go-no-go-when-undecided",
     "sentry-debug-quiet-week", "sentry-debug-no-sentry-settings",
     "guided-review-disagreement-not-pass", "guided-review-staging-comment-only", "guided-review-needs-auto-test",
+    "docs-audit-asks-before-filing", "docs-write-never-merges", "setup-docs-not-set-up",
 }
 TAGS = re.compile(r"^tags:\s*\[([^\]]*)\]\s*$", re.M)
 TYPE = re.compile(r"^type:\s*(\S+)\s*$", re.M)

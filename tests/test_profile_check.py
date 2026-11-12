@@ -142,6 +142,11 @@ projects = ["my-project"]
 release_format = "the full commit SHA"
 report_dir = "reports"
 evidence_command = "make evidence"
+
+[docs]
+dir = "docs"
+index = "docs/README.md"
+public = "docs/public"
 +++
 
 # Process profile
@@ -796,6 +801,24 @@ class GuidedReview(unittest.TestCase):
         settings["environments"][1].pop("url")
         self.assertIn("verify.human: environment 'production' has no url",
                       pc.check(settings, sections, pc.GUIDED)[0])
+
+
+class Docs(unittest.TestCase):
+    """/gogogo:docs reads an optional [docs] table and is not an opt-in skill (gogogo#270)."""
+
+    def test_the_table_is_optional_and_its_values_are_not_empty(self):
+        self.assertIn(pc.DOCS, pc.SKILLS)
+        self.assertTrue((ROOT / "plugins" / "gogogo" / "skills" / pc.DOCS / "SKILL.md").is_file())
+        self.assertNotIn(pc.DOCS, pc.OPT_IN)
+        settings, sections = parse()
+        self.assertEqual(pc.check(drop(settings, "docs"), sections, pc.DOCS), ([], []))
+        for path in ("docs.dir", "docs.index", "docs.public"):
+            with self.subTest(path):
+                settings, sections = parse()
+                settings["docs"][path.split(".")[1]] = " "
+                errors, _ = pc.check(settings, sections, pc.DOCS)
+                self.assertTrue(any(e.startswith(f"{path}: empty") for e in errors), errors)
+                self.assertFalse([e for e in pc.check(settings, sections, pc.ONE)[0] if e.startswith("docs.")])
 
 
 class Sentry(unittest.TestCase):
