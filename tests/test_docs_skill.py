@@ -36,5 +36,14 @@ class SkillNamesWhatItDependsOn(unittest.TestCase):
             self.assertIn(path, pc.FIELDS)
 
 
+
+class PublicBodies(unittest.TestCase):
+    def test_docs_keeps_todays_path_rule(self):
+        # gogogo#262: the committed-link exception is approved for idea and spec, not docs.
+        text = SKILL.read_text(encoding="utf-8")
+        line = next(p for p in text.split("\n\n") if "Posting" in p and "step 2" in p)
+        self.assertIn("without its exception for a committed link", line)
+
+
 if __name__ == "__main__":
     unittest.main()

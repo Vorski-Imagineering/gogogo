@@ -1,5 +1,5 @@
 ---
 type: regex
-pattern: '^\W*Removed\W+(?![^\n]*\bnone\b)(?![^\n]*private-specs)[^\n]*\b(?:path|checkout)'
+pattern: '^\W*Removed\W+(?!none\W*$)(?![^\n]*private-specs)[^\n]*\b(?:path|checkout)'
 flags: im
 ---
