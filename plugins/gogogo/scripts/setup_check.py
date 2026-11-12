@@ -627,6 +627,26 @@ def check_notify(profile, rep):
         rep.warn("notify", detail)
 
 
+def check_docs(root, settings, rep):
+    """Where /gogogo:docs finds the repo's docs: the [docs] table, or what is on disk when there is none."""
+    docs = settings.get("docs")
+    if not isinstance(docs, dict):
+        folder = Path(root) / "docs"
+        index = next((f"docs/{n}" for n in ("README.md", "index.md") if (folder / n).is_file()), None)
+        public = sorted(str(p.relative_to(root)) for p in folder.rglob("public") if p.is_dir()) \
+            if folder.is_dir() else []
+        rep.info("docs", f"not set up: {'docs/ found' if folder.is_dir() else 'no docs/ folder'}, "
+                 f"index {index or 'none'}, public {public[0] if public else 'none'}")
+        return
+    for key in ("dir", "index", "public"):
+        value = docs.get(key)
+        if isinstance(value, str) and value and not (Path(root) / value).exists():
+            rep.fail("docs", f"{key} names {value}, which does not exist", "correct [docs] in the profile")
+            return
+    rep.ok("docs", f"{docs.get('dir', 'docs')}, index {docs.get('index') or 'none'}, "
+           f"public {docs.get('public') or 'none'}")
+
+
 def check_independence(settings, rep):
     """Which decisions Claude asks about in this repo. Never WARNs or FAILs: no level is wrong."""
     level = settings.get("independence")
@@ -1208,6 +1228,7 @@ def main(argv=None):
         check_hard_stop_source(root, (settings.get("hard_stops") or {}).get("source"), rep)
         check_tracker(root, settings, rep)
         check_notify(path, rep)
+        check_docs(path.resolve().parent.parent, settings, rep)
         check_independence(settings, rep)
     check_local_skills(root, rep)
     check_claude_md(root, rep)
