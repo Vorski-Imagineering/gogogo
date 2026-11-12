@@ -51,6 +51,7 @@ CASES = {
     "auto-dev-waits-until-shipped", "dev-shipped-ref-goes-to-queue", "dev-shipped-ref-without-link",
     "spec-ship-wait-is-a-link", "spec-merge-wait-stays-unmarked", "spec-shipped-states-why",
     "spec-approval-lists-edge-cases", "human-help-approval-lists-edge-cases",
+    "spec-signoff-when-decided", "spec-go-no-go-when-undecided",
     "sentry-debug-quiet-week", "sentry-debug-no-sentry-settings",
     "docs-audit-asks-before-filing", "docs-write-never-merges", "setup-docs-not-set-up",
 }
