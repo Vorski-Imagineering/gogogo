@@ -30,9 +30,9 @@ before they answer.
    session, or in the issue's report as their own request to build it. An
    agent-filed follow-up is not, and neither is a report saying a person
    agreed to file it. A change that adds run time is never a sign-off: the
-   time is the decision. Nor is a two-licence change: what it does to a shared
-   environment is. Anything else is a go/no-go, with "don't approve"
-   as a choice, and rules 8 to 10 do not apply.
+   time is the decision. Nor is the apply question of a two-licence change.
+   Anything else is a go/no-go, with "don't approve" as a choice, and rules 8
+   to 10 do not apply.
 8. **The sign-off's opening and choices.** It opens: "Formal sign-off this
    repo's rules require, not whether to build <the feature>." Then the
    decided design, then the edge cases as above. The first choice approves.
@@ -42,19 +42,10 @@ before they answer.
 9. **Post first.** Its row's Chosen says "Post first, not approved yet". The
    verdict is the proposal form, the item's Why cell does not use the word
    "row", and `Not approved:` names the item. Posting then withholds the
-   label and leaves the card; an issue already carrying the label has it
-   removed, since the approval promised no run takes it. When the card is in
-   the queue, a run hands it back to a person, and the reply says so. The
-   reply says to run `/gogogo:spec <N>` after
+   label and leaves the card. The reply says to run `/gogogo:spec <N>` after
    reading.
-10. **The return.** `/gogogo:spec <N>` on an issue whose verdict is a
-    proposal from rule 9 asks only the sign-off of rule 8, with "Not yet, keep
-    it as a proposal" as its second choice, and this is not another question
-    round. Read the body again first: when it no longer meets rule 7, the
-    question is a go/no-go. On approval: add a row, make the verdict `approved`
-    citing it, take the item off `Not approved:` (`none` when it was the only
-    one), correct the spec as Posting says, then run Posting steps 8 and 9. A
-    change the person asks for is made, and rule 7 decides the next question
-    afresh. A typed "don't build" is recorded as a row, the proposal stands,
-    and a later return is a go/no-go. On anything else the proposal stands and
-    nothing moves.
+10. **The return.** A person who chose rule 9 approves by running
+    `/gogogo:spec <N>` again. It specs the issue as any run does, reading
+    it again and correcting what changed, and its approval question is the
+    sign-off of rule 8. The earlier "post first" row is not a decline and
+    licenses nothing.
