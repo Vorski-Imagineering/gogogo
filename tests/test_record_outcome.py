@@ -707,13 +707,19 @@ class Walk(unittest.TestCase):
     def test_a_state_not_read_stops_before_anything_is_written(self):
         # Guards gogogo#263: off verify.human the reason needs the state, so an unread state posts nothing.
         for kw in ({"env": "dev"}, {}):
-            with self.subTest(**kw):
-                world = FakeWorld()
-                world.fail["state"] = 1
-                code, _, err = self.apply(world, **kw)
-                self.assertEqual(code, 2)
-                self.assertIn("could not read the issue's state: fake state failed", err)
-                self.assertEqual(world.issue["comments"], [])
+            for broken in ("exit", "not json"):
+                with self.subTest(broken, **kw):
+                    world = FakeWorld()
+                    if broken == "exit":
+                        world.fail["state"] = 1
+                    else:
+                        world.inert.add("state")
+                    code, _, err = self.apply(world, **kw)
+                    self.assertEqual(code, 2)
+                    self.assertIn("could not read the issue's state", err)
+                    self.assertEqual(world.issue["comments"], [])
+                    self.assertEqual([cmd for verb, cmd in world.calls if verb == "state"],
+                                     [["gh", "issue", "view", "7", "--repo", "acme/issues", "--json", "state"]])
 
     def test_a_comment_not_read_back_stops(self):
         for comments in ([], [{"body": "thanks!"}]):
