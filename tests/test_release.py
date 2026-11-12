@@ -16,6 +16,7 @@ import sys
 import tempfile
 import unittest
 from contextlib import redirect_stderr, redirect_stdout
+from unittest import mock
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -239,6 +240,318 @@ class Reference(unittest.TestCase):
         text = (PLUGIN / "references" / "versioning.md").read_text(encoding="utf-8")
         self.assertIsNone(re.search(PROJECT_NAMES, text, re.I))
 
+
+
+class Announce(ReleaseRepo):
+    """gogogo#268: `announce` makes the Release, moves the cards and sends one message per tag."""
+
+    commits = 2
+
+    def setUp(self):
+        super().setUp()
+        self.repo.git("tag", "-a", "deploy-2", "-m", "deploy-2", self.shas[1])
+        self.repo.commit("Fix the thing\n\nShips-issue: acme/issues#7\n")
+        self.repo.git("tag", "-a", "deploy-3", "-m", "deploy-3")
+        self.push_main()
+        self.releases, self.calls, self.sent, self.fail = {}, [], [], set()
+        self.view_error, self.created, self.argv, self.view_ok, self.main_refs = "", (), [], None, []
+        world = self
+
+        class Transport:
+            def __init__(self, root):
+                self.token = "x"
+
+            def missing(self):
+                return []
+
+            def send(self, text, markup=False):
+                world.sent.append(text)
+
+        def gh(*args):
+            self.calls.append(args[:2])
+            self.argv.append(args)
+            if args[1] == "view" and self.view_ok is not None:
+                self.view_ok -= 1
+                if self.view_ok < 0:
+                    return subprocess.CompletedProcess(args, 1, "", "HTTP 502")
+            verb, tag = args[1], args[2]
+            if verb in self.fail:
+                return subprocess.CompletedProcess(args, 1, "", f"{verb} refused")
+            if verb == "view" and self.view_error:
+                return subprocess.CompletedProcess(args, 1, "", self.view_error)
+            if verb == "view":
+                found = tag in self.releases
+                return subprocess.CompletedProcess(args, 0 if found else 1, self.releases.get(tag, ""),
+                                                   "" if found else "release not found")
+            if verb == "create":
+                self.created = args
+            self.releases[tag] = Path(args[args.index("--notes-file") + 1]).read_text()
+            return subprocess.CompletedProcess(args, 0, "", "")
+
+        def sync(profile, tag, main_ref, dry_run):
+            self.calls.append(("sync", tag, dry_run))
+            self.main_refs.append(main_ref)
+            print("MOVE      acme/issues#7  abc")
+            if not dry_run:
+                print("acme/issues#7: In Dev -> In Production")
+                print("acme/issues#9: no linked commit; left in In Dev")
+                print("acme/issues#10: reporter not assigned")
+            return self.sync_code
+        self.sync_code = 0
+
+        for target, name, fake in ((release, "gh", gh), (release.stage_sync, "sync", sync),
+                                   (release.stage_sync, "fetch_titles",
+                                    lambda links: {("acme/issues", 7): "Fix the thing"}),
+                                   (release.notify, "TRANSPORTS", {"telegram": Transport})):
+            patcher = mock.patch.object(target, name, fake)
+            patcher.start()
+            self.addCleanup(patcher.stop)
+
+    def messages_on(self, text=None):
+        text = text or profile_text()
+        tmp = tempfile.TemporaryDirectory(prefix="release-profile-")
+        self.addCleanup(tmp.cleanup)
+        path = Path(tmp.name) / "dev-process.md"
+        path.write_text(text.replace('notify = "none"', 'notify = "telegram"'))
+        return str(path)
+
+    def announce(self, *extra, profile=None):
+        code, out, err = self.run_main("announce", "--tag", "deploy-3", *extra, profile=profile)
+        return code, out.splitlines(), err
+
+    def test_a_tag_this_clone_does_not_have(self):
+        code, lines, err = self.announce_tag("deploy-99")
+        self.assertEqual((code, lines, len(err.strip().splitlines())), (2, [], 1))
+        self.assertEqual((self.calls, self.sent), ([], []))
+
+    def announce_tag(self, tag):
+        code, out, err = self.run_main("announce", "--tag", tag)
+        return code, out.splitlines(), err
+
+    def test_the_release_is_made_with_the_titles(self):
+        code, lines, err = self.announce()
+        self.assertEqual(code, 0, err)
+        self.assertIn("release: created", lines)
+        self.assertEqual(self.calls.count(("release", "create")), 1)
+        self.assertIn("Fix the thing", self.releases["deploy-3"])
+
+    def test_an_existing_release_is_not_made_again(self):
+        self.releases["deploy-3"] = "notes\n"
+        code, lines, _ = self.announce()
+        self.assertIn("release: exists", lines)
+        self.assertNotIn(("release", "create"), self.calls)
+
+    def test_sync_runs_for_a_stage_that_takes_the_tag_and_is_skipped_without_one(self):
+        code, lines, _ = self.announce()
+        self.assertIn(("sync", "deploy-3", False), self.calls)
+        self.assertIn("sync: 1 card(s) moved", lines)
+        untagged = profile_text().replace('tag = "deploy-*"\n', "")
+        self.assertNotEqual(untagged, profile_text())
+        self.calls.clear()
+        code, lines, _ = self.announce(profile=self.messages_on(untagged))
+        self.assertEqual(code, 0)
+        self.assertIn("sync: no stage takes deploy-3; skipped", lines)
+        self.assertFalse([c for c in self.calls if c[0] == "sync"])
+        self.assertTrue(any(line.startswith("notify: ") for line in lines))
+
+    def test_one_message_per_tag(self):
+        profile = self.messages_on()
+        code, lines, err = self.announce(profile=profile)
+        self.assertEqual(code, 0, err)
+        self.assertIn("notify: sent", lines)
+        self.assertEqual(len(self.sent), 1)
+        self.assertTrue(self.releases["deploy-3"].rstrip().endswith("<!-- gogogo:announced -->"))
+        code, lines, _ = self.announce(profile=profile)
+        self.assertIn("notify: already sent", lines)
+        self.assertEqual(len(self.sent), 1)
+
+    def test_messages_off_marks_nothing(self):
+        code, lines, _ = self.announce()
+        self.assertIn("notify: off; not marked", lines)
+        self.assertNotIn(("release", "edit"), self.calls)
+        self.assertNotIn(release.ANNOUNCED, self.releases.get("deploy-3", ""))
+
+    def test_a_failed_release_names_its_retry_and_the_rest_still_run(self):
+        self.fail.add("create")
+        code, lines, _ = self.announce(profile=self.messages_on())
+        self.assertEqual(code, 0)
+        failed = next(line for line in lines if line.startswith("release: failed"))
+        self.assertIn("announce --tag deploy-3 --only release", failed)
+        self.assertIn(("sync", "deploy-3", False), self.calls)
+        self.assertEqual(len(self.sent), 1)
+        self.assertIn("notify: sent; not marked (no Release)", lines)
+        self.assertTrue(lines[-1].startswith("announce: deploy-3 release=failed"))
+
+    def test_a_dry_run_writes_nothing(self):
+        code, lines, _ = self.announce("--dry-run", profile=self.messages_on())
+        self.assertEqual(code, 0)
+        self.assertEqual(lines[:3], ["release: would create", "sync: would move 1 card(s)", "notify: would send"])
+        self.assertFalse([c for c in self.calls if c[1] in ("create", "edit")])
+        self.assertIn(("sync", "deploy-3", True), self.calls)
+        self.assertEqual(self.sent, [])
+
+    def test_only_one_job(self):
+        code, lines, _ = self.announce("--only", "notify")
+        self.assertEqual(code, 0)
+        self.assertEqual(len(lines), 2)
+        self.assertTrue(lines[0].startswith("notify: "))
+        self.assertTrue(lines[1].startswith("announce: deploy-3 notify="))
+        self.assertFalse([c for c in self.calls if c[0] == "sync" or c[1] == "create"])
+
+
+    def test_a_release_that_cannot_be_read_is_not_taken_as_missing(self):
+        self.releases["deploy-3"] = f"notes\n\n{release.ANNOUNCED}\n"
+        self.view_error = "HTTP 401: Bad credentials"
+        code, lines, _ = self.announce(profile=self.messages_on())
+        self.assertEqual(code, 0)
+        self.assertTrue(lines[0].startswith("release: failed: HTTP 401"), lines)
+        self.assertTrue(lines[2].startswith("notify: failed: HTTP 401"), lines)
+        self.assertEqual(self.sent, [])
+        self.assertNotIn(("release", "create"), self.calls)
+
+    def test_a_profile_with_no_production_fails_notify_rather_than_sending(self):
+        broken = profile_text().replace('roles = ["production"]', 'roles = ["pre-production"]') \
+                               .replace('tag = "deploy-*"\n', "")
+        self.assertNotEqual(broken, profile_text())
+        code, lines, _ = self.announce(profile=self.messages_on(broken))
+        self.assertEqual(code, 0)
+        self.assertTrue(lines[2].startswith("notify: failed: environments: no environment"), lines)
+        self.assertEqual(self.sent, [])
+
+    def test_a_dry_run_that_cannot_read_the_release_still_says_what_it_would_do(self):
+        self.view_error = "HTTP 401: Bad credentials"
+        code, lines, _ = self.announce("--dry-run", profile=self.messages_on())
+        self.assertEqual((code, lines[0], lines[2]), (0, "release: would create", "notify: would send"))
+        self.assertFalse([c for c in self.calls if c[1] in ("create", "edit")])
+        self.assertEqual(self.sent, [])
+
+    def test_a_dry_run_names_a_release_that_exists_and_was_announced(self):
+        self.releases["deploy-3"] = f"notes\n\n{release.ANNOUNCED}\n"
+        code, lines, _ = self.announce("--dry-run", profile=self.messages_on())
+        self.assertEqual((lines[0], lines[2]), ("release: exists", "notify: already sent"))
+        self.releases["deploy-3"] = "notes\n"
+        code, lines, _ = self.announce("--dry-run", profile=self.messages_on())
+        self.assertEqual((lines[0], lines[2]), ("release: exists", "notify: would send"))
+
+    def test_the_release_is_made_only_from_the_tag_on_the_remote(self):
+        self.announce()
+        self.assertIn("--verify-tag", self.created)
+
+    def test_a_branch_or_sha_is_not_a_tag(self):
+        for name in ("main", self.shas[0]):
+            with self.subTest(name):
+                code, lines, err = self.announce_tag(name)
+                self.assertEqual((code, lines, self.calls), (2, [], []))
+
+    def test_a_profile_problem_fails_each_job_not_the_deploy(self):
+        code, lines, _ = self.announce(profile=self.messages_on(profile_text().replace("[release]", "[release")))
+        self.assertEqual(code, 0)
+        self.assertEqual([line.split(":")[0] + ":" + line.split(":")[1] for line in lines[:3]],
+                         ["release: failed", "sync: failed", "notify: failed"])
+
+    def test_the_message_names_the_stage_environment_or_says_the_list_is_unavailable(self):
+        staged = profile_text().replace('environment = "production"\ncolumn = "In Production"',
+                                        'environment = "dev"\ncolumn = "In Production"')
+        self.assertNotEqual(staged, profile_text())
+        self.announce(profile=self.messages_on(staged))
+        self.assertIn("to dev", self.sent[-1])
+        with mock.patch.object(release.stage_sync, "shipped", side_effect=RuntimeError("git log failed")):
+            self.releases.clear()
+            code, lines, _ = self.announce(profile=self.messages_on())
+        self.assertTrue(lines[2].startswith("notify: sent"), lines)
+        self.assertIn("issue list unavailable", self.sent[-1])
+
+
+    def test_the_summary_line_names_each_jobs_outcome(self):
+        # Guards gogogo#268 Design 1's last line, for every value a job can give.
+        on = self.messages_on()
+        untagged = self.messages_on(profile_text().replace('tag = "deploy-*"\n', ""))
+        runs = (
+            ((), on, "release=created sync=moved 1 notify=sent"),
+            ((), on, "release=exists sync=moved 1 notify=already sent"),
+            (("--dry-run",), on, "release=exists sync=would move 1 notify=already sent"),
+        )
+        for extra, profile, summary in runs:
+            with self.subTest(summary):
+                code, lines, _ = self.announce(*extra, profile=profile)
+                self.assertEqual((code, lines[-1]), (0, f"announce: deploy-3 {summary}"))
+        self.releases.clear()
+        for extra, profile, summary in (
+            (("--dry-run",), on, "release=would create sync=would move 1 notify=would send"),
+            ((), untagged, "release=created sync=skipped notify=sent"),
+        ):
+            with self.subTest(summary):
+                self.releases.clear()
+                code, lines, _ = self.announce(*extra, profile=profile)
+                self.assertEqual(lines[-1], f"announce: deploy-3 {summary}")
+        self.releases.clear()
+        code, lines, _ = self.announce()
+        self.assertEqual(lines[-1], "announce: deploy-3 release=created sync=moved 1 notify=off")
+
+    def test_what_is_handed_to_gh(self):
+        self.releases["deploy-3"] = "Fix X\n"
+        self.announce(profile=self.messages_on())
+        self.assertIn(("release", "view", "deploy-3", "--json", "body", "-q", ".body"), self.argv)
+        edit = next(a for a in self.argv if a[1] == "edit")
+        self.assertEqual((edit[:4], edit[4].endswith(".md")), (("release", "edit", "deploy-3", "--notes-file"), True))
+        self.assertEqual(self.releases["deploy-3"], "Fix X\n\n<!-- gogogo:announced -->\n")
+        self.assertEqual(self.main_refs, ["origin/main"])
+        self.releases.clear()
+        self.announce()
+        create = next(a for a in self.argv if a[1] == "create")
+        self.assertEqual(create[:7], ("release", "create", "deploy-3", "--verify-tag", "--title", "deploy-3",
+                                      "--notes-file"))
+
+    def test_each_failure_says_why(self):
+        self.fail.add("create")
+        code, lines, _ = self.announce(profile=self.messages_on())
+        self.assertTrue(lines[0].startswith("release: failed: create refused; retry: python3 "), lines[0])
+        self.assertTrue(lines[0].endswith("announce --tag deploy-3 --only release"), lines[0])
+        self.assertEqual(lines[-1], "announce: deploy-3 release=failed sync=moved 1 notify=sent")
+        self.fail.discard("create")
+        self.releases.clear()
+        self.fail.add("edit")
+        code, lines, _ = self.announce(profile=self.messages_on())
+        self.assertEqual((lines[2], lines[-1]), ("notify: sent; not marked (edit refused)",
+                                                  "announce: deploy-3 release=created sync=moved 1 notify=sent"))
+        self.fail.discard("edit")
+        self.releases.clear()
+        self.sync_code = 2
+        code, lines, _ = self.announce()
+        self.assertTrue(lines[1].startswith("sync: failed: a card's comment failed"), lines[1])
+        self.sync_code = 0
+        with mock.patch.object(release, "send", lambda profile, event: (1, "boom")):
+            code, lines, _ = self.announce(profile=self.messages_on())
+        self.assertTrue(lines[2].startswith("notify: failed: boom;"), lines[2])
+
+    def test_a_release_unreadable_after_the_send_is_left_unmarked(self):
+        self.releases["deploy-3"] = "notes\n"
+        self.view_ok = 2  # release's read and notify's first read; the read after the send fails
+        code, lines, _ = self.announce(profile=self.messages_on())
+        self.assertEqual((lines[2], lines[-1]), ("notify: sent; not marked (HTTP 502)",
+                                                  "announce: deploy-3 release=exists sync=moved 1 notify=sent"))
+
+    def test_the_first_deploy_tag_has_nothing_to_compare_with(self):
+        code, out, _ = self.run_main("announce", "--tag", "deploy-2", profile=self.messages_on())
+        self.assertIn("notify: sent", out.splitlines())
+        self.assertIn("deployed deploy-2 to", self.sent[-1])
+        self.assertIn("nothing to compare with", self.sent[-1])
+
+    def test_stdin_is_given_back_and_a_tag_is_required(self):
+        with mock.patch.object(sys, "stdin", io.StringIO("")) as saved:
+            self.announce(profile=self.messages_on())
+            self.assertIs(sys.stdin, saved)
+        code, _, err = self.run_main("announce")
+        self.assertEqual(code, 2)
+        self.assertIn("the following arguments are required: --tag", err)
+
+
+class VersioningDoc(unittest.TestCase):
+    def test_the_deploy_job_announces_and_no_tag_workflow_is_left(self):
+        doc = (PLUGIN / "references" / "versioning.md").read_text(encoding="utf-8")
+        part = doc.split("\n## 7")[1].split("\n## ")[0]
+        self.assertIn("release.py announce", part)
+        self.assertIsNone(re.search(r"^\s*on:\s*$[\s\S]*?^\s*tags:", part, re.M))
 
 if __name__ == "__main__":
     unittest.main()

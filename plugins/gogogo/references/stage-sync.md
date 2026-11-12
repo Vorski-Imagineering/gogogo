@@ -130,10 +130,12 @@ The workflow runs a pinned copy, not the plugin: CI must not follow gogogo's
 
 1. Copy `tracker.py`, `profile_check.py`, `stage_sync.py` and `notify.py`
    from **one** gogogo commit into one folder of the repo (they import each
-   other from their own folder).
+   other from their own folder). A repo that also runs `release.py announce`
+   (`references/versioning.md` §7) copies `release.py` too, from the same
+   commit.
 2. Record that commit and each file's sha256 in a pin file next to them.
 3. Keep a test in the repo that fails when a copy no longer matches its pin.
-4. To refresh, copy all four again from one newer commit and rewrite the pin.
+4. To refresh, copy them all again from one newer commit and rewrite the pin.
 
 A repo gets the formatted deploy message (status mark, bold repo, linked issue
 numbers) when it refreshes its copies and takes the `--json` and `--event`
