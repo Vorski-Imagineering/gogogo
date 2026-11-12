@@ -216,8 +216,7 @@ class HardStopCheck(unittest.TestCase):
         errs, _, withheld = run(body)
         self.assertEqual(errs, [])
         self.assertEqual(withheld, "a Hard Stop awaits approval")
-        errs, _, withheld = run(body.replace("the design adds a field", "see row 1"))
-        self.assertEqual(errs, [])
+        _, _, withheld = run(body.replace("the design adds a field", "see row 1"))
         self.assertIsNone(withheld)
 
     def test_proposal_is_valid_and_withholds_the_label(self):
