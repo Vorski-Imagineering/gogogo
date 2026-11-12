@@ -14,6 +14,7 @@ import re
 import subprocess
 import sys
 import tempfile
+import threading
 import unittest
 from pathlib import Path
 
@@ -203,6 +204,24 @@ class ReviewWait(unittest.TestCase):
             json.dumps({"message": {"role": "assistant", "content": [{"type": "text", "text": "ok"}]}}) + "\n")
         self.assertEqual(self.bash(self.blocks[1].replace("<agent>", str(agent))), "finished")
         self.assertEqual(self.bash(self.blocks[2].replace("<agent>", str(agent))), "ok")
+
+    def test_the_final_text_lands_before_the_read(self):
+        """gogogo#257: the final text reaches the transcript just after the state file says finished."""
+        def line(text):
+            return json.dumps({"message": {"role": "assistant", "content": [{"type": "text", "text": text}]}}) + "\n"
+        agent = self.tmp / "agent-a"
+        agent.with_name("agent-a.meta.json").write_text('{"finished":true}')
+        transcript = agent.with_name("agent-a.jsonl")
+        transcript.write_text(line("earlier remarks"))
+
+        def append_final():
+            with transcript.open("a", encoding="utf-8") as f:
+                f.write(line("the findings"))
+        late = threading.Timer(0.3, append_final)
+        late.start()
+        self.addCleanup(late.cancel)
+        self.assertEqual(self.bash(self.blocks[1].replace("<agent>", str(agent))), "finished")
+        self.assertEqual(self.bash(self.blocks[2].replace("<agent>", str(agent))), "the findings")
 
     def test_the_reader_prints_the_last_assistant_text(self):
         def line(role, content):
