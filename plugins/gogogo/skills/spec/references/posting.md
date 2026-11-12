@@ -68,7 +68,14 @@ order, checking each step before starting the next:
    - any path outside this checkout: absolute (`/Users/`, `/home/`, `/tmp/`,
      `/private/`, `C:\`), home-relative (`~/`), or into another checkout
      (`../<folder>`). A path inside the checkout, relative to its root, and a
-     placeholder such as `<scratch>` are kept;
+     placeholder such as `<scratch>` are kept. So is a path through a link
+     this repo commits: one of its leading folders, given with no trailing
+     slash to `git ls-files -s`, run from the checkout root, prints a line for
+     that folder with mode `120000`. Every segment of such a path still
+     answers to the names rule below, for private names; a folder under the
+     link is not, by being there, from outside this checkout. A path with any
+     `..` segment, and a link git does not list, is a path into another
+     checkout;
    - every repo, project, client, product or folder name from outside this
      checkout, except `tracker.issues_repo`, `tracker.code_repo`, and tools
      and products anyone would know as public;

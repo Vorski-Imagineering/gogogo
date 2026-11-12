@@ -438,5 +438,14 @@ class ShipWait(unittest.TestCase):
         self.assertIn("`references/posting.md` step 7", sentence)
 
 
+class CommittedLink(unittest.TestCase):
+    def test_posting_keeps_a_path_through_a_committed_link(self):
+        # gogogo#262 case 2: the same rule as idea's step 3
+        text = POSTING.read_text(encoding="utf-8")
+        step = text[text.index("\n2. **Write the spec to the scratchpad**"):text.index("\n3. **Compose the body file**")]
+        for name in ("git ls-files -s", "120000"):
+            self.assertIn(name, step)
+
+
 if __name__ == "__main__":
     unittest.main()
