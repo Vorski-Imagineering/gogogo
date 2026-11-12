@@ -877,9 +877,11 @@ def check_profile_skills(settings, sections, rep):
     for skill in profile_check.SKILLS:
         table = profile_check.OPT_IN.get(skill)
         if table and table not in settings:
-            # The skill's own sections: the table alone still fails its check.
-            own = [t for t, needed_by in profile_check.SECTIONS.items() if needed_by == (skill,)]
-            anchor = "Auto-test" if skill == profile_check.TEST else own[0]
+            # The skill's own sections: the table alone still fails its check. A section several
+            # opt-in skills read (## Test data) is each one's own.
+            own = [t for t, needed_by in profile_check.SECTIONS.items()
+                   if skill in needed_by and all(s in profile_check.OPT_IN for s in needed_by)]
+            anchor = "Auto-test" if table == "auto_test" else own[0]
             rep.info(f"profile for /gogogo:{skill}",
                      f"not set up: add [{table}] and {' and '.join(f'## {t}' for t in own)} to use it "
                      f"(references/profile-schema.md § {anchor})")

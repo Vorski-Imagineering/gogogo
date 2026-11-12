@@ -2,10 +2,13 @@
 """Render and record one /gogogo:auto-test outcome, in the order the skill requires.
 
     record_outcome.py [--profile FILE] column
-    record_outcome.py [--profile FILE] version
+    record_outcome.py [--profile FILE] version [--walk]
     record_outcome.py [--profile FILE] last <issue> [--repo owner/name]
     record_outcome.py [--profile FILE] render <run-dir> <issue> --build <ref> --model <id> < spec.json
     record_outcome.py [--profile FILE] apply <run-dir> <issue> <PASS|FAIL|NEEDS_HUMAN> [--repo owner/name]
+    record_outcome.py [--profile FILE] render <dir> <issue> --walk <walk id> --env <name> --repo owner/name
+                      --build <ref> --model <id> < spec.json
+    record_outcome.py [--profile FILE] apply <dir> <issue> <verdict> --walk --repo owner/name
 
 `column` prints the column under test: the `column` of the one stage whose
 `environment` is `verify.human`. `version` prints the stamp a verdict carries
@@ -32,6 +35,13 @@ writes for one change, and retyping them per issue is how they went wrong.
 The stamp hashes content, not a git sha: an installed plugin is a cache folder
 with no `.git`, and the same skill must stamp the same there and in a clone.
 
+`--walk` is /gogogo:guided-review's mode: a person checked each step on screen,
+on the environment `--env` names. Its comment carries a `guided-review` marker,
+which `last` never reads. Its `apply` does exactly what auto-test's does only
+on `verify.human`, for an issue of this repo, whose card is in the column under
+test and which is open; anywhere else it posts the comment alone, then reads
+the comments back.
+
 Every subcommand checks the profile for auto-test first. Exit codes: 0 ok, 2
 stop the run (the reason is on stderr). Standard library only.
 """
@@ -55,8 +65,11 @@ EXIT_OK, EXIT_STOP = 0, 2
 VERDICTS = {"PASS": "✅ PASS", "FAIL": "❌ FAIL", "NEEDS_HUMAN": "🧑 NEEDS HUMAN"}
 # The shared marker, and the one a repo-local copy of this skill wrote before it.
 MARKERS = ("<!-- auto-test ", "<!-- gogogo-auto-test ")
+WALK_MARKER = "<!-- guided-review "
 REQUIRED = ("n", "verdict", "kind", "summary", "role", "commits", "checks")
 BY_VERDICT = {"FAIL": ("repro",), "NEEDS_HUMAN": ("human", "blocked")}
+# A walk's comment names no label to remove, so it has no `blocked` sentence.
+WALK_BY_VERDICT = {"FAIL": ("repro",), "NEEDS_HUMAN": ("human",)}
 
 # What a published comment may not hold (tracker.public): a URL with a query
 # string, a URL with a user:password part, a bare IPv4 address.
@@ -112,6 +125,18 @@ def stamp(plugin_root, test_data):
     return "c-" + digest.hexdigest()[:12]
 
 
+def walk_stamp(plugin_root, test_data):
+    """`g-` and 12 hex of sha256 over guided-review's skill and references, this script and `## Test data`."""
+    root = Path(plugin_root)
+    skill = root / "skills" / "guided-review"
+    digest = hashlib.sha256()
+    for path in (skill / "SKILL.md", *sorted((skill / "references").glob("*.md"), key=lambda p: p.name)):
+        digest.update(path.read_bytes())
+    digest.update((root / "scripts" / "record_outcome.py").read_bytes())
+    digest.update(test_data.encode("utf-8"))
+    return "g-" + digest.hexdigest()[:12]
+
+
 def source(plugin_root):
     """Where the plugin came from, for people to read. Never compared."""
     root = str(plugin_root)
@@ -125,9 +150,9 @@ def source(plugin_root):
     return "unknown"
 
 
-def parse_marker(line):
+def parse_marker(line, prefixes=MARKERS):
     """The fields of a verdict marker line, or None when the line is not one."""
-    if not line.startswith(MARKERS):
+    if not line.startswith(prefixes):
         return None
     return dict(re.findall(r"(\w+)=(\S+)", line.removesuffix("-->")))
 
@@ -179,18 +204,20 @@ def issue_number(n):
     raise Stop(f"spec: n must be the issue number (7, \"7\" or \"#7\"), found {n!r}")
 
 
-def _check_spec(spec, public, issue, host=None):
+def _check_spec(spec, public, issue, hosts=(), walk=False):
     if not isinstance(spec, dict):
         raise Stop("spec: expected a JSON object")
     verdict = spec.get("verdict")
     if verdict not in VERDICTS:
         raise Stop(f"spec: verdict must be one of {', '.join(VERDICTS)}, found {verdict!r}")
-    for key in REQUIRED + BY_VERDICT.get(verdict, ()):
+    for key in REQUIRED + (WALK_BY_VERDICT if walk else BY_VERDICT).get(verdict, ()):
         if spec.get(key) in (None, ""):
             raise Stop(f"spec: {key} is missing" + (" (record the role preflight saw; never guess it)"
                                                     if key == "role" else ""))
     if issue_number(spec["n"]) != issue:
         raise Stop(f"spec: n is {spec['n']!r}, but this is issue {issue}")
+    if spec.get("mention") and walk:
+        raise Stop("spec: mention is for auto-test; a walk's comment mentions nobody")
     if spec.get("mention") and verdict != "PASS":
         raise Stop(f"spec: mention is for a PASS only, and this is {verdict}")
     if not isinstance(spec["commits"], list):
@@ -210,8 +237,9 @@ def _check_spec(spec, public, issue, host=None):
         raise Stop("spec: NEEDS_HUMAN with no checks; list what ran and what could not")
     if public:
         for key, value in _strings(spec):
-            if host and host.lower() in value.lower():
-                raise Stop(f"spec: {key} holds the environment's host {host}, and this tracker is public")
+            for host in hosts:
+                if host and host.lower() in value.lower():
+                    raise Stop(f"spec: {key} holds the environment's host {host}, and this tracker is public")
             for pattern, what in SECRETS:
                 if pattern.search(value):
                     raise Stop(f"spec: {key} holds {what}, and this tracker is public")
@@ -228,11 +256,15 @@ def _strings(node, key=""):
             yield from _strings(v, f"{key}[{i}]")
 
 
+def _host(env):
+    return urlparse(env["url"]).hostname or env["url"]
+
+
 def render(settings, sections, run_dir, issue, build, model, spec, plugin_root):
     public = settings["tracker"]["public"] is True
     env = profile_check.environment(settings, settings["verify"]["human"])
-    host = urlparse(env["url"]).hostname or env["url"]
-    _check_spec(spec, public, issue, host)
+    host = _host(env)
+    _check_spec(spec, public, issue, (host,))
     run_dir = Path(run_dir).resolve()
     if not run_dir.is_dir():
         raise Stop(f"run folder {run_dir} does not exist")
@@ -275,6 +307,54 @@ def render(settings, sections, run_dir, issue, build, model, spec, plugin_root):
     return path
 
 
+def render_walk(settings, sections, run_dir, issue, build, model, spec, plugin_root, walk, env_name, repo):
+    """A guided-review comment: the person's answers and the system side, per step."""
+    env = profile_check.environment(settings, env_name)
+    if env is None:
+        raise Stop(f"--env: the profile has no environment named {env_name!r}")
+    if not env.get("url"):
+        raise Stop(f"--env: environment '{env_name}' has no url")
+    tracker = settings["tracker"]
+    own = repo in (tracker["issues_repo"], tracker["code_repo"])
+    # Another repo's readers are a second public: its comment is checked as if published.
+    public = tracker["public"] is True or not own
+    human = profile_check.environment(settings, settings["verify"]["human"])
+    _check_spec(spec, public, issue, (_host(env), _host(human)), walk=True)
+    run_dir = Path(run_dir).resolve()
+    if not run_dir.is_dir():
+        raise Stop(f"run folder {run_dir} does not exist")
+    n, verdict = issue, spec["verdict"]
+    skill = walk_stamp(plugin_root, sections.get("Test data", ""))
+    now = datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%d %H:%M")
+
+    out = [f"{WALK_MARKER}v1 run={walk} issue={n} verdict={verdict} build={build} env={env_name} skill={skill} -->",
+           f"## Guided review: {VERDICTS[verdict]}", "", spec["summary"]]
+    out += ["", "### Build tested", "| | |", "|---|---|",
+            f"| Environment | {cell(env_name)} |",
+            f"| Running build | `{cell(build, code=True)}` |"]
+    out += [f"| Change under test | {cell(c)} |" for c in spec["commits"] or ["none found"]]
+    out += [f"| Kind | {cell(spec['kind'])} |", "",
+            "### How it was tested", "| | |", "|---|---|",
+            f"| Tester | `guided-review` @ `{skill}` ({source(plugin_root)}) · {cell(model)} |",
+            f"| Account role | {cell(spec['role'])} |",
+            "| Method | A person checked each step on screen; the agent checked the system side |",
+            f"| When | finished {now} UTC · walk `{walk}` |", "",
+            "### Checks",
+            "| # | Criterion | Source | Steps (route · action) | Expected | Observed | |",
+            "|---|---|---|---|---|---|---|"]
+    out += [f"| {i} | " + " | ".join(cell(v) for v in c) + " |" for i, c in enumerate(spec["checks"], 1)]
+    # Auto-test's defaults would claim checks a walk never made: an omitted key says so instead.
+    out += ["", f"Signals: {spec.get('signals', 'not recorded')}", "", "### Test data",
+            spec.get("data", "Not recorded."), "", "### Not tested", spec.get("not_tested", "Not recorded.")]
+    if verdict == "FAIL":
+        out += ["", "### Reproduce", spec["repro"]]
+    if verdict == "NEEDS_HUMAN":
+        out += ["", "### For the human tester", spec["human"]]
+    path = run_dir / f"comment-{n}.md"
+    path.write_text("\n".join(out) + "\n", encoding="utf-8")
+    return path
+
+
 def last(settings, issue, repo):
     view = run(["gh", "issue", "view", str(issue), "--repo", repo, "--json", "comments"])
     if view.returncode != 0:
@@ -298,7 +378,39 @@ def _append(run_dir, row):
         f.write(row + "\n")
 
 
-def apply(settings, profile_path, run_dir, issue, verdict, repo):
+def _comment_only(run_dir, issue, verdict, repo, comment, first, reason):
+    """Post the walk's comment alone, then confirm the newest comment is it."""
+    n, gh = str(issue), ["--repo", repo]
+    posted = run(["gh", "issue", "comment", n, *gh, "--body-file", str(comment)])
+    if posted.returncode != 0:
+        raise Stop(f"#{issue}: the comment failed (exit {posted.returncode}): {posted.stderr.strip()}")
+    view = run(["gh", "issue", "view", n, *gh, "--json", "comments"])
+    if view.returncode != 0:
+        raise Stop(f"#{issue}: could not read the comments back: {view.stderr.strip()}")
+    try:
+        comments = json.loads(view.stdout).get("comments") or []
+    except (json.JSONDecodeError, AttributeError):
+        raise Stop(f"#{issue}: the comments read back are not JSON") from None
+    newest = ((comments[-1].get("body") or "").splitlines() or [""])[0] if comments else ""
+    if newest != first:
+        raise Stop(f"#{issue}: the newest comment read back is not this walk's: the comment was not recorded")
+    print(f"#{issue}: {verdict} recorded (comment only: {reason})")
+    _append(run_dir, f"| #{issue} | {verdict} (comment only: {reason}) |")
+
+
+def _state(issue, repo):
+    """The issue's state as gh prints it (OPEN, CLOSED); stops when it cannot be read."""
+    state = run(["gh", "issue", "view", str(issue), "--repo", repo, "--json", "state"])
+    try:
+        current = json.loads(state.stdout).get("state") if state.returncode == 0 else None
+    except (json.JSONDecodeError, AttributeError):
+        current = None
+    if current is None:
+        raise Stop(f"#{issue}: could not read the issue's state: {state.stderr.strip()}")
+    return current
+
+
+def apply(settings, profile_path, run_dir, issue, verdict, repo, walk=False):
     auto = settings["auto_test"]
     issues_repo = settings["tracker"]["issues_repo"]
     col = column(settings)
@@ -306,9 +418,18 @@ def apply(settings, profile_path, run_dir, issue, verdict, repo):
     if not comment.is_file():
         raise Stop(f"#{issue}: no {comment}; render it first")
     first = (comment.read_text(encoding="utf-8").splitlines() or [""])[0]
-    fields = parse_marker(first)
+    fields = parse_marker(first, (WALK_MARKER,) if walk else MARKERS)
     if fields is None or fields.get("verdict") != verdict or fields.get("issue") != str(issue):
-        raise Stop(f"#{issue}: {comment.name} does not start with a marker saying issue={issue} verdict={verdict}")
+        raise Stop(f"#{issue}: {comment.name} does not start with a {'guided-review ' if walk else ''}marker "
+                   f"saying issue={issue} verdict={verdict}")
+    # A walk's reason says what the issue still waits on, so only an open issue of this repo, walked off
+    # verify.human, is "not the confirming environment" (gogogo#263).
+    if walk:
+        if repo not in (issues_repo, settings["tracker"]["code_repo"]):
+            return _comment_only(run_dir, issue, verdict, repo, comment, first, "other repo")
+        if fields.get("env") != settings["verify"]["human"]:
+            reason = "not the confirming environment" if _state(issue, repo) == "OPEN" else "closed"
+            return _comment_only(run_dir, issue, verdict, repo, comment, first, reason)
 
     tool = tracker_cmd(settings, profile_path)
     card_repo = ["--repo", repo] if repo != issues_repo else []
@@ -325,20 +446,18 @@ def apply(settings, profile_path, run_dir, issue, verdict, repo):
     # 3 is the contract's "in a different column"; the shared tool also exits 1 for "not on the board".
     moved = (3, 1) if settings["tracker"]["tool"] == "shared" else (3,)
     if shown.returncode in moved:
+        if walk:
+            return _comment_only(run_dir, issue, verdict, repo, comment, first, f"card not in {col}")
         print(f"#{issue} is no longer in {col}: nothing written")
         _append(run_dir, f"| #{issue} | no longer in {col}: nothing written |")
         return
     if shown.returncode != 0:
         raise Stop(f"#{issue}: could not read the card (tracker exit {shown.returncode}): {shown.stderr.strip()}")
 
-    state = run(["gh", "issue", "view", n, *gh, "--json", "state"])
-    try:
-        current = json.loads(state.stdout).get("state") if state.returncode == 0 else None
-    except (json.JSONDecodeError, AttributeError):
-        current = None
-    if current is None:
-        raise Stop(f"#{issue}: could not read the issue's state: {state.stderr.strip()}")
+    current = _state(issue, repo)
     if current != "OPEN":
+        if walk:
+            return _comment_only(run_dir, issue, verdict, repo, comment, first, "closed")
         print(f"#{issue} is {current.lower()}: nothing written")
         _append(run_dir, f"| #{issue} | closed: nothing written |")
         return
@@ -397,7 +516,8 @@ def main(argv=None):
     parser.add_argument("--profile", help="profile file (default: the nearest .agents/dev-process.md)")
     sub = parser.add_subparsers(dest="command", required=True)
     sub.add_parser("column", help="the column under test")
-    sub.add_parser("version", help="the stamp; the plugin's source on stderr")
+    p = sub.add_parser("version", help="the stamp; the plugin's source on stderr")
+    p.add_argument("--walk", action="store_true", help="guided-review's stamp")
     p = sub.add_parser("last", help="the newest verdict marker on an issue")
     p.add_argument("issue", type=int)
     p.add_argument("--repo")
@@ -406,11 +526,15 @@ def main(argv=None):
     p.add_argument("issue", type=int)
     p.add_argument("--build", required=True)
     p.add_argument("--model", required=True)
+    p.add_argument("--walk", metavar="WALK_ID", help="a guided-review walk's comment")
+    p.add_argument("--env", help="the environment the walk ran on (with --walk)")
+    p.add_argument("--repo", help="the issue's repo (with --walk)")
     p = sub.add_parser("apply", help="comment, then labels, close and card, then read the issue back")
     p.add_argument("run_dir")
     p.add_argument("issue", type=int)
     p.add_argument("verdict", choices=sorted(VERDICTS))
     p.add_argument("--repo")
+    p.add_argument("--walk", action="store_true", help="a guided-review walk's comment")
     args = parser.parse_args(argv)
     plugin_root = HERE.parent
 
@@ -421,7 +545,7 @@ def main(argv=None):
         if args.command == "column":
             print(col)
         elif args.command == "version":
-            print(stamp(plugin_root, sections.get("Test data", "")))
+            print((walk_stamp if args.walk else stamp)(plugin_root, sections.get("Test data", "")))
             print(source(plugin_root), file=sys.stderr)
         elif args.command == "last":
             print(last(settings, args.issue, repo))
@@ -430,9 +554,17 @@ def main(argv=None):
                 spec = json.load(sys.stdin)
             except json.JSONDecodeError as exc:
                 raise Stop(f"spec: not valid JSON ({exc})") from None
-            print(render(settings, sections, args.run_dir, args.issue, args.build, args.model, spec, plugin_root))
+            if args.walk is not None and not (args.env and args.repo):
+                raise Stop("render: --walk needs --env and --repo")
+            if args.walk is None:
+                print(render(settings, sections, args.run_dir, args.issue, args.build, args.model, spec, plugin_root))
+            else:
+                print(render_walk(settings, sections, args.run_dir, args.issue, args.build, args.model, spec,
+                                  plugin_root, args.walk, args.env, repo))
         elif args.command == "apply":
-            apply(settings, path, args.run_dir, args.issue, args.verdict, repo)
+            if args.walk and not args.repo:
+                raise Stop("apply: --walk needs --repo")
+            apply(settings, path, args.run_dir, args.issue, args.verdict, repo, args.walk)
     except Stop as exc:
         for line in str(exc).splitlines():
             print(f"error: {line}", file=sys.stderr)

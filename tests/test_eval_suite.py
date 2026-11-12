@@ -53,6 +53,7 @@ CASES = {
     "spec-approval-lists-edge-cases", "human-help-approval-lists-edge-cases",
     "spec-signoff-when-decided", "spec-go-no-go-when-undecided",
     "sentry-debug-quiet-week", "sentry-debug-no-sentry-settings",
+    "guided-review-disagreement-not-pass", "guided-review-staging-comment-only", "guided-review-needs-auto-test",
     "docs-audit-asks-before-filing", "docs-write-never-merges", "setup-docs-not-set-up",
 }
 TAGS = re.compile(r"^tags:\s*\[([^\]]*)\]\s*$", re.M)
