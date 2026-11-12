@@ -354,6 +354,19 @@ What each fix involves:
     a message, then `chat-id`, and `chat-id --save <id>` for the chat the
     person confirms). Add `--repo` to each command when this repo keeps its
     own `.claude/gogogo/notify.env`.
+- **Docs** (the `docs` row). `/gogogo:docs` reads the profile's optional
+  `[docs]` table to find the repo's docs.
+  - `INFO docs: not set up`: ask once with `AskUserQuestion`, naming what the
+    row found:
+    - **set it up with what was found** (recommended): write `[docs]` with
+      `dir`, plus `index` and `public` when the row found them;
+    - **use the defaults**: write `[docs]` with `dir = "docs"` only.
+
+    Commit it like setup's other profile changes; a later setup run then does
+    not ask again. A decline writes nothing, and the row stays INFO.
+  - `FAIL docs: <key> names <path>, which does not exist`: propose the
+    correction (the path that does exist, or removing the key), and apply it
+    on a yes.
 
 ## Reviewing a repo that is already set up
 

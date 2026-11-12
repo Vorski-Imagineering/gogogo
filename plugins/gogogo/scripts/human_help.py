@@ -8,8 +8,10 @@ Read-only. `list` gathers, for each open issue in `tracker.columns.needs_human`,
 oldest card first: its stop reason (the newest `gogogo:stop` marker, or `skip`
 for a `gogogo:skip` marker, or `none`), the `**Needs you:**` line of that
 comment, the branch it names, the comments after it by someone with write
-access, and how many `gogogo:requeue` markers with the same reason the issue
-has. Write access is GitHub's permission call for each comment's author, read
+access that hold no line starting `<!-- gogogo:` (a skill's own record is never
+an answer), how many `gogogo:requeue` markers with the same reason the issue
+has, and its open blockers (`blocked_by`, GitHub's "blocked by" links to issues
+still open). Write access is GitHub's permission call for each comment's author, read
 once per author: `admin`, `maintain` or `write` is a writer, a 404 is not, and
 any other failure is exit 2 (an org member with no access to the repo is not a
 writer). Exit 0 when listed (also when empty), 2 when the board, an issue or an
@@ -32,6 +34,8 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 STOP = re.compile(r"<!-- gogogo:stop v=1 reason=([a-z-]+)(?: [^>]*)? -->")
 SKIP = re.compile(r"<!-- gogogo:skip v=\d+ ")
 REQUEUE = re.compile(r"<!-- gogogo:requeue v=1 reason=([a-z-]+) -->")
+#: A line any gogogo skill wrote: such a comment is the process's own record, never an answer.
+MARKED = re.compile(r"^\s*<!-- gogogo:", re.M)
 NEEDS_YOU = re.compile(r"^\*\*Needs you:\*\*\s*(.*)$", re.M)
 BRANCH = re.compile(r"/tree/([^\s)>\"]+)")
 WRITE_PERMISSIONS = {"admin", "maintain", "write"}
@@ -72,7 +76,7 @@ def card(number, title, url, comments, labels):
     answers = [
         {"author": c["author"], "url": c["url"], "body": c["body"]}
         for c in comments[index + 1:]
-        if c.get("writer") is True and not REQUEUE.search(c["body"])
+        if c.get("writer") is True and not MARKED.search(c["body"])
     ]
     requeued = sum(1 for c in comments if (m := REQUEUE.search(c["body"])) and m.group(1) == reason)
     return {
@@ -172,7 +176,10 @@ def cmd_list(args):
         except CannotRead as exc:
             print(str(exc), file=sys.stderr)
             return 2
-        cards.append(card(item["number"], item["title"], item["url"], comments, item.get("labels") or []))
+        listed = card(item["number"], item["title"], item["url"], comments, item.get("labels") or [])
+        listed["blocked_by"] = [{"number": b["number"], "state": "OPEN"} for b in item.get("blocked_by") or []
+                                if (b.get("state") or "").upper() == "OPEN"]
+        cards.append(listed)
     if args.json:
         print(json.dumps(cards, indent=2))
     else:

@@ -10,8 +10,9 @@ the human check names real URLs, that Design and Test cases number their items
 (`1.` or `**1.**` at the start of the line) and Files groups its paths, which
 `spec_check.py` reads, that a part of the work in a repo the profile's
 `related_repos` lists cites an issue there, and, as a warning, that each
-`(shipped)` ref on the `**Blocked by:**` line has its reason line, and that no
-line licenses a whole test file. It cannot judge whether the design is right; the
+`(shipped)` ref on the `**Blocked by:**` line has its reason line, that no
+line licenses a whole test file, and that no Files folder entry is the root or
+at or above a lane's tests folder. It cannot judge whether the design is right; the
 skill's pre-post check does that.
 
 Output: one `error:` or `warning:` line per finding, then `label: apply` or
@@ -71,9 +72,38 @@ GROUP = re.compile(r"^(?:-\s+)?\*\*(create|edit|explicitly not in scope)\b[^*]*\
 GROUP_KEYS = {"create": "create", "edit": "edit", "explicitly not in scope": "not_in_scope"}
 BLOCKED_BY = re.compile(r"^\*\*Blocked by:\*\*(.*)$", re.I)
 SHIPPED_REF = re.compile(r"\x60?((?:[\w.-]+/[\w.-]+)?#\d+)\x60?\s*\(shipped\)", re.I)
-LICENSING = re.compile(r"\b(?:remove[sd]?|rewrit(?:e|es|ten|ing))\b", re.I)
+LICENSING = re.compile(r"\b(?:remove[sd]?|delete[sd]?|rewrit(?:e|es|ten|ing))\b", re.I)
 LICENCE_TOKEN = re.compile(r"`([^`\s]+)`")
 CODE_SPAN = re.compile(r"``.*?``|`[^`]*`")
+
+
+BRACES = re.compile(r"\{([^{}]*,[^{}]*)\}")
+
+
+def expand(path: str) -> list[str]:
+    """Every combination of the `{a,b}` groups in path, the first group varying
+    slowest. A path with no group, an unmatched or nested brace, or a group
+    with no comma comes back as it is."""
+    rest = BRACES.sub("", path)
+    if "{" in rest or "}" in rest or not BRACES.search(path):
+        return [path]
+    out, last = [""], 0
+    for m in BRACES.finditer(path):
+        out = [o + path[last:m.start()] + alt for o in out for alt in m.group(1).split(",")]
+        last = m.end()
+    return [o + path[last:] for o in out]
+
+
+PATH = re.compile(r"`([^`\s]+)`")
+PARENS = re.compile(r"\([^()]*\)")
+
+
+def line_paths(line: str) -> list[str]:
+    """The backticked names in a Files line, as spec_check reads them: parenthesised
+    text (nested too) dropped, each `{a,b}` group expanded."""
+    while PARENS.search(line):
+        line = PARENS.sub("", line)
+    return [p for found in PATH.findall(line) for p in expand(found)]
 
 
 def licence_tokens(line):
@@ -273,6 +303,14 @@ def lint(body, settings):
             errors.append("## Files: no **Create** or **Edit** group naming a file in backticks")
         if "not_in_scope" not in groups:
             errors.append("## Files: no **Explicitly not in scope** group")
+        # A folder entry covers every file under it; at the root or a lane's tests folder, nothing is outside.
+        fixed = [re.split(r"[*?\[]", p, maxsplit=1)[0] for lane in settings.get("lanes", [])
+                 for p in lane.get("tests") or [] if isinstance(p, str)]
+        for line in groups.get("create", []) + groups.get("edit", []):
+            for entry in (e for e in line_paths(line) if e.endswith("/")):
+                if entry in ("/", "./") or any(f.startswith(entry) for f in fixed):
+                    warnings.append(f"## Files: `{entry}` covers every file under it, so nothing there can be "
+                                    "outside the spec; name a narrower folder")
 
     # --- Test cases -------------------------------------------------------
     if "Test cases" in by_title:
