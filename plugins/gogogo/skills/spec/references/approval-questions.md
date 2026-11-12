@@ -41,8 +41,8 @@ before they answer.
    a person can still type that.
 9. **Post first.** Its row's Chosen says "Post first, not approved yet". The
    verdict is the proposal form, the item's Why cell does not use the word
-   "row" or "rows", and `Not approved:` names the item. Posting then withholds
-   the label, removing it when the issue has it, and leaves the card. The reply says to run `/gogogo:spec <N>` after
+   "row", and `Not approved:` names the item. Posting then withholds the
+   label and leaves the card. The reply says to run `/gogogo:spec <N>` after
    reading.
 10. **The return.** A person who chose rule 9 approves by running
     `/gogogo:spec <N>` again. It specs the issue as any run does, reading
