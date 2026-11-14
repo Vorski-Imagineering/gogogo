@@ -26,6 +26,7 @@ import re
 import sys
 import tomllib
 from pathlib import Path
+from urllib.parse import urlparse
 
 DEFAULT_PATH = ".agents/dev-process.md"
 PROFILE_VERSION = 1
@@ -323,7 +324,8 @@ def _check_environments(settings):
         if "other_urls" in env:
             others = env["other_urls"]
             if (not isinstance(others, list) or not others
-                    or not all(isinstance(u, str) and u.startswith(("http://", "https://")) for u in others)):
+                    or not all(isinstance(u, str) and u.startswith(("http://", "https://"))
+                               and urlparse(u).hostname for u in others)):
                 errors.append(f"environments[{i}] ({name}): other_urls must be a list of http(s) addresses")
             elif isinstance(env.get("url"), str) and env["url"].rstrip("/") in [u.rstrip("/") for u in others]:
                 warnings.append(f"environments[{i}] ({name}): other_urls repeats url")
@@ -412,8 +414,10 @@ def environment(settings, name):
 
 def environment_urls(env):
     """The environment's `url`, then each of its `other_urls`, without a trailing `/` or repeats."""
+    others = env.get("other_urls")
+    others = [others] if isinstance(others, str) else others if isinstance(others, list) else []
     urls = []
-    for url in [env.get("url"), *(env.get("other_urls") or [])]:
+    for url in [env.get("url"), *others]:
         if isinstance(url, str) and url and url.rstrip("/") not in urls:
             urls.append(url.rstrip("/"))
     return urls

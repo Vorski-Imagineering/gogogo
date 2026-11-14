@@ -546,7 +546,7 @@ class Environments(unittest.TestCase):
         self.assertEqual(errors, [])
 
     def test_other_urls_must_be_a_list_of_addresses(self):
-        for bad in ("https://admin.example.org", [], ["admin.example.org"]):
+        for bad in ("https://admin.example.org", [], ["admin.example.org"], ["https://"]):
             errors, _ = self.full(lambda s, bad=bad: s["environments"][0].update(other_urls=bad))
             self.assertIn("environments[0] (dev): other_urls must be a list of http(s) addresses", errors, bad)
 
@@ -559,6 +559,9 @@ class Environments(unittest.TestCase):
         env = {"url": "https://a.example/", "other_urls": ["https://b.example", "https://a.example"]}
         self.assertEqual(pc.environment_urls(env), ["https://a.example", "https://b.example"])
         self.assertEqual(pc.environment_urls({}), [])
+        self.assertEqual(pc.environment_urls({"url": "https://a.example", "other_urls": "https://b.example"}),
+                         ["https://a.example", "https://b.example"])
+        self.assertEqual(pc.environment_urls({"url": "https://a.example", "other_urls": 5}), ["https://a.example"])
 
     def test_stage_must_name_a_known_environment(self):
         errors = self.check(lambda s: s["stages"][0].update(environment="staging"))

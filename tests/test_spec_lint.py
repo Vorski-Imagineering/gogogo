@@ -189,6 +189,11 @@ class VerifyByHand(unittest.TestCase):
         self.assertTrue(any("no URL under https://app.example.org or https://admin.example.org (" in w
                             for w in warns), warns)
 
+    def test_an_address_ending_a_sentence_is_under_it(self):
+        body = GOOD.replace("https://app.example.org/holon/1708/.", "https://app.example.org.")
+        _, warns, _ = run(body)
+        self.assertFalse([w for w in warns if "no URL under" in w], warns)
+
     def test_a_host_that_only_starts_like_the_address_still_warns(self):
         body = GOOD.replace("https://app.example.org/holon/1708/", "https://admin.example.org.evil/x")
         _, warns, _ = run(body, self.two_hosts())
