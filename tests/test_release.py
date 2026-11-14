@@ -235,6 +235,18 @@ class LegacyTag(ReleaseRepo):
         self.assertNotIn("#9", out)
 
 
+class Vendored(unittest.TestCase):
+    def test_the_commands_other_than_announce_run_without_notify_beside_them(self):
+        # gogogo#268: a repo that copied the four files versioning.md named before
+        # announce (no notify.py) still cuts its tag after a refresh.
+        with tempfile.TemporaryDirectory(prefix="release-vendored-") as tmp:
+            for name in ("release.py", "profile_check.py", "stage_sync.py", "tracker.py"):
+                (Path(tmp) / name).write_bytes((PLUGIN / "scripts" / name).read_bytes())
+            run = subprocess.run([sys.executable, str(Path(tmp) / "release.py"), "--help"],
+                                 capture_output=True, text=True, timeout=60)
+        self.assertEqual(run.returncode, 0, run.stderr)
+
+
 class Reference(unittest.TestCase):
     def test_versioning_reference_names_no_project(self):
         text = (PLUGIN / "references" / "versioning.md").read_text(encoding="utf-8")
@@ -255,6 +267,7 @@ class Announce(ReleaseRepo):
         self.push_main()
         self.releases, self.calls, self.sent, self.fail = {}, [], [], set()
         self.view_error, self.created, self.argv, self.view_ok, self.main_refs = "", (), [], None, []
+        self.send_error = ""
         world = self
 
         class Transport:
@@ -265,6 +278,8 @@ class Announce(ReleaseRepo):
                 return []
 
             def send(self, text, markup=False):
+                if world.send_error:
+                    raise release.notify.SendError(world.send_error)
                 world.sent.append(text)
 
         def gh(*args):
@@ -523,6 +538,9 @@ class Announce(ReleaseRepo):
         with mock.patch.object(release, "send", lambda profile, event: (1, "boom")):
             code, lines, _ = self.announce(profile=self.messages_on())
         self.assertTrue(lines[2].startswith("notify: failed: boom;"), lines[2])
+        self.send_error = "HTTP 401 Unauthorized"
+        code, lines, _ = self.announce(profile=self.messages_on())
+        self.assertTrue(lines[2].startswith("notify: failed: notify failed: HTTP 401 Unauthorized;"), lines[2])
 
     def test_a_release_unreadable_after_the_send_is_left_unmarked(self):
         self.releases["deploy-3"] = "notes\n"

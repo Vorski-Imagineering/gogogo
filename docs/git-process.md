@@ -349,9 +349,11 @@ on the base ([versioning.md](../plugins/gogogo/references/versioning.md)):
   on `origin/<integration.base>`, and never from a shallow clone;
 - the tag's message lists the issues shipped since the previous `deploy-*`
   tag, read from the `Ships-issue` trailers;
-- the repo's CI runs `stage_sync.py sync` on the tag push, which moves each
+- the deploy job then runs `release.py announce`, whose sync job moves each
   card whose linked commits are all in the tag to the next stage and comments
-  where the fix is live.
+  where the fix is live (a repo that still runs `stage_sync.py sync` on the
+  tag push instead takes `deploy-*` out of that trigger when it adopts
+  `announce`).
 
 ## What stops the whole run
 

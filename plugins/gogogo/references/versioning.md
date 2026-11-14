@@ -139,8 +139,9 @@ deploy:
         python3 <vendored scripts>/release.py announce --tag "$TAG"
 ```
 
-`STAGE_SYNC_TOKEN` is the token stage sync already uses (it can read and
-move the board and create a Release). The `concurrency` group, keyed by the
+`STAGE_SYNC_TOKEN` is the token stage sync already uses (it reads and moves
+the board); to create the Release it also needs Contents: write on the code
+repo. The `concurrency` group, keyed by the
 tag, keeps two runs for one tag from both sending: reading the mark and
 sending are two steps. The tag is only cut inside the deploy job, so the
 `tag-name` job works out its name first, with `release.py build`; the group

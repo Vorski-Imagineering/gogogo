@@ -45,7 +45,10 @@ from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
-import notify  # noqa: E402
+try:
+    import notify  # noqa: E402
+except ImportError:  # vendored without it: every command but announce's notify job still runs
+    notify = None
 import profile_check  # noqa: E402
 import stage_sync  # noqa: E402
 
@@ -293,10 +296,16 @@ def deployed_event(tag: str, sha: str, profile: stage_sync.Profile) -> dict:
 
 def send(profile: stage_sync.Profile, event: dict) -> tuple[int, str]:
     """`notify.py send --event`, in this process: its exit code and what it printed."""
-    out = io.StringIO()
-    with contextlib.redirect_stdout(out), _stdin(json.dumps(event)):
+    if notify is None:
+        raise RuntimeError("notify.py is not beside release.py")
+    out, err = io.StringIO(), io.StringIO()
+    with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err), _stdin(json.dumps(event)):
         code = notify.main(["--profile", str(profile.path), "send", "--event"])
-    return code, out.getvalue().strip()
+    sys.stderr.write(err.getvalue())
+    said = out.getvalue().strip()
+    if code != 0 and not said:
+        said = (err.getvalue().strip().splitlines() or [""])[-1]
+    return code, said
 
 
 @contextlib.contextmanager
