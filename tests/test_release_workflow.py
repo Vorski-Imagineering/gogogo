@@ -42,6 +42,15 @@ class ReleaseWorkflow(unittest.TestCase):
         """A group keeps one pending run, so a merge's tag would be skipped under a burst; tags differ per commit."""
         self.assertNotIn("concurrency:", self.text)
 
+    def test_announces_the_release_after_tagging_it(self):
+        # gogogo#265: every tag gets its GitHub Release, made by release.py announce.
+        steps = self.text.split("- name: ")
+        tag = next(i for i, s in enumerate(steps) if "tag --push origin" in s)
+        announce = next(i for i, s in enumerate(steps)
+                        if "release.py --profile .agents/dev-process.md announce --tag" in s)
+        self.assertGreater(announce, tag)
+        self.assertRegex(steps[announce], r"GH_TOKEN:\s*\$\{\{\s*github\.token\s*\}\}")
+
     def test_the_profile_adopts_the_release_standard(self):
         settings, _ = pc.split_profile((ROOT / ".agents" / "dev-process.md").read_text(encoding="utf-8"))
         self.assertEqual(settings.get("release"), {"major": 1})

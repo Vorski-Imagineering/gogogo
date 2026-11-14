@@ -25,3 +25,9 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           python3 plugins/gogogo/scripts/release.py --profile .agents/dev-process.md tag --push origin
+      - name: Announce the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          TAG="deploy-$(python3 plugins/gogogo/scripts/release.py --profile .agents/dev-process.md build --ref HEAD)"
+          python3 plugins/gogogo/scripts/release.py --profile .agents/dev-process.md announce --tag "$TAG"
