@@ -1,5 +1,6 @@
 ---
 type: regex
-pattern: '^Link path: keep\s*$'
-flags: m
+pattern: '^\W*Link path\W*:\W*keep\b'
+flags: im
+weight: 2
 ---
