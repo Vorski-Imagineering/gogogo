@@ -198,6 +198,10 @@ class ProfileSkills(unittest.TestCase):
                              "nav docs/public/SUMMARY.md, tags docs/public/tags.yml"),
                 ({"docs": {"public": "docs/public", "nav": "docs/public/SUMMARY.md", "tags": "docs/public/gone.yml"}},
                  "FAIL", "tags names docs/public/gone.yml, which does not exist"),
+                ({"docs": {"public": "docs/public", "nav": "docs/public/GONE.md"}},
+                 "FAIL", "nav names docs/public/GONE.md, which does not exist"),
+                ({"docs": {"public": "docs/public", "nav": "docs/public/SUMMARY.md", "tags": "docs/public/tags.yml"}},
+                 "PASS", "docs, index none, public docs/public, nav docs/public/SUMMARY.md, tags docs/public/tags.yml"),
                 ({"docs": {"public": "docs/public", "nav": "docs/public/SUMMARY.md"}}, "PASS",
                  "docs, index none, public docs/public, nav docs/public/SUMMARY.md, "
                  "tags docs/public/tags.yml found, not set"),

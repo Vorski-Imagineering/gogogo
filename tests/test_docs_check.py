@@ -346,6 +346,31 @@ class PublicMenuAndTags(unittest.TestCase):
         self.assertEqual(code, 1, err)
         self.assertIn(f"nav {outside}/SUMMARY.md:1: {outside}/a.md missing from the menu", lines)
 
+    def test_quoted_names_keep_their_own_letters(self):
+        # Only quotes are stripped, never a name's own first or last letter.
+        code, lines, err = self.public(menu=MENU + "- [X](X.md)\n", **{"docs/pub/X.md": "x\n"},
+                                       tags='vocabulary:\n  "XML": XML\npages:\n  "X.md": ["XML"]\n')
+        self.assertEqual((code, lines[-1]), (0, "docs: files=5 findings=0"), lines)
+
+    def test_a_menu_ending_in_a_section_line_and_an_index_landing_page(self):
+        menu = "- [Home](index.md)\n- [A](a.md)\n- [B](b%20c.md)\n- [R](README.md)\n- Later\n"
+        code, lines, err = self.public(menu=menu, **{"docs/pub/index.md": "i\n"})
+        self.assertEqual((code, lines[-1]), (0, "docs: files=5 findings=0"), lines + [err])
+
+    def test_a_missing_menu_tags_file_or_public_page_is_refused(self):
+        for docs, said in ((NAV_DOCS.replace("SUMMARY.md", "GONE.md"), "docs.nav names docs/pub/GONE.md"),
+                           (NAV_DOCS.replace("tags.yml", "gone.yml"), "docs.tags names docs/pub/gone.yml"),
+                           ('[docs]\ntags = "docs/pub/tags.yml"\n', "docs.tags is set without docs.public")):
+            with self.subTest(said):
+                code, lines, err = self.public(docs=docs)
+                self.assertEqual(code, 2)
+                self.assertIn(said, err)
+        (self.case.root / "docs" / "empty").mkdir()
+        self.case.repo({}, docs='[docs]\npublic = "docs/empty"\n')
+        code, lines, err = self.case.run_it("--public")
+        self.assertEqual(code, 2)
+        self.assertIn("no file in scope: no *.md under docs/empty", err)
+
     def test_a_tags_line_in_another_shape_is_refused(self):
         code, lines, err = self.public(tags=TAGS + "  - api\n")
         self.assertEqual(code, 2)
