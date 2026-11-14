@@ -130,12 +130,14 @@ in full before writing any of the section: it holds the evidence rules.
    (`git merge-base --is-ancestor <sha> origin/<base>` fails): stop, say the
    history was rewritten after the marker, and open nothing. Leave out the
    commits that change only the history doc (earlier runs' own pull
-   requests); none left after the start: say so, and open nothing.
+   requests), as step 3's command does; none left after the start: say so,
+   and open nothing.
 3. **Gather**, from the start to the tip of `origin/<base>`: the first-parent
    commits with their dates on the base
-   (`git log --first-parent --format='%H %cs %s' <start>..origin/<base>`, or
-   `origin/<base>` alone when there is no doc), less the commits that change
-   only the history doc, the issues and pull requests they reference, pull requests closed without merging, issues closed as not
+   (`git log --first-parent --format='%H %cs %s' <start>..origin/<base> -- . ':!<doc>'`,
+   with `origin/<base>` alone when there is no doc; the pathspec leaves out the
+   commits that change only the history doc), the issues and pull requests
+   they reference, pull requests closed without merging, issues closed as not
    planned, and cards handed to a person (stop markers in issue comments) in
    that period.
 4. **Write one new section** at the end of the doc,

@@ -27,7 +27,7 @@ link (a conversation, a call) are not quoted.
 A count, duration or total was counted in this run, and the command that
 counted it is given in a footnote at the end of the section, above its
 marker line (the marker stays the doc's last line), for example
-`[^1]: git log --first-parent --oneline <start>..<end> | wc -l`. A number that
+`[^1]: git log --first-parent --oneline <start>..<end> -- . ':!<doc>' | wc -l`. A number that
 was not counted is left out, never estimated: no "about", "roughly" or "a
 dozen".
 
