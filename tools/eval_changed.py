@@ -44,6 +44,7 @@ $0.60 a case.
 import argparse
 import json
 import re
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -113,25 +114,31 @@ def _read(out: Path) -> dict | None:
 def base_score(root: Path, fork: str, name: str) -> tuple[float | None, float]:
     """Run case `name` alone on the base's own plugin and case files, from a worktree at `fork`
     taken down afterwards: (its score, or None for no result; what the run cost)."""
-    with tempfile.TemporaryDirectory() as tmp:
-        tree, out = Path(tmp) / "base", Path(tmp) / "base.json"
-        try:
-            _git(["worktree", "add", "--detach", "--quiet", str(tree), fork], root)
-        except subprocess.CalledProcessError:
-            return None, 0.0
-        try:
-            _run_eval(["claude", "plugin", "eval", str(tree / PLUGIN), *FIXED, "--ablation", "none",
-                       "--trust-plugin", "--no-publish", "--json", str(out), "--case", name], tree)
-            doc = _read(out)
-        finally:
-            if subprocess.run(["git", "worktree", "remove", "--force", "--force", str(tree)], cwd=root,
-                              capture_output=True).returncode != 0:
-                print(f"evals: warning: could not remove the base worktree {tree}; its entry is left")
+    parent = Path(tempfile.mkdtemp(prefix="evals-base-"))  # kept when git will not remove the tree
+    tree, out = parent / "base", parent / "base.json"
+    try:
+        _git(["worktree", "add", "--detach", "--quiet", str(tree), fork], root)
+    except subprocess.CalledProcessError:
+        shutil.rmtree(parent, ignore_errors=True)
+        return None, 0.0
+    try:
+        _run_eval(["claude", "plugin", "eval", str(tree / PLUGIN), *FIXED, "--ablation", "none",
+                   "--trust-plugin", "--no-publish", "--json", str(out), "--case", name], tree)
+        doc = _read(out)
+    finally:
+        out.unlink(missing_ok=True)
+        if subprocess.run(["git", "worktree", "remove", "--force", "--force", str(tree)], cwd=root,
+                          capture_output=True).returncode != 0:
+            print(f"evals: warning: could not remove the base worktree {tree}; its entry is left")
+        else:
+            parent.rmdir()
     if doc is None:
         return None, 0.0
     cost = float(doc.get("costUsd") or 0)
     for c in doc.get("cases") or []:
         if c.get("name") == name:
+            if any(r.get("error") for r in (c.get("arms") or {}).get("with") or []):
+                return None, cost  # a run that errored is no evidence the case fails there
             score = (c.get("aggregates") or {}).get("score")
             return (None if score is None else float(score)), cost
     return None, cost
@@ -156,7 +163,7 @@ def main(argv=None, root: Path = ROOT) -> int:
     ap.add_argument("--baseline", action="store_true")
     a = ap.parse_args(argv)
 
-    cases, fork, at_fork = case_tags(root), None, None
+    cases, fork, at_fork, edited = case_tags(root), None, None, None
     if a.skill:
         skills = set(a.skill)
     else:
@@ -201,17 +208,18 @@ def main(argv=None, root: Path = ROOT) -> int:
         if score is None or float(score) >= THRESHOLD:
             continue
         below.add(c.get("name"))
-        if at_fork is None:
+        if at_fork is None or edited is None:
             try:
-                fork = fork_point(root, a.base)
-                at_fork = case_tags_at(root, fork)
+                fork = fork or fork_point(root, a.base)
+                at_fork = at_fork if at_fork is not None else case_tags_at(root, fork)
+                edited = {f[len(EVALS):].split("/")[0] for f in changed_files(root, fork) if f.startswith(EVALS)}
             except subprocess.CalledProcessError:
-                fork, at_fork = None, {}
+                fork, at_fork, edited = None, {}, set()
         if fork is None:
             on_base.append(f"evals: {c['name']} base re-run gave no result")
             continue
-        if c.get("name") not in at_fork:
-            continue
+        if c.get("name") not in at_fork or c.get("name") in edited:
+            continue  # the base never had this case as it is now, so its failure stands
         there, spent = base_score(root, fork, c["name"])
         cost += spent
         if there is None:

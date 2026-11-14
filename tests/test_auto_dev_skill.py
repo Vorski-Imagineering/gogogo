@@ -253,7 +253,7 @@ class RelatedBlock(unittest.TestCase):
     """The close report's RELATED paragraph names the block's two lines (gogogo#277)."""
 
     def test_the_paragraph_names_waiting_there_and_waiting_here(self):
-        para = next(p for p in SKILL.read_text(encoding="utf-8").split("\n\n") if "the RELATED block as" in p)
+        para = next(p for p in SKILL.read_text(encoding="utf-8").split("\n\n") if "RELATED  unreadable:" in p)
         for line in ("`waiting there:`", "`waiting here:`"):
             self.assertIn(line, para)
 

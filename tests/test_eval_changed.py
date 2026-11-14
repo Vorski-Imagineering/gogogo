@@ -11,7 +11,6 @@ return a given exit code, and records the arguments it was called with.
 import contextlib
 import io
 import json
-import shutil
 import subprocess
 import sys
 import tempfile
@@ -188,6 +187,19 @@ class Lane(unittest.TestCase):
                                        "dev-new": {"score": 0.33}}))
         self.assertEqual((rc, len(self.calls)), (1, 1))
 
+    def test_an_edited_case_that_fails_is_not_run_on_the_base(self):
+        write(self.root, "plugins/gogogo/evals/dev-third-attempt/prompt.md", "---\ntags: [dev]\n---\nnew grader\n")
+        rc, out = self.run_lane(["--skill", "dev"], code=1, base=self.base_run(0.33), result=self.failing())
+        self.assertEqual((rc, len(self.calls)), (1, 1))
+
+    def test_a_base_run_whose_runs_errored_gives_no_result(self):
+        write(self.root, "plugins/gogogo/skills/dev/SKILL.md", "changed\n")
+        errored = self.base_run(0.0)
+        errored["cases"][0]["arms"] = {"with": [{"score": 0, "error": "usage limit"}] * 3}
+        rc, out = self.run_lane(result=self.failing(), code=1, base=errored)
+        self.assertEqual(rc, 1)
+        self.assertIn("evals: dev-third-attempt base re-run gave no result", out)
+
     def test_a_case_that_did_not_run_is_not_run_on_the_base(self):
         rc, out = self.run_lane(["--skill", "dev"], code=0, base=self.base_run(0.33),
                                 result=doc(total=1, passed=1, scores={"dev-reversal": {"score": 1}}))
@@ -247,6 +259,7 @@ class Lane(unittest.TestCase):
         self.assertEqual([a[3:5] for a in removes], [["--force", "--force"]])
         tree = removes[0][-1]
         self.assertIn(f"evals: warning: could not remove the base worktree {tree}", out)
+        self.assertTrue(Path(tree).is_dir(), "the tree git would not remove was deleted by hand")
         listed = real(["git", "worktree", "list"], cwd=self.root, capture_output=True, text=True).stdout
         self.assertEqual(len(listed.splitlines()), 2, listed)  # its entry is left, deleted by nobody's hand
 
