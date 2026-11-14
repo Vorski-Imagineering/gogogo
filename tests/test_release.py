@@ -244,7 +244,10 @@ class Vendored(unittest.TestCase):
                 (Path(tmp) / name).write_bytes((PLUGIN / "scripts" / name).read_bytes())
             run = subprocess.run([sys.executable, str(Path(tmp) / "release.py"), "--help"],
                                  capture_output=True, text=True, timeout=60)
+            missing = subprocess.run([sys.executable, "-c", "import release; print(release.notify is None)"],
+                                     cwd=tmp, capture_output=True, text=True, timeout=60)
         self.assertEqual(run.returncode, 0, run.stderr)
+        self.assertEqual(missing.stdout.strip(), "True", missing.stderr)
 
     def test_a_notify_that_fails_its_own_import_is_not_taken_as_missing(self):
         with tempfile.TemporaryDirectory(prefix="release-vendored-") as tmp:
