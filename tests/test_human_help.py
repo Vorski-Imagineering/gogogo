@@ -40,6 +40,25 @@ class Card(unittest.TestCase):
         c = hh.card(1, "t", "u", [comment(STOP_REVIEW), answer], [])
         self.assertEqual([a["body"] for a in c["answers"]], ["merge it"])
 
+    def test_a_human_help_comment_is_not_an_answer(self):
+        # gogogo#261 case 1: the skill's own Leave comment, posted through a writer's account.
+        left = comment("Left: waits on #5.\n<!-- gogogo:human-help v=1 outcome=leave -->", True)
+        self.assertEqual(hh.card(1, "t", "u", [comment(STOP_REVIEW), left], [])["answers"], [])
+
+    def test_any_gogogo_marker_is_not_an_answer_and_a_plain_comment_is(self):
+        # gogogo#261 case 2, with a review record: a skip marker is read as the newest stop, never an answer.
+        record = comment("Done.\n<!-- gogogo:review v=3 pr=1 kind=code end=clean -->", True)
+        plain = comment("merge it", True)
+        c = hh.card(1, "t", "u", [comment(STOP_REVIEW), record, plain], [])
+        self.assertEqual([a["body"] for a in c["answers"]], ["merge it"])
+
+    def test_a_leave_marker_does_not_count_as_a_requeue(self):
+        # gogogo#261 case 3
+        gate = "<!-- gogogo:stop v=1 reason=gate session=unknown -->"
+        comments = [comment(gate), comment("<!-- gogogo:requeue v=1 reason=gate -->"), comment(gate),
+                    comment("<!-- gogogo:human-help v=1 outcome=leave -->", True)]
+        self.assertEqual(hh.card(1, "t", "u", comments, [])["requeued"], 1)
+
     def test_a_reader_comment_after_the_stop_is_not_an_answer(self):
         # An org member with no write access is not a writer: association MEMBER does not count.
         member = dict(comment("merge it", False, "m"), association="MEMBER")
@@ -117,11 +136,12 @@ class Permissions(unittest.TestCase):
             tracker.COLUMNS.update(saved[3])
         self.addCleanup(restore)
 
-    def run_list(self, gh):
+    def run_list(self, gh, board=None):
         with tempfile.TemporaryDirectory() as tmp:
             profile = Path(tmp) / "dev-process.md"
             profile.write_text(PROFILE, encoding="utf-8")
-            board = [{"number": 7, "title": "t", "url": "u", "status_since": "2026-10-05T00:00:00Z", "labels": []}]
+            board = board or [{"number": 7, "title": "t", "url": "u", "status_since": "2026-10-05T00:00:00Z",
+                               "labels": []}]
             out, err = io.StringIO(), io.StringIO()
             import tracker
             with mock.patch.object(tracker, "list_cards", return_value=(board, [], 1)), \
@@ -140,6 +160,18 @@ class Permissions(unittest.TestCase):
         card = json.loads(out)[0]
         self.assertEqual([a["author"] for a in card["answers"]], ["w", "w"])
         self.assertEqual(sorted(gh.asked), ["bot", "m", "w", "x"], "each login is looked up once")
+
+    def test_only_open_blockers_are_listed(self):
+        # gogogo#261 case 4
+        board = [{"number": 7, "title": "t", "url": "u", "status_since": "2026-10-05T00:00:00Z",
+                  "labels": ["dev ready"],
+                  "blocked_by": [{"number": 5, "state": "OPEN"}, {"number": 6, "state": "CLOSED"}]},
+                 {"number": 8, "title": "t", "url": "u", "status_since": "2026-10-06T00:00:00Z", "labels": []}]
+        gh = FakeGh([gh_comment("bot", STOP_REVIEW)], {"bot": "admin"})
+        code, out, err = self.run_list(gh, board)
+        self.assertEqual(code, 0, err)
+        self.assertEqual([c["blocked_by"] for c in json.loads(out)], [[{"number": 5, "state": "OPEN"}], []])
+        self.assertEqual([c["labels"] for c in json.loads(out)], [["dev ready"], []])
 
     def test_the_board_is_read_from_the_profile(self):
         # Live run, 2026-10-05: list read "project /#0" because the tracker was never configured.

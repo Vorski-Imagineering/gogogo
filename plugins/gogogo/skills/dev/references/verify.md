@@ -69,12 +69,18 @@ that the change did not get there by weakening a test. In order:
    loosened).
 4. Run `test_guard.py verify <body file> <answers file> --base origin/<base>`.
    On exit 2, give the reader the errors and have it answer again.
-5. Exit 1: for each `NOT LICENSED` item, restore what the test guarded (put
+5. Exit 1: first, when the reader can quote a line of the spec's Design or
+   Test cases that, in its own words, takes away or replaces the test of an
+   item the guard refused, the issue stops for a person at once (§8), with the
+   stop marker's reason `tests` and a Needs-you line naming each such item and
+   quoting that line; nothing is restored, for that item or any other.
+   Otherwise, for each `NOT LICENSED` item, restore what the test guarded (put
    back the base version of that hunk, or the deleted file) and make the change
    pass with it. Then run the lanes and steps 1 to 4 again. Up to three
    attempts, each naming a hypothesis different from the last. After the
    third, the issue stops for a person (§8), with the stop marker's reason
-   `tests` and each unlicensed item named in §7.
+   `tests` and each unlicensed item named in §7. Never carry on past a
+   `NOT LICENSED` item, and never record an `end=` the template does not list.
 6. Run steps 1 to 4 again after any later step of this section that changed a
    test file.
 

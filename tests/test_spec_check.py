@@ -259,6 +259,44 @@ class Items(unittest.TestCase):
         self.assertEqual(status["F:scripts/b.py"], "met")
         self.assertEqual([o for o in listed["outside"] if o.startswith("scripts/")], [])
 
+    FOLDER = "plugins/gogogo/evals/x/graders/"
+
+    def folder(self, changed, renamed_away=()):
+        body = BODY.replace(BODY[BODY.index("**Create:**"):BODY.index("\n", BODY.index("**Create:**"))],
+                            f"**Create:** `{self.FOLDER}`, `plugins/gogogo/evals/x/prompt.md`.")
+        listed = items(body, changed=changed, tree=lambda: [], renamed_away=renamed_away)
+        return {i["id"]: i.get("status") for i in listed["items"]}, listed["outside"]
+
+    def test_a_folder_entry_covers_the_files_beneath_it(self):
+        # Guards gogogo#276's case: a graders/ folder read as one missing file, its files as outside.
+        status, outside = self.folder([self.FOLDER + "a.md", "plugins/gogogo/evals/x/prompt.md"])
+        self.assertEqual(status["F:" + self.FOLDER], "met")
+        self.assertEqual([o for o in outside if o.startswith("plugins/")], [])
+
+    def test_a_folder_entry_with_nothing_beneath_it_is_missing(self):
+        status, _ = self.folder(["plugins/gogogo/evals/x/prompt.md"])
+        self.assertEqual(status["F:" + self.FOLDER], "missing")
+
+    def test_a_sibling_folder_sharing_a_prefix_is_not_covered(self):
+        status, outside = self.folder(["plugins/gogogo/evals/x/graders2/a.md"])
+        self.assertEqual(status["F:" + self.FOLDER], "missing")
+        self.assertIn("plugins/gogogo/evals/x/graders2/a.md", outside)
+
+    def test_a_nested_file_is_beneath_the_folder(self):
+        status, outside = self.folder([self.FOLDER + "deep/b.md"])
+        self.assertEqual(status["F:" + self.FOLDER], "met")
+        self.assertNotIn(self.FOLDER + "deep/b.md", outside)
+
+    def test_a_file_renamed_away_from_the_folder_touches_it(self):
+        status, _ = self.folder(["plugins/gogogo/evals/y/a.md"], renamed_away=[self.FOLDER + "a.md"])
+        self.assertEqual(status["F:" + self.FOLDER], "met")
+
+    def test_a_long_folder_entry_is_judged_on_its_whole_path(self):
+        self.FOLDER = "plugins/gogogo/evals/" + "a-very-long-eval-case-name-" * 3 + "x/graders/fixtures/"
+        self.assertGreater(len(self.FOLDER), 100)
+        status, _ = self.folder([self.FOLDER + "a.md"])
+        self.assertEqual(status["F:" + self.FOLDER], "met")
+
     def test_unexpandable_braces_stay_as_written(self):
         # Guards Design 1's unchanged cases.
         for path in ("a/{b.py", "a/{b}.py", "a/{b,{c,d}}.py", "a/{x,y}/{m.py", "a/{x,y}/m}.py"):
@@ -297,6 +335,28 @@ class ChangedFiles(unittest.TestCase):
         self.assertIn("F:app/views.py\tapp/views.py\tmissing", lines)
         self.assertIn("outside: README.md", lines)
         self.assertFalse([ln for ln in lines if ln.startswith("outside: plugins/")], lines)
+
+    def test_a_folder_entry_through_the_command(self):
+        # Guards gogogo#276 case 6: the CLI path agrees with list_items.
+        with tempfile.TemporaryDirectory() as tmp:
+            repo = Path(tmp)
+            git(repo, "init", "-q", "-b", "main")
+            git(repo, "config", "user.email", "t@example.org")
+            git(repo, "config", "user.name", "t")
+            (repo / "README.md").write_text("one\n")
+            git(repo, "add", "-A")
+            git(repo, "commit", "-q", "-m", "base")
+            for path in ("evals/x/graders/a.md", "evals/x/graders/deep/b.md"):
+                (repo / path).parent.mkdir(parents=True, exist_ok=True)
+                (repo / path).write_text("new\n")
+            (repo / "body.md").write_text("## Design\n\n1. Add graders.\n\n## Files\n\n**Create:**\n- `evals/x/graders/`\n")
+            (repo / ".gitignore").write_text("body.md\n.gitignore\n")
+            out = subprocess.run([sys.executable, str(SCRIPT), "items", "body.md", "--base", "main"],
+                                 cwd=repo, capture_output=True, text=True)
+        self.assertEqual(out.returncode, 0, out.stderr)
+        lines = out.stdout.splitlines()
+        self.assertIn("F:evals/x/graders/\tevals/x/graders/\tmet", lines)
+        self.assertEqual([ln for ln in lines if ln.startswith("outside:")], [])
 
     def slashless_repo(self, tmp, edit_line):
         repo = Path(tmp)

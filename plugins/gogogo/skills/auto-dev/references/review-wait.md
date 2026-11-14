@@ -31,12 +31,15 @@ echo "${f%.forked-skill.json}"
 5. **Wait**, one foreground command at a time, under the shell tool's limit:
 
 ```bash
-sh -c 'n=0; while [ $n -lt 36 ] && ! grep -Eq "\"finished\": *true" "<agent>.meta.json"; do sleep 15; n=$((n+1)); done'; grep -Eq '"finished": *true' "<agent>.meta.json" && echo finished || echo waiting
+sh -c 'n=0; while [ $n -lt 36 ] && ! grep -Eq "\"finished\": *true" "<agent>.meta.json"; do sleep 15; n=$((n+1)); done'; grep -Eq '"finished": *true' "<agent>.meta.json" && sleep 2 && echo finished || echo waiting
 ```
 
-   Repeat until it says `finished`. After each `waiting`, apply `/gogogo:dev`
-   §5 rule 9, the silent-review check, to `<agent>.jsonl`'s last write time. Its
-   stop also uses reason `review`: the tracker refuses `silent`.
+   Repeat until it says `finished`. It prints `finished` 2 seconds after the
+   state file says so, because the review's final text reaches the transcript
+   just after: up to 126 ms later in 537 real reviews. After each `waiting`,
+   apply `/gogogo:dev` §5 rule 9, the silent-review check, to `<agent>.jsonl`'s
+   last write time. Its stop also uses reason `review`: the tracker refuses
+   `silent`.
 6. **Read the result**, the last assistant text in the transcript:
 
 ```bash
