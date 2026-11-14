@@ -804,6 +804,19 @@ class LabelTests(unittest.TestCase):
         payload = json.loads(printed.call_args_list[0].args[0])
         self.assertEqual([c["labels"] for c in payload], [["dev ready"], []])
 
+    def test_list_json_keeps_the_summary_off_stdout(self):
+        # gogogo#289: a caller parses stdout alone, so the count line must stay on stderr.
+        args = Namespace(status=None, open_only=False, issues_only=False,
+                         json=True, repo=board.DEFAULT_REPO, no_crosscheck=True)
+        nodes = [card(1, "a", "Dev Priority", ("dev ready",)), card(2, "b", "Dev Priority")]
+        out, err = io.StringIO(), io.StringIO()
+        with mock.patch.object(board, "graphql", side_effect=[page(nodes, total=2)]), \
+             redirect_stdout(out), redirect_stderr(err):
+            board.cmd_list(args)
+        self.assertEqual(len(json.loads(out.getvalue())), 2)
+        self.assertNotIn("card(s);", out.getvalue())
+        self.assertIn("card(s);", err.getvalue())
+
 
 class ColumnGuardTests(unittest.TestCase):
     """A column the board lacks is refused, never read as an empty column."""

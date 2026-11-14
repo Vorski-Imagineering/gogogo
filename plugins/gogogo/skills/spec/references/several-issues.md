@@ -13,7 +13,9 @@ Part of `/gogogo:spec`. Read it in full. Section names and § numbers here are `
    ```bash
    <tracker.tool> list --status "<column>" --issues-only --open-only --json
    ```
-   and keep the order it prints. A column needs `tracker.tool`; without it,
+   and keep the order it prints. Its stdout is the JSON list alone and the count
+   line goes to stderr, so parse stdout on its own (pipe it into the parser);
+   never parse the two together. A column needs `tracker.tool`; without it,
    say the tracker has no columns to read, and ask for issue numbers. Say the
    list and its order in one line before starting. An issue filed during the
    run, such as a split-off, is never added; it goes in the final report
