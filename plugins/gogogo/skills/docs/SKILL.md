@@ -1,6 +1,6 @@
 ---
 name: docs
-description: Use when asked to audit, check or update a repo's documentation — audit (the default) checks every doc against the code and, on the person's yes, files one tracker issue per doc that is out of date; write <N> updates the docs a shipped issue touched, in a new worktree, and opens a pull request it never merges; history adds the period since the history doc last changed, from evidence, in the same kind of pull request.
+description: Use when asked to audit, check or update a repo's documentation — audit (the default) checks every doc against the code and, on the person's yes, files one tracker issue per doc that is out of date; write <N> updates the docs a shipped issue touched, in a new worktree, and opens a pull request it never merges; history adds the period since its last run (or since the history doc last changed), from evidence, in the same kind of pull request.
 ---
 
 # docs: the docs, checked against the code
@@ -9,8 +9,8 @@ Docs go wrong quietly: the code changes, and the sentence that described it
 stays. This skill finds those sentences. **Audit** reads every doc against the
 code and reports what is wrong, then files issues only when the person says
 yes. **Write** updates the docs one shipped issue touched, in a pull request a
-person merges. **History** adds what happened since the history doc last
-changed, every date, quote and number linked to its record, in the same kind
+person merges. **History** adds what happened since its last run (or since
+the history doc last changed), every date, quote and number linked to its record, in the same kind
 of pull request. Fixes found by an audit go through `/gogogo:spec` and
 `/gogogo:dev` like any other issue.
 
@@ -114,35 +114,43 @@ No doc needs a change: say so, naming the docs read, and open nothing.
 `/gogogo:docs history`. **REQUIRED REFERENCE:** read `references/history.md`
 in full before writing any of the section: it holds the evidence rules.
 
-1. **Where it starts.** The doc is `<docs.dir>/history.md`. The last line in it
-   of the form `<!-- history: through <sha> <YYYY-MM-DD> -->` names where the
-   last run stopped. No such line: start after the last commit that changed
-   the doc (`git log -1 --format='%H %cs' origin/<base> -- <doc>`), never from
+1. **Where it starts.** The base is `integration.base`, else the repo's
+   default branch, as Write step 3 says. `git fetch origin` first, and read
+   the doc from the base (`git show origin/<base>:<docs.dir>/history.md`),
+   never from the person's checkout. When the doc's last non-empty line is
+   `<!-- history: through <full sha> <YYYY-MM-DD> -->`, the run starts after
+   that commit. No such line: start after the last commit that changed the
+   doc (`git log -1 --format='%H %cs' origin/<base> -- <doc>`), never from
    the project's first commit, or the run retells what a person already
-   wrote. No doc: start at the repo's first commit, and create it. Say which
-   period the run covers before gathering.
-2. **Nothing to tell.** The marker's sha not on the base
+   wrote. No doc: the whole of the base, first commit included, and the run
+   creates it. Say which period the run covers before gathering.
+2. **Nothing to tell.** An open pull request on a `docs/history-` branch:
+   name it, and open nothing (its section is not on the base yet). The
+   marker's sha not on the base
    (`git merge-base --is-ancestor <sha> origin/<base>` fails): stop, say the
-   history was rewritten after the marker, and open nothing. No first-parent
-   commits after the start: say so, and open nothing.
+   history was rewritten after the marker, and open nothing. Leave out the
+   commits that change only the history doc (earlier runs' own pull
+   requests); none left after the start: say so, and open nothing.
 3. **Gather**, from the start to the tip of `origin/<base>`: the first-parent
    commits with their dates on the base
-   (`git log --first-parent --format='%H %cs %s' <start>..origin/<base>`),
-   the issues and pull requests they reference, pull requests closed without
-   merging, issues closed as not planned, and cards handed to a person (stop
-   markers in issue comments) in that period.
+   (`git log --first-parent --format='%H %cs %s' <start>..origin/<base>`, or
+   `origin/<base>` alone when there is no doc), the issues and pull requests
+   they reference, pull requests closed without merging, issues closed as not
+   planned, and cards handed to a person (stop markers in issue comments) in
+   that period.
 4. **Write one new section** at the end of the doc,
    `## <start date> to <end date>`, under `references/history.md`'s rules,
-   its last line the marker for the tip commit. Earlier text is never
-   changed, even where it is wrong: a correction is a sentence in the new
-   section, with its link.
-5. **Open it as Write does** (steps 3 to 5): base `integration.base`, a new
-   worktree on branch `docs/history-<end date>` at
-   `<its parent>/<its folder name>-wt-docs-history`, the check and each
-   `gates.always` command, commit, push, and a pull request it never merges.
-   When `tracker.public` is true, re-read the section as `/gogogo:spec`'s
-   Posting step 2 does before the commit; people are named by role, never by
-   name or handle.
+   its last line the marker for the tip commit, with its full sha. Earlier
+   text is never changed, even where it is wrong: a correction is a sentence
+   in the new section, with its link.
+5. **Open it as Write does** (steps 3 to 5), with these names: branch
+   `docs/history-<end date>`, worktree
+   `<its parent>/<its folder name>-wt-docs-history-<end date>`, and a pull
+   request body that says which period the section covers, with no `Refs`
+   line. The check and each `gates.always` command, commit, push, and a pull
+   request it never merges. When `tracker.public` is true, re-read the
+   section as `/gogogo:spec`'s Posting step 2 does before the commit; people
+   are named by role, never by name or handle.
 
 ## What it never does
 

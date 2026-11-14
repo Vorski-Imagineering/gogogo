@@ -329,7 +329,7 @@ rebased.
 | `/gogogo:auto-test` | Tests each shipped issue on the environment where a person confirms fixes, and records PASS, FAIL or NEEDS HUMAN on the issue. `--triage-only` lists what it would test or skip and changes nothing. |
 | `/gogogo:guided-review` | Walks a person through several shipped issues, or a release, in one sitting: gathers their *Verify by hand* steps into one ordered walk, prepares the data, gives one link and one sentence per step, checks the system side, and records each issue's outcome. Needs auto-test set up. `--plan-only` prints the walk and changes nothing. |
 | `/gogogo:sentry-debug` | Read-only Sentry debugging and weekly report through the Sentry MCP, with each repo's org, projects and release format from its profile's `[sentry]` table. |
-| `/gogogo:docs` | Audits a repo's docs against its code and, on your yes, files one issue per out-of-date doc; `write <N>` updates the docs a shipped issue touched in a pull request it never merges; `history` adds what happened since the history doc last changed, every date, quote and number linked to its record, in a pull request it never merges. |
+| `/gogogo:docs` | Audits a repo's docs against its code and, on your yes, files one issue per out-of-date doc; `write <N>` updates the docs a shipped issue touched in a pull request it never merges; `history` adds what happened since its last run (or since the history doc last changed), every date, quote and number linked to its record, in a pull request it never merges. |
 
 A session started or resumed in a repo with a profile opens with a one-line
 status from the plugin's own hook (the repo's independence level, coloured in

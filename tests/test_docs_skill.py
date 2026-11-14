@@ -46,10 +46,8 @@ class HistoryMode(unittest.TestCase):
 
     def test_its_rules_are_named_from_the_skill_alone(self):
         self.assertTrue((SKILL.parent / "references" / "history.md").is_file())
+        # No other reference naming it is test_skill_budget's check.
         self.assertIn("references/history.md", SKILL.read_text(encoding="utf-8"))
-        others = [p for p in (PLUGIN / "skills").rglob("*.md")
-                  if p != SKILL and "references/history.md" in p.read_text(encoding="utf-8")]
-        self.assertEqual(others, [])
 
 
 if __name__ == "__main__":
