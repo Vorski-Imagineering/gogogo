@@ -327,6 +327,7 @@ rebased.
 | `/gogogo:status` | Where things stand in this repo: cards per board column, what is queued, in progress and released, open pull requests, and branches and worktrees holding work. Each listed card names the open issues it is blocked by and the ones it blocks. With related repos, a RELATED block lists, per repo, what this repo waits on there and what waits on it here. Reads only; gives no verdicts. |
 | `/gogogo:roadmap` | Keeps a roadmap document's status marks in step with the board: re-derives every row's mark from the issue's state and column, fixes the notes the change made stale, and commits the document, opening a PR for it when the roadmap shares the repo. A section whose heading links a GitHub milestone is kept in step with it: it proposes the milestone changes, and applies only the ones you approve. |
 | `/gogogo:auto-test` | Tests each shipped issue on the environment where a person confirms fixes, and records PASS, FAIL or NEEDS HUMAN on the issue. `--triage-only` lists what it would test or skip and changes nothing. |
+| `/gogogo:guided-review` | Walks a person through several shipped issues, or a release, in one sitting: gathers their *Verify by hand* steps into one ordered walk, prepares the data, gives one link and one sentence per step, checks the system side, and records each issue's outcome. Needs auto-test set up. `--plan-only` prints the walk and changes nothing. |
 | `/gogogo:sentry-debug` | Read-only Sentry debugging and weekly report through the Sentry MCP, with each repo's org, projects and release format from its profile's `[sentry]` table. |
 | `/gogogo:docs` | Audits a repo's docs against its code and, on your yes, files one issue per out-of-date doc; `write <N>` updates the docs a shipped issue touched in a pull request it never merges. |
 
@@ -344,7 +345,7 @@ Scripts the skills call, all in `plugins/gogogo/scripts/`:
 - `merge_ready.py`: reads a PR's state and prints one outcome (`ready`, `behind`, `draft`, `checks-failed` and so on), so dev and auto-dev decide a merge the same way. It only reads.
 - `verify_merged.py`: confirms a PR's merge is really on the base branch.
 - `stage_sync.py`: writes the `Ships-issue` link at merge, moves cards to a stage when a tag ships their commits (run by a repo's CI), and with `reverts` hands back a card whose shipped fix was reverted.
-- `release.py`: numbers a production release, cuts its annotated `deploy-<build>` tag after the deploy, and prints the notes listing the issues it shipped.
+- `release.py`: numbers a production release, cuts its annotated `deploy-<build>` tag after the deploy, and prints the notes listing the issues it shipped. `announce` creates the tag's GitHub Release, moves the cards the tag ships and sends the deploy message, once per tag.
 - `waiting.py`: how many cards wait in each stage column and how old the oldest is, for `/gogogo:status` and by hand. Read-only.
 - `stranded_work.py`: finds local and `origin` branches holding work that nothing accounts for (no open issue, or an open issue with no open pull request and no stop marker naming the branch), and says what became of each branch's pull request.
 - `worktree_sweep.py`: removes the worktrees whose pull request merged or whose issue is closed, and keeps any with uncommitted changes, commits on no remote, or an open issue whose work has not merged. It also removes a local branch whose merged pull request's head is exactly the branch's tip. Without `--apply` it only lists. The first whole `--apply` sweep in a clone (not `--only`) holds what a merged pull request alone would remove, and says so, until it is run once with `--apply --confirm-merged`. `--only <path>` always says why when it removes nothing (the current directory is inside it, the main worktree, or no worktree of this repo).
@@ -359,7 +360,7 @@ Scripts the skills call, all in `plugins/gogogo/scripts/`:
 - `roadmap_status.py`: compares a roadmap document's marks with the tracker, and rewrites the ones that disagree with `--write`.
 - `roadmap_milestones.py`: plans, as JSON, the milestone changes that keep a roadmap's linked sections and GitHub's milestones in step, and applies only the ids it is given. It never deletes a milestone.
 - `session_status.py`: the plugin's session-start hook; prints that one-line status, or nothing outside a repo with a profile.
-- `record_outcome.py`: renders and records an auto-test outcome: comment first, then labels, close and card, then reads the issue back.
+- `record_outcome.py`: renders and records an auto-test outcome: comment first, then labels, close and card, then reads the issue back; with `--walk`, a guided-review outcome, which is a comment only off the confirming environment.
 
 Agents the skills start, in `plugins/gogogo/agents/`: `build-high`, `build-xhigh` and `build-max` each run one issue's build at that effort, when the issue's Approvals authorise it.
 

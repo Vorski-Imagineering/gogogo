@@ -207,6 +207,18 @@ class HardStopCheck(unittest.TestCase):
         body = GOOD.replace("implement directly.**", "proposal — Schema awaits approval.**")
         self.assertTrue(any("calls the spec a proposal, but every item is answered no" in e for e in errors(body)))
 
+    def test_a_post_first_spec_is_withheld(self):
+        body = GOOD.replace("| Schema | no | no field changes |", "| Schema | yes | the design adds a field |").replace(
+            "implement directly.**", "proposal — Schema awaits approval.**").replace(
+            "| 2026-09-30 | None — every Hard Stop item is no, implement directly. | — | — |",
+            "| 2026-09-30 | Formal sign-off | Post first, not approved yet | Approve |").replace(
+            "Not approved: none", "Not approved: Schema")
+        errs, _, withheld = run(body)
+        self.assertEqual(errs, [])
+        self.assertEqual(withheld, "a Hard Stop awaits approval")
+        _, _, withheld = run(body.replace("the design adds a field", "see row 1"))
+        self.assertIsNone(withheld)
+
     def test_proposal_is_valid_and_withholds_the_label(self):
         body = GOOD.replace("| Schema | no |", "| Schema | yes |").replace(
             "implement directly.**", "proposal — Schema awaits approval.**")
@@ -528,6 +540,55 @@ TESTS_LANE = dict(SETTINGS, lanes=[{"name": "unit", "run": "make test", "tests":
                                    {"name": "live", "env": "dev"}])
 
 
+class WideFolder(unittest.TestCase):
+    """gogogo#276: a Files folder entry so wide nothing can be outside the spec is named."""
+
+    def wide(self, entry):
+        errs, warns, withheld = run(GOOD.replace("**Edit:** `views.py`.", f"**Edit:** `views.py`, `{entry}`."),
+                                    TESTS_LANE)
+        self.assertEqual((errs, withheld), ([], None))
+        return [w for w in warns if "covers every file under it" in w]
+
+    def test_a_folder_at_or_above_a_lanes_tests_or_the_root_warns(self):
+        for entry in ("tests/", "/", "./"):
+            with self.subTest(entry):
+                self.assertEqual(self.wide(entry), [f"## Files: `{entry}` covers every file under it, so nothing "
+                                                    "there can be outside the spec; name a narrower folder"])
+
+    def test_a_narrow_folder_does_not_warn(self):
+        self.assertEqual(self.wide("plugins/gogogo/evals/x/graders/"), [])
+
+    def test_the_folder_is_read_as_spec_check_reads_it(self):
+        # A folder named only in parentheses is not an entry; a brace group is expanded first.
+        self.assertEqual(self.wide("tests/test_x.py` (in the unit lane's `tests/` folder) `views.py"), [])
+        self.assertEqual(len(self.wide("{tests,docs}/")), 1)
+        self.assertEqual(self.wide("tests/x.py` (see (a) `tests/`) `views.py"), [])
+        self.assertEqual(len(self.wide("{tests/,docs/}")), 1)
+
+    def test_a_create_entry_is_read_too(self):
+        errs, warns, _ = run(GOOD.replace("**Edit:** `views.py`.", "**Create:** `tests/`.\n\n**Edit:** `views.py`."),
+                             TESTS_LANE)
+        self.assertEqual(len([w for w in warns if "covers every file under it" in w]), 1)
+
+    def test_only_the_fixed_part_of_a_lane_pattern_counts(self):
+        lane = dict(SETTINGS, lanes=[{"name": "unit", "run": "make test", "tests": ["tests/*/x.py"]}])
+        errs, warns, _ = run(GOOD.replace("**Edit:** `views.py`.", "**Edit:** `views.py`, `tests/*/`."), lane)
+        self.assertEqual([w for w in warns if "covers every file under it" in w], [])
+
+    def test_the_command_still_exits_0_on_the_warning(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            profile = Path(tmp) / "dev-process.md"
+            profile.write_text(COMPLETE.replace('items = ["schema", "auth"]', 'items = ["Schema", "Auth / permissions"]')
+                               .replace('run = "make test"\nci = true\n', 'run = "make test"\nci = true\ntests = ["tests/*"]\n'))
+            body = Path(tmp) / "body.md"
+            body.write_text(GOOD.replace("**Edit:** `views.py`.", "**Edit:** `views.py`, `tests/`."))
+            out = io.StringIO()
+            with redirect_stdout(out), redirect_stderr(io.StringIO()):
+                code = sl.main([str(body), "--profile", str(profile)])
+        self.assertEqual(code, 0)
+        self.assertIn("warning: ## Files: `tests/` covers every file under it", out.getvalue())
+
+
 def bare_warnings(body):
     return [w for w in run(body, TESTS_LANE)[1] if "licenses every change" in w]
 
@@ -536,6 +597,12 @@ class BareLicence(unittest.TestCase):
     """gogogo#252: a line that licenses a whole test file is named."""
 
     CASE = "1. Automated: `test_pages_listed`, guards the empty list."
+
+    def test_a_deleted_test_file_gets_the_whole_file_warning(self):
+        # gogogo#260: "deleted" licenses as "removed" does, so the lint names it too.
+        self.assertEqual(bare_warnings(GOOD.replace(self.CASE, "1. `tests/test_a.py` deleted")),
+                         ["## Test cases: `tests/test_a.py` licenses every change to that test file; "
+                          "name `path::name`, unless the Design deletes the file"])
 
     def test_a_bare_test_path_on_a_licence_line_warns(self):
         errs, warns, withheld = run(GOOD.replace(self.CASE, "1. The file `tests/test_a.py` is removed."), TESTS_LANE)
@@ -600,6 +667,21 @@ class CommandLine(unittest.TestCase):
             self.assertEqual(code, 0)
             self.assertIn("warning: ## Context: #5 is marked (shipped)", out)
             self.assertEqual(out.strip().splitlines()[-1], "label: apply")
+
+
+class LinePaths(unittest.TestCase):
+    """How a Files line is read, by spec_check and the lint alike (gogogo#276)."""
+
+    def test_brace_groups_expand_and_malformed_ones_stay(self):
+        self.assertEqual(sl.expand("x/{a,b}.py"), ["x/a.py", "x/b.py"])
+        for path in ("a/{b.py", "a/{b}.py", "a}/{b,c}", "a{/{b,c}"):
+            with self.subTest(path):
+                self.assertEqual(sl.expand(path), [path])
+
+    def test_parenthesised_text_is_dropped(self):
+        self.assertEqual(sl.line_paths("`a.py`(x)`b.py` (see `c.py`)"), ["a.py", "b.py"])
+        # Inside a name too, as spec_check always has: a folder named in parentheses is a follow-up of #276.
+        self.assertEqual(sl.line_paths("`docs/(old)/a.py`"), ["docs//a.py"])
 
 
 if __name__ == "__main__":

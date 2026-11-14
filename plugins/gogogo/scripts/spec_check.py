@@ -23,6 +23,7 @@ touches that file and `missing` when it does not, and each changed file no
 `F:` item names is printed as `outside:` (not when Files is unlisted: there is
 no list to be outside of). A file the change renames away counts as touched
 under its old path too, and only its new path is checked for `outside:`.
+A Files entry ending `/` is a folder: it covers every file beneath it.
 
 `verify` reads a reader's answers, one line per `V`, `A`, `D`, `T` and `N`
 item: `<id> | <met|missing|differs|na> | <evidence> | <note>`. Evidence is
@@ -56,12 +57,10 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from spec_lint import file_groups, numbered_items, split_sections, table_rows  # noqa: E402
+from spec_lint import line_paths, file_groups, numbered_items, split_sections, table_rows  # noqa: E402
 
 STATUSES = ("met", "missing", "differs", "na")
 NEEDS_EVIDENCE = ("D", "T", "A")
-PATH = re.compile(r"`([^`\s]+)`")
-PARENS = re.compile(r"\([^()]*\)")
 BULLET = re.compile(r"^[-*]\s+(\S.*)")
 NOT_APPROVED = re.compile(r"^\**\s*not approved\s*:\**\s*(.*)", re.I)
 
@@ -87,32 +86,13 @@ def _tree() -> list[str]:
     return [p for p in out.split("\0") if p]
 
 
-BRACES = re.compile(r"\{([^{}]*,[^{}]*)\}")
-
-
-def _expand(path: str) -> list[str]:
-    """Every combination of the `{a,b}` groups in path, the first group varying
-    slowest. A path with no group, an unmatched or nested brace, or a group
-    with no comma comes back as it is."""
-    rest = BRACES.sub("", path)
-    if "{" in rest or "}" in rest or not BRACES.search(path):
-        return [path]
-    out, last = [""], 0
-    for m in BRACES.finditer(path):
-        out = [o + path[last:m.start()] + alt for o in out for alt in m.group(1).split(",")]
-        last = m.end()
-    return [o + path[last:] for o in out]
-
-
 def _paths(lines: list[str], tree=None) -> list[str]:
     """Backticked paths in lines. With tree (a callable listing the working tree's
     files, called at most once), a name with no `/` is kept only when a file
     equals it or ends with `/` + it."""
     found, files = [], None
     for line in lines:
-        while PARENS.search(line):
-            line = PARENS.sub("", line)
-        for path in (p for found_path in PATH.findall(line) for p in _expand(found_path)):
+        for path in line_paths(line):
             if tree is not None and "/" not in path:
                 if files is None:
                     files = tree()
@@ -165,14 +145,20 @@ def list_items(body: str, changed: list[str] | None = None, tree=None, renamed_a
     for path in paths:
         add(f"F:{path}", path)
     if changed is not None:
+        def covers(path, f):
+            # A path ending `/` is a folder: it covers every file beneath it, at any depth.
+            if path.endswith("/"):
+                return f.startswith(path)
+            return f == path or f.endswith("/" + path)
+
         def touches(path):
             # A file renamed away is touched under its old path too; only `changed` is checked for outside.
-            return [f for f in [*changed, *renamed_away] if f == path or f.endswith("/" + path)]
+            return [f for f in [*changed, *renamed_away] if covers(path, f)]
         for item in items:
             if item["id"].startswith("F:"):
-                item["status"] = "met" if touches(item["text"]) else "missing"
+                item["status"] = "met" if touches(item["id"][2:]) else "missing"  # the id holds the whole path
         if paths:
-            outside = [f for f in changed if not any(f == p or f.endswith("/" + p) for p in paths)]
+            outside = [f for f in changed if not any(covers(p, f) for p in paths)]
     return {"items": items, "unlisted": unlisted, "outside": outside}
 
 
