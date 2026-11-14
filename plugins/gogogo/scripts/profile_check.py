@@ -132,10 +132,14 @@ FIELDS = {
     "docs.dir": (str, (), "Folder of the repo's docs. Optional; absent means docs."),
     "docs.index": (str, (), "Page that links every doc in docs.dir. Optional; absent means no index check."),
     "docs.public": (str, (), "Folder of the docs outsiders read. Optional; absent means no public-detail check."),
+    "docs.nav": (str, (), "Menu of the public docs, a Markdown list of links. Optional; needs docs.public; "
+                 "absent means no menu check."),
+    "docs.tags": (str, (), "Tags file of the public docs (vocabulary and pages). Optional; needs docs.public; "
+                  "absent means no tag check."),
 }
 
 # The [docs] table: each, when present, names a path, so it may not be empty.
-DOCS_PATHS = ("docs.dir", "docs.index", "docs.public")
+DOCS_PATHS = ("docs.dir", "docs.index", "docs.public", "docs.nav", "docs.tags")
 
 # Body sections (## headings) a skill reads, by skill.
 SECTIONS = {

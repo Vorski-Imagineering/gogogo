@@ -176,7 +176,11 @@ class DocsCheck(unittest.TestCase):
                    "docs/home/index.md": "x\n"},
                   docs='[docs]\npublic = "docs/public"\n')
         code, lines, _ = self.run_it()
-        self.assertEqual((code, self.findings(lines, "public")), (0, []))
+        # gogogo#267: the two links into docs/home/ leave the public folder, a public-link each.
+        self.assertEqual((code, self.findings(lines, "public")), (1, []))
+        self.assertEqual(self.findings(lines, "public-link"), [
+            "public-link docs/public/p.md:2: ../home/index.md leaves docs/public",
+            "public-link docs/public/p.md:3: /docs/home/index.md leaves docs/public"])
 
     def test_an_absolute_path_under_another_folder(self):
         self.repo({"docs/public/p.md": "Cache in /private/tmp/x\nLogs in /var/tmp/x\nOpen /mnt/c/Users/me\n"
@@ -248,6 +252,87 @@ class DocsCheck(unittest.TestCase):
             code = dc.main(["--profile", str(self.root / "nope.md")])
         self.assertEqual(code, 2)
         self.assertIn("profile", err.getvalue())
+
+
+NAV_DOCS = '[docs]\npublic = "docs/pub"\nnav = "docs/pub/SUMMARY.md"\ntags = "docs/pub/tags.yml"\n'
+MENU = "- [Home](README.md)\n- Guides\n    - [A](a.md)\n    - [B C](b%20c.md)\n"
+TAGS = "# tags\nvocabulary:\n  api: the API\n\npages:\n  a.md: [api]\n"
+
+
+class PublicMenuAndTags(unittest.TestCase):
+    """gogogo#267: a public docs folder's menu, links and tags, checked before merge."""
+
+    def setUp(self):
+        self.case = DocsCheck("run_it")
+        self.case.setUp()
+        self.addCleanup(self.case.doCleanups)
+
+    def public(self, menu=MENU, tags=TAGS, docs=NAV_DOCS, **extra):
+        files = {"docs/pub/README.md": "home\n", "docs/pub/a.md": "a\n", "docs/pub/b c.md": "b\n",
+                 "docs/pub/SUMMARY.md": menu, "docs/pub/tags.yml": tags, **extra}
+        self.case.repo(files, docs=docs)
+        return self.case.run_it("--public")
+
+    def kind(self, lines, kind):
+        return self.case.findings(lines, kind)
+
+    def test_a_nested_menu_with_an_encoded_name_passes(self):
+        code, lines, err = self.public()
+        self.assertEqual((code, lines[-1]), (0, "docs: files=4 findings=0"), err)
+
+    def test_a_page_missing_from_the_menu(self):
+        code, lines, _ = self.public(menu=MENU.replace("    - [A](a.md)\n", ""))
+        self.assertEqual(code, 1)
+        self.assertEqual(self.kind(lines, "nav"), ["nav docs/pub/a.md:1: missing from the menu docs/pub/SUMMARY.md"])
+
+    def test_a_page_listed_twice(self):
+        code, lines, _ = self.public(menu=MENU + "- [A again](a.md)\n")
+        self.assertEqual(self.kind(lines, "nav"), ["nav docs/pub/SUMMARY.md:5: a.md listed twice"])
+
+    def test_a_first_entry_that_is_not_the_landing_page(self):
+        code, lines, _ = self.public(menu="- [A](a.md)\n- [Home](README.md)\n- [B](b%20c.md)\n")
+        self.assertEqual(self.kind(lines, "nav"),
+                         ["nav docs/pub/SUMMARY.md:1: first entry is not the landing page: a.md"])
+
+    def test_a_menu_entry_for_a_missing_page(self):
+        code, lines, _ = self.public(menu=MENU + "- [Gone](gone.md)\n")
+        self.assertEqual(self.kind(lines, "nav"), ["nav docs/pub/SUMMARY.md:5: menu names a missing page: gone.md"])
+
+    def test_a_menu_in_another_format_is_refused(self):
+        code, lines, err = self.public(docs=NAV_DOCS.replace("SUMMARY.md", "nav.yml"))
+        self.assertEqual(code, 2)
+        self.assertIn("nav: unsupported format docs/pub/nav.yml; a Markdown list of links is read", err)
+
+    def test_a_link_that_resolves_but_leaves_the_public_folder(self):
+        self.case.repo({"README.md": "root\n"})
+        code, lines, _ = self.public(**{"docs/pub/a.md": "[root](../../README.md)\n"})
+        self.assertEqual(self.kind(lines, "public-link"),
+                         ["public-link docs/pub/a.md:1: ../../README.md leaves docs/pub"])
+        code, lines, _ = self.case.run_it()
+        self.assertEqual(self.kind(lines, "link"), [])
+
+    def test_an_unknown_tag_and_a_tags_key_for_a_missing_page(self):
+        code, lines, _ = self.public(tags=TAGS.replace("[api]", "[api, nope]") + "  gone.md: [api]\n")
+        self.assertEqual(code, 1)
+        self.assertEqual(self.kind(lines, "tags"), ["tags docs/pub/tags.yml:6: a.md: tag nope is not in the vocabulary",
+                                                    "tags docs/pub/tags.yml:7: gone.md does not exist"])
+
+    def test_a_tags_line_in_another_shape_is_refused(self):
+        code, lines, err = self.public(tags=TAGS + "  - api\n")
+        self.assertEqual(code, 2)
+        self.assertIn("docs/pub/tags.yml:7", err)
+
+    def test_a_menu_without_a_public_folder_is_refused(self):
+        self.case.repo({"docs/a.md": "a\n", "docs/SUMMARY.md": "- [A](a.md)\n"}, docs='[docs]\nnav = "docs/SUMMARY.md"\n')
+        code, lines, err = self.case.run_it()
+        self.assertEqual(code, 2)
+        self.assertIn("docs.nav is set without docs.public", err)
+
+    def test_public_reads_only_the_public_folder(self):
+        code, lines, _ = self.public(**{"docs/x.md": "[gone](gone.md)\n"})
+        self.assertEqual((code, lines[-1]), (0, "docs: files=4 findings=0"))
+        code, lines, _ = self.case.run_it()
+        self.assertEqual(self.kind(lines, "link"), ["link docs/x.md:1: gone.md does not exist"])
 
 
 if __name__ == "__main__":
