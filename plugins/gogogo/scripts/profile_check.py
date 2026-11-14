@@ -10,7 +10,8 @@ is a named error instead of a guess.
 
 With no --for it checks what every skill needs, except that each opt-in skill
 in `OPT_IN` is checked only when the profile has that skill's table: `auto-test`
-with [auto_test], and the other with the table `OPT_IN` names for it. A repo
+and `guided-review` with [auto_test], and the other with the table `OPT_IN`
+names for it. A repo
 that never adopted one still passes.
 
 Exit codes: 0 ok (warnings allowed), 2 no profile file, 3 profile unreadable or
@@ -25,6 +26,7 @@ import re
 import sys
 import tomllib
 from pathlib import Path
+from urllib.parse import urlparse
 
 DEFAULT_PATH = ".agents/dev-process.md"
 PROFILE_VERSION = 1
@@ -45,11 +47,12 @@ STATUS = "status"
 IDEA = "idea"
 HUMAN = "human-help"
 SENTRY = "sentry-debug"
+GUIDED = "guided-review"
 DOCS = "docs"
-SKILLS = (SPEC, ONE, LOOP, TEST, TECH, ROADMAP, STATUS, IDEA, HUMAN, SENTRY, DOCS)
+SKILLS = (SPEC, ONE, LOOP, TEST, TECH, ROADMAP, STATUS, IDEA, HUMAN, SENTRY, GUIDED, DOCS)
 # Skills a repo adopts by adding a table: checked with no --for only when the
 # profile has it.
-OPT_IN = {TEST: "auto_test", SENTRY: "sentry"}
+OPT_IN = {TEST: "auto_test", SENTRY: "sentry", GUIDED: "auto_test"}
 
 # Dotted path -> (type, skills that require it, one-line meaning).
 # `references/profile-schema.md` documents the same paths; a test keeps the two
@@ -61,7 +64,7 @@ FIELDS = {
     "tracker.code_repo": (str, SKILLS, "owner/repo that holds the code."),
     "tracker.public": (bool, SKILLS, "True if the tracker is readable by the public."),
     "tracker.ready_marker": (str, (SPEC, LOOP, HUMAN), "Label that marks an issue as specced and pickable."),
-    "tracker.tool": (str, (ONE, LOOP, TEST, ROADMAP, HUMAN), "'shared' for the plugin's tracker.py, or a command for the repo's own tool meeting references/tracker-contract.md."),
+    "tracker.tool": (str, (ONE, LOOP, TEST, ROADMAP, HUMAN, GUIDED), "'shared' for the plugin's tracker.py, or a command for the repo's own tool meeting references/tracker-contract.md."),
     "tracker.project_owner": (str, (), "Owner of the GitHub project board."),
     "tracker.project_number": (int, (), "Number of the GitHub project board."),
     "tracker.queue": (str, (LOOP, HUMAN), "Board column the loop works."),
@@ -69,8 +72,8 @@ FIELDS = {
     "tracker.columns.needs_human": (str, (), "Column of an issue stopped for a person: an unreviewed fix, "
                                     "a decision or Hard Stop found mid-change, or verification that gave up. "
                                     "Optional; absent means the in_progress column."),
-    "environments": (list, SKILLS, "Where code runs: name, roles, and url/serves/reached_by/data/writes."),
-    "stages": (list, (ONE, LOOP, TEST), "The path a change takes after it merges: code_is, column, environment."),
+    "environments": (list, SKILLS, "Where code runs: name, roles, and url/other_urls/serves/reached_by/data/writes."),
+    "stages": (list, (ONE, LOOP, TEST, GUIDED), "The path a change takes after it merges: code_is, column, environment."),
     "related_repos": (list, (), "Other repos one product is built with: repo, board, merged_columns, shipped_columns, half."),
     "hard_stops.source": (str, SKILLS, "Where the repo's Hard Stop rules live (file#anchor)."),
     "hard_stops.form": (str, (SPEC, ONE, LOOP), "categories | questions."),
@@ -82,7 +85,7 @@ FIELDS = {
     "release.major": (int, (), "Hand-set major version. A production release is tagged deploy-<build> and versioned <major>.0.<build>; see references/versioning.md."),
     "lanes": (list, (SPEC, ONE, LOOP), "Test lanes: name, plus run/focused/tests/env/ci."),
     "verify.agent": (list, (ONE, LOOP), "Environments where the implementing agent checks its work."),
-    "verify.human": (str, (SPEC, TEST), "Environment where a person confirms a fix."),
+    "verify.human": (str, (SPEC, TEST, GUIDED), "Environment where a person confirms a fix."),
     "verify.rungs": (list, (ONE, LOOP), "Ordered verification steps."),
     "state.read": (str, (), "How to read a safe copy of real state."),
     "state.forbidden": (list, (ONE, LOOP), "What must never be written or run."),
@@ -114,11 +117,11 @@ FIELDS = {
                      "decisions Claude asks about and which it takes itself; see docs/independence-mode.md."),
     "publish.private_names": (list, (), "Optional; absent means []. Extra names the name check removes before "
                               "filing on gogogo's tracker."),
-    "auto_test.pass_column": (str, (TEST,), "Column a card moves to on PASS."),
-    "auto_test.fail_column": (str, (TEST,), "Column a card moves to on FAIL."),
-    "auto_test.fail_label": (str, (TEST,), "Label added on FAIL."),
-    "auto_test.human_label": (str, (TEST,), "Label added on NEEDS HUMAN."),
-    "auto_test.pass_closes": (bool, (TEST,), "True if PASS closes the issue."),
+    "auto_test.pass_column": (str, (TEST, GUIDED), "Column a card moves to on PASS."),
+    "auto_test.fail_column": (str, (TEST, GUIDED), "Column a card moves to on FAIL."),
+    "auto_test.fail_label": (str, (TEST, GUIDED), "Label added on FAIL."),
+    "auto_test.human_label": (str, (TEST, GUIDED), "Label added on NEEDS HUMAN."),
+    "auto_test.pass_closes": (bool, (TEST, GUIDED), "True if PASS closes the issue."),
     "sentry.org": (str, (SENTRY,), "Sentry organisation slug."),
     "sentry.region_url": (str, (SENTRY,), "Sentry region URL: https://sentry.io, or the regional host the org lives on."),
     "sentry.projects": (list, (SENTRY,), "Sentry project slugs this repo reports to."),
@@ -139,7 +142,7 @@ SECTIONS = {
     "Recon traps": (SPEC, ONE),
     "Lane constraints": (SPEC, ONE),
     "superpowers boundary": SKILLS,
-    "Test data": (TEST,),
+    "Test data": (TEST, GUIDED),
     "Sentry": (SENTRY,),
 }
 
@@ -181,28 +184,28 @@ REQUIRED_V1 = frozenset({
     ("tracker.code_repo", SKILLS),
     ("tracker.public", SKILLS),
     ("tracker.ready_marker", (SPEC, LOOP, HUMAN)),
-    ("tracker.tool", (ONE, LOOP, TEST, ROADMAP, HUMAN)),
+    ("tracker.tool", (ONE, LOOP, TEST, ROADMAP, HUMAN, GUIDED)),
     ("tracker.queue", (LOOP, HUMAN)),
     ("tracker.columns.in_progress", (ONE, LOOP)),
     ("environments", SKILLS),
-    ("stages", (ONE, LOOP, TEST)),
+    ("stages", (ONE, LOOP, TEST, GUIDED)),
     ("hard_stops.source", SKILLS),
     ("hard_stops.form", (SPEC, ONE, LOOP)),
     ("hard_stops.items", (SPEC, ONE, LOOP)),
     ("lanes", (SPEC, ONE, LOOP)),
     ("verify.agent", (ONE, LOOP)),
-    ("verify.human", (SPEC, TEST)),
+    ("verify.human", (SPEC, TEST, GUIDED)),
     ("verify.rungs", (ONE, LOOP)),
     ("state.forbidden", (ONE, LOOP)),
     ("gates.always", (LOOP,)),
     ("integration.strategy", (LOOP,)),
     ("integration.base", (LOOP,)),
     ("integration.ci_before_merge", (LOOP,)),
-    ("auto_test.pass_column", (TEST,)),
-    ("auto_test.fail_column", (TEST,)),
-    ("auto_test.fail_label", (TEST,)),
-    ("auto_test.human_label", (TEST,)),
-    ("auto_test.pass_closes", (TEST,)),
+    ("auto_test.pass_column", (TEST, GUIDED)),
+    ("auto_test.fail_column", (TEST, GUIDED)),
+    ("auto_test.fail_label", (TEST, GUIDED)),
+    ("auto_test.human_label", (TEST, GUIDED)),
+    ("auto_test.pass_closes", (TEST, GUIDED)),
     ("sentry.org", (SENTRY,)),
     ("sentry.region_url", (SENTRY,)),
     ("sentry.projects", (SENTRY,)),
@@ -303,11 +306,12 @@ def _leaf_paths(node, prefix=""):
 
 
 def _check_environments(settings):
-    """Environments, stages and the verify settings must agree with each other."""
-    errors = []
+    """Environments, stages and the verify settings must agree with each other.
+    Returns (errors, warnings)."""
+    errors, warnings = [], []
     environments = settings.get("environments")
     if not isinstance(environments, list):
-        return errors
+        return errors, warnings
     names, roles_seen = [], set()
     for i, env in enumerate(environments):
         if not isinstance(env, dict) or not env.get("name"):
@@ -317,6 +321,13 @@ def _check_environments(settings):
         if name in names:
             errors.append(f"environments[{i}] ({name}): the name is used twice")
         names.append(name)
+        if "other_urls" in env:
+            others = env["other_urls"]
+            if (not isinstance(others, list) or not others
+                    or not all(isinstance(u, str) and u.startswith(("http://", "https://")) for u in others)):
+                errors.append(f"environments[{i}] ({name}): other_urls must be a list of http(s) addresses")
+            elif isinstance(env.get("url"), str) and env["url"].rstrip("/") in [u.rstrip("/") for u in others]:
+                warnings.append(f"environments[{i}] ({name}): other_urls repeats url")
         roles = env.get("roles")
         if not isinstance(roles, list) or not roles:
             errors.append(f"environments[{i}] ({name}): needs roles, a list from {', '.join(ROLES)}")
@@ -339,7 +350,7 @@ def _check_environments(settings):
         for name in agent:
             if name not in names:
                 errors.append(f"verify.agent: '{name}' is not in environments")
-    return errors
+    return errors, warnings
 
 
 def _check_stages(settings):
@@ -398,6 +409,25 @@ def environment(settings, name):
         if isinstance(env, dict) and env.get("name") == name:
             return env
     return None
+
+
+def _host(url):
+    try:
+        return urlparse(url).hostname
+    except ValueError:  # an unclosed `[`
+        return None
+
+
+def environment_urls(env):
+    """The environment's `url`, then each of its `other_urls`, without a trailing `/` or repeats,
+    leaving out any that names no host (a bare `https://` would match every link)."""
+    others = env.get("other_urls")
+    others = [others] if isinstance(others, str) else others if isinstance(others, list) else []
+    urls = []
+    for url in [env.get("url"), *others]:
+        if isinstance(url, str) and _host(url) and url.rstrip("/") not in urls:
+            urls.append(url.rstrip("/"))
+    return urls
 
 
 def _check_related_repos(settings):
@@ -549,7 +579,9 @@ def check(settings, sections, skill=None, root=None):
             if not isinstance(name, str) or not name.strip():
                 errors.append(f"tracker.columns.{role}: expected a column name, found {name!r}")
 
-    errors.extend(_check_environments(settings))
+    env_errors, env_warnings = _check_environments(settings)
+    errors.extend(env_errors)
+    warnings.extend(env_warnings)
     stage_errors, stage_warnings = _check_stages(settings)
     errors.extend(stage_errors)
     warnings.extend(stage_warnings)
@@ -559,7 +591,7 @@ def check(settings, sections, skill=None, root=None):
     major, present = _lookup(settings, "release.major")
     if present and isinstance(major, int) and not isinstance(major, bool) and major < 1:
         errors.append("release.major: must be 1 or more")
-    if TEST in wanted:
+    if TEST in wanted or GUIDED in wanted:
         errors.extend(_check_auto_test(settings, sections))
     for path in DOCS_PATHS if DOCS in wanted else ():
         value, present = _lookup(settings, path)

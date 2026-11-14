@@ -93,6 +93,14 @@ class NameCheck(unittest.TestCase):
             code, found = self.hits(f"mentions {word} once\n", profile=profile_path)
             self.assertEqual((code, found), (1, [word]), word)
 
+    def test_a_host_under_other_urls_is_a_hit(self):
+        # gogogo#290: a second app's host is as private as the first.
+        self.profile(PROFILE.format(extra=(
+            '[[environments]]\nname = "pre"\nroles = ["pre-merge"]\nurl = "https://staging.zinc-app.example"\n'
+            'other_urls = ["https://admin.quartz-app.example/x"]\n')))
+        code, found = self.hits("mentions admin.quartz-app.example once\n")
+        self.assertEqual((code, found), (1, ["admin.quartz-app.example"]))
+
     def test_the_targets_own_names_are_not_checked(self):
         self.assertEqual(self.check("Vorski-Imagineering/gogogo and gogogo and vorski-imagineering\n")[0], 0)
 

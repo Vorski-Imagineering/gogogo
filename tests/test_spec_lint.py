@@ -1,3 +1,4 @@
+import copy
 import io
 import sys
 import tempfile
@@ -171,6 +172,52 @@ class VerifyByHand(unittest.TestCase):
         _, warns, _ = run(body)
         self.assertTrue(any("no URL under https://app.example.org (production" in w for w in warns))
 
+    def two_hosts(self):
+        settings = copy.deepcopy(SETTINGS)
+        settings["environments"][1]["other_urls"] = ["https://admin.example.org"]
+        return settings
+
+    def test_a_link_under_other_urls_does_not_warn(self):
+        # gogogo#290: the second app's host is the same environment.
+        body = GOOD.replace("https://app.example.org/holon/1708/", "https://admin.example.org/rooms/12")
+        _, warns, _ = run(body, self.two_hosts())
+        self.assertFalse([w for w in warns if "no URL under" in w], warns)
+
+    def test_a_link_under_neither_address_names_both(self):
+        body = GOOD.replace("https://app.example.org/holon/1708/", "the holon page")
+        _, warns, _ = run(body, self.two_hosts())
+        self.assertTrue(any(w.startswith("## Verify by hand: no URL under https://app.example.org or "
+                                         "https://admin.example.org (production, where a person confirms")
+                            for w in warns), warns)
+
+    def test_an_address_ending_a_sentence_is_under_it(self):
+        body = GOOD.replace("https://app.example.org/holon/1708/.", "https://app.example.org.")
+        _, warns, _ = run(body)
+        self.assertFalse([w for w in warns if "no URL under" in w], warns)
+
+    def test_an_address_with_no_host_does_not_switch_the_warning_off(self):
+        settings = copy.deepcopy(SETTINGS)
+        settings["environments"][1]["other_urls"] = ["https://"]
+        body = GOOD.replace("https://app.example.org/holon/1708/", "https://docs.example.com/x")
+        _, warns, _ = run(body, settings)
+        self.assertTrue(any("no URL under https://app.example.org (" in w for w in warns), warns)
+
+    def test_a_file_under_an_address_with_a_path_is_under_it(self):
+        settings = copy.deepcopy(SETTINGS)
+        settings["environments"][1]["other_urls"] = ["https://example.org/app"]
+        body = GOOD.replace("https://app.example.org/holon/1708/", "https://example.org/app.html")
+        _, warns, _ = run(body, settings)
+        self.assertFalse([w for w in warns if "no URL under" in w], warns)
+        settings["environments"][1]["other_urls"] = ["https://example.org/go?to=https://x"]
+        body = GOOD.replace("https://app.example.org/holon/1708/", "https://example.org/go?to=https://x.y")
+        _, warns, _ = run(body, settings)
+        self.assertFalse([w for w in warns if "no URL under" in w], warns)
+
+    def test_a_host_that_only_starts_like_the_address_still_warns(self):
+        body = GOOD.replace("https://app.example.org/holon/1708/", "https://admin.example.org.evil/x")
+        _, warns, _ = run(body, self.two_hosts())
+        self.assertTrue(any("no URL under" in w for w in warns), warns)
+
 
 class Approvals(unittest.TestCase):
     def test_needs_the_four_columns(self):
@@ -206,6 +253,18 @@ class HardStopCheck(unittest.TestCase):
     def test_all_no_with_proposal_verdict(self):
         body = GOOD.replace("implement directly.**", "proposal — Schema awaits approval.**")
         self.assertTrue(any("calls the spec a proposal, but every item is answered no" in e for e in errors(body)))
+
+    def test_a_post_first_spec_is_withheld(self):
+        body = GOOD.replace("| Schema | no | no field changes |", "| Schema | yes | the design adds a field |").replace(
+            "implement directly.**", "proposal — Schema awaits approval.**").replace(
+            "| 2026-09-30 | None — every Hard Stop item is no, implement directly. | — | — |",
+            "| 2026-09-30 | Formal sign-off | Post first, not approved yet | Approve |").replace(
+            "Not approved: none", "Not approved: Schema")
+        errs, _, withheld = run(body)
+        self.assertEqual(errs, [])
+        self.assertEqual(withheld, "a Hard Stop awaits approval")
+        _, _, withheld = run(body.replace("the design adds a field", "see row 1"))
+        self.assertIsNone(withheld)
 
     def test_proposal_is_valid_and_withholds_the_label(self):
         body = GOOD.replace("| Schema | no |", "| Schema | yes |").replace(

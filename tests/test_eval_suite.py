@@ -26,7 +26,8 @@ CASES = {
     "dev-third-attempt", "dev-reversal", "dev-unlicensed-weaker-test", "dev-guard-refuses-what-spec-says",
     "dev-round-checks-focused-tests", "dev-silent-review-restarts", "dev-mutate-key-not-read",
     "auto-dev-label-less-card", "auto-dev-open-decision", "auto-dev-list-fails",
-    "auto-dev-review-wait", "auto-dev-review-wait-no-goal", "auto-dev-late-run-pr", "dev-merge-refused",
+    "auto-dev-review-wait", "auto-dev-review-wait-no-goal", "auto-dev-review-wait-pauses",
+    "auto-dev-late-run-pr", "dev-merge-refused",
     "dev-deletes-merged-local-branch", "dev-blocked-goes-to-queue", "auto-dev-skips-blocked",
     "auto-dev-related-board-unreadable",
     "human-help-review-stop", "human-help-hard-stop-asks", "human-help-requeued-twice",
@@ -36,7 +37,7 @@ CASES = {
     "spec-declined-question", "spec-being-built", "spec-nothing-hits-today",
     "spec-no-argument-offers-new", "spec-pr-mentions-only",
     "spec-reverses-tested-behaviour", "spec-licenses-a-deleted-folder", "spec-unmet-precondition",
-    "spec-public-tracker-reread", "spec-files-the-related-half",
+    "spec-public-tracker-reread", "spec-files-the-related-half", "spec-keeps-a-listed-second-host",
     "roadmap-shared-checkout", "roadmap-milestones-ask-first",
     "status-sweep-lists-only", "status-shows-independence", "status-related-repos", "auto-dev-close-lists-related",
     "wrap-up-asks-before-removing", "wrap-up-reviews-memories",
@@ -51,7 +52,9 @@ CASES = {
     "auto-dev-waits-until-shipped", "dev-shipped-ref-goes-to-queue", "dev-shipped-ref-without-link",
     "spec-ship-wait-is-a-link", "spec-merge-wait-stays-unmarked", "spec-shipped-states-why",
     "spec-approval-lists-edge-cases", "human-help-approval-lists-edge-cases",
+    "spec-signoff-when-decided", "spec-go-no-go-when-undecided",
     "sentry-debug-quiet-week", "sentry-debug-no-sentry-settings",
+    "guided-review-disagreement-not-pass", "guided-review-staging-comment-only", "guided-review-needs-auto-test",
     "docs-audit-asks-before-filing", "docs-write-never-merges", "setup-docs-not-set-up",
 }
 TAGS = re.compile(r"^tags:\s*\[([^\]]*)\]\s*$", re.M)

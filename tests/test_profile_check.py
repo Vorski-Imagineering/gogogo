@@ -535,6 +535,43 @@ class Environments(unittest.TestCase):
             s["environments"][0]["roles"] = ["pre-merge"]
         self.assertEqual(self.check(mutate), [])
 
+    def full(self, mutate):
+        settings, sections = parse()
+        mutate(settings)
+        return pc.check(settings, sections)
+
+    def test_other_urls_is_accepted(self):
+        # gogogo#290: a second app on the same environment.
+        errors, warnings = self.full(lambda s: s["environments"][0].update(
+            other_urls=["https://admin.example.org", "http://plain.example.org"]))
+        self.assertEqual(errors, [])
+        self.assertFalse([w for w in warnings if "other_urls" in w], warnings)
+
+    def test_other_urls_must_be_a_list_of_addresses(self):
+        for bad in ("https://admin.example.org", [], ["admin.example.org"]):
+            errors, _ = self.full(lambda s, bad=bad: s["environments"][0].update(other_urls=bad))
+            self.assertIn("environments[0] (dev): other_urls must be a list of http(s) addresses", errors, bad)
+
+    def test_other_urls_repeating_url_warns(self):
+        errors, warnings = self.full(lambda s: s["environments"][0].update(other_urls=["https://dev.example.org/"]))
+        self.assertEqual(errors, [])
+        self.assertIn("environments[0] (dev): other_urls repeats url", warnings)
+        _, warnings = self.full(lambda s: s["environments"][0].update(
+            url="https://dev.example.org/X", other_urls=["https://dev.example.org/X/"]))
+        self.assertIn("environments[0] (dev): other_urls repeats url", warnings)
+
+    def test_environment_urls_keeps_order_and_drops_slashes_and_repeats(self):
+        env = {"url": "https://a.example/", "other_urls": ["https://b.example", "https://a.example"]}
+        self.assertEqual(pc.environment_urls(env), ["https://a.example", "https://b.example"])
+        self.assertEqual(pc.environment_urls({}), [])
+        self.assertEqual(pc.environment_urls({"url": "https://a.example/X", "other_urls": ["https://a.example/X"]}),
+                         ["https://a.example/X"])
+        self.assertEqual(pc.environment_urls({"url": "https://a.example", "other_urls": "https://b.example"}),
+                         ["https://a.example", "https://b.example"])
+        self.assertEqual(pc.environment_urls({"url": "https://a.example", "other_urls": 5}), ["https://a.example"])
+        self.assertEqual(pc.environment_urls({"url": "https://", "other_urls": ["https://[b.example", "https://c.example"]}),
+                         ["https://c.example"])
+
     def test_stage_must_name_a_known_environment(self):
         errors = self.check(lambda s: s["stages"][0].update(environment="staging"))
         self.assertIn("stages[0] (In Dev): environment 'staging' is not in environments", errors)
@@ -589,8 +626,8 @@ class Environments(unittest.TestCase):
     def test_this_repos_own_profile_is_clean_for_every_skill(self):
         settings, sections = pc.split_profile((ROOT / ".agents" / "dev-process.md").read_text(encoding="utf-8"))
         for skill in (None, *pc.SKILLS):
-            if skill == pc.TEST and "auto_test" not in settings:
-                continue  # auto-test is opt-in; this repo has not opted in
+            if skill in (pc.TEST, pc.GUIDED) and "auto_test" not in settings:
+                continue  # auto-test and guided-review are opt-in; this repo has not opted in (gogogo#263)
             if skill == pc.SENTRY and "sentry" not in settings:
                 continue  # so is sentry-debug, by a [sentry] table (gogogo#204)
             self.assertEqual(pc.check(settings, sections, skill), ([], []), skill)
@@ -779,6 +816,28 @@ class AutoTest(unittest.TestCase):
         self.assertEqual(code, pc.EXIT_OK, err)
         errors, _ = pc.check(drop(settings, "auto_test.pass_column"), sections)
         self.assertTrue(any(e.startswith("auto_test.pass_column: missing") for e in errors), errors)
+
+
+class GuidedReview(unittest.TestCase):
+    """/gogogo:guided-review is opted into by auto-test's table and section (gogogo#263)."""
+
+    def test_both_skills_are_opted_into_by_the_auto_test_table(self):
+        self.assertEqual((pc.OPT_IN[pc.TEST], pc.OPT_IN[pc.GUIDED]), ("auto_test", "auto_test"))
+
+    def test_without_auto_test_only_its_own_check_refuses(self):
+        settings, sections = parse()
+        bare = drop(settings, "auto_test")
+        rest = {k: v for k, v in sections.items() if k != "Test data"}
+        self.assertEqual(pc.check(bare, rest), ([], []))
+        errors, _ = pc.check(bare, rest, pc.GUIDED)
+        self.assertTrue(any(e.startswith("auto_test.pass_column: missing") for e in errors), errors)
+        self.assertIn("section '## Test data': missing", errors)
+
+    def test_the_walk_needs_the_human_environments_url(self):
+        settings, sections = parse()
+        settings["environments"][1].pop("url")
+        self.assertIn("verify.human: environment 'production' has no url",
+                      pc.check(settings, sections, pc.GUIDED)[0])
 
 
 class Docs(unittest.TestCase):
