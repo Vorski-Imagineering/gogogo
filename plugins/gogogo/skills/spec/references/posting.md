@@ -73,9 +73,9 @@ order, checking each step before starting the next:
      slash to `git ls-files -s`, run from the checkout root, prints a line for
      that folder with mode `120000`. Every segment of such a path still
      answers to the names rule below, for private names; a folder under the
-     link is not, by being there, from outside this checkout. A path with any
-     `..` segment, and a link git does not list, is a path into another
-     checkout;
+     link is not, by being there, from outside this checkout. A path that
+     leaves the checkout once resolved, and a link git does not list, is a
+     path into another checkout;
    - every repo, project, client, product or folder name from outside this
      checkout, except `tracker.issues_repo`, `tracker.code_repo`, and tools
      and products anyone would know as public;

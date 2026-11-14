@@ -1,5 +1,5 @@
 ---
 type: regex
-pattern: '^\W*Removed:\s*(?:a|an|one|the)\b(?![^\n]*private-specs)[^\n]*\b(?:path|checkout)'
-flags: im
+pattern: '^(?=[\s\S]*^Sibling path: remove\s*$)(?=[\s\S]*^A removed path is listed by: its kind\s*$)'
+flags: m
 ---
