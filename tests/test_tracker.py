@@ -513,8 +513,9 @@ class IssueSideCrossCheckTests(unittest.TestCase):
             missing = board.cards_the_board_did_not_list([], board.DEFAULT_REPO)
         self.assertEqual([c["number"] for c in missing], [1, 2])
 
-    def test_list_puts_recovered_cards_where_the_queue_is_read_from(self):
-        """A recovered card is newest-added, so it belongs at the front."""
+    def test_list_puts_recovered_cards_last(self):
+        """Licensed rewrite (gogogo#272 Approvals row 1): a recovered card's place on the
+        board is unknown, so it comes after the cards the board listed, top first."""
         board_side = page([card(1, "old", "Dev Priority")], total=1)
         issue_side = issue_page([
             issue_node(1, "old", "Dev Priority"),
@@ -529,7 +530,18 @@ class IssueSideCrossCheckTests(unittest.TestCase):
             code = board.cmd_list(args)
         self.assertEqual(code, 0)
         payload = json.loads(printed.call_args_list[0].args[0])
-        self.assertEqual([c["number"] for c in payload], [412, 1])
+        self.assertEqual([c["number"] for c in payload], [1, 412])
+
+    def test_the_board_is_read_top_of_each_column_first(self):
+        # gogogo#272: the top of a column is the lowest position.
+        self.assertRegex(board.ITEMS_QUERY, r"orderBy: \{field: POSITION, direction: ASC\}")
+        args = Namespace(status=None, open_only=False, issues_only=False,
+                         json=True, repo=board.DEFAULT_REPO, no_crosscheck=True)
+        nodes = [card(30, "top", "Dev Priority"), card(12, "middle", "Dev Priority"), card(7, "bottom", "Dev Priority")]
+        with mock.patch.object(board, "graphql", side_effect=[page(nodes, total=3)]), \
+             mock.patch("builtins.print") as printed:
+            board.cmd_list(args)
+        self.assertEqual([c["number"] for c in json.loads(printed.call_args_list[0].args[0])], [30, 12, 7])
 
     def test_no_crosscheck_skips_the_second_read_entirely(self):
         board_side = page([card(1, "old", "Dev Priority")], total=1)

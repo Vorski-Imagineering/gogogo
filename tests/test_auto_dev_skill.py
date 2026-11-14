@@ -393,6 +393,16 @@ class ShipWait(unittest.TestCase):
             self.assertIn(words, text)
 
 
+class BoardOrder(unittest.TestCase):
+    """gogogo#272: with no order given, the queue is taken top of the column first."""
+
+    def test_rule_6_takes_the_column_top_first(self):
+        text = (SKILL.parent / "references" / "blocked.md").read_text(encoding="utf-8")
+        rule = text.split("6. **Order**")[1].split("\n7. ")[0]
+        self.assertNotIn("anything large", rule)
+        self.assertIn("top", rule)
+
+
 class CloseReport(unittest.TestCase):
     """gogogo#239: the close report ends with the RELATED block, from one read."""
 

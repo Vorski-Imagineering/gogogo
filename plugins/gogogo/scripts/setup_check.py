@@ -779,6 +779,10 @@ def check_board_views(views, ready, stage_columns, rep):
     if ready and not queue:
         problems.append(f"no {ready!r} kanban: add a board-layout view filtered "
                         f"`is:open -status:{_status_list(['Done', 'Future', *stage_columns])} label:\"{ready}\"`")
+    for v in queue:
+        if v.get("sort"):
+            problems.append(f"'{v['name']}' is sorted by {v['sort'][0][0]}, so it does not show the order "
+                            "auto-dev takes; View → Sort by → none, then Save view")
     if problems:
         rep.warn("tracker: board views", "; ".join(problems))
     unlabelled = [v["name"] for v in boards if "Labels" not in (v.get("fields") or [])]

@@ -1253,6 +1253,15 @@ class BoardViews(unittest.TestCase):
         self.assertEqual([r["check"] for r in rep.rows], ["tracker: board views"])
         self.assertIn("newest first", rep.rows[0]["detail"])
 
+    def test_a_sorted_ready_view_warns_by_name(self):
+        # gogogo#272: a sorted queue view does not show the order auto-dev takes.
+        sorted_ready = view("Dev Ready", filt='label:"dev ready"', sort=(("Created", "DESC"),))
+        rep = self.check([BACKLOG, sorted_ready])
+        self.assertEqual([(r["level"], r["check"]) for r in rep.rows], [("WARN", "tracker: board views")])
+        self.assertIn("'Dev Ready' is sorted by Created", rep.rows[0]["detail"])
+        rep = self.check([BACKLOG, READY])
+        self.assertEqual([r["level"] for r in rep.rows], ["PASS"])
+
     def test_unreadable_views_say_so_and_views_never_fail(self):
         rep = self.check(None)
         self.assertEqual([r["level"] for r in rep.rows], ["INFO"])
