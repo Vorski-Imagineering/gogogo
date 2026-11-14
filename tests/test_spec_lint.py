@@ -194,6 +194,20 @@ class VerifyByHand(unittest.TestCase):
         _, warns, _ = run(body)
         self.assertFalse([w for w in warns if "no URL under" in w], warns)
 
+    def test_an_address_with_no_host_does_not_switch_the_warning_off(self):
+        settings = copy.deepcopy(SETTINGS)
+        settings["environments"][1]["other_urls"] = ["https://"]
+        body = GOOD.replace("https://app.example.org/holon/1708/", "https://docs.example.com/x")
+        _, warns, _ = run(body, settings)
+        self.assertTrue(any("no URL under https://app.example.org (" in w for w in warns), warns)
+
+    def test_a_file_under_an_address_with_a_path_is_under_it(self):
+        settings = copy.deepcopy(SETTINGS)
+        settings["environments"][1]["other_urls"] = ["https://example.org/app"]
+        body = GOOD.replace("https://app.example.org/holon/1708/", "https://example.org/app.html")
+        _, warns, _ = run(body, settings)
+        self.assertFalse([w for w in warns if "no URL under" in w], warns)
+
     def test_a_host_that_only_starts_like_the_address_still_warns(self):
         body = GOOD.replace("https://app.example.org/holon/1708/", "https://admin.example.org.evil/x")
         _, warns, _ = run(body, self.two_hosts())

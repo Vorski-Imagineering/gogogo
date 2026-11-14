@@ -272,7 +272,9 @@ def lint(body, settings):
         bases = [u for u in profile_check.environment_urls(env) if u.startswith("http")]
         text = "\n".join(lines)
         # The whole address: a host that only starts like it (`<base>.evil`) is not under it.
-        if bases and not any(re.search(re.escape(base) + r"(?![\w-]|\.[\w-])", text) for base in bases):
+        if bases and not any(re.search(re.escape(base) + ("" if "/" in base.split("://", 1)[-1]
+                                                         else r"(?![\w-]|\.[\w-])"), text)
+                             for base in bases):
             warnings.append(f"## Verify by hand: no URL under {' or '.join(bases)} ({where}, where a person "
                             "confirms a fix in this repo)")
 
