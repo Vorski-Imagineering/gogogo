@@ -44,7 +44,6 @@ $0.60 a case.
 import argparse
 import json
 import re
-import shutil
 import subprocess
 import sys
 import tempfile
@@ -118,7 +117,6 @@ def base_score(root: Path, fork: str, name: str) -> tuple[float | None, float]:
         tree, out = Path(tmp) / "base", Path(tmp) / "base.json"
         try:
             _git(["worktree", "add", "--detach", "--quiet", str(tree), fork], root)
-            admin = Path(_git(["rev-parse", "--absolute-git-dir"], tree).strip())
         except subprocess.CalledProcessError:
             return None, 0.0
         try:
@@ -126,9 +124,9 @@ def base_score(root: Path, fork: str, name: str) -> tuple[float | None, float]:
                        "--trust-plugin", "--no-publish", "--json", str(out), "--case", name], tree)
             doc = _read(out)
         finally:
-            if subprocess.run(["git", "worktree", "remove", "--force", str(tree)], cwd=root,
+            if subprocess.run(["git", "worktree", "remove", "--force", "--force", str(tree)], cwd=root,
                               capture_output=True).returncode != 0:
-                shutil.rmtree(admin, ignore_errors=True)  # this worktree's own entry, and no other
+                print(f"evals: warning: could not remove the base worktree {tree}; its entry is left")
     if doc is None:
         return None, 0.0
     cost = float(doc.get("costUsd") or 0)

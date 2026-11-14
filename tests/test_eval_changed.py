@@ -233,22 +233,22 @@ class Lane(unittest.TestCase):
         self.assertIn("evals: dev-third-attempt base re-run gave no result", out)
         self.assertIn("evals: cases=2 passed=1 base_failed=0", out)
 
-    def test_a_worktree_that_cannot_be_removed_leaves_no_entry(self):
+    def test_a_worktree_that_cannot_be_removed_is_named_and_left(self):
         write(self.root, "plugins/gogogo/skills/dev/SKILL.md", "changed\n")
-        real = subprocess.run
+        real, removes = subprocess.run, []
 
         def run(args, *rest, **kw):
             if list(args[:3]) == ["git", "worktree", "remove"]:
+                removes.append(list(args))
                 return subprocess.CompletedProcess(args, 128, "", "locked")
             return real(args, *rest, **kw)
-        other = Path(self.tmp.name + "-other")
-        real(["git", "worktree", "add", "--detach", "--quiet", str(other)], cwd=self.root, check=True)
-        shutil.rmtree(other)  # someone else's worktree, its folder missing for now: not this run's to clear
         with mock.patch.object(eval_changed.subprocess, "run", run):
-            self.run_lane(result=self.failing(), code=1, base=self.base_run(0.33))
+            rc, out = self.run_lane(result=self.failing(), code=1, base=self.base_run(0.33))
+        self.assertEqual([a[3:5] for a in removes], [["--force", "--force"]])
+        tree = removes[0][-1]
+        self.assertIn(f"evals: warning: could not remove the base worktree {tree}", out)
         listed = real(["git", "worktree", "list"], cwd=self.root, capture_output=True, text=True).stdout
-        self.assertEqual(len(listed.splitlines()), 2, listed)
-        self.assertIn(str(other), listed)
+        self.assertEqual(len(listed.splitlines()), 2, listed)  # its entry is left, deleted by nobody's hand
 
     def test_the_base_worktree_is_taken_down(self):
         write(self.root, "plugins/gogogo/skills/dev/SKILL.md", "changed\n")
