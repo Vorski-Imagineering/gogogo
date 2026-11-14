@@ -542,8 +542,10 @@ class Environments(unittest.TestCase):
 
     def test_other_urls_is_accepted(self):
         # gogogo#290: a second app on the same environment.
-        errors, _ = self.full(lambda s: s["environments"][0].update(other_urls=["https://admin.example.org"]))
+        errors, warnings = self.full(lambda s: s["environments"][0].update(
+            other_urls=["https://admin.example.org", "http://plain.example.org"]))
         self.assertEqual(errors, [])
+        self.assertFalse([w for w in warnings if "other_urls" in w], warnings)
 
     def test_other_urls_must_be_a_list_of_addresses(self):
         for bad in ("https://admin.example.org", [], ["admin.example.org"]):
@@ -554,11 +556,15 @@ class Environments(unittest.TestCase):
         errors, warnings = self.full(lambda s: s["environments"][0].update(other_urls=["https://dev.example.org/"]))
         self.assertEqual(errors, [])
         self.assertIn("environments[0] (dev): other_urls repeats url", warnings)
+        _, warnings = self.full(lambda s: s["environments"][0].update(
+            url="https://dev.example.org/X", other_urls=["https://dev.example.org/X/"]))
+        self.assertIn("environments[0] (dev): other_urls repeats url", warnings)
 
     def test_environment_urls_keeps_order_and_drops_slashes_and_repeats(self):
         env = {"url": "https://a.example/", "other_urls": ["https://b.example", "https://a.example"]}
         self.assertEqual(pc.environment_urls(env), ["https://a.example", "https://b.example"])
         self.assertEqual(pc.environment_urls({}), [])
+        self.assertEqual(pc.environment_urls({"url": "https://a.example/X"}), ["https://a.example/X"])
         self.assertEqual(pc.environment_urls({"url": "https://a.example", "other_urls": "https://b.example"}),
                          ["https://a.example", "https://b.example"])
         self.assertEqual(pc.environment_urls({"url": "https://a.example", "other_urls": 5}), ["https://a.example"])

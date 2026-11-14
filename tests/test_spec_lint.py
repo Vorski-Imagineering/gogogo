@@ -207,6 +207,10 @@ class VerifyByHand(unittest.TestCase):
         body = GOOD.replace("https://app.example.org/holon/1708/", "https://example.org/app.html")
         _, warns, _ = run(body, settings)
         self.assertFalse([w for w in warns if "no URL under" in w], warns)
+        settings["environments"][1]["other_urls"] = ["https://example.org/go?to=https://x"]
+        body = GOOD.replace("https://app.example.org/holon/1708/", "https://example.org/go?to=https://x.y")
+        _, warns, _ = run(body, settings)
+        self.assertFalse([w for w in warns if "no URL under" in w], warns)
 
     def test_a_host_that_only_starts_like_the_address_still_warns(self):
         body = GOOD.replace("https://app.example.org/holon/1708/", "https://admin.example.org.evil/x")
