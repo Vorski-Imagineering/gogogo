@@ -558,6 +558,14 @@ class Announce(ReleaseRepo):
         code, lines, _ = self.announce(profile=self.messages_on())
         self.assertTrue(lines[2].startswith("notify: failed: notify failed: HTTP 401 Unauthorized;"), lines[2])
 
+    def test_a_notify_that_fails_silently_or_is_missing_says_so(self):
+        with mock.patch.object(release.notify, "main", lambda argv: 1):
+            code, lines, _ = self.announce(profile=self.messages_on())
+        self.assertTrue(lines[2].startswith("notify: failed: notify.py exited 1;"), lines[2])
+        with mock.patch.object(release, "notify", None):
+            code, lines, _ = self.announce(profile=self.messages_on())
+        self.assertTrue(lines[2].startswith("notify: failed: notify.py is not beside release.py;"), lines[2])
+
     def test_a_release_unreadable_after_the_send_is_left_unmarked(self):
         self.releases["deploy-3"] = "notes\n"
         self.view_ok = 2  # release's read and notify's first read; the read after the send fails
