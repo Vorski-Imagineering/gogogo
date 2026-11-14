@@ -115,8 +115,8 @@ draft, and again on the whole draft after every change. Remove:
   segment of such a path still answers to the names rule below, for private
   names; a folder under the link is not, by being there, from outside this
   checkout. A path that leaves the checkout once its `..` segments are
-  resolved (without following a link), and a link git does not list, is a
-  path into another checkout;
+  resolved (without following a link), and a link git does not list (a
+  leading folder `test -L` finds a link), is a path into another checkout;
 - every repo, project, client, product or folder name from outside this
   checkout, in any form (`owner/repo`, a bare name, a folder), except
   `tracker.issues_repo`, `tracker.code_repo`, and tools and products anyone
