@@ -81,3 +81,7 @@ A file under `docs/` is documentation. Open with what the thing does and how to
 use it; put the reasons after, and the sources last, each as a link. Name modes
 and settings by what they do for the user. Do not link the issues that build
 it; a one-line status is fine.
+
+A new file under `docs/` is listed in `docs/README.md` in the same PR, and a
+new skill gets its row in the README's skills table in the same PR;
+`tests/test_docs_index.py` checks both.
