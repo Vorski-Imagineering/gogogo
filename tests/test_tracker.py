@@ -94,15 +94,24 @@ class ShortReadTests(unittest.TestCase):
             items = board.fetch_items()
         self.assertEqual([board.flatten(i)["number"] for i in items], [1, 2, 3])
 
-    def test_a_card_moved_during_the_read_keeps_its_later_column(self):
+    def test_a_card_archived_during_the_read_is_still_refused(self):
+        # The board shrank: the first count stands, as before the board was read top first.
         pages = [
-            page([card(1, "a", "Dev Priority"), card(2, "b", "Dev Priority")], total=2, has_next=True),
-            page([card(2, "b", "Done")], total=2, has_next=False),
+            page([card(1, "a", "Dev Priority"), card(2, "b", "Dev Priority")], total=3, has_next=True),
+            page([], total=2, has_next=False),
         ]
         with mock.patch.object(board, "graphql", side_effect=pages):
-            items = board.fetch_items()
-        self.assertEqual([(board.flatten(i)["number"], board.flatten(i)["status"]) for i in items],
-                         [(1, "Dev Priority"), (2, "Done")])
+            with self.assertRaises(board.BoardError):
+                board.fetch_items()
+
+    def test_more_cards_than_the_board_reports_are_refused(self):
+        pages = [
+            page([card(1, "a", "Dev Priority"), card(2, "b", "Dev Priority")], total=2, has_next=True),
+            page([card(3, "c", "Dev Priority")], total=2, has_next=False),
+        ]
+        with mock.patch.object(board, "graphql", side_effect=pages):
+            with self.assertRaises(board.BoardError):
+                board.fetch_items()
 
     def test_a_card_missed_and_one_added_is_still_a_short_read(self):
         pages = [
