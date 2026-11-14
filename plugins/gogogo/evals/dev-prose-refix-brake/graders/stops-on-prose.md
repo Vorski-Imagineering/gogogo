@@ -1,5 +1,5 @@
 ---
 type: regex
-pattern: '^End: prose$'
-flags: m
+pattern: '^\W*End\W+prose\W*$(?![\s\S]*\S)'
+flags: im
 ---

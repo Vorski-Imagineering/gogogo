@@ -34,6 +34,13 @@ class Card(unittest.TestCase):
                                          "https://github.com/o/r/tree/fix/140-x")
         self.assertEqual(c["branch"], "fix/140-x")
 
+    def test_the_newest_review_records_kind_is_listed(self):
+        # gogogo#259: human-help reads a prose card from the list, with no read of its own.
+        older = comment("<!-- gogogo:review v=3 pr=1 kind=code coverage=broad rounds=2 -->")
+        newer = comment(STOP_REVIEW + "\n<!-- gogogo:review v=3 pr=1 kind=prose coverage=precise rounds=3 -->")
+        self.assertEqual(hh.card(1, "t", "u", [older, newer], [])["kind"], "prose")
+        self.assertIsNone(hh.card(1, "t", "u", [comment(STOP_REVIEW)], [])["kind"])
+
     def test_a_writer_comment_after_the_stop_is_an_answer(self):
         # gogogo#159 Design 7: write access decides, whatever the comment's association.
         answer = dict(comment("merge it", True, "v2", "https://example/a"), association="NONE")
