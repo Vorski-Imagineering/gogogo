@@ -71,7 +71,7 @@ FIELDS = {
     "tracker.columns.needs_human": (str, (), "Column of an issue stopped for a person: an unreviewed fix, "
                                     "a decision or Hard Stop found mid-change, or verification that gave up. "
                                     "Optional; absent means the in_progress column."),
-    "environments": (list, SKILLS, "Where code runs: name, roles, and url/serves/reached_by/data/writes."),
+    "environments": (list, SKILLS, "Where code runs: name, roles, and url/other_urls/serves/reached_by/data/writes."),
     "stages": (list, (ONE, LOOP, TEST, GUIDED), "The path a change takes after it merges: code_is, column, environment."),
     "related_repos": (list, (), "Other repos one product is built with: repo, board, merged_columns, shipped_columns, half."),
     "hard_stops.source": (str, SKILLS, "Where the repo's Hard Stop rules live (file#anchor)."),
@@ -305,11 +305,12 @@ def _leaf_paths(node, prefix=""):
 
 
 def _check_environments(settings):
-    """Environments, stages and the verify settings must agree with each other."""
-    errors = []
+    """Environments, stages and the verify settings must agree with each other.
+    Returns (errors, warnings)."""
+    errors, warnings = [], []
     environments = settings.get("environments")
     if not isinstance(environments, list):
-        return errors
+        return errors, warnings
     names, roles_seen = [], set()
     for i, env in enumerate(environments):
         if not isinstance(env, dict) or not env.get("name"):
@@ -319,6 +320,13 @@ def _check_environments(settings):
         if name in names:
             errors.append(f"environments[{i}] ({name}): the name is used twice")
         names.append(name)
+        if "other_urls" in env:
+            others = env["other_urls"]
+            if (not isinstance(others, list) or not others
+                    or not all(isinstance(u, str) and u.startswith(("http://", "https://")) for u in others)):
+                errors.append(f"environments[{i}] ({name}): other_urls must be a list of http(s) addresses")
+            elif isinstance(env.get("url"), str) and env["url"].rstrip("/") in [u.rstrip("/") for u in others]:
+                warnings.append(f"environments[{i}] ({name}): other_urls repeats url")
         roles = env.get("roles")
         if not isinstance(roles, list) or not roles:
             errors.append(f"environments[{i}] ({name}): needs roles, a list from {', '.join(ROLES)}")
@@ -341,7 +349,7 @@ def _check_environments(settings):
         for name in agent:
             if name not in names:
                 errors.append(f"verify.agent: '{name}' is not in environments")
-    return errors
+    return errors, warnings
 
 
 def _check_stages(settings):
@@ -400,6 +408,15 @@ def environment(settings, name):
         if isinstance(env, dict) and env.get("name") == name:
             return env
     return None
+
+
+def environment_urls(env):
+    """The environment's `url`, then each of its `other_urls`, without a trailing `/` or repeats."""
+    urls = []
+    for url in [env.get("url"), *(env.get("other_urls") or [])]:
+        if isinstance(url, str) and url and url.rstrip("/") not in urls:
+            urls.append(url.rstrip("/"))
+    return urls
 
 
 def _check_related_repos(settings):
@@ -551,7 +568,9 @@ def check(settings, sections, skill=None, root=None):
             if not isinstance(name, str) or not name.strip():
                 errors.append(f"tracker.columns.{role}: expected a column name, found {name!r}")
 
-    errors.extend(_check_environments(settings))
+    env_errors, env_warnings = _check_environments(settings)
+    errors.extend(env_errors)
+    warnings.extend(env_warnings)
     stage_errors, stage_warnings = _check_stages(settings)
     errors.extend(stage_errors)
     warnings.extend(stage_warnings)

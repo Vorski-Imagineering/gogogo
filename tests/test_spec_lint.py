@@ -1,3 +1,4 @@
+import copy
 import io
 import sys
 import tempfile
@@ -170,6 +171,28 @@ class VerifyByHand(unittest.TestCase):
         body = GOOD.replace("https://app.example.org/holon/1708/", "the holon page")
         _, warns, _ = run(body)
         self.assertTrue(any("no URL under https://app.example.org (production" in w for w in warns))
+
+    def two_hosts(self):
+        settings = copy.deepcopy(SETTINGS)
+        settings["environments"][1]["other_urls"] = ["https://admin.example.org"]
+        return settings
+
+    def test_a_link_under_other_urls_does_not_warn(self):
+        # gogogo#290: the second app's host is the same environment.
+        body = GOOD.replace("https://app.example.org/holon/1708/", "https://admin.example.org/rooms/12")
+        _, warns, _ = run(body, self.two_hosts())
+        self.assertFalse([w for w in warns if "no URL under" in w], warns)
+
+    def test_a_link_under_neither_address_names_both(self):
+        body = GOOD.replace("https://app.example.org/holon/1708/", "the holon page")
+        _, warns, _ = run(body, self.two_hosts())
+        self.assertTrue(any("no URL under https://app.example.org or https://admin.example.org (" in w
+                            for w in warns), warns)
+
+    def test_a_host_that_only_starts_like_the_address_still_warns(self):
+        body = GOOD.replace("https://app.example.org/holon/1708/", "https://admin.example.org.evil/x")
+        _, warns, _ = run(body, self.two_hosts())
+        self.assertTrue(any("no URL under" in w for w in warns), warns)
 
 
 class Approvals(unittest.TestCase):

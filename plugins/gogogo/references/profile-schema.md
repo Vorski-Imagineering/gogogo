@@ -95,7 +95,7 @@ no skill requires it; a skill that finds it uses it.
 | `tracker.queue` | str | `auto-dev`, `human-help` | Board column the loop works. |
 | `tracker.columns.in_progress` | str | `dev`, `auto-dev` | Column of an issue being worked now. |
 | `tracker.columns.needs_human` | str | optional | Column of an issue stopped for a person: an unreviewed fix, a decision or Hard Stop found mid-change, or verification that gave up. Optional; absent means the `in_progress` column. |
-| `environments` | list | all | Where code runs: name, roles, and url/serves/reached_by/data/writes. |
+| `environments` | list | all | Where code runs: name, roles, and url/other_urls/serves/reached_by/data/writes. |
 | `stages` | list | `dev`, `auto-dev`, `auto-test`, `guided-review` | The path a change takes after it merges: code_is, column, environment. |
 | `related_repos` | list | optional | Other repos one product is built with: repo, board, merged_columns, shipped_columns, half. |
 | `hard_stops.source` | str | all | Where the repo's Hard Stop rules live (file#anchor). |
@@ -186,13 +186,17 @@ Each environment needs a `name` (this repo's word for it) and `roles`. One
 environment may fill two roles. Optional: `url`, `serves` (what code it runs),
 `reached_by` (how code gets there), `data`, and `writes` (what may be written
 there, and by whom). A skill takes its safety rules for an environment from
-`writes`; it does not assume them.
+`writes`; it does not assume them. `other_urls`, a list of further addresses
+the same environment serves (a second app on its own host), accepted wherever
+a link must be under the environment's `url`; everything that opens the
+environment still uses `url`.
 
 ```toml
 [[environments]]
 name = "dev"
 roles = ["pre-merge", "pre-production"]
 url = "https://dev.example.org"
+other_urls = ["https://admin.dev.example.org"]
 serves = "the checked-out branch; main between runs"
 data = "restore of production"
 writes = "allowed, except restores"

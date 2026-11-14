@@ -37,7 +37,7 @@ CASES = {
     "spec-declined-question", "spec-being-built", "spec-nothing-hits-today",
     "spec-no-argument-offers-new", "spec-pr-mentions-only",
     "spec-reverses-tested-behaviour", "spec-licenses-a-deleted-folder", "spec-unmet-precondition",
-    "spec-public-tracker-reread", "spec-files-the-related-half",
+    "spec-public-tracker-reread", "spec-files-the-related-half", "spec-keeps-a-listed-second-host",
     "roadmap-shared-checkout", "roadmap-milestones-ask-first",
     "status-sweep-lists-only", "status-shows-independence", "status-related-repos", "auto-dev-close-lists-related",
     "wrap-up-asks-before-removing", "wrap-up-reviews-memories",
