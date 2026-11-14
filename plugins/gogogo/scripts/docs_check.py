@@ -198,8 +198,11 @@ def check(root, settings, public_only=False):
     if index is not None and not index.is_file():
         raise Stop(f"docs.index names {docs['index']}, which does not exist")
 
+    def shown(path):
+        return str(path.relative_to(root) if path.is_relative_to(root) else path)
+
     def add(kind, path, line, detail):
-        findings.append({"kind": kind, "file": str(path.relative_to(root) if path.is_relative_to(root) else path), "line": line, "detail": detail})
+        findings.append({"kind": kind, "file": shown(path), "line": line, "detail": detail})
 
     texts = {path: read(path) for path in files}
     for path, text in texts.items() if not public_only else ():
@@ -257,7 +260,7 @@ def check(root, settings, public_only=False):
                 add("nav", nav, number, f"menu names a missing page: {raw}")
         for page in pages:
             if page.resolve() not in seen:
-                add("nav", nav, 1, f"{page.relative_to(root)} missing from the menu")
+                add("nav", nav, 1, f"{shown(page)} missing from the menu")
 
     if public is not None:
         resolved = public.resolve()
