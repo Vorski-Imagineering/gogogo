@@ -236,14 +236,15 @@ def check(root, settings, public_only=False):
                         add("public", path, number, f"holds {what}")
 
     if nav is not None:
-        pages = sorted(p.resolve() for p in public.rglob("*.md") if p.is_file() and p.resolve() != nav.resolve()) \
+        pages = sorted(p for p in public.rglob("*.md") if p.is_file() and p.resolve() != nav.resolve()) \
             if public.is_dir() else []
-        entries = []
+        entries, links = [], 0
         for number, line in prose_lines(read(nav)):
             if LIST_ITEM.match(line):
+                links += len(LINK.findall(line))
                 entries += [(number, raw, target) for raw in LINK.findall(line)
                             if (target := link_target(raw, nav.parent, root)) is not None]
-        if not entries:
+        if not links:
             raise Stop(f"nav: unsupported format {docs['nav']}; a Markdown list of links is read")
         if entries and entries[0][2] not in {(public / n).resolve() for n in ("README.md", "index.md")}:
             add("nav", nav, entries[0][0], f"first entry is not the landing page: {entries[0][1]}")
@@ -255,8 +256,8 @@ def check(root, settings, public_only=False):
             if not target.exists():
                 add("nav", nav, number, f"menu names a missing page: {raw}")
         for page in pages:
-            if page not in seen:
-                add("nav", nav, 1, f"{page.relative_to(root.resolve())} missing from the menu")
+            if page.resolve() not in seen:
+                add("nav", nav, 1, f"{page.relative_to(root)} missing from the menu")
 
     if public is not None:
         resolved = public.resolve()

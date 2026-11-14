@@ -326,6 +326,16 @@ class PublicMenuAndTags(unittest.TestCase):
         self.assertEqual(code, 2)
         self.assertIn("nav: unsupported format docs/pub/SUMMARY.md", err)
 
+    def test_a_menu_of_outside_links_is_read_and_a_symlinked_page_named_where_it_sits(self):
+        outside = Path(tempfile.mkdtemp())
+        self.addCleanup(shutil.rmtree, outside)
+        (outside / "e.md").write_text("e\n")
+        self.public(menu="- [Ext](https://x.example/)\n")
+        (self.case.root / "docs" / "pub" / "e.md").symlink_to(outside / "e.md")
+        code, lines, err = self.case.run_it("--public")
+        self.assertEqual(code, 1, err)
+        self.assertIn("nav docs/pub/SUMMARY.md:1: docs/pub/e.md missing from the menu", lines)
+
     def test_a_tags_line_in_another_shape_is_refused(self):
         code, lines, err = self.public(tags=TAGS + "  - api\n")
         self.assertEqual(code, 2)
