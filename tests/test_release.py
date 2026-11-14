@@ -250,11 +250,11 @@ class Vendored(unittest.TestCase):
         with tempfile.TemporaryDirectory(prefix="release-vendored-") as tmp:
             for name in ("release.py", "profile_check.py", "stage_sync.py", "tracker.py"):
                 (Path(tmp) / name).write_bytes((PLUGIN / "scripts" / name).read_bytes())
-            (Path(tmp) / "notify.py").write_text("from profile_check import NO_SUCH_NAME\n")
+            (Path(tmp) / "notify.py").write_text("import no_such_module_xyz\n")
             run = subprocess.run([sys.executable, str(Path(tmp) / "release.py"), "--help"],
                                  capture_output=True, text=True, timeout=60)
         self.assertNotEqual(run.returncode, 0)
-        self.assertIn("NO_SUCH_NAME", run.stderr)
+        self.assertIn("no_such_module_xyz", run.stderr)
 
 
 class Reference(unittest.TestCase):
