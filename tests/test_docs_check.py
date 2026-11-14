@@ -283,7 +283,7 @@ class PublicMenuAndTags(unittest.TestCase):
     def test_a_page_missing_from_the_menu(self):
         code, lines, _ = self.public(menu=MENU.replace("    - [A](a.md)\n", ""))
         self.assertEqual(code, 1)
-        self.assertEqual(self.kind(lines, "nav"), ["nav docs/pub/a.md:1: missing from the menu docs/pub/SUMMARY.md"])
+        self.assertEqual(self.kind(lines, "nav"), ["nav docs/pub/SUMMARY.md:1: docs/pub/a.md missing from the menu"])
 
     def test_a_page_listed_twice(self):
         code, lines, _ = self.public(menu=MENU + "- [A again](a.md)\n")
@@ -316,6 +316,15 @@ class PublicMenuAndTags(unittest.TestCase):
         self.assertEqual(code, 1)
         self.assertEqual(self.kind(lines, "tags"), ["tags docs/pub/tags.yml:6: a.md: tag nope is not in the vocabulary",
                                                     "tags docs/pub/tags.yml:7: gone.md does not exist"])
+
+    def test_quoted_names_paths_and_tags_are_read(self):
+        code, lines, err = self.public(tags='vocabulary:\n  "api": the API\npages:\n  "a.md": ["api"]\n')
+        self.assertEqual((code, lines[-1]), (0, "docs: files=4 findings=0"), lines)
+
+    def test_a_markdown_menu_with_no_list_is_refused(self):
+        code, lines, err = self.public(menu="[Home](README.md) [A](a.md) [B](b%20c.md)\n")
+        self.assertEqual(code, 2)
+        self.assertIn("nav: unsupported format docs/pub/SUMMARY.md", err)
 
     def test_a_tags_line_in_another_shape_is_refused(self):
         code, lines, err = self.public(tags=TAGS + "  - api\n")

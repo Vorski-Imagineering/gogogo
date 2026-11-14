@@ -22,18 +22,20 @@ folder that holds the profile's `.agents/`. Each finding is one line,
           (a whole word, any case);
   nav     with `docs.nav` set (a Markdown list of links, read from its own
           folder): a `*.md` under `docs.public` the menu does not name
-          (`missing from the menu`), a page named twice (`listed twice`), an
+          (`<page> missing from the menu`, filed under the menu), a page named twice (`listed twice`), an
           entry whose page does not exist (`menu names a missing page`), and a
           first entry that is not the public folder's `README.md` or
           `index.md` (`first entry is not the landing page`). Any other menu
-          format is refused (exit 2), never half-read;
+          format, or a menu with no list line holding a link, is refused
+          (exit 2), never half-read;
   public-link  a relative link in a file under `docs.public` whose target is
           outside it, whether or not the target exists;
   tags    with `docs.tags` set: a page's tag not in the file's `vocabulary`,
           and a `pages` path (from the public folder) that does not exist.
           The file is two top-level keys, `vocabulary:` (`  <name>: <text>`)
           and `pages:` (`  <path>: [<tag>, ...]`), with `#` comment and blank
-          lines; any other line is refused (exit 2), naming it.
+          lines; any other line is refused (exit 2), naming it. A name, path
+          or tag may be quoted.
 
 `docs.nav` or `docs.tags` without `docs.public` cannot be checked (exit 2).
 `--public` reads only the `*.md` under `docs.public`, and runs only the public,
@@ -148,10 +150,10 @@ def read_tags(path, text):
         if top:
             key = top.group(1)
         elif word:
-            vocabulary.add(word.group(1).strip())
+            vocabulary.add(word.group(1).strip().strip("'\""))
         elif page:
             tags = [t.strip().strip("'\"") for t in page.group(2).split(",")]
-            pages.append((number, page.group(1).strip(), [t for t in tags if t]))
+            pages.append((number, page.group(1).strip().strip("'\""), [t for t in tags if t]))
         else:
             raise Stop(f"tags: {path}:{number} is not a vocabulary or pages line: {line.strip()}")
     return vocabulary, pages
@@ -241,6 +243,8 @@ def check(root, settings, public_only=False):
             if LIST_ITEM.match(line):
                 entries += [(number, raw, target) for raw in LINK.findall(line)
                             if (target := link_target(raw, nav.parent, root)) is not None]
+        if not entries:
+            raise Stop(f"nav: unsupported format {docs['nav']}; a Markdown list of links is read")
         if entries and entries[0][2] not in {(public / n).resolve() for n in ("README.md", "index.md")}:
             add("nav", nav, entries[0][0], f"first entry is not the landing page: {entries[0][1]}")
         seen = set()
@@ -252,7 +256,7 @@ def check(root, settings, public_only=False):
                 add("nav", nav, number, f"menu names a missing page: {raw}")
         for page in pages:
             if page not in seen:
-                add("nav", page, 1, f"missing from the menu {docs['nav']}")
+                add("nav", nav, 1, f"{page.relative_to(root.resolve())} missing from the menu")
 
     if public is not None:
         resolved = public.resolve()
