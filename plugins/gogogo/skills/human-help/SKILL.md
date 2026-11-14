@@ -144,9 +144,10 @@ the question still offers **keep at it until it succeeds**, but never as the
 recommendation. The recommended option is one more fix at the usual limit
 (`/gogogo:dev` review rule 7), checked by a person walking the page on a real
 environment through the issue's *Verify by hand* once it is merged. The
-option says it goes back to the default model and effort. Its answer is an
-Approvals row whose Chosen reads `authorised:` with nothing after it, which
-withdraws every earlier authorisation, then requeue. The question says why in
+option says it drops only `review=until-clean`. Its answer, when an earlier
+`authorised:` row exists, is an Approvals row whose Chosen reads
+`authorised:` with that row's `model=` and `effort=`, if any, and without
+`review=until-clean`; with none, no row is written. Then requeue. The question says why in
 one plain sentence: a written page cannot be run, so reviewing it until clean
 tends to fix its own fixes.
 
