@@ -85,6 +85,24 @@ class Month(unittest.TestCase):
         self.assertIn("- x: y, [#12](https://github.com/Vorski-Imagineering/gogogo/issues/12)", out)
         self.assertNotIn("later: z", out)
 
+    def test_a_side_branch_commit_is_not_listed_but_its_merge_is(self):
+        git(self.root, "checkout", "-q", "-b", "side")
+        write(self.root, "README.md", "side\n")
+        self.commit("side: work (Refs #20)", "2026-10-06T12:00:00Z")
+        git(self.root, "checkout", "-q", "main")
+        git(self.root, "merge", "-q", "--no-ff", "-m", "merge: side (Refs #21) (#22)", "side",
+            date="2026-10-07T12:00:00Z")
+        code, out = self.run_tool("2026-10")
+        self.assertNotIn("side: work", out)
+        self.assertIn("- merge: side, [#21](", out)
+
+    def test_each_subject_form_links_its_issue_or_else_its_pull_request(self):
+        base = "https://github.com/Vorski-Imagineering/gogogo"
+        self.assertEqual(changes.line("a (Refs #159, partial) (#183)"), f"- a, [#159]({base}/issues/159)")
+        self.assertEqual(changes.line("b (#5) (#7)"), f"- b, [#5]({base}/issues/5)")
+        self.assertEqual(changes.line("c (#9)"), f"- c, [#9]({base}/pull/9)")
+        self.assertEqual(changes.line("d"), "- d")
+
     def test_a_month_with_no_commits_says_so_and_fails(self):
         code, out = self.run_tool("2026-12")
         self.assertEqual(code, 1)

@@ -8,6 +8,7 @@ on:
     branches: [main]
 permissions:
   contents: write
+  issues: read
 jobs:
   tag:
     if: github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'push'

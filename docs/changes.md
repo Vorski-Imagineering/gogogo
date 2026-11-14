@@ -1,6 +1,6 @@
 # What changed in gogogo
 
-What changed in the plugin each month, newest first, grouped by what it means for a repo that uses it: new skills, settings to look at, changes to what the skills do, script fixes, and everything else. Read it when you update the plugin, to see what your next run will do differently. Each line links the issue it came from.
+What changed in the plugin each month, newest first, grouped by what it means for a repo that uses it: new skills, settings to look at, changes to what the skills do, script fixes, and everything else. Read it when you update the plugin, to see what your next run will do differently. Each line links the issue it came from, or its pull request when it names no issue; the earliest commits, made straight to `main`, link neither.
 
 Each month's section is drafted by `python3 tools/changes.py <YYYY-MM>` from `main`'s commits, then edited by hand, with a one-line summary above each group, and added at the top through a pull request.
 
@@ -11,22 +11,22 @@ Each month's section is drafted by `python3 tools/changes.py <YYYY-MM>` from `ma
 The first public release, and six skills added after it: roadmap, auto-test, status, idea, human-help and sentry-debug.
 
 - gogogo: first public release
-- roadmap: shared /gogogo:roadmap and roadmap_status.py (#5), [#7](https://github.com/Vorski-Imagineering/gogogo/pull/7)
-- auto-test: shared /gogogo:auto-test and record_outcome.py (#3), [#8](https://github.com/Vorski-Imagineering/gogogo/pull/8)
-- status: one read-only screen of where things stand (#6), [#37](https://github.com/Vorski-Imagineering/gogogo/pull/37)
-- idea: save a session's findings as an un-specced issue (#31), [#38](https://github.com/Vorski-Imagineering/gogogo/pull/38)
-- human-help: work the Human!Help! column (Refs #159, partial), [#183](https://github.com/Vorski-Imagineering/gogogo/pull/183)
+- roadmap: shared /gogogo:roadmap and roadmap_status.py, [#5](https://github.com/Vorski-Imagineering/gogogo/issues/5)
+- auto-test: shared /gogogo:auto-test and record_outcome.py, [#3](https://github.com/Vorski-Imagineering/gogogo/issues/3)
+- status: one read-only screen of where things stand, [#6](https://github.com/Vorski-Imagineering/gogogo/issues/6)
+- idea: save a session's findings as an un-specced issue, [#31](https://github.com/Vorski-Imagineering/gogogo/issues/31)
+- human-help: work the Human!Help! column, [#159](https://github.com/Vorski-Imagineering/gogogo/issues/159)
 - sentry-debug: a shared, read-only Sentry debugging and weekly-report skill, [#204](https://github.com/Vorski-Imagineering/gogogo/issues/204)
 
 ### Settings
 
 Settings a profile can now set or must look at: notifications, the Human!Help! column, the board queue, independence, where each issue's work goes, related repos and ship waits.
 
-- stage_sync.py: cards follow deploy tags; dev and auto-dev write the Ships-issue trailer (#4), [#9](https://github.com/Vorski-Imagineering/gogogo/pull/9)
-- release: one way to number, tag and describe a production release (#15), [#27](https://github.com/Vorski-Imagineering/gogogo/pull/27)
-- dev, auto-dev: a Human!Help! column for issues stopped and waiting for a person (#26), [#32](https://github.com/Vorski-Imagineering/gogogo/pull/32)
+- stage_sync.py: cards follow deploy tags; dev and auto-dev write the Ships-issue trailer, [#4](https://github.com/Vorski-Imagineering/gogogo/issues/4)
+- release: one way to number, tag and describe a production release, [#15](https://github.com/Vorski-Imagineering/gogogo/issues/15)
+- dev, auto-dev: a Human!Help! column for issues stopped and waiting for a person, [#26](https://github.com/Vorski-Imagineering/gogogo/issues/26)
 - The queue is a board column: drop label queues and the github-label tracker kind, [#35](https://github.com/Vorski-Imagineering/gogogo/pull/35)
-- notify: send auto-dev's messages by Telegram, and name the run's session (#30), [#39](https://github.com/Vorski-Imagineering/gogogo/pull/39)
+- notify: send auto-dev's messages by Telegram, and name the run's session, [#30](https://github.com/Vorski-Imagineering/gogogo/issues/30)
 - dev, auto-dev: judge review findings by evidence; review_stats.py, [#33](https://github.com/Vorski-Imagineering/gogogo/issues/33)
 - dev, auto-dev: compare the tests a change touched before it merges, [#58](https://github.com/Vorski-Imagineering/gogogo/issues/58)
 - dev, auto-dev: mutation-test the changed lines before merge, [#45](https://github.com/Vorski-Imagineering/gogogo/issues/45)
@@ -49,12 +49,12 @@ What the existing skills do differently: how setup, spec, dev and auto-dev read 
 
 - setup: two kanban views, and start and finish on a clean main, [#1](https://github.com/Vorski-Imagineering/gogogo/pull/1)
 - setup: a repo with no Hard Stops gets an interim list and an issue, [#2](https://github.com/Vorski-Imagineering/gogogo/pull/2)
-- setup: one standard colour for the ready label, and offer to fix a different one (#18), [#20](https://github.com/Vorski-Imagineering/gogogo/pull/20)
-- setup: start by printing the repo's setup and configuration (#12), [#23](https://github.com/Vorski-Imagineering/gogogo/pull/23)
-- tracker.py: views --hide-closed and tidy, ported from the stranded board-automation branch (#21), [#28](https://github.com/Vorski-Imagineering/gogogo/pull/28)
-- spec: a declined question offers explain, user impact, you decide or leave open; offer to move a ready card (#13), [#24](https://github.com/Vorski-Imagineering/gogogo/pull/24)
-- dev, auto-dev: two review rounds for prose only, code until clean; record rounds on the issue (#17), [#25](https://github.com/Vorski-Imagineering/gogogo/pull/25)
-- auto-dev: in a straight-to-production repo, merge each issue that clears every gate (#29), [#36](https://github.com/Vorski-Imagineering/gogogo/pull/36)
+- setup: one standard colour for the ready label, and offer to fix a different one, [#18](https://github.com/Vorski-Imagineering/gogogo/issues/18)
+- setup: start by printing the repo's setup and configuration, [#12](https://github.com/Vorski-Imagineering/gogogo/issues/12)
+- tracker.py: views --hide-closed and tidy, ported from the stranded board-automation branch, [#21](https://github.com/Vorski-Imagineering/gogogo/issues/21)
+- spec: a declined question offers explain, user impact, you decide or leave open; offer to move a ready card, [#13](https://github.com/Vorski-Imagineering/gogogo/issues/13)
+- dev, auto-dev: two review rounds for prose only, code until clean; record rounds on the issue, [#17](https://github.com/Vorski-Imagineering/gogogo/issues/17)
+- auto-dev: in a straight-to-production repo, merge each issue that clears every gate, [#29](https://github.com/Vorski-Imagineering/gogogo/issues/29)
 - spec: file the issue first when the user brings an idea, not an issue
 - verify_merged --open; dev and auto-dev name the issue with Refs #n, [#34](https://github.com/Vorski-Imagineering/gogogo/issues/34)
 - stranded_work: an open PR claims its branch; name the PR's fate, [#22](https://github.com/Vorski-Imagineering/gogogo/issues/22)
@@ -122,7 +122,7 @@ What the existing skills do differently: how setup, spec, dev and auto-dev read 
 
 Fixes and additions to the scripts the skills run, mostly spec_check, test_guard, stranded_work and worktree_sweep.
 
-- setup_check: warn on cards from another repo and closed cards in the queue (#11), [#19](https://github.com/Vorski-Imagineering/gogogo/pull/19)
+- setup_check: warn on cards from another repo and closed cards in the queue, [#11](https://github.com/Vorski-Imagineering/gogogo/issues/11)
 - stranded_work: the issue number in a branch name by status's rule, [#40](https://github.com/Vorski-Imagineering/gogogo/issues/40)
 - require_unattended: find the transcript by session id, from any folder, [#52](https://github.com/Vorski-Imagineering/gogogo/issues/52)
 - spec_check, spec_lint: bold-numbered items, and settings under Edit are not files, [#77](https://github.com/Vorski-Imagineering/gogogo/issues/77)

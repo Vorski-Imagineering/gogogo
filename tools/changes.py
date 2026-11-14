@@ -5,8 +5,9 @@
 
 Prints `## <Month YYYY>`, then the month's commits on the ref's first-parent
 line (by commit date), each as `- <subject>, [#<issue>](<link>)`: the subject
-without its `(Refs #N)` and trailing `(#PR)`, linked to the issue it names, or
-to its pull request when it names none. Each commit goes in the first group
+without its `(Refs #N, ...)` and trailing `(#PR)`, linked to the issue it names
+(`(Refs #N)`, or the older `(#issue) (#PR)`), or to its pull request when it
+names none. Each commit goes in the first group
 its changed paths fit: New skills (adds a skill's SKILL.md), Settings (changes
 profile-schema.md), Skill changes, Scripts, Other. Empty groups are left out.
 A month with no commits prints `no changes in <YYYY-MM>` and exits 1.
@@ -32,7 +33,7 @@ NEW_SKILL = re.compile(r"^plugins/gogogo/skills/[^/]+/SKILL\.md$")
 SCHEMA = "plugins/gogogo/references/profile-schema.md"
 SCRIPTS = "plugins/gogogo/scripts/"
 GROUPS = ("New skills", "Settings", "Skill changes", "Scripts", "Other")
-REFS = re.compile(r"\s*\(Refs #(\d+)\)")
+REFS = re.compile(r"\s*\(Refs #(\d+)[^)]*\)")
 PR = re.compile(r"\s*\(#(\d+)\)\s*$")
 
 
@@ -64,8 +65,14 @@ def group(paths: list[tuple[str, str]]) -> str:
 
 def line(subject: str) -> str:
     issue = REFS.search(subject)
-    pr = PR.search(subject)
-    text = PR.sub("", REFS.sub("", subject)).strip()
+    text = REFS.sub("", subject)
+    pr = PR.search(text)
+    text = PR.sub("", text)
+    if pr and not issue:
+        # The older form `<subject> (#issue) (#PR)`.
+        issue = PR.search(text)
+        text = PR.sub("", text)
+    text = text.strip()
     if issue:
         return f"- {text}, [#{issue.group(1)}]({REPO}/issues/{issue.group(1)})"
     if pr:

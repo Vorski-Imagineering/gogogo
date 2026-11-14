@@ -50,6 +50,9 @@ class ReleaseWorkflow(unittest.TestCase):
                         if "release.py --profile .agents/dev-process.md announce --tag" in s)
         self.assertGreater(announce, tag)
         self.assertRegex(steps[announce], r"GH_TOKEN:\s*\$\{\{\s*github\.token\s*\}\}")
+        # The notes carry issue titles, which the token reads only with issues: read.
+        permissions = self.text.split("\npermissions:", 1)[1].split("\njobs:", 1)[0]
+        self.assertRegex(permissions, r"\n\s+issues:\s*(read|write)")
 
     def test_the_profile_adopts_the_release_standard(self):
         settings, _ = pc.split_profile((ROOT / ".agents" / "dev-process.md").read_text(encoding="utf-8"))
