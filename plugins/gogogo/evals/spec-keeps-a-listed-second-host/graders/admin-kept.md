@@ -1,5 +1,5 @@
 ---
 type: regex
-pattern: '^\W*Admin link: keep\W*$'
-flags: im
+pattern: '^Admin link: keep\s*$'
+flags: m
 ---

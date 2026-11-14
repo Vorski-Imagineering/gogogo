@@ -1,5 +1,5 @@
 ---
 type: regex
-pattern: '^\W*Preview link: remove\W*$'
-flags: im
+pattern: '^Preview link: remove\s*$'
+flags: m
 ---
