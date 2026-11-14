@@ -1,6 +1,6 @@
 ---
 type: regex
-pattern: '\b(?:cp|copy|copies|copying)\b[^\n]*scratch[\s\S]*\brm\b'
+pattern: '^(?=[\s\S]*\b(?:cp|copy|copies|copying)\b)[\s\S]*scratch[\s\S]*\brm\b'
 flags: i
 weight: 3
 ---
