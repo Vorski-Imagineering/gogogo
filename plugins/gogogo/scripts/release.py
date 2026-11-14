@@ -47,7 +47,9 @@ HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
 try:
     import notify  # noqa: E402
-except ImportError:  # vendored without it: every command but announce's notify job still runs
+except ModuleNotFoundError as exc:  # vendored without it: every command but announce's notify job still runs
+    if exc.name != "notify":
+        raise
     notify = None
 import profile_check  # noqa: E402
 import stage_sync  # noqa: E402
@@ -299,9 +301,11 @@ def send(profile: stage_sync.Profile, event: dict) -> tuple[int, str]:
     if notify is None:
         raise RuntimeError("notify.py is not beside release.py")
     out, err = io.StringIO(), io.StringIO()
-    with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err), _stdin(json.dumps(event)):
-        code = notify.main(["--profile", str(profile.path), "send", "--event"])
-    sys.stderr.write(err.getvalue())
+    try:
+        with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err), _stdin(json.dumps(event)):
+            code = notify.main(["--profile", str(profile.path), "send", "--event"])
+    finally:
+        sys.stderr.write(err.getvalue())
     said = out.getvalue().strip()
     if code != 0 and not said:
         said = (err.getvalue().strip().splitlines() or [""])[-1]

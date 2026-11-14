@@ -246,6 +246,16 @@ class Vendored(unittest.TestCase):
                                  capture_output=True, text=True, timeout=60)
         self.assertEqual(run.returncode, 0, run.stderr)
 
+    def test_a_notify_that_fails_its_own_import_is_not_taken_as_missing(self):
+        with tempfile.TemporaryDirectory(prefix="release-vendored-") as tmp:
+            for name in ("release.py", "profile_check.py", "stage_sync.py", "tracker.py"):
+                (Path(tmp) / name).write_bytes((PLUGIN / "scripts" / name).read_bytes())
+            (Path(tmp) / "notify.py").write_text("from profile_check import NO_SUCH_NAME\n")
+            run = subprocess.run([sys.executable, str(Path(tmp) / "release.py"), "--help"],
+                                 capture_output=True, text=True, timeout=60)
+        self.assertNotEqual(run.returncode, 0)
+        self.assertIn("NO_SUCH_NAME", run.stderr)
+
 
 class Reference(unittest.TestCase):
     def test_versioning_reference_names_no_project(self):
@@ -538,6 +548,12 @@ class Announce(ReleaseRepo):
         with mock.patch.object(release, "send", lambda profile, event: (1, "boom")):
             code, lines, _ = self.announce(profile=self.messages_on())
         self.assertTrue(lines[2].startswith("notify: failed: boom;"), lines[2])
+        def raising(argv):
+            print("notify: credentials unread", file=sys.stderr)
+            raise OSError("disk gone")
+        with mock.patch.object(release.notify, "main", raising):
+            code, lines, err = self.announce(profile=self.messages_on())
+        self.assertIn("notify: credentials unread", err)
         self.send_error = "HTTP 401 Unauthorized"
         code, lines, _ = self.announce(profile=self.messages_on())
         self.assertTrue(lines[2].startswith("notify: failed: notify failed: HTTP 401 Unauthorized;"), lines[2])
