@@ -4,7 +4,7 @@ max_turns: 12
 allowed_tools: [Skill, Read, Glob, Grep]
 ---
 
-We use the gogogo docs process here, and it is time for its history mode. This is what happened in the period, from the records; the tip of `main` is now `f3b7d53`:
+We use the gogogo docs process here, and it is time for its history mode. This is what happened in the period, from the records; the tip of `main` is now `f3b7d53e8a41c09b7d2f5e6a1c3b8d904e7f2a61`:
 
 - 2026-11-02: #52 merged, status: one screen of where things stand.
 - 2026-11-04: #54 closed without merging, a first try at the idea skill that wrote to the wrong board.
