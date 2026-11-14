@@ -858,6 +858,9 @@ class Docs(unittest.TestCase):
                 errors, _ = pc.check(settings, sections, pc.DOCS)
                 self.assertTrue(any(e.startswith(f"{path}: empty") for e in errors), errors)
                 self.assertFalse([e for e in pc.check(settings, sections, pc.ONE)[0] if e.startswith("docs.")])
+        settings, sections = parse()
+        settings["docs"]["nav"] = ""
+        self.assertTrue(any(e.startswith("docs.nav: empty") for e in pc.check(settings, sections, pc.DOCS)[0]))
 
 
 class Sentry(unittest.TestCase):
