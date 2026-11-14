@@ -420,7 +420,8 @@ def fetch_items() -> list[dict]:
         page = graphql(ITEMS_QUERY, **variables)["repositoryOwner"]["projectV2"]["items"]
 
         total = page["totalCount"] if total is None else total
-        items.extend(page["nodes"])
+        seen = {i.get("id") for i in items}
+        items.extend(n for n in page["nodes"] if n.get("id") not in seen)  # a card moved mid-read, once
         pages += 1
 
         if not page["pageInfo"]["hasNextPage"]:
@@ -429,7 +430,9 @@ def fetch_items() -> list[dict]:
         if pages > 200:  # ~20k cards; a cursor that stopped advancing, in practice
             raise BoardError("pagination did not terminate — refusing to report a partial board")
 
-    if total is not None and len(items) != total:
+    # Fewer than the total is the short read; more is a card added mid-read, at
+    # the bottom of its column, which a top-first read reaches last.
+    if total is not None and len(items) < total:
         raise BoardError(
             f"read {len(items)} cards but the board reports {total}. "
             "This is the short read this script exists to catch — not an empty column."
