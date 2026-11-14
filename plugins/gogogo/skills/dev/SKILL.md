@@ -428,6 +428,9 @@ Write the body to a file and pass `--body-file`; inline `--body` mangles markdow
 - Write to anything `state.forbidden` lists, or to production data.
 - Report "fixed" on a green suite alone.
 - Chain a commit, push or merge on anything but the run's own exit status: output piped through a filter, or the `echo "exit=$?"` after it.
+- Delete, move or overwrite a file a script read or wrote in the same command as that script (`&&`, `;`, a pipe).
+  Run it, look at its output (a count, a diff, the file), not only its exit status, then delete.
+  Copy an input git does not track to the scratchpad first.
 - Commit, push, or open a PR unless asked (outside `auto-dev`).
 - Move a card ahead of the code, or to Done.
 
