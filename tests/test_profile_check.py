@@ -564,7 +564,8 @@ class Environments(unittest.TestCase):
         env = {"url": "https://a.example/", "other_urls": ["https://b.example", "https://a.example"]}
         self.assertEqual(pc.environment_urls(env), ["https://a.example", "https://b.example"])
         self.assertEqual(pc.environment_urls({}), [])
-        self.assertEqual(pc.environment_urls({"url": "https://a.example/X"}), ["https://a.example/X"])
+        self.assertEqual(pc.environment_urls({"url": "https://a.example/X", "other_urls": ["https://a.example/X"]}),
+                         ["https://a.example/X"])
         self.assertEqual(pc.environment_urls({"url": "https://a.example", "other_urls": "https://b.example"}),
                          ["https://a.example", "https://b.example"])
         self.assertEqual(pc.environment_urls({"url": "https://a.example", "other_urls": 5}), ["https://a.example"])

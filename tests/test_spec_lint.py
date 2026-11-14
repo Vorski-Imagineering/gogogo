@@ -186,7 +186,8 @@ class VerifyByHand(unittest.TestCase):
     def test_a_link_under_neither_address_names_both(self):
         body = GOOD.replace("https://app.example.org/holon/1708/", "the holon page")
         _, warns, _ = run(body, self.two_hosts())
-        self.assertTrue(any("no URL under https://app.example.org or https://admin.example.org (" in w
+        self.assertTrue(any(w.startswith("## Verify by hand: no URL under https://app.example.org or "
+                                         "https://admin.example.org (production, where a person confirms")
                             for w in warns), warns)
 
     def test_an_address_ending_a_sentence_is_under_it(self):
