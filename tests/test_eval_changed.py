@@ -11,6 +11,7 @@ return a given exit code, and records the arguments it was called with.
 import contextlib
 import io
 import json
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -192,6 +193,14 @@ class Lane(unittest.TestCase):
         rc, out = self.run_lane(["--skill", "dev"], code=1, base=self.base_run(0.33), result=self.failing())
         self.assertEqual((rc, len(self.calls)), (1, 1))
 
+    def test_a_base_run_with_one_errored_run_still_counts(self):
+        write(self.root, "plugins/gogogo/skills/dev/SKILL.md", "changed\n")
+        base = self.base_run(0.0)
+        base["cases"][0]["arms"] = {"with": [{"score": 0, "error": "timed out"}, {"score": 0, "error": None},
+                                             {"score": 0, "error": None}]}
+        rc, out = self.run_lane(result=self.failing(), code=1, base=base)
+        self.assertIn("evals: dev-third-attempt fails on main too", out)
+
     def test_a_base_run_whose_runs_errored_gives_no_result(self):
         write(self.root, "plugins/gogogo/skills/dev/SKILL.md", "changed\n")
         errored = self.base_run(0.0)
@@ -259,6 +268,7 @@ class Lane(unittest.TestCase):
         self.assertEqual([a[3:5] for a in removes], [["--force", "--force"]])
         tree = removes[0][-1]
         self.assertIn(f"evals: warning: could not remove the base worktree {tree}", out)
+        self.addCleanup(shutil.rmtree, Path(tree).parent, ignore_errors=True)
         self.assertTrue(Path(tree).is_dir(), "the tree git would not remove was deleted by hand")
         listed = real(["git", "worktree", "list"], cwd=self.root, capture_output=True, text=True).stdout
         self.assertEqual(len(listed.splitlines()), 2, listed)  # its entry is left, deleted by nobody's hand

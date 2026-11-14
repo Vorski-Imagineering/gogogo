@@ -23,7 +23,8 @@ at the fork point taken down afterwards, with the base's own plugin and cases:
 failing there too, it is an old failure, printed `evals: <name> fails on <base>
 too score=<s>; not this change`, and does not fail the lane; passing there
 (`passes on <base>`), or with no result there (`base re-run gave no result`),
-its failure stands. A case the base does not have is not re-run. It prints
+its failure stands, as it does when every run there errored. A case the base
+does not have, or whose folder this change edited, is not re-run. It prints
 `evals: cases=<n> passed=<n> base_failed=<k> cost=$<x>`, the cost including
 the re-runs, and exits 0 only when every case passed or failed on the base too.
 After that line it prints one line per case in the result,
@@ -131,14 +132,15 @@ def base_score(root: Path, fork: str, name: str) -> tuple[float | None, float]:
                           capture_output=True).returncode != 0:
             print(f"evals: warning: could not remove the base worktree {tree}; its entry is left")
         else:
-            parent.rmdir()
+            shutil.rmtree(parent, ignore_errors=True)  # git took the tree; what is left is this run's own
     if doc is None:
         return None, 0.0
     cost = float(doc.get("costUsd") or 0)
     for c in doc.get("cases") or []:
         if c.get("name") == name:
-            if any(r.get("error") for r in (c.get("arms") or {}).get("with") or []):
-                return None, cost  # a run that errored is no evidence the case fails there
+            runs = (c.get("arms") or {}).get("with") or []
+            if runs and all(r.get("error") for r in runs):
+                return None, cost  # no run finished: no evidence the case fails there
             score = (c.get("aggregates") or {}).get("score")
             return (None if score is None else float(score)), cost
     return None, cost

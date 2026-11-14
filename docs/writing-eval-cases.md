@@ -102,7 +102,9 @@ it fails there too, the lane prints `evals: <name> fails on <base> too
 score=<s>; not this change`, counts it in `base_failed`, and does not fail the
 change: the change did not cause it. Fix such a case in an issue of its own.
 When it passes on the base (`passes on <base>`), or the base run gives no
-result, its failure stands. A case the base does not have is not re-run.
+result (every run there errored, say), its failure stands. A case the base does
+not have, or one this change edited, is not re-run: the base never had it as it
+is now.
 
 Each run's own scores are in `aggregate-result.json` in the run's report folder
 under `plugins/gogogo/evals/results/` (not committed).
