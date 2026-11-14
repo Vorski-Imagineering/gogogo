@@ -23,7 +23,7 @@ at the fork point taken down afterwards, with the base's own plugin and cases:
 failing there too, it is an old failure, printed `evals: <name> fails on <base>
 too score=<s>; not this change`, and does not fail the lane; passing there
 (`passes on <base>`), or with no result there (`base re-run gave no result`),
-its failure stands, as it does when every run there errored. A case the base
+its failure stands, as it does when fewer than 2 runs there finished. A case the base
 does not have, or whose folder this change edited, is not re-run. It prints
 `evals: cases=<n> passed=<n> base_failed=<k> cost=$<x>`, the cost including
 the re-runs, and exits 0 only when every case passed or failed on the base too.
@@ -138,10 +138,11 @@ def base_score(root: Path, fork: str, name: str) -> tuple[float | None, float]:
     cost = float(doc.get("costUsd") or 0)
     for c in doc.get("cases") or []:
         if c.get("name") == name:
-            runs = (c.get("arms") or {}).get("with") or []
-            if runs and all(r.get("error") for r in runs):
-                return None, cost  # no run finished: no evidence the case fails there
             score = (c.get("aggregates") or {}).get("score")
+            runs = (c.get("arms") or {}).get("with") or []
+            finished = [float(r.get("score") or 0) for r in runs if not r.get("error")]
+            if runs:  # an errored run is no evidence; the gate needs 2 of 3 runs to decide
+                score = sum(finished) / len(finished) if len(finished) >= 2 else None
             return (None if score is None else float(score)), cost
     return None, cost
 

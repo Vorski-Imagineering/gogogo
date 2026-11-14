@@ -193,13 +193,35 @@ class Lane(unittest.TestCase):
         rc, out = self.run_lane(["--skill", "dev"], code=1, base=self.base_run(0.33), result=self.failing())
         self.assertEqual((rc, len(self.calls)), (1, 1))
 
-    def test_a_base_run_with_one_errored_run_still_counts(self):
+    def test_a_base_score_counts_only_the_runs_that_finished(self):
         write(self.root, "plugins/gogogo/skills/dev/SKILL.md", "changed\n")
-        base = self.base_run(0.0)
-        base["cases"][0]["arms"] = {"with": [{"score": 0, "error": "timed out"}, {"score": 0, "error": None},
-                                             {"score": 0, "error": None}]}
+        base = self.base_run(0.33)
+        base["cases"][0]["arms"] = {"with": [{"score": 0, "error": "timed out"}, {"score": 0.5, "error": None},
+                                             {"score": 0.5, "error": None}]}
         rc, out = self.run_lane(result=self.failing(), code=1, base=base)
-        self.assertIn("evals: dev-third-attempt fails on main too", out)
+        self.assertEqual(rc, 0, out)
+        self.assertIn("evals: dev-third-attempt fails on main too score=0.50", out)
+        base["cases"][0]["arms"] = {"with": [{"score": 1, "error": None}, {"score": 0, "error": "usage limit"},
+                                             {"score": 0, "error": "usage limit"}]}
+        rc, out = self.run_lane(result=self.failing(), code=1, base=base)
+        self.assertEqual(rc, 1, out)
+        self.assertIn("evals: dev-third-attempt base re-run gave no result", out)
+
+    def test_the_runs_own_folder_goes_once_git_takes_the_tree(self):
+        write(self.root, "plugins/gogogo/skills/dev/SKILL.md", "changed\n")
+        made = []
+        real_mkdtemp = tempfile.mkdtemp
+
+        def mkdtemp(*a, **kw):
+            if kw.get("prefix") != "evals-base-":
+                return real_mkdtemp(*a, **kw)
+            made.append(real_mkdtemp(dir=self.tmp.name, **kw))
+            Path(made[-1], "base.json.tmp").write_text("a side file the eval left")
+            return made[-1]
+        with mock.patch.object(eval_changed.tempfile, "mkdtemp", mkdtemp):
+            self.run_lane(result=self.failing(), code=1, base=self.base_run(0.33))
+        self.assertEqual(len(made), 1)
+        self.assertFalse(Path(made[0]).exists())
 
     def test_a_base_run_whose_runs_errored_gives_no_result(self):
         write(self.root, "plugins/gogogo/skills/dev/SKILL.md", "changed\n")
@@ -267,8 +289,8 @@ class Lane(unittest.TestCase):
             rc, out = self.run_lane(result=self.failing(), code=1, base=self.base_run(0.33))
         self.assertEqual([a[3:5] for a in removes], [["--force", "--force"]])
         tree = removes[0][-1]
-        self.assertIn(f"evals: warning: could not remove the base worktree {tree}", out)
         self.addCleanup(shutil.rmtree, Path(tree).parent, ignore_errors=True)
+        self.assertIn(f"evals: warning: could not remove the base worktree {tree}", out)
         self.assertTrue(Path(tree).is_dir(), "the tree git would not remove was deleted by hand")
         listed = real(["git", "worktree", "list"], cwd=self.root, capture_output=True, text=True).stdout
         self.assertEqual(len(listed.splitlines()), 2, listed)  # its entry is left, deleted by nobody's hand
