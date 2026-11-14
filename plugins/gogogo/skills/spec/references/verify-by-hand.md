@@ -18,7 +18,8 @@ Write it for someone who has not read the rest of the spec and never will:
 - **Name where to do it, and when.** The profile's `verify.human` names the
   environment where a person confirms a fix in this repo. Call it by the
   profile's name for it and give full clickable URLs under that environment's
-  `url`. The profile's `stages` say how a change gets there; if that is later
+  `url`, or under one of its `other_urls` when the steps are about what that
+  address serves. The profile's `stages` say how a change gets there; if that is later
   than the merge, say so in the first line ("Check this on production, after
   the next deploy"), so nobody looks for a fix that has not arrived.
 - **Use a real record.** The real id or slug of a record that actually

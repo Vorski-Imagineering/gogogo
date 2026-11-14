@@ -535,6 +535,43 @@ class Environments(unittest.TestCase):
             s["environments"][0]["roles"] = ["pre-merge"]
         self.assertEqual(self.check(mutate), [])
 
+    def full(self, mutate):
+        settings, sections = parse()
+        mutate(settings)
+        return pc.check(settings, sections)
+
+    def test_other_urls_is_accepted(self):
+        # gogogo#290: a second app on the same environment.
+        errors, warnings = self.full(lambda s: s["environments"][0].update(
+            other_urls=["https://admin.example.org", "http://plain.example.org"]))
+        self.assertEqual(errors, [])
+        self.assertFalse([w for w in warnings if "other_urls" in w], warnings)
+
+    def test_other_urls_must_be_a_list_of_addresses(self):
+        for bad in ("https://admin.example.org", [], ["admin.example.org"]):
+            errors, _ = self.full(lambda s, bad=bad: s["environments"][0].update(other_urls=bad))
+            self.assertIn("environments[0] (dev): other_urls must be a list of http(s) addresses", errors, bad)
+
+    def test_other_urls_repeating_url_warns(self):
+        errors, warnings = self.full(lambda s: s["environments"][0].update(other_urls=["https://dev.example.org/"]))
+        self.assertEqual(errors, [])
+        self.assertIn("environments[0] (dev): other_urls repeats url", warnings)
+        _, warnings = self.full(lambda s: s["environments"][0].update(
+            url="https://dev.example.org/X", other_urls=["https://dev.example.org/X/"]))
+        self.assertIn("environments[0] (dev): other_urls repeats url", warnings)
+
+    def test_environment_urls_keeps_order_and_drops_slashes_and_repeats(self):
+        env = {"url": "https://a.example/", "other_urls": ["https://b.example", "https://a.example"]}
+        self.assertEqual(pc.environment_urls(env), ["https://a.example", "https://b.example"])
+        self.assertEqual(pc.environment_urls({}), [])
+        self.assertEqual(pc.environment_urls({"url": "https://a.example/X", "other_urls": ["https://a.example/X"]}),
+                         ["https://a.example/X"])
+        self.assertEqual(pc.environment_urls({"url": "https://a.example", "other_urls": "https://b.example"}),
+                         ["https://a.example", "https://b.example"])
+        self.assertEqual(pc.environment_urls({"url": "https://a.example", "other_urls": 5}), ["https://a.example"])
+        self.assertEqual(pc.environment_urls({"url": "https://", "other_urls": ["https://[b.example", "https://c.example"]}),
+                         ["https://c.example"])
+
     def test_stage_must_name_a_known_environment(self):
         errors = self.check(lambda s: s["stages"][0].update(environment="staging"))
         self.assertIn("stages[0] (In Dev): environment 'staging' is not in environments", errors)

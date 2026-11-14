@@ -74,9 +74,9 @@ order, checking each step before starting the next:
      and products anyone would know as public;
    - hostnames and IP addresses, except inside a link the next rule keeps;
    - links, except into `tracker.issues_repo` or `tracker.code_repo`, under
-     an `environments` entry's `url` in the profile, or to a public product's
-     documentation or public project page. A shared, preview, signed or
-     secret link is removed wherever it points;
+     an `environments` entry's `url` or one of its `other_urls` in the profile,
+     or to a public product's documentation or public project page. A shared,
+     preview, signed or secret link is removed wherever it points;
    - anything that looks like a token or key, and email addresses;
    - people's names (use their role);
    - anything else not known to be safe to publish.
