@@ -520,6 +520,248 @@ class Last(unittest.TestCase):
             self.assertEqual(self.last(world, tmp)[0], 2)
 
 
+WALK = "20261111-1600-beef"
+RELATED = "example-org/client-repo"
+
+
+def walk_comment(d, n, verdict, env="production"):
+    (d / f"comment-{n}.md").write_text(
+        f"<!-- guided-review v1 run={WALK} issue={n} verdict={verdict} build=deploy-2 env={env} "
+        "skill=g-000000000000 -->\n## Guided review\n")
+
+
+WALK_SPEC = {**SPEC, "signals": "the stored row read back", "data": "None created.", "not_tested": "Nothing."}
+
+
+class Walk(unittest.TestCase):
+    """gogogo#263: /gogogo:guided-review's mode. Full outcome only where auto-test's would apply."""
+
+    def setUp(self):
+        self.tmp = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, self.tmp)
+        self.dir = run_dir(self.tmp)
+
+    def render(self, spec=WALK_SPEC, env="dev", repo="acme/issues", text=COMPLETE):
+        path = profile(self.tmp, text)
+        return call(FakeWorld(), "--profile", path, "render", self.dir, 7, "--walk", WALK, "--env", env,
+                    "--repo", repo, "--build", "deploy-2", "--model", "claude-test", stdin=json.dumps(spec))
+
+    def apply(self, world, verdict="PASS", env="production", repo="acme/issues", text=COMPLETE, **auto_test):
+        path = profile(self.tmp, text, **auto_test)
+        walk_comment(self.dir, 7, verdict, env)
+        return call(world, "--profile", path, "apply", self.dir, 7, verdict, "--walk", "--repo", repo)
+
+    def test_a_walk_never_claims_auto_tests_defaults(self):
+        code, _, err = self.render(SPEC)
+        self.assertEqual(code, 0, err)
+        comment = (self.dir / "comment-7.md").read_text()
+        for claim in ("no console errors", "None created", "Nothing."):
+            self.assertNotIn(claim, comment)
+        self.assertEqual(comment.count("Not recorded."), 2)
+
+    def test_a_walk_comment_mentions_nobody(self):
+        code, _, err = self.render({**WALK_SPEC, "mention": "someone"})
+        self.assertEqual(code, 2)
+        self.assertIn("mention", err)
+        self.assertFalse((self.dir / "comment-7.md").exists())
+
+    def test_walk_mode_needs_the_issues_repo(self):
+        path = profile(self.tmp)
+        code, _, err = call(FakeWorld(), "--profile", path, "render", self.dir, 7, "--walk", WALK, "--env", "dev",
+                            "--build", "deploy-2", "--model", "m", stdin=json.dumps(WALK_SPEC))
+        self.assertEqual(code, 2)
+        self.assertIn("--repo", err)
+        walk_comment(self.dir, 7, "PASS", "dev")
+        world = FakeWorld()
+        code, _, err = call(world, "--profile", path, "apply", self.dir, 7, "PASS", "--walk")
+        self.assertEqual((code, world.verbs()), (2, []))
+        self.assertIn("--repo", err)
+
+    def test_the_whole_walk_comment(self):
+        settings, sections = pc.split_profile(COMPLETE)
+        stamp = ro.walk_stamp(PLUGIN, sections["Test data"])
+        for verdict, extra, tail in (
+            ("PASS", {}, []),
+            ("FAIL", {"repro": "Open it.", "checks": [[*SPEC["checks"][0][:5], "❌"]]}, ["", "### Reproduce", "Open it."]),
+            ("NEEDS_HUMAN", {"human": "Look at it."}, ["", "### For the human tester", "Look at it."]),
+        ):
+            with self.subTest(verdict):
+                spec = {**WALK_SPEC, "verdict": verdict, **extra}
+                self.assertEqual(self.render(spec)[0], 0)
+                lines = (self.dir / "comment-7.md").read_text().split("\n")
+                self.assertEqual(lines[-1], "")
+                self.assertRegex(lines[16], rf"^\| Tester \| `guided-review` @ `{stamp}` \(.+\) · claude-test \|$")
+                self.assertRegex(lines[19], rf"^\| When \| finished \d{{4}}-\d{{2}}-\d{{2}} \d{{2}}:\d{{2}} UTC · walk `{WALK}` \|$")
+                row = " | ".join(spec["checks"][0])
+                self.assertEqual(lines[:16] + lines[17:19] + lines[20:-1], [
+                    f"<!-- guided-review v1 run={WALK} issue=7 verdict={verdict} build=deploy-2 env=dev skill={stamp} -->",
+                    f"## Guided review: {ro.VERDICTS[verdict]}", "", SPEC["summary"], "",
+                    "### Build tested", "| | |", "|---|---|", "| Environment | dev |", "| Running build | `deploy-2` |",
+                    f"| Change under test | {SPEC['commits'][0]} |", "| Kind | behaviour |", "",
+                    "### How it was tested", "| | |", "|---|---|",
+                    "| Account role | staff |",
+                    "| Method | A person checked each step on screen; the agent checked the system side |",
+                    "", "### Checks",
+                    "| # | Criterion | Source | Steps (route · action) | Expected | Observed | |",
+                    "|---|---|---|---|---|---|---|", f"| 1 | {row} |", "",
+                    "Signals: the stored row read back", "", "### Test data", "None created.", "",
+                    "### Not tested", "Nothing.", *tail])
+
+    def test_no_commits_and_a_build_with_a_newline(self):
+        path = profile(self.tmp)
+        code, _, err = call(FakeWorld(), "--profile", path, "render", self.dir, 7, "--walk", WALK, "--env", "dev",
+                            "--repo", "acme/issues", "--build", "deploy\n2", "--model", "m",
+                            stdin=json.dumps({**WALK_SPEC, "commits": []}))
+        self.assertEqual(code, 0, err)
+        comment = (self.dir / "comment-7.md").read_text()
+        self.assertIn("| Running build | `deploy 2` |", comment)
+        self.assertIn("| Change under test | none found |", comment)
+
+    def test_a_failed_or_open_walk_needs_its_section(self):
+        for verdict, key in (("FAIL", "repro"), ("NEEDS_HUMAN", "human")):
+            with self.subTest(verdict):
+                checks = [[*SPEC["checks"][0][:5], "❌" if verdict == "FAIL" else "⏭"]]
+                code, _, err = self.render({**WALK_SPEC, "verdict": verdict, "checks": checks})
+                self.assertEqual(code, 2)
+                self.assertIn(f"spec: {key} is missing", err)
+
+    def test_a_host_with_no_scheme_is_still_kept_out(self):
+        bare = COMPLETE.replace('url = "https://dev.example.org"', 'url = "dev.example.org"')
+        self.assertNotEqual(bare, COMPLETE)
+        check = [*SPEC["checks"][0][:4], "loaded dev.example.org/board", "✅"]
+        code, _, err = self.render({**WALK_SPEC, "checks": [check]}, text=bare)
+        self.assertEqual(code, 2)
+        self.assertIn("dev.example.org", err)
+
+    def test_version_prints_the_walk_stamp(self):
+        _, sections = pc.split_profile(COMPLETE)
+        code, out, _ = call(subprocess_run, "--profile", profile(self.tmp), "version", "--walk")
+        self.assertEqual((code, out.strip()), (0, ro.walk_stamp(PLUGIN, sections["Test data"])))
+
+    def test_a_walk_comment_is_not_auto_tests(self):
+        for verdict, extra in (("PASS", {}), ("FAIL", {"repro": "Open it.", "checks": [[*SPEC["checks"][0][:5], "❌"]]}),
+                               ("NEEDS_HUMAN", {"human": "Look at it."})):
+            with self.subTest(verdict=verdict):
+                code, _, err = self.render({**WALK_SPEC, "verdict": verdict, **extra})
+                self.assertEqual(code, 0, err)
+                comment = (self.dir / "comment-7.md").read_text()
+                first = comment.splitlines()[0]
+                self.assertTrue(first.startswith("<!-- guided-review v1 run=" + WALK + " issue=7 "), first)
+                self.assertIn(" env=dev ", first)
+                self.assertRegex(first, r" skill=g-[0-9a-f]{12} -->$")
+                self.assertIn("## Guided review:", comment)
+                self.assertNotIn("auto-test", comment)
+                self.assertNotIn("Card moved", comment)
+                self.assertIsNone(ro.parse_marker(first))
+
+    def test_another_repos_readers_are_a_public(self):
+        private = COMPLETE.replace("public = true", "public = false")
+        check = [*SPEC["checks"][0][:4], "loaded dev.example.org/board", "✅"]
+        code, _, err = self.render({**WALK_SPEC, "checks": [check]}, repo=RELATED, text=private)
+        self.assertEqual(code, 2)
+        self.assertIn("dev.example.org", err)
+        self.assertFalse((self.dir / "comment-7.md").exists())
+        self.assertEqual(self.render({**WALK_SPEC, "checks": [check]}, text=private)[0], 0)
+
+    def test_an_unknown_environment_or_one_without_a_url_is_refused(self):
+        no_url = COMPLETE.replace('url = "https://dev.example.org"\n', "")
+        self.assertNotEqual(no_url, COMPLETE)
+        for env, text in (("staging", COMPLETE), ("dev", no_url)):
+            with self.subTest(env=env):
+                code, _, err = self.render(env=env, text=text)
+                self.assertEqual(code, 2)
+                self.assertIn("--env", err)
+                self.assertFalse((self.dir / "comment-7.md").exists())
+
+    def test_on_the_confirming_environment_it_does_what_auto_test_does(self):
+        world = FakeWorld(labels={"test fail", "test needs human", "bug"})
+        code, _, err = self.apply(world)
+        self.assertEqual(code, 0, err)
+        self.assertEqual(world.verbs(), ["show", "state", "comment", "label-", "label-", "close", "move", "view"])
+        self.assertEqual((world.issue["state"], world.issue["column"]), ("CLOSED", "Done"))
+
+    def test_anywhere_else_it_comments_only(self):
+        for name, world, kw, verbs, reason in (
+            ("env", FakeWorld(), {"env": "dev"}, ["state", "comment", "comments"], "not the confirming environment"),
+            # gogogo#263: only an open issue of this repo waits on verify.human, so off it these say why not.
+            ("env closed", FakeWorld(state="CLOSED"), {"env": "dev"}, ["state", "comment", "comments"], "closed"),
+            ("env repo", FakeWorld(), {"env": "dev", "repo": RELATED}, ["comment", "comments"], "other repo"),
+            ("card", FakeWorld(column="In Dev"), {}, ["show", "comment", "comments"], f"card not in {COLUMN}"),
+            ("closed", FakeWorld(state="CLOSED"), {}, ["show", "state", "comment", "comments"], "closed"),
+            ("repo", FakeWorld(), {"repo": RELATED}, ["comment", "comments"], "other repo"),
+        ):
+            with self.subTest(name):
+                labels, state, column = set(world.issue["labels"]), world.issue["state"], world.issue["column"]
+                code, out, err = self.apply(world, **kw)
+                self.assertEqual(code, 0, err)
+                self.assertEqual(world.verbs(), verbs)
+                self.assertIn(f"#7: PASS recorded (comment only: {reason})", out)
+                self.assertEqual((world.issue["labels"], world.issue["state"], world.issue["column"]),
+                                 (labels, state, column))
+                self.assertEqual(len(world.issue["comments"]), 1)
+                repo = kw.get("repo", "acme/issues")
+                self.assertEqual([cmd for verb, cmd in world.calls if verb in ("comment", "comments")], [
+                    ["gh", "issue", "comment", "7", "--repo", repo, "--body-file", str(self.dir / "comment-7.md")],
+                    ["gh", "issue", "view", "7", "--repo", repo, "--json", "comments"]])
+
+    def test_a_state_not_read_stops_before_anything_is_written(self):
+        # Guards gogogo#263: off verify.human the reason needs the state, so an unread state posts nothing.
+        for kw in ({"env": "dev"}, {}):
+            for broken in ("exit", "not json"):
+                with self.subTest(broken, **kw):
+                    world = FakeWorld()
+                    if broken == "exit":
+                        world.fail["state"] = 1
+                    else:
+                        world.inert.add("state")
+                    code, _, err = self.apply(world, **kw)
+                    self.assertEqual(code, 2)
+                    self.assertIn("could not read the issue's state", err)
+                    self.assertEqual(world.issue["comments"], [])
+                    self.assertEqual([cmd for verb, cmd in world.calls if verb == "state"],
+                                     [["gh", "issue", "view", "7", "--repo", "acme/issues", "--json", "state"]])
+
+    def test_a_comment_not_read_back_stops(self):
+        for comments in ([], [{"body": "thanks!"}]):
+            with self.subTest(comments=comments):
+                world = FakeWorld(comments=comments)
+                world.inert.add("comment")
+                code, _, err = self.apply(world, env="dev")
+                self.assertEqual(code, 2)
+                self.assertIn("not recorded", err)
+
+    def test_the_two_markers_are_never_mixed(self):
+        marker_comment(self.dir, 7, "PASS")
+        world = FakeWorld()
+        code, _, _ = call(world, "--profile", profile(self.tmp), "apply", self.dir, 7, "PASS", "--walk")
+        self.assertEqual((code, world.verbs()), (2, []))
+        walk_comment(self.dir, 7, "PASS")
+        code, _, _ = call(world, "--profile", profile(self.tmp), "apply", self.dir, 7, "PASS")
+        self.assertEqual((code, world.verbs()), (2, []))
+
+    def test_last_reads_no_walk_marker(self):
+        self.assertEqual(self.render()[0], 0)
+        body = (self.dir / "comment-7.md").read_text()
+        code, out, _ = call(FakeWorld(comments=[{"body": body}]), "--profile", profile(self.tmp), "last", 7)
+        self.assertEqual((code, out.strip()), (0, "none"))
+
+    def test_the_walk_stamp_reads_the_walks_rules(self):
+        root = Path(self.tmp) / "plugin"
+        shutil.copytree(PLUGIN / "skills" / "auto-test", root / "skills" / "auto-test")
+        shutil.copytree(PLUGIN / "skills" / "guided-review", root / "skills" / "guided-review")
+        (root / "scripts").mkdir()
+        shutil.copy(PLUGIN / "scripts" / "record_outcome.py", root / "scripts" / "record_outcome.py")
+        data = "### Running build\nThe footer.\n"
+        self.assertRegex(ro.walk_stamp(root, data), r"^g-[0-9a-f]{12}$")
+        for name in ("gather-and-prepare.md", "walk-and-record.md"):
+            with self.subTest(name):
+                walk, test = ro.walk_stamp(root, data), ro.stamp(root, data)
+                ref = root / "skills" / "guided-review" / "references" / name
+                ref.write_bytes(ref.read_bytes() + b" ")
+                self.assertNotEqual(ro.walk_stamp(root, data), walk)
+                self.assertEqual(ro.stamp(root, data), test)
+
+
 def git(*args, cwd):
     return subprocess.run(["git", *args], cwd=cwd, check=True, capture_output=True, text=True).stdout.strip()
 

@@ -11,7 +11,7 @@ names are derived, then matched in the title file and the body file:
     `owner/name`, `owner` and `name`;
   - the `owner/name` of each git remote of the repo holding the profile;
   - the folder name of that repo and of its main worktree;
-  - the host of each `environments[].url`;
+  - the host of each `environments[].url` and `other_urls`;
   - each string in `publish.private_names`.
 
 The target's own names (`Vorski-Imagineering/gogogo` and its two parts) and any
@@ -83,9 +83,10 @@ def derive(settings, root):
     if first:
         found.append(Path(first[len("worktree "):]).name)
     for env in settings.get("environments") or []:
-        host = urlparse(env.get("url") or "").hostname if isinstance(env, dict) else None
-        if host:
-            found.append(host)
+        for url in profile_check.environment_urls(env) if isinstance(env, dict) else []:
+            host = urlparse(url).hostname
+            if host:
+                found.append(host)
     publish = settings.get("publish") if isinstance(settings.get("publish"), dict) else {}
     found += [n for n in publish.get("private_names") or [] if isinstance(n, str)]
     names, seen = [], set()

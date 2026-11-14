@@ -14,6 +14,7 @@ import re
 import subprocess
 import sys
 import tempfile
+import threading
 import unittest
 from pathlib import Path
 
@@ -204,6 +205,24 @@ class ReviewWait(unittest.TestCase):
         self.assertEqual(self.bash(self.blocks[1].replace("<agent>", str(agent))), "finished")
         self.assertEqual(self.bash(self.blocks[2].replace("<agent>", str(agent))), "ok")
 
+    def test_the_final_text_lands_before_the_read(self):
+        """gogogo#257: the final text reaches the transcript just after the state file says finished."""
+        def line(text):
+            return json.dumps({"message": {"role": "assistant", "content": [{"type": "text", "text": text}]}}) + "\n"
+        agent = self.tmp / "agent-a"
+        agent.with_name("agent-a.meta.json").write_text('{"finished":true}')
+        transcript = agent.with_name("agent-a.jsonl")
+        transcript.write_text(line("earlier remarks"))
+
+        def append_final():
+            with transcript.open("a", encoding="utf-8") as f:
+                f.write(line("the findings"))
+        late = threading.Timer(0.3, append_final)
+        late.start()
+        self.addCleanup(late.cancel)
+        self.assertEqual(self.bash(self.blocks[1].replace("<agent>", str(agent))), "finished")
+        self.assertEqual(self.bash(self.blocks[2].replace("<agent>", str(agent))), "the findings")
+
     def test_the_reader_prints_the_last_assistant_text(self):
         def line(role, content):
             return json.dumps({"message": {"role": role, "content": content}})
@@ -228,6 +247,15 @@ class Independence(unittest.TestCase):
             text = skill.read_text(encoding="utf-8")
             for name in ("independence", "Decided without asking"):
                 self.assertIn(name, text, f"{skill.parent.name}: {name}")
+
+
+class RelatedBlock(unittest.TestCase):
+    """The close report's RELATED paragraph names the block's two lines (gogogo#277)."""
+
+    def test_the_paragraph_names_waiting_there_and_waiting_here(self):
+        para = next(p for p in SKILL.read_text(encoding="utf-8").split("\n\n") if "RELATED  unreadable:" in p)
+        for line in ("`waiting there:`", "`waiting here:`"):
+            self.assertIn(line, para)
 
 
 class TakeWithFrom(unittest.TestCase):

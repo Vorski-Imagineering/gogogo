@@ -36,8 +36,9 @@ python3 "${CLAUDE_PLUGIN_ROOT}/scripts/human_help.py" list --json
 
 Exit 0 gives each card, oldest first: its number, title, `reason` (the stop
 reason, or `skip`, or `none`), its `needs_you` line, the `branch` it names,
-its `answers` (comments by someone with write access after the stop), and its
-`requeued` count for that same reason. Exit 2 means the board or an issue could
+its `answers` (comments by someone with write access after the stop, leaving
+out any with a line starting `<!-- gogogo:`), its `requeued` count for that
+same reason, and its open blockers, `blocked_by`. Exit 2 means the board or an issue could
 not be read: **stop and report it.** A failed read is never an empty column.
 
 Say the list in one line per card before working any of them: number, reason,
@@ -56,8 +57,15 @@ as moved meanwhile.
 
 For each card, in this order:
 
-1. **An answer already given settles the question.** Record it (see *Record
-   an answer*) and requeue, without asking.
+1. **An answer already given settles the question**, without asking. An
+   answer is a writer's comment after the stop with no gogogo marker (the
+   list's `answers`). In this order:
+   1. Record it (see *Record an answer*).
+   2. The card has an open blocker in the list's `blocked_by`: **Leave**, the
+      comment naming each blocker.
+   3. The answer says the remaining steps are a person's, or that the card
+      stays: **Leave**, the comment quoting the answer's line that says so.
+   4. Otherwise requeue.
 2. **Otherwise the reason decides**, by `references/reasons.md`. That file holds
    the rule for each reason. Read the one for this card's reason before acting.
 3. **A question goes to the person** with `AskUserQuestion`, one card per
@@ -65,10 +73,12 @@ For each card, in this order:
    sentence, the evidence (the commit, the survivor's line, the missing
    approval), and your recommendation. Each option says what changes for
    people. Name no files, flags or exit codes in the question.
-4. **A declined question** leaves the card where it is. Say so in the report and
-   go on to the next card.
+4. **A declined question** leaves the card where it is. This is not the
+   *Leave* outcome: nothing is posted. Say so in the report and go on to the
+   next card.
 5. **With no person to ask** (the question tool errors, or `claude -p`), every
-   card that needs a question stays in the column, and the run goes on.
+   card that needs a question stays in the column with nothing posted, as in
+   step 4, and the run goes on.
 
 A card's `requeued` count is at least 1 for the same reason it stopped on
 again: that is a question, never another requeue, so a loop cannot run forever.
@@ -89,8 +99,10 @@ Read the body, add the row, and write it back with `gh issue edit <n> --repo
 
 ## Outcomes
 
-Each outcome posts one comment on the issue saying what was done and why.
-Confirm every move by its exit status.
+Each outcome posts one comment on the issue saying what was done and why,
+with its own line `<!-- gogogo:human-help v=1 outcome=<requeue|close|backlog|respec|leave> -->`,
+so the next run never reads it as an answer. Confirm every move by its exit
+status.
 
 - **Requeue.** Run the lint on the body:
   ```bash
@@ -98,7 +110,8 @@ Confirm every move by its exit status.
   ```
   On `label: apply`: add `tracker.ready_marker`
   (`gh issue edit <n> --repo <issues_repo> --add-label "<ready_marker>"`),
-  post a comment whose own line is `<!-- gogogo:requeue v=1 reason=<reason> -->`,
+  post a comment whose own lines are `<!-- gogogo:requeue v=1 reason=<reason> -->`
+  and the human-help marker,
   then `tracker.py move <n> --from needs_human --to "<tracker.queue>"`.
   A lint failure: no label, no move. The card stays, and the report gives the
   lint's first error.
@@ -108,7 +121,8 @@ Confirm every move by its exit status.
 - **Back to Backlog.** Remove the ready label, then move the card to
   `Backlog`. Offered only when `tracker.py fields` shows a Backlog column.
 - **Re-spec.** Run `/gogogo:spec <n>` in this session, then requeue as above.
-- **Leave.** Nothing changes. The report says why.
+- **Leave.** Nothing else changes: post a comment saying what was left and
+  why, and the report says why too.
 
 Do not move any card into `tracker.columns.needs_human` yourself. The tracker
 refuses a move there unless the issue's newest comment carries a stop marker,

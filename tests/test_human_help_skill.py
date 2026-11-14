@@ -67,12 +67,18 @@ class SkillSize(unittest.TestCase):
         self.assertLessEqual(len(SKILL_MD.splitlines()), 500)
 
 
-
 class AuthorisedEffort(unittest.TestCase):
     def test_a_prose_card_is_not_recommended_keep_at_it(self):
         # gogogo#259: the question reads the review record's kind.
         part = SKILL_MD.split("\n## Authorised effort")[1].split("\n## ")[0]
         self.assertIn("kind=prose", part)
+
+
+class AnswerButBlocked(unittest.TestCase):
+    def test_step_1_reads_blockers_and_comments_carry_the_marker(self):
+        # gogogo#261 case 5
+        for name in ("blocked_by", "<!-- gogogo:human-help v=1 outcome="):
+            self.assertIn(name, SKILL_MD)
 
 
 if __name__ == "__main__":
