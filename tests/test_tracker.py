@@ -84,6 +84,17 @@ class ShortReadTests(unittest.TestCase):
                 board.fetch_items()
         self.assertIn("read 2 cards but the board reports 300", str(caught.exception))
 
+    def test_a_card_added_during_the_read_is_refused(self):
+        # gogogo#272 Approvals row 2: main's strict read stays; the run stops and the next one reads again.
+        pages = [
+            page([card(1, "a", "Dev Priority"), card(2, "b", "Dev Priority")], total=2, has_next=True),
+            page([card(3, "new", "Dev Priority")], total=3, has_next=False),
+        ]
+        with mock.patch.object(board, "graphql", side_effect=pages):
+            with self.assertRaises(board.BoardError) as caught:
+                board.fetch_items()
+        self.assertIn("does not reconcile", str(caught.exception))
+
     def test_a_complete_read_is_returned(self):
         pages = [
             page([card(1, "a", "Dev Priority")], total=2, has_next=True),
@@ -513,8 +524,9 @@ class IssueSideCrossCheckTests(unittest.TestCase):
             missing = board.cards_the_board_did_not_list([], board.DEFAULT_REPO)
         self.assertEqual([c["number"] for c in missing], [1, 2])
 
-    def test_list_puts_recovered_cards_where_the_queue_is_read_from(self):
-        """A recovered card is newest-added, so it belongs at the front."""
+    def test_list_puts_recovered_cards_last(self):
+        """Licensed rewrite (gogogo#272 Approvals row 1): a recovered card's place on the
+        board is unknown, so it comes after the cards the board listed, top first."""
         board_side = page([card(1, "old", "Dev Priority")], total=1)
         issue_side = issue_page([
             issue_node(1, "old", "Dev Priority"),
@@ -529,7 +541,18 @@ class IssueSideCrossCheckTests(unittest.TestCase):
             code = board.cmd_list(args)
         self.assertEqual(code, 0)
         payload = json.loads(printed.call_args_list[0].args[0])
-        self.assertEqual([c["number"] for c in payload], [412, 1])
+        self.assertEqual([c["number"] for c in payload], [1, 412])
+
+    def test_the_board_is_read_top_of_each_column_first(self):
+        # gogogo#272: the top of a column is the lowest position.
+        self.assertRegex(board.ITEMS_QUERY, r"orderBy: \{field: POSITION, direction: ASC\}")
+        args = Namespace(status=None, open_only=False, issues_only=False,
+                         json=True, repo=board.DEFAULT_REPO, no_crosscheck=True)
+        nodes = [card(30, "top", "Dev Priority"), card(12, "middle", "Dev Priority"), card(7, "bottom", "Dev Priority")]
+        with mock.patch.object(board, "graphql", side_effect=[page(nodes, total=3)]), \
+             mock.patch("builtins.print") as printed:
+            board.cmd_list(args)
+        self.assertEqual([c["number"] for c in json.loads(printed.call_args_list[0].args[0])], [30, 12, 7])
 
     def test_no_crosscheck_skips_the_second_read_entirely(self):
         board_side = page([card(1, "old", "Dev Priority")], total=1)

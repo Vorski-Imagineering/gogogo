@@ -367,7 +367,7 @@ query($org: String!, $number: Int!, $size: Int!, $after: String) {
     ... on ProjectV2Owner {
     projectV2(number: $number) {
       items(first: $size, after: $after,
-            orderBy: {field: POSITION, direction: DESC}) {
+            orderBy: {field: POSITION, direction: ASC}) {
         totalCount
         pageInfo { hasNextPage endCursor }
         nodes {
@@ -402,7 +402,7 @@ query($org: String!, $number: Int!, $size: Int!, $after: String) {
 
 
 def fetch_items() -> list[dict]:
-    """Every card on the board, newest-added first.
+    """Every card on the board, top of each column first.
 
     Raises rather than returns if the pages do not reconcile against
     `totalCount` — a short read and an empty column look identical otherwise,
@@ -432,7 +432,7 @@ def fetch_items() -> list[dict]:
     if total is not None and len(items) != total:
         raise BoardError(
             f"read {len(items)} cards but the board reports {total}. "
-            "This is the short read this script exists to catch — not an empty column."
+            "The read does not reconcile with the board's own count — not an empty column."
         )
     return items
 
@@ -717,13 +717,12 @@ def list_cards(
     total = len(cards)
 
     # The project side has finished answering; now ask the issues themselves.
-    # Recovered cards go to the front because they are newest-added, which is
-    # the end of the list the queue is taken from — and because a card the
-    # board could not name is the one a reader most needs to see.
+    # Recovered cards go last: the board did not list them, so their place in
+    # a column is unknown, and the queue is taken top first.
     recovered: list[dict] = []
     if crosscheck:
         recovered = cards_the_board_did_not_list(cards, repo)
-        cards = recovered + cards
+        cards = cards + recovered
     # Over the whole board, before any filter: a blocker's column is read from
     # its own card, wherever it sits.
     annotate_blockers(cards)
@@ -1275,7 +1274,7 @@ def main() -> int:
     parser.add_argument("--profile", help="profile file (default: the nearest .agents/dev-process.md above this folder)")
     subparsers = parser.add_subparsers(dest="command", required=True)
 
-    lister = subparsers.add_parser("list", help="cards on the board, newest-added first")
+    lister = subparsers.add_parser("list", help="cards on the board, top of each column first")
     lister.add_argument("--status", help='registry key or column name, e.g. in-dev or "Dev Ready"')
     lister.add_argument("--open-only", action="store_true", help="drop closed issues/PRs")
     lister.add_argument("--issues-only", action="store_true", help="drop drafts and PRs")

@@ -48,11 +48,11 @@ them in the same board read §1 already makes.
    no move, no marker and no `issue_skipped`; the ready label is kept, and
    rule 7 applies. In a run this rule, not `/gogogo:dev`'s blocked-issue
    question, decides the row.
-6. **Order**, when the user gave none:
-   - first, rows whose `blocking` list names an open issue, the row blocking
-     the most open issues first;
-   - then live user-facing bugs, refactors after, anything large last so it
-     cannot absorb the run.
+6. **Order**, when the user gave none: the list's own order, the top of the
+   column first, as the board shows it. A row rule 2 passes over is checked
+   again under rule 7. Cards the board did not list (`list` names them as
+   recovered from the issue side) are taken last, and the run report names
+   them in one line: `<n> card(s) the board did not list, taken last: #a, #b`.
 7. **Read again each time.** A row passed over as blocked is checked again
    every time §1's list is read in this run, and taken as soon as its
    blockers are out of the way: a blocker merged earlier in the same run
