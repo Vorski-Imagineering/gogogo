@@ -2,6 +2,15 @@
 
 Part of `/gogogo:auto-dev`. Read it in full. Section names and § numbers here are `SKILL.md`'s. `${CLAUDE_PLUGIN_ROOT}` below is not filled in for you: it is the plugin's folder, the one whose `scripts/` `SKILL.md` names in full.
 
+## Contents
+
+- Where the branch goes
+- Earlier work, and continuing on it
+- Taking the card
+- Branching from a fresh base
+- A worktree already there
+- A failed branch
+
 Where the branch goes is the profile's `integration.workspace` (preflight 2
 has already stopped a run whose profile leaves it unset while
 `## Lane constraints` mention a worktree):
@@ -33,7 +42,8 @@ the issue already has work:
   then **continue on it**, without asking. Check it out (`git switch <branch>`,
   or `git switch --track origin/<branch>` when it is only on `origin`; for
   `worktree`, `git worktree add <path> <branch>`, or
-  `git worktree add --track -b <branch> <path> origin/<branch>`), then
+  `git worktree add --track -b <branch> <path> origin/<branch>`; when
+  `<path>` already exists, see *A worktree already there* below), then
   `git merge origin/<integration.base>` (in `<path>` for `worktree`), never a
   rebase or a force push.
   Resolve a conflict as a code change. Push to that branch, and merge its
@@ -78,8 +88,31 @@ For `worktree`:
 git fetch origin && git worktree add -b fix/<issue-number>-<short-slug> <path> origin/<integration.base>
 ```
 
-A `<path>` that already exists (an earlier stopped run, say) is a failed
-branch, below: never reuse or delete it.
+### A worktree already there
+
+For `worktree`, when `<path>` already exists, it is the stopped run's
+worktree. Use it, with no `git worktree add`, only when every check
+holds, all read from the main worktree:
+
+1. `git worktree list --porcelain` has an entry for `<path>` whose
+   `branch` is `refs/heads/<the one candidate>` from `issue_work.py`.
+2. `git -C <path> status --porcelain` prints nothing.
+3. `origin/<branch>` exists after the fetch.
+4. `git -C <path> rev-list --left-right --count HEAD...origin/<branch>`
+   is `0 0` (the same), `0 <k>` (behind: run
+   `git -C <path> merge --ff-only origin/<branch>`), or `<k> 0` (ahead:
+   keep the commits; the run's first push carries them).
+
+Then go on as the continue path says, in `<path>`:
+`git merge origin/<integration.base>`, never a rebase or a force push.
+The run report names the worktree reused and which of `same`,
+`behind` or `ahead <k>` held.
+
+Any check failing is a failed branch, below, its message naming the
+check: `<path> holds <its branch>`, `<path> has uncommitted changes`,
+`origin/<branch> is gone`, or `<path> and origin/<branch> have both
+moved`. Never delete, reset or stash the worktree. A `<path>` with no
+candidate (exit 0) is a failed branch too.
 
 Always from a fresh base: the previous iteration merged into it, and branching
 from a stale one silently reverts that work in the squash. The branch name
