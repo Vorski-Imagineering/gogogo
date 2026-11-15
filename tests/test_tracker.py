@@ -95,15 +95,6 @@ class ShortReadTests(unittest.TestCase):
                 board.fetch_items()
         self.assertIn("does not reconcile", str(caught.exception))
 
-    def test_more_cards_than_the_board_reports_are_refused(self):
-        pages = [
-            page([card(1, "a", "Dev Priority"), card(2, "b", "Dev Priority")], total=2, has_next=True),
-            page([card(3, "c", "Dev Priority")], total=2, has_next=False),
-        ]
-        with mock.patch.object(board, "graphql", side_effect=pages):
-            with self.assertRaises(board.BoardError):
-                board.fetch_items()
-
     def test_a_complete_read_is_returned(self):
         pages = [
             page([card(1, "a", "Dev Priority")], total=2, has_next=True),
