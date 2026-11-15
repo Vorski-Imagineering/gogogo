@@ -295,6 +295,15 @@ class BeforeYouWrite(unittest.TestCase):
         before = "\n".join(section(skill_text(), BEFORE))
         return re.findall(r"^(\d+)\. (.*?)(?=^\d+\. |^\*\*REQUIRED|\Z)", before, re.M | re.S)
 
+    def test_step_five_names_the_trace(self):
+        # gogogo#304: a requirement traces to a person's words or an Approvals row.
+        steps = dict(self.before_steps())
+        self.assertIn("trace each requirement", steps["5"])
+        recon = (SKILL.parent / "references" / "recon.md").read_text(encoding="utf-8")
+        trace = recon.split("## Trace each requirement")[1].split("\n## ")[0]
+        for word in ("Not asked for:", "Approvals row"):
+            self.assertIn(word, trace)
+
     def test_building_section_directly_before_before_you_write(self):
         lines = skill_text().splitlines()
         heads = [i for i, line in enumerate(lines) if line.startswith(BUILDING)]
