@@ -314,6 +314,15 @@ class Workspace(unittest.TestCase):
             for word in ("integration.workspace", "git worktree add"):
                 self.assertIn(word, text, name)
 
+    def test_kept_worktree_checks(self):
+        # gogogo#302: a stopped issue's kept worktree is continued, after four checks.
+        text = BRANCH.read_text(encoding="utf-8")
+        kept = text.split("### A worktree already there")[1]
+        for word in ("git worktree list --porcelain", "status --porcelain", "--left-right --count",
+                     "--ff-only", "Never delete, reset or stash"):
+            self.assertIn(word, kept)
+        self.assertNotIn("never reuse or delete it", text)
+
     def test_auto_dev_preflight_reads_the_setting(self):
         preflight = section(SKILL.read_text(encoding="utf-8"), "Before anything: preflight")
         self.assertIn("integration.workspace", preflight)
