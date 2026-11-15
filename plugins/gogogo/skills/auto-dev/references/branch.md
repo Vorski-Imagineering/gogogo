@@ -99,8 +99,7 @@ holds, all read from the main worktree:
 2. `git -C <path> status --porcelain` prints nothing.
 3. `git ls-remote --exit-code origin refs/heads/<branch>` exits 0: the
    branch is on GitHub (a fetch keeps a deleted branch's `origin/<branch>`
-   unless it prunes). Exit 2 means it is gone; any other exit is a failed
-   branch with the command's own message.
+   unless it prunes). Exit 2 means it is gone.
 4. `git -C <path> rev-list --left-right --count HEAD...origin/<branch>`
    is `0 0` (the same), `0 <k>` (behind: run
    `git -C <path> merge --ff-only origin/<branch>`), or `<k> 0` (ahead:
@@ -113,8 +112,9 @@ The run report names the worktree reused and which of `same`,
 
 Any check failing is a failed branch, below, its message naming the
 check: `<path> holds <its branch>`, `<path> has uncommitted changes`,
-`origin/<branch> is gone`, or `<path> and origin/<branch> have both
-moved`. Never delete, reset or stash the worktree. A `<path>` with no
+`origin/<branch> is gone` (exit 2), `could not reach origin/<branch>:
+<its message>` (any other exit), or `<path> and origin/<branch> have
+both moved`. Never delete, reset or stash the worktree. A `<path>` with no
 candidate (exit 0) is a failed branch too.
 
 Always from a fresh base: the previous iteration merged into it, and branching
