@@ -186,6 +186,32 @@ class ProfileSkills(unittest.TestCase):
                     self.assertEqual([(r["level"], r["detail"], r["fix"]) for r in rep.rows if r["check"] == "docs"],
                                      [(level, detail, fix)])
 
+    def test_the_docs_row_offers_the_public_menu_and_tags(self):
+        # Guards gogogo#267: a public folder's SUMMARY.md and tags.yml are offered; a set one that is gone fails.
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "docs" / "public").mkdir(parents=True)
+            for name in ("README.md", "public/SUMMARY.md", "public/tags.yml"):
+                (root / "docs" / name).write_text("x")
+            for settings, level, detail in (
+                ({}, "INFO", "not set up: docs/ found, index docs/README.md, public docs/public, "
+                             "nav docs/public/SUMMARY.md, tags docs/public/tags.yml"),
+                ({"docs": {"public": "docs/public", "nav": "docs/public/SUMMARY.md", "tags": "docs/public/gone.yml"}},
+                 "FAIL", "tags names docs/public/gone.yml, which does not exist"),
+                ({"docs": {"public": "docs/public", "nav": "docs/public/GONE.md"}},
+                 "FAIL", "nav names docs/public/GONE.md, which does not exist"),
+                ({"docs": {"public": "docs/public", "nav": "docs/public/SUMMARY.md", "tags": "docs/public/tags.yml"}},
+                 "PASS", "docs, index none, public docs/public, nav docs/public/SUMMARY.md, tags docs/public/tags.yml"),
+                ({"docs": {"public": "docs/public", "nav": "docs/public/SUMMARY.md"}}, "PASS",
+                 "docs, index none, public docs/public, nav docs/public/SUMMARY.md, "
+                 "tags docs/public/tags.yml found, not set"),
+            ):
+                with self.subTest(settings=settings):
+                    rep = sc.Report()
+                    sc.check_docs(root, settings, rep)
+                    self.assertEqual([(r["level"], r["detail"]) for r in rep.rows if r["check"] == "docs"],
+                                     [(level, detail)])
+
     def test_the_docs_row_finds_an_index_md_or_nothing(self):
         # Guards gogogo#270: the index candidate is <dir>/README.md or <dir>/index.md; no docs/ says so.
         for files, detail in (({"docs/index.md": "x"}, "not set up: docs/ found, index docs/index.md, public none"),
@@ -202,7 +228,8 @@ class ProfileSkills(unittest.TestCase):
         # Guards gogogo#270: in a monorepo, [docs] paths are relative to the app holding the profile.
         from test_profile_check import COMPLETE
         root = repo({"apps/web/.agents/dev-process.md": COMPLETE, "apps/web/docs/README.md": "x",
-                     "apps/web/docs/public/p.md": "x"})
+                     "apps/web/docs/public/p.md": "x", "apps/web/docs/public/SUMMARY.md": "x",
+                     "apps/web/docs/public/tags.yml": "x"})
         quiet = ("check_git_state", "check_settings", "check_profile_skills", "check_workspace", "check_release_shape",
                  "check_release", "check_hard_stop_source", "check_tracker", "check_notify", "check_independence",
                  "check_local_skills", "check_claude_md", "check_session_hook", "config_header")
@@ -1252,6 +1279,15 @@ class BoardViews(unittest.TestCase):
         rep = self.check([view("Backlog", filt="-status:Done,Future"), READY])
         self.assertEqual([r["check"] for r in rep.rows], ["tracker: board views"])
         self.assertIn("newest first", rep.rows[0]["detail"])
+
+    def test_a_sorted_ready_view_warns_by_name(self):
+        # gogogo#272: a sorted queue view does not show the order auto-dev takes.
+        sorted_ready = view("Dev Ready", filt='label:"dev ready"', sort=(("Created", "DESC"),))
+        rep = self.check([BACKLOG, sorted_ready])
+        self.assertEqual([(r["level"], r["check"]) for r in rep.rows], [("WARN", "tracker: board views")])
+        self.assertIn("'Dev Ready' is sorted by Created", rep.rows[0]["detail"])
+        rep = self.check([BACKLOG, READY])
+        self.assertEqual([r["level"] for r in rep.rows], ["PASS"])
 
     def test_unreadable_views_say_so_and_views_never_fail(self):
         rep = self.check(None)

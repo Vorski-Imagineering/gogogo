@@ -636,15 +636,28 @@ def check_docs(root, settings, rep):
         public = sorted(str(p.relative_to(root)) for p in folder.rglob("public") if p.is_dir()) \
             if folder.is_dir() else []
         rep.info("docs", f"not set up: {'docs/ found' if folder.is_dir() else 'no docs/ folder'}, "
-                 f"index {index or 'none'}, public {public[0] if public else 'none'}")
+                 f"index {index or 'none'}, public {public[0] if public else 'none'}"
+                 + menu_and_tags(root, public[0] if public else None, {}))
         return
-    for key in ("dir", "index", "public"):
+    for key in ("dir", "index", "public", "nav", "tags"):
         value = docs.get(key)
         if isinstance(value, str) and value and not (Path(root) / value).exists():
             rep.fail("docs", f"{key} names {value}, which does not exist", "correct [docs] in the profile")
             return
     rep.ok("docs", f"{docs.get('dir', 'docs')}, index {docs.get('index') or 'none'}, "
-           f"public {docs.get('public') or 'none'}")
+           f"public {docs.get('public') or 'none'}" + menu_and_tags(root, docs.get("public"), docs))
+
+
+def menu_and_tags(root, public, docs):
+    """`, nav <path>` and `, tags <path>`: each as set, else the public folder's SUMMARY.md and
+    tags.yml when there, marked `found` when the table does not set it (gogogo#267)."""
+    out = ""
+    for key, name in (("nav", "SUMMARY.md"), ("tags", "tags.yml")):
+        if docs.get(key):
+            out += f", {key} {docs[key]}"
+        elif isinstance(public, str) and public and (Path(root) / public / name).is_file():
+            out += f", {key} {public}/{name}" + (" found, not set" if docs else "")
+    return out
 
 
 def check_independence(settings, rep):
@@ -779,6 +792,10 @@ def check_board_views(views, ready, stage_columns, rep):
     if ready and not queue:
         problems.append(f"no {ready!r} kanban: add a board-layout view filtered "
                         f"`is:open -status:{_status_list(['Done', 'Future', *stage_columns])} label:\"{ready}\"`")
+    for v in queue:
+        if v.get("sort"):
+            problems.append(f"'{v['name']}' is sorted by {v['sort'][0][0]}, so it does not show the order "
+                            "auto-dev takes; View → Sort by → none, then Save view")
     if problems:
         rep.warn("tracker: board views", "; ".join(problems))
     unlabelled = [v["name"] for v in boards if "Labels" not in (v.get("fields") or [])]
