@@ -72,7 +72,8 @@ For each card, in this order:
 3. **A question goes to the person** with `AskUserQuestion`, one card per
    question. Name `#<n>` in it, give the card's Needs-you line in one plain
    sentence, the evidence (the commit, the survivor's line, the missing
-   approval), and your recommendation. Each option says what changes for
+   approval), and your recommendation. Before the options, say the three lines
+   of `references/decision-questions.md` in this plugin. Each option says what changes for
    people. Name no files, flags or exit codes in the question.
 4. **A declined question** leaves the card where it is. This is not the
    *Leave* outcome: nothing is posted. Say so in the report and go on to the
