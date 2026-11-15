@@ -359,7 +359,7 @@ What each fix involves:
   - `INFO docs: not set up`: ask once with `AskUserQuestion`, naming what the
     row found:
     - **set it up with what was found** (recommended): write `[docs]` with
-      `dir`, plus `index` and `public` when the row found them;
+      `dir`, plus `index`, `public`, `nav` and `tags` when the row found them;
     - **use the defaults**: write `[docs]` with `dir = "docs"` only.
 
     Commit it like setup's other profile changes; a later setup run then does
