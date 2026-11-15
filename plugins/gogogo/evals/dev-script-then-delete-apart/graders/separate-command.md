@@ -1,5 +1,6 @@
 ---
 type: regex
-pattern: '^Removal: separate command\s*$'
+pattern: '^\W*Removal\W+separate command\W*$'
 flags: m
+weight: 3
 ---

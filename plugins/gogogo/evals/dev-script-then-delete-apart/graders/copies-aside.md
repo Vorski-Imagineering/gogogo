@@ -1,5 +1,5 @@
 ---
 type: regex
-pattern: '^Copy aside: yes\s*$'
+pattern: '^\W*Copy aside\W+yes\W*$'
 flags: m
 ---
