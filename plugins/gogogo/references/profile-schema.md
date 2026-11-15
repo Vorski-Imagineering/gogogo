@@ -144,6 +144,8 @@ no skill requires it; a skill that finds it uses it.
 | `docs.dir` | str | optional | Folder of the repo's docs. Optional; absent means docs. |
 | `docs.index` | str | optional | Page that links every doc in docs.dir. Optional; absent means no index check. |
 | `docs.public` | str | optional | Folder of the docs outsiders read. Optional; absent means no public-detail check. |
+| `docs.nav` | str | optional | Menu of the public docs, a Markdown list of links. Optional; needs docs.public; absent means no menu check. |
+| `docs.tags` | str | optional | Tags file of the public docs (vocabulary and pages). Optional; needs docs.public; absent means no tag check. |
 
 ### Lanes
 
@@ -401,12 +403,76 @@ shipped issue touched. The optional `[docs]` table says where they are:
 dir = "docs"              # absent: docs/, plus README.md at the root
 index = "docs/README.md"  # absent: no check that the index links every doc
 public = "docs/public"    # absent: no check for internal detail in public docs
+nav = "docs/public/SUMMARY.md"  # absent: no menu check; needs public
+tags = "docs/public/tags.yml"   # absent: no tag check; needs public
 ```
 
 Each key, when present, names a path from the repo root and may not be empty.
 The table is not an opt-in: a profile without it still passes `--for docs`, and
 the skill uses the defaults. `/gogogo:setup` offers to write it from what it
-finds. The nav and tags files of public docs (#267) will join this table.
+finds.
+
+**Public docs are for outsiders**: people using the product or adopting the
+repo. They hold no host names, infrastructure or credentials, which is what
+`docs_check.py`'s `public` check looks for. A doc written for both outsiders
+and the people working in the repo is split in two, one under `public`.
+
+**The menu** (`nav`) is a Markdown list of relative links, read from the menu's
+own folder, the `SUMMARY.md` form the mkdocs literate-nav plugin reads. Section
+lines without a link and nested lists are fine; a name with a space is written
+`%20`. Any other menu file is refused, never half-read. The check refuses a
+public page the menu leaves out or lists twice, an entry whose page is gone,
+and a first entry that is not the public folder's `README.md` or `index.md`.
+
+```markdown
+- [Home](README.md)
+- Guides
+    - [Getting started](getting-started.md)
+    - [Using the API](using%20the%20api.md)
+```
+
+**The tags file** (`tags`) is two top-level keys: `vocabulary`, the allowed
+tags, and `pages`, each page's tags, by path from the public folder. Comment
+and blank lines are skipped; any other line is refused, naming it. The check
+refuses a tag not in the vocabulary and a page that does not exist.
+
+```yaml
+vocabulary:
+  api: Using the API
+  setup: Installing and configuring
+pages:
+  getting-started.md: [setup]
+  using the api.md: [api, setup]
+```
+
+**A link that leaves the public folder** (`public-link`) is refused too, even
+when it resolves: the published site has only the public folder.
+
+**Checking public docs before merge.** No shared skill runs these checks
+before a merge; a repo adds them to its own merge checks. Copy
+`docs_check.py` and `profile_check.py`, which it imports, from one gogogo
+commit into the repo (as `references/stage-sync.md` § Vendoring copies
+scripts), then add a `gates.when` entry for the public folder, and the same
+command to the repo's CI:
+
+```toml
+[gates]
+when = { "docs/public/**" = ["python3 tools/gogogo/docs_check.py --public"] }
+```
+
+`--public` reads only the public folder, and runs only its checks (`public`,
+`nav`, `public-link`, `tags`), so an internal doc never blocks the merge.
+`${CLAUDE_PLUGIN_ROOT}` is not filled in inside a profile, which is why the
+command names the repo's own copy.
+
+**Docs that must change with code** are a `gates.when` entry too: the path that
+changes, and the command that regenerates or checks its doc. For example, a
+diagram regenerated from the models:
+
+```toml
+[gates]
+when = { "app/models/**" = ["python3 tools/diagrams.py --check docs/models.md"] }
+```
 
 ### Roadmap
 

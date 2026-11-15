@@ -35,6 +35,8 @@ default:
 | `docs.dir` | `docs`, plus `README.md` at the repo root |
 | `docs.index` | no check that an index links every doc |
 | `docs.public` | no check for internal detail in public docs |
+| `docs.nav` | no check of the public docs' menu (needs `docs.public`) |
+| `docs.tags` | no check of the public docs' tags (needs `docs.public`) |
 
 Docs under `docs.public` are read by outsiders (people using the product,
 people adopting the repo). Everything else is read by the developers and
@@ -45,8 +47,9 @@ agents working in the repo.
 `/gogogo:docs`, or `/gogogo:docs audit`.
 
 1. **The check first.** Run the check with `--json`. Exit 2 means it could not
-   check (no doc in scope, an unreadable profile, an index or public folder
-   that does not exist): report its line and stop. **Zero files read is a
+   check (no doc in scope, an unreadable profile, an index, public folder,
+   menu or tags file that does not exist, or a menu or tags file in a shape it
+   does not read): report its line and stop. **Zero files read is a
    failure, never "all clear".**
 2. **Then the claims.** For each file in scope, every sentence that names a
    script, setting, skill, command, flag or path is a claim. Read the code it
@@ -55,7 +58,8 @@ agents working in the repo.
    evidence either way is not reported: a guess is not a finding.
 3. **The report.** The counts first: files read, claims checked. Then one
    block per doc, `stale` findings first (wrong docs are the worst gap), then
-   the check's `link`, `index`, `path` and `public` findings. A doc with
+   the check's `link`, `index`, `path`, `public`, `nav`, `public-link` and
+   `tags` findings. A doc with
    nothing found is not listed.
 
 ## Filing

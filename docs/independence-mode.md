@@ -42,7 +42,9 @@ more.
   reply ends with a short list of them, so you can overturn any one. An
   unattended run lists its decisions in its report on the issue.
 - **Questions are put in plain words.** Each question opens with the real
-  case in one sentence, and each option says what changes for people. A
+  case in one sentence. In spec, human-help and wrap-up, a question asking you
+  to decide about a change or an issue then says what it is, how far its risk
+  reaches and its run time. Each option says what changes for people. A
   question does not name files, flags or exit codes.
 - **A question asking for your approval lists its edge cases.** Under the
   recommendation, at most four lines, each saying what could happen, how the

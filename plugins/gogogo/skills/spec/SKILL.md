@@ -165,8 +165,8 @@ asking until pre-post check question 1 answers *"none"*.
 - At `tech-lead` and `product-owner`, ask at most one round per issue. When the
   person answers against the recommendation, work out what follows from the
   answer yourself.
-- Every question opens with the real case in one plain sentence, and each
-  option says what changes for people. Name no files, flags or exit codes in a question.
+- Every question opens with the real case in one plain sentence, then the three lines of `references/decision-questions.md` in this plugin,
+  and each option says what changes for people. Name no files, flags or exit codes in a question.
 - An approval question also lists its edge cases and what stays unfixed, and is a sign-off or a go/no-go.
   **REQUIRED REFERENCE:** read `references/approval-questions.md` (in this
   skill's folder) before asking one.

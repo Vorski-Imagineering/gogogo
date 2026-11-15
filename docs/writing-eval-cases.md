@@ -59,6 +59,12 @@ plugins/gogogo/evals/<skill>-<what-it-checks>/
   prompt ask for a last line with fixed choices (`Next: stop` or
   `Next: attempt again`), grade that line, and also require wording only the
   skill gives; see `plugins/gogogo/evals/dev-authorised-until-clean/`.
+- A grader that would have to parse commands, paths or links out of the
+  answer asks for fixed-choice lines instead (for example `Copy aside: yes`
+  / `no`), like the negation rule above. Each new pattern for a free-text
+  command or path opens a new edge case in review; a fixed line has none.
+  Grade the fixed line, and keep one grader on wording only the skill
+  gives, as `plugins/gogogo/evals/dev-authorised-until-clean/` does.
 - A pattern in single quotes ends at its first lone `'`, and the case then
   does not load. Write a quote inside it as `\x27` (or `''`);
   `tests/test_eval_suite.py` refuses a lone one.
