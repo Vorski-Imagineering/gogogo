@@ -97,7 +97,9 @@ holds, all read from the main worktree:
 1. `git worktree list --porcelain` has an entry for `<path>` whose
    `branch` is `refs/heads/<the one candidate>` from `issue_work.py`.
 2. `git -C <path> status --porcelain` prints nothing.
-3. `origin/<branch>` exists after the fetch.
+3. `git ls-remote --exit-code origin refs/heads/<branch>` exits 0: the
+   branch is on GitHub (a fetch keeps a deleted branch's `origin/<branch>`
+   unless it prunes).
 4. `git -C <path> rev-list --left-right --count HEAD...origin/<branch>`
    is `0 0` (the same), `0 <k>` (behind: run
    `git -C <path> merge --ff-only origin/<branch>`), or `<k> 0` (ahead:
