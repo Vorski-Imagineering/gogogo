@@ -99,7 +99,8 @@ holds, all read from the main worktree:
 2. `git -C <path> status --porcelain` prints nothing.
 3. `git ls-remote --exit-code origin refs/heads/<branch>` exits 0: the
    branch is on GitHub (a fetch keeps a deleted branch's `origin/<branch>`
-   unless it prunes).
+   unless it prunes). Exit 2 means it is gone; any other exit is a failed
+   branch with the command's own message.
 4. `git -C <path> rev-list --left-right --count HEAD...origin/<branch>`
    is `0 0` (the same), `0 <k>` (behind: run
    `git -C <path> merge --ff-only origin/<branch>`), or `<k> 0` (ahead:
