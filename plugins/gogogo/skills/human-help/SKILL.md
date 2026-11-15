@@ -38,7 +38,8 @@ Exit 0 gives each card, oldest first: its number, title, `reason` (the stop
 reason, or `skip`, or `none`), its `needs_you` line, the `branch` it names,
 its `answers` (comments by someone with write access after the stop, leaving
 out any with a line starting `<!-- gogogo:`), its `requeued` count for that
-same reason, and its open blockers, `blocked_by`. Exit 2 means the board or an issue could
+same reason, the `kind` of its newest `<!-- gogogo:review … -->` record (or
+null), and its open blockers, `blocked_by`. Exit 2 means the board or an issue could
 not be read: **stop and report it.** A failed read is never an empty column.
 
 Say the list in one line per card before working any of them: number, reason,
@@ -137,7 +138,22 @@ effort, Fable, or Fable at high effort. This is always asked, at every
 `independence` level. It is never taken from a comment unless that comment
 says it in words, and it is never chosen without a person to answer.
 
-The answer is an Approvals row whose Chosen reads
+For a card stopped on `review` (any end but `reversal`) whose list `kind` is
+`prose` (its newest review record says `kind=prose`), the question still
+offers **keep at it until it succeeds**, but never as the recommendation. The
+recommended option is one more fix at the usual limit (`/gogogo:dev` review
+rule 7), checked by a person walking the page on a real environment through
+the issue's *Verify by hand* once it is merged. The option says it keeps any
+model and effort authorised earlier and drops `review=until-clean` when there
+is one. When `human_help.py authorised` (below) prints settings for the body,
+its answer is an Approvals row whose Chosen reads `authorised:` with the
+`model=` and `effort=` it printed, if any, and without `review=until-clean`;
+when it prints nothing, no `authorised:` row is written. The answer is
+recorded as any other is. Then requeue. The question says why in one plain
+sentence: a written page cannot be run, so reviewing it until clean tends to
+fix its own fixes.
+
+The answer to **keep at it** is an Approvals row whose Chosen reads
 `authorised: review=until-clean[ model=<m>][ effort=<e>]`, then requeue. The
 next run reads it with:
 
