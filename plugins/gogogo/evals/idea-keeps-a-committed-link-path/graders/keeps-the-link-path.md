@@ -1,6 +1,6 @@
 ---
 type: regex
-pattern: '^\W*Link path\W*:\W*keep\b(?!\s+or\s+remove)'
+pattern: '^[^A-Za-z\n]*Link path[^A-Za-z\n]+keep[^A-Za-z\n]*$'
 flags: im
 weight: 2
 ---
