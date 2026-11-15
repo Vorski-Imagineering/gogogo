@@ -11,8 +11,8 @@ things, one plain line each:
 2. **Where its risk reaches.** How far the change has got, or would get:
    not built yet; on a branch not yet merged; the pre-merge environment;
    production. Use the profile's names for its `environments`, and its
-   `reached_by` words for production, so the reach is the repo's own. A
-   repo with no profile gets the plain words above.
+   `reached_by` words for production, so the reach is the repo's own.
+   Where the profile does not say, use the plain words above.
 3. **Its run time.** What it adds to a run: a figure already measured (a
    test run, a run report, a review record), with where it came from;
    `adds no time`; or `not measured`. Never run anything to get a figure
