@@ -409,9 +409,8 @@ def fetch_items() -> list[dict]:
     and only one of them is a fact.
     """
     items: list[dict] = []
-    seen: set = set()
     cursor: str | None = None
-    first = total = 0
+    total: int | None = None
     pages = 0
 
     while True:
@@ -420,12 +419,8 @@ def fetch_items() -> list[dict]:
             variables["after"] = cursor
         page = graphql(ITEMS_QUERY, **variables)["repositoryOwner"]["projectV2"]["items"]
 
-        total = page["totalCount"]
-        first = total if pages == 0 else first
-        for node in page["nodes"]:
-            if node["id"] not in seen:  # a card dragged mid-read is read once
-                seen.add(node["id"])
-                items.append(node)
+        total = page["totalCount"] if total is None else total
+        items.extend(page["nodes"])
         pages += 1
 
         if not page["pageInfo"]["hasNextPage"]:
@@ -434,13 +429,10 @@ def fetch_items() -> list[dict]:
         if pages > 200:  # ~20k cards; a cursor that stopped advancing, in practice
             raise BoardError("pagination did not terminate — refusing to report a partial board")
 
-    # Only a card added mid-read explains a larger later count: read top first, it
-    # lands on the last page. Otherwise the first count stands.
-    expected = total if total > first else first
-    if len(items) != expected:
+    if total is not None and len(items) != total:
         raise BoardError(
-            f"read {len(items)} cards but the board reports {expected}. "
-            "The read does not reconcile with the board's own count — not an empty column."
+            f"read {len(items)} cards but the board reports {total}. "
+            "This is the short read this script exists to catch — not an empty column."
         )
     return items
 
