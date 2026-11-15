@@ -84,6 +84,26 @@ class ShortReadTests(unittest.TestCase):
                 board.fetch_items()
         self.assertIn("read 2 cards but the board reports 300", str(caught.exception))
 
+    def test_a_card_added_during_the_read_is_refused(self):
+        # gogogo#272 Approvals row 2: main's strict read stays; the run stops and the next one reads again.
+        pages = [
+            page([card(1, "a", "Dev Priority"), card(2, "b", "Dev Priority")], total=2, has_next=True),
+            page([card(3, "new", "Dev Priority")], total=3, has_next=False),
+        ]
+        with mock.patch.object(board, "graphql", side_effect=pages):
+            with self.assertRaises(board.BoardError) as caught:
+                board.fetch_items()
+        self.assertIn("does not reconcile", str(caught.exception))
+
+    def test_more_cards_than_the_board_reports_are_refused(self):
+        pages = [
+            page([card(1, "a", "Dev Priority"), card(2, "b", "Dev Priority")], total=2, has_next=True),
+            page([card(3, "c", "Dev Priority")], total=2, has_next=False),
+        ]
+        with mock.patch.object(board, "graphql", side_effect=pages):
+            with self.assertRaises(board.BoardError):
+                board.fetch_items()
+
     def test_a_complete_read_is_returned(self):
         pages = [
             page([card(1, "a", "Dev Priority")], total=2, has_next=True),

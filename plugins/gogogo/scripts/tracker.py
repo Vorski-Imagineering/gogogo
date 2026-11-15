@@ -432,7 +432,7 @@ def fetch_items() -> list[dict]:
     if total is not None and len(items) != total:
         raise BoardError(
             f"read {len(items)} cards but the board reports {total}. "
-            "This is the short read this script exists to catch — not an empty column."
+            "The read does not reconcile with the board's own count — not an empty column."
         )
     return items
 
