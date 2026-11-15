@@ -99,7 +99,7 @@ index = "docs/README.md"
 | **`CLAUDE_CODE_PLUGIN_DIRS` does not override** | It stopped taking effect on 2026-09-30 | Use `--plugin-dir` |
 | **`--plugin-dir` given the repo root** | It must name `<clone>/plugins/gogogo`. Given the repo root, a repo that installs the plugin silently loads the installed copy instead, and a trigger test measures the old text | The session's `init` lists the plugin's path under the clone, and the new skill's name |
 | **A profile setting nobody reads, or a skill reading a setting nobody defines** | The checker and the skills drift | `references/profile-schema.md` is checked against `profile_check.py` by a test; a skill naming a setting must find it there |
-| **Headless runs differ from interactive ones** | The transcript can lack `permissionMode`; skills load differently | Test both when a change touches preflight |
+| **Headless runs differ from interactive ones** | A transcript records `permissionMode` only when the mode changes, so any session, interactive or headless, that kept its launch mode has none; skills load differently | Test both when a change touches preflight |
 | **Mutation tools edit source files in place** | In the loaded tree that hands a broken script to another repo's run | Mutation runs only through `tools/mutate.py`, which works in a copy |
 | **A new eval case not in the suite's list** | `tests/test_eval_suite.py` lists every case in `CASES` exactly, so a spec that adds a case and does not list that file under Edit has its build read the edit as outside the spec | A spec that adds an eval case adds its name to `CASES` and lists `tests/test_eval_suite.py` under Edit |
 
