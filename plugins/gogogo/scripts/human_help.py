@@ -38,7 +38,7 @@ REQUEUE = re.compile(r"<!-- gogogo:requeue v=1 reason=([a-z-]+) -->")
 MARKED = re.compile(r"^\s*<!-- gogogo:", re.M)
 NEEDS_YOU = re.compile(r"^\*\*Needs you:\*\*\s*(.*)$", re.M)
 BRANCH = re.compile(r"/tree/([^\s)>\"]+)")
-REVIEW_KIND = re.compile(r"^\s*<!-- gogogo:review v=\d+ [^>]*?\bkind=([a-z]+)", re.M)
+REVIEW_KIND = re.compile(r"<!-- gogogo:review v=\d+ [^>]*?\bkind=([a-z]+)")
 WRITE_PERMISSIONS = {"admin", "maintain", "write"}
 
 MODELS = {"fable", "opus", "sonnet", "inherit"}

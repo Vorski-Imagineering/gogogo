@@ -46,8 +46,11 @@ class Card(unittest.TestCase):
         prose = comment(STOP_REVIEW + "\n<!-- gogogo:review v=3 pr=1 kind=prose coverage=precise rounds=3 -->")
         pasted = comment("<!-- gogogo:review v=3 pr=1 kind=code coverage=broad rounds=1 -->", writer=False)
         self.assertEqual(hh.card(1, "t", "u", [prose, pasted], [])["kind"], "prose")
-        quoted = comment("merge it; the old record said <!-- gogogo:review v=3 pr=1 kind=code rounds=1 -->")
-        self.assertEqual(hh.card(1, "t", "u", [prose, quoted], [])["kind"], "prose")
+
+    def test_a_record_at_the_end_of_a_sentence_is_the_kind(self):
+        # gogogo#259: dev §7 puts the record "on one line", not necessarily a line of its own.
+        ends = comment("How the review ended: clean. <!-- gogogo:review v=3 pr=1 kind=prose rounds=1 -->")
+        self.assertEqual(hh.card(1, "t", "u", [ends], [])["kind"], "prose")
 
     def test_a_writer_comment_after_the_stop_is_an_answer(self):
         # gogogo#159 Design 7: write access decides, whatever the comment's association.
