@@ -41,6 +41,12 @@ class Card(unittest.TestCase):
         self.assertEqual(hh.card(1, "t", "u", [older, newer], [])["kind"], "prose")
         self.assertIsNone(hh.card(1, "t", "u", [comment(STOP_REVIEW)], [])["kind"])
 
+    def test_a_record_in_a_comment_without_write_access_is_not_the_kind(self):
+        # gogogo#259: on a public tracker anyone can paste a record; only a writer's counts.
+        prose = comment(STOP_REVIEW + "\n<!-- gogogo:review v=3 pr=1 kind=prose coverage=precise rounds=3 -->")
+        pasted = comment("<!-- gogogo:review v=3 pr=1 kind=code coverage=broad rounds=1 -->", writer=False)
+        self.assertEqual(hh.card(1, "t", "u", [prose, pasted], [])["kind"], "prose")
+
     def test_a_writer_comment_after_the_stop_is_an_answer(self):
         # gogogo#159 Design 7: write access decides, whatever the comment's association.
         answer = dict(comment("merge it", True, "v2", "https://example/a"), association="NONE")

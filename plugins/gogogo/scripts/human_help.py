@@ -80,7 +80,7 @@ def card(number, title, url, comments, labels):
         if c.get("writer") is True and not MARKED.search(c["body"])
     ]
     requeued = sum(1 for c in comments if (m := REQUEUE.search(c["body"])) and m.group(1) == reason)
-    kinds = [m.group(1) for c in comments for m in REVIEW_KIND.finditer(c["body"])]
+    kinds = [m.group(1) for c in comments if c.get("writer") is True for m in REVIEW_KIND.finditer(c["body"])]
     return {
         "number": number,
         "title": title,
