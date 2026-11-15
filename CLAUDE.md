@@ -85,3 +85,6 @@ it; a one-line status is fine.
 A new file under `docs/` is listed in `docs/README.md` in the same PR, and a
 new skill gets its row in the README's skills table in the same PR;
 `tests/test_docs_index.py` checks both.
+
+At the start of each month, run `python3 tools/changes.py <YYYY-MM>` for the
+month just ended and add its section to the top of `docs/changes.md` through a PR.

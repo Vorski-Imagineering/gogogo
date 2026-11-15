@@ -147,6 +147,8 @@ evidence_command = "make evidence"
 dir = "docs"
 index = "docs/README.md"
 public = "docs/public"
+nav = "docs/public/SUMMARY.md"
+tags = "docs/public/tags.yml"
 +++
 
 # Process profile
@@ -849,13 +851,16 @@ class Docs(unittest.TestCase):
         self.assertNotIn(pc.DOCS, pc.OPT_IN)
         settings, sections = parse()
         self.assertEqual(pc.check(drop(settings, "docs"), sections, pc.DOCS), ([], []))
-        for path in ("docs.dir", "docs.index", "docs.public"):
+        for path in ("docs.dir", "docs.index", "docs.public", "docs.nav", "docs.tags"):
             with self.subTest(path):
                 settings, sections = parse()
                 settings["docs"][path.split(".")[1]] = " "
                 errors, _ = pc.check(settings, sections, pc.DOCS)
                 self.assertTrue(any(e.startswith(f"{path}: empty") for e in errors), errors)
                 self.assertFalse([e for e in pc.check(settings, sections, pc.ONE)[0] if e.startswith("docs.")])
+        settings, sections = parse()
+        settings["docs"]["nav"] = ""
+        self.assertTrue(any(e.startswith("docs.nav: empty") for e in pc.check(settings, sections, pc.DOCS)[0]))
 
 
 class Sentry(unittest.TestCase):

@@ -636,15 +636,28 @@ def check_docs(root, settings, rep):
         public = sorted(str(p.relative_to(root)) for p in folder.rglob("public") if p.is_dir()) \
             if folder.is_dir() else []
         rep.info("docs", f"not set up: {'docs/ found' if folder.is_dir() else 'no docs/ folder'}, "
-                 f"index {index or 'none'}, public {public[0] if public else 'none'}")
+                 f"index {index or 'none'}, public {public[0] if public else 'none'}"
+                 + menu_and_tags(root, public[0] if public else None, {}))
         return
-    for key in ("dir", "index", "public"):
+    for key in ("dir", "index", "public", "nav", "tags"):
         value = docs.get(key)
         if isinstance(value, str) and value and not (Path(root) / value).exists():
             rep.fail("docs", f"{key} names {value}, which does not exist", "correct [docs] in the profile")
             return
     rep.ok("docs", f"{docs.get('dir', 'docs')}, index {docs.get('index') or 'none'}, "
-           f"public {docs.get('public') or 'none'}")
+           f"public {docs.get('public') or 'none'}" + menu_and_tags(root, docs.get("public"), docs))
+
+
+def menu_and_tags(root, public, docs):
+    """`, nav <path>` and `, tags <path>`: each as set, else the public folder's SUMMARY.md and
+    tags.yml when there, marked `found` when the table does not set it (gogogo#267)."""
+    out = ""
+    for key, name in (("nav", "SUMMARY.md"), ("tags", "tags.yml")):
+        if docs.get(key):
+            out += f", {key} {docs[key]}"
+        elif isinstance(public, str) and public and (Path(root) / public / name).is_file():
+            out += f", {key} {public}/{name}" + (" found, not set" if docs else "")
+    return out
 
 
 def check_independence(settings, rep):
