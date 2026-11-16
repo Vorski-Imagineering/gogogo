@@ -148,11 +148,12 @@ Then the review, by these rules:
    security hole or lost data. The rule holds under `review=until-clean`.
 3. **Three attempts per finding.** From round 2, a finding that meets tests 1
    to 4 in what a correction changed is one of two kinds:
-   - **Again**: the correction does not meet the finding it was for (that
-     finding's own case still fails), or it brings back that finding's
-     original symptom. It is the next attempt at that finding.
+   - **Again**: the correction does not meet the finding it was for: that
+     finding's own case (the input it was raised on) still fails. It is the
+     next attempt at that finding.
    - **New**: the correction meets the finding it was for, and the round
-     found a different case in the lines the correction added or changed. It
+     found a different case (another input) in the lines the correction
+     added or changed, even when it shows the same symptom. It
      is a new finding with its own three attempts. When it would be test 3,
      it is applied only when its reach line names how a real user or run
      meets it, with evidence a reader can open (a `file:line`, a record, a
