@@ -472,7 +472,7 @@ and integration follow this skill and the repo's merge path. See the profile's
   `inherit` or absent. This session first places the work, and takes the card, as §4's first
   two bullets say (asking there when it asks); in an `/gogogo:auto-dev` run,
   auto-dev §3 has placed it, and that place is used. The prompt names the issue, that
-  worktree (or this folder), the body file and the authorisation line, and
+  worktree (or this folder), the body file, the authorisation line and the run's `--attempts` when given, and
   tells it to follow `/gogogo:dev` §3 to §6 exactly, in that place, leaving
   out §4's first two bullets; to run the review as `/code-review` from
   inside the subagent, so the review uses the same model and effort; to

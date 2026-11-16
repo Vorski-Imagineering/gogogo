@@ -193,8 +193,8 @@ Then the review, by these rules:
    the issue stops for a person, who decides.
 5. **Late findings.** From round 2, a finding about something no correction
    touched is declined as `late` and listed as a follow-up, unless it meets
-   test 2, 3 or 4, in which case it is a new finding with its own three
-   attempts.
+   test 2, 3 or 4, in which case it is a new finding with its own
+   attempts (rule 3).
 6. **A small addition that goes wrong is removed.** When a later round finds a
    defect in something applied as `added`, the addition is taken out and
    listed as a follow-up.
