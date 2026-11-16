@@ -86,7 +86,7 @@ or a Design item rests on one, find its source:
 
 A sentence an agent wrote into the issue (its *What is there today*, a
 filed follow-up, a summary of a wrap-up) is not a source on its own; the
-person's words it quotes, or says are theirs, are. A fact the code forces is not a requirement:
+person's words it quotes are. A fact the code forces is not a requirement:
 it needs a `file:line`, not a quote.
 
 A requirement with neither source is an inference. Leave it out of the
