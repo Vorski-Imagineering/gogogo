@@ -163,7 +163,9 @@ Decided on 2026-10-02 and specified in
    review looks only at the corrections, so a real defect there means a fix was
    wrong. The second attempt must say what the first got wrong and take a
    different approach. A real defect in the third attempt sends the issue to a
-   person, with the three attempts. A finding that would undo an earlier
+   person, with the three attempts. Only a defect that is the same failure
+   again counts as an attempt; a new case found in a fix's lines is a new
+   finding, fixed only with evidence that someone meets it. A finding that would undo an earlier
    correction is never applied a second time: the spec's reading stands, and
    where the spec is silent a person decides. This replaces #17's "no round
    limit" with a rule about what a round means; in practice a review ends in

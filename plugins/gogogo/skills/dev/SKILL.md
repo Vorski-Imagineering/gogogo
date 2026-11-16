@@ -343,11 +343,11 @@ Comment in the reporter's language, not the codebase's:
   `+<insertions> −<deletions>` (§5 rule 11). One line per round: how many
   findings were applied and how many declined, the most important applied
   finding in a few words, and the size after that round, written the same way.
-  A **Findings** table, `| Id | Round | Test | Recorded as | Re-fixes |`,
+  A **Findings** table, `| Id | Round | Test | Recorded as | Re-fixes | Kind |`,
   inside a `<details>` block when it has more than five rows: ids `F1`, `F2`,
   … in the order the findings were raised; *Test* is §5's table row (1 to 7)
   or `declined`; *Recorded as* is the word from that table; *Re-fixes* is the id of the finding whose correction this
-  one corrects (§5 rule 3), or `-`. **Added beyond the spec**, when anything was (§5 test 5).
+  one corrects (§5 rule 3), or `-`. *Kind* is `again` or `new` (§5 rule 3) when *Re-fixes* names a finding, and `-` otherwise. **Added beyond the spec**, when anything was (§5 test 5).
   **Declined**: one line per declined finding, by its id, with its reason word from §5's
   table, and, for a finding the reach line declined, the evidence that rules it out, inside a `<details>` block when there are more than five. The
   follow-ups. How the review ended (§5 rule 8). When §3 found that the bug
@@ -360,7 +360,7 @@ Comment in the reporter's language, not the codebase's:
   - `applied`, `declined` and `refix` have one number per round, in order.
     `refix` counts the applied findings that fixed an earlier correction (§5
     rule 3): a round's applied rows with an id under *Re-fixes*. Its first
-    number is always 0.
+    number is always 0. It counts both kinds.
   - `size` has `rounds + 1` entries, each `<insertions>+<deletions>`: `s0` is
     the change as round 1 read it, `sk` the change after round `k`'s
     corrections and cut (§5 rule 11).
