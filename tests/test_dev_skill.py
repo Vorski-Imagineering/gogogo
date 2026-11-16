@@ -241,7 +241,7 @@ class SpecWording(unittest.TestCase):
 
     def test_the_declined_line_quotes_the_spec(self):
         text = DEV.read_text(encoding="utf-8")
-        declined = text.split("**Declined**:")[1].split("\n  -")[0]
+        declined = text.split("**Declined**:")[1].split(" The\n  follow-ups.")[0]
         self.assertIn("quoted words", declined)
 
 
