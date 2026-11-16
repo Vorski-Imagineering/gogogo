@@ -1,5 +1,5 @@
 ---
 type: regex
-pattern: '^\W*File attachments\W*left out\b'
-flags: m
+pattern: '^[\W_]*File attachments[\W_]*left out(?![a-z])[^\n]*$(?![\s\S]*\S)'
+flags: im
 ---
