@@ -77,7 +77,9 @@ For each doc chosen:
 
 When `tracker.public` is true, re-read each body as `/gogogo:spec`'s Posting
 step 2 does (paths outside the checkout, outside names, hosts, links, tokens
-and emails) before posting it. Write each body to a file; never `--body`.
+and emails), except that a path with a link on it, as Posting step 2 finds
+one, is a path into another checkout and is removed even when this repo
+commits the link, before posting it. Write each body to a file; never `--body`.
 
 A decline, or no person to ask: file nothing and say so. The report stands on
 its own.
