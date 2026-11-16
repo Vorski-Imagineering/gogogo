@@ -23,7 +23,9 @@ sys.path.insert(0, str(ROOT / "plugins" / "gogogo" / "scripts"))
 import profile_check as pc  # noqa: E402
 
 CASES = {
-    "dev-third-attempt", "dev-reversal", "dev-unlicensed-weaker-test", "dev-guard-refuses-what-spec-says",
+    "dev-third-attempt", "dev-new-case-in-correction", "dev-new-case-needs-evidence", "dev-script-then-delete-apart",
+    "dev-finding-settled-by-spec", "dev-attempts-from-run",
+    "dev-reversal", "dev-unlicensed-weaker-test", "dev-guard-refuses-what-spec-says",
     "dev-round-checks-focused-tests", "dev-silent-review-restarts", "dev-mutate-key-not-read",
     "auto-dev-label-less-card", "human-help-question-states-reach", "spec-question-states-reach", "spec-inference-is-not-a-requirement", "wrap-up-question-states-reach", "auto-dev-continues-kept-worktree", "auto-dev-takes-board-order", "auto-dev-open-decision", "auto-dev-list-fails",
     "auto-dev-review-wait", "auto-dev-review-wait-no-goal", "auto-dev-review-wait-pauses",
@@ -36,6 +38,7 @@ CASES = {
     "dev-authorised-until-clean", "dev-authorised-model", "dev-correction-smallest-fix",
     "dev-reach-line-declines", "dev-reach-line-spares-security",
     "spec-declined-question", "spec-being-built", "spec-nothing-hits-today",
+    "spec-items-conflict", "dev-triage-items-conflict",
     "spec-no-argument-offers-new", "spec-pr-mentions-only",
     "spec-reverses-tested-behaviour", "spec-licenses-a-deleted-folder", "spec-unmet-precondition",
     "spec-public-tracker-reread", "spec-files-the-related-half", "spec-keeps-a-listed-second-host",
@@ -48,6 +51,7 @@ CASES = {
     "setup-connected-message", "setup-leaves-out-plugin-steps",
     "setup-machine-has-bot",
     "idea-files-upstream-checked",
+    "idea-keeps-a-committed-link-path",
     "auto-dev-sends-event-json",
     "auto-dev-resends-refused-event",
     "auto-dev-waits-until-shipped", "dev-shipped-ref-goes-to-queue", "dev-shipped-ref-without-link",

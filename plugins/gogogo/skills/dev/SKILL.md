@@ -63,7 +63,8 @@ python3 "${CLAUDE_PLUGIN_ROOT}/scripts/human_help.py" authorised <scratch>/issue
   (`review=until-clean`, `model=<m>`, `effort=<e>`, each only when given),
   from the newest `authorised:` row of `## Approvals`. Note that row's number
   for §7. `review=until-clean` changes the review's limits
-  (`references/review.md`); `model` or `effort` moves §3 to §6 into a
+  (`references/review.md`). Otherwise the review's attempt limit is the run's `--attempts`, the profile's
+  `review.attempts`, or 3 (`references/review.md` rule 3). `model` or `effort` moves §3 to §6 into a
   subagent (`## Claude-specific`).
 - Exit 2: the `authorised:` row cannot be read. Hand the issue back by §8
   with `reason=spec`, the Needs-you line naming that row and the script's
@@ -91,6 +92,9 @@ Stop and say so, rather than guessing, when the issue:
 - names an **open decision of a kind the profile's `independence` asks
   about** (§ *Who decides* in `/gogogo:spec`), not answered in the body;
 - needs a **Hard Stop** under the repo's rules with no recorded approval;
+- has two items that cannot both hold, certainly: from their own words, with no assumption about a device, timing, data or
+  environment. Read the body's items (`spec_check.py" items`) against each other first, and name the two ids. A pair that
+  needs such an assumption is noted in §7 instead, and the build goes on;
 - is a feature with no analysis pass. Those need a spec first, via
   `/gogogo:spec`, not an improvised implementation.
 
@@ -339,17 +343,17 @@ Comment in the reporter's language, not the codebase's:
 - **How it was verified**: which rungs ran, how many new tests went red, what
   the real run showed.
 - **How it was reviewed**: the kind (code, prose, or mixed: code with prose
-  files, §5 rule 7), the coverage, and the size before round 1 as
+  files, §5 rule 7), the coverage, the attempt limit and where it came from (`until-clean`, run, profile or default), and the size before round 1 as
   `+<insertions> −<deletions>` (§5 rule 11). One line per round: how many
   findings were applied and how many declined, the most important applied
   finding in a few words, and the size after that round, written the same way.
-  A **Findings** table, `| Id | Round | Test | Recorded as | Re-fixes |`,
+  A **Findings** table, `| Id | Round | Test | Recorded as | Re-fixes | Kind |`,
   inside a `<details>` block when it has more than five rows: ids `F1`, `F2`,
   … in the order the findings were raised; *Test* is §5's table row (1 to 7)
   or `declined`; *Recorded as* is the word from that table; *Re-fixes* is the id of the finding whose correction this
-  one corrects (§5 rule 3), or `-`. **Added beyond the spec**, when anything was (§5 test 5).
+  one corrects (§5 rule 3), or `-`. *Kind* is `again` or `new` (§5 rule 3) when *Re-fixes* names a finding, and `-` otherwise. **Added beyond the spec**, when anything was (§5 test 5).
   **Declined**: one line per declined finding, by its id, with its reason word from §5's
-  table, and, for a finding the reach line declined, the evidence that rules it out, inside a `<details>` block when there are more than five. The
+  table, and, for a finding the reach line declined, the evidence that rules it out, or for one the spec's own wording moved (§5), the item and its quoted words, inside a `<details>` block when there are more than five. The
   follow-ups. How the review ended (§5 rule 8). When §3 found that the bug
   this issue fixes was introduced by the change made for an earlier issue in
   this tracker, say so in one sentence. End the comment with the record on one
@@ -360,7 +364,7 @@ Comment in the reporter's language, not the codebase's:
   - `applied`, `declined` and `refix` have one number per round, in order.
     `refix` counts the applied findings that fixed an earlier correction (§5
     rule 3): a round's applied rows with an id under *Re-fixes*. Its first
-    number is always 0.
+    number is always 0. It counts both kinds.
   - `size` has `rounds + 1` entries, each `<insertions>+<deletions>`: `s0` is
     the change as round 1 read it, `sk` the change after round `k`'s
     corrections and cut (§5 rule 11).
@@ -428,6 +432,9 @@ Write the body to a file and pass `--body-file`; inline `--body` mangles markdow
 - Write to anything `state.forbidden` lists, or to production data.
 - Report "fixed" on a green suite alone.
 - Chain a commit, push or merge on anything but the run's own exit status: output piped through a filter, or the `echo "exit=$?"` after it.
+- Delete, move or overwrite a file a script read or wrote in the same command as that script (`&&`, `;`, a pipe).
+  Run it, look at its output (a count, a diff, the file), not only its exit status, then delete.
+  Copy an input git does not track to the scratchpad first.
 - Commit, push, or open a PR unless asked (outside `auto-dev`).
 - Move a card ahead of the code, or to Done.
 
@@ -465,7 +472,7 @@ and integration follow this skill and the repo's merge path. See the profile's
   `inherit` or absent. This session first places the work, and takes the card, as §4's first
   two bullets say (asking there when it asks); in an `/gogogo:auto-dev` run,
   auto-dev §3 has placed it, and that place is used. The prompt names the issue, that
-  worktree (or this folder), the body file and the authorisation line, and
+  worktree (or this folder), the body file, the authorisation line and the run's `--attempts` when given, and
   tells it to follow `/gogogo:dev` §3 to §6 exactly, in that place, leaving
   out §4's first two bullets; to run the review as `/code-review` from
   inside the subagent, so the review uses the same model and effort; to

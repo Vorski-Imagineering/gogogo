@@ -107,7 +107,21 @@ draft, and again on the whole draft after every change. Remove:
 
 - any path outside this checkout: absolute (`/Users/`, `/home/`, `/tmp/`,
   `/private/`, `C:\`), home-relative (`~/`), or into another checkout. A path
-  inside this checkout is written relative to its root, and is kept;
+  inside this checkout is written relative to its root, and is kept, unless
+  a link is on it. A link is on it when, run from the checkout root, for the path or one of
+  its leading folders (its `.` and `..` segments resolved first, without
+  following a link, and no `./` at the start or trailing slash), `test -L`
+  succeeds or `git -c core.quotePath=false --literal-pathspecs ls-files -s -z -- <that path>`
+  prints an entry for that exact name with mode `120000`. A path with a link
+  on it is a path into another checkout, except, when the target is
+  `tracker.issues_repo` (not an upstream filing to gogogo's tracker), one
+  where that same git read prints each such link with mode `120000`: a link
+  this repo commits. That path is kept, and
+  every segment of it still answers to the names rule below, for private
+  names; a folder under the link is not, by being there, from outside this
+  checkout. A path that leaves the checkout once its `..` segments are
+  resolved (without following a link) is a path into another checkout, even
+  through a link this repo commits;
 - every repo, project, client, product or folder name from outside this
   checkout, in any form (`owner/repo`, a bare name, a folder), except
   `tracker.issues_repo`, `tracker.code_repo`, and tools and products anyone

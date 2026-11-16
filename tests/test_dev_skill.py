@@ -196,6 +196,71 @@ class ReachLine(unittest.TestCase):
             self.assertNotIn("reach line", self.rows[row])
 
 
+class NewCaseInCorrection(unittest.TestCase):
+    """gogogo#296: a new case in a correction's lines is a new finding, not another attempt."""
+
+    def test_rule_3_names_both_kinds(self):
+        text = DEV_REVIEW.read_text(encoding="utf-8")
+        rule = text.split("\n3. **")[1].split("\n4. **")[0]
+        for name in ("**Again**", "**New**", "hypothetical"):
+            self.assertIn(name, rule)
+
+    def test_the_reach_line_points_at_rule_3(self):
+        text = DEV_REVIEW.read_text(encoding="utf-8")
+        paragraph = text.split("**The reach line.**")[1].split("\n3. **")[0]
+        self.assertIn("rule 3", paragraph)
+
+    def test_findings_table_has_a_kind_column(self):
+        text = DEV.read_text(encoding="utf-8")
+        self.assertIn("`| Id | Round | Test | Recorded as | Re-fixes | Kind |`", text)
+        refix = text.split("`refix` counts")[1].split("\n  - ")[0]
+        self.assertIn("both kinds", refix)
+
+
+class SpecWording(unittest.TestCase):
+    """gogogo#291: a bug finding about a rule is weighed against the spec's own words first."""
+
+    def paragraph(self):
+        text = DEV_REVIEW.read_text(encoding="utf-8")
+        return text.split("**The spec's own wording.**")[1].split("\n3. **")[0]
+
+    def test_the_paragraph_is_after_the_reach_line(self):
+        text = DEV_REVIEW.read_text(encoding="utf-8")
+        at = text.index("**The spec's own wording.**")
+        self.assertLess(text.index("**The reach line.**"), at)
+        self.assertLess(at, text.index("\n3. **"))
+
+    def test_it_names_its_tests(self):
+        for name in ("test 7", "settled", "test 5", "test 1, 2 or 4"):
+            self.assertIn(name, self.paragraph())
+
+    def test_the_brief_asks_for_the_spec_line(self):
+        text = DEV_REVIEW.read_text(encoding="utf-8")
+        rule = text.split("\n1. **")[1].split("\n2. **")[0]
+        self.assertIn("spec's line", rule)
+
+    def test_the_declined_line_quotes_the_spec(self):
+        text = DEV.read_text(encoding="utf-8")
+        rest = text.split("**Declined**:")[1]
+        self.assertRegex(rest, r"more than\s+five\.")
+        declined = re.split(r"more than\s+five\.", rest)[0]
+        self.assertIn("quoted words", declined)
+
+
+class AttemptLimit(unittest.TestCase):
+    """gogogo#294: the attempt limit comes from until-clean, the run, the profile, or 3."""
+
+    def test_rule_3_names_every_source(self):
+        rule = DEV_REVIEW.read_text(encoding="utf-8").split("\n3. **")[1].split("\n4. **")[0]
+        for name in ("review.attempts", "--attempts", "review=until-clean"):
+            self.assertIn(name, rule)
+
+    def test_the_report_names_the_limit(self):
+        text = DEV.read_text(encoding="utf-8")
+        reviewed = text.split("- **How it was reviewed**")[1].split("\n- **")[0]
+        self.assertIn("attempt limit", reviewed)
+
+
 class Excess(unittest.TestCase):
     """The review's table names only reasons review_stats.py counts, and the size is measured (gogogo#231)."""
 
@@ -225,6 +290,15 @@ class ShipWait(unittest.TestCase):
         case = hand_back.split("- **blocked by another issue**", 1)[1].split("\n- **stopped for a person**", 1)[0]
         self.assertIn("(shipped)", case)
         self.assertIn("taken once <B> ships", case)
+
+
+class ItemConflictTriage(unittest.TestCase):
+    def test_triage_reads_the_items(self):
+        """Guards the triage read of a spec's items against each other, by the same ids (gogogo#295 case 3)."""
+        text = DEV.read_text(encoding="utf-8")
+        triage = text[text.index("## 2. Triage"):text.index(FOLD)]
+        for part in ('spec_check.py" items', "certain"):
+            self.assertIn(part, triage)
 
 
 if __name__ == "__main__":
