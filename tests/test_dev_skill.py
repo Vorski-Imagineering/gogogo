@@ -241,7 +241,9 @@ class SpecWording(unittest.TestCase):
 
     def test_the_declined_line_quotes_the_spec(self):
         text = DEV.read_text(encoding="utf-8")
-        declined = text.split("**Declined**:")[1].split(" The\n  follow-ups.")[0]
+        rest = text.split("**Declined**:")[1]
+        self.assertRegex(rest, r"more than\s+five\.")
+        declined = re.split(r"more than\s+five\.", rest)[0]
         self.assertIn("quoted words", declined)
 
 
