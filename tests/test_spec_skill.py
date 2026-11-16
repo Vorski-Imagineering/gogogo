@@ -381,6 +381,20 @@ class BeforeYouWrite(unittest.TestCase):
             self.assertIn(part, park)
         self.assertNotIn("--add-label", park)
 
+    def test_park_offers_measure_first(self):
+        """Guards the third choice being dropped from the park question (gogogo#311 case 1)."""
+        park = (SKILL.parent / "references" / "park.md").read_text(encoding="utf-8")
+        rule = park[park.index("4. **The question**"):park.index("5. **The three lines**")]
+        self.assertIn("**spec a measure-first step**", rule)
+
+    def test_measure_first_rule_files_the_follow_up(self):
+        """Guards what a measure-first spec must hold (gogogo#311 case 2)."""
+        park = (SKILL.parent / "references" / "park.md").read_text(encoding="utf-8")
+        self.assertIn("11. **On measure first:**", park)
+        rule = park[park.index("11. **On measure first:**"):]
+        for part in ("time box", "comment", "follow-up issue"):
+            self.assertIn(part, rule)
+
     def test_claude_specific_names_web_search(self):
         self.assertIn("WebSearch", "\n".join(section(skill_text(), "## Claude-specific")))
 

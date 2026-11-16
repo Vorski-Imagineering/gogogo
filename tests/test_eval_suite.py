@@ -38,6 +38,7 @@ CASES = {
     "spec-declined-question", "spec-being-built", "spec-nothing-hits-today",
     "spec-no-argument-offers-new", "spec-pr-mentions-only",
     "spec-reverses-tested-behaviour", "spec-licenses-a-deleted-folder", "spec-unmet-precondition",
+    "spec-measure-first",
     "spec-public-tracker-reread", "spec-files-the-related-half", "spec-keeps-a-listed-second-host",
     "docs-history-counts-or-cuts", "docs-history-keeps-mistakes", "docs-history-starts-after-the-doc",
     "roadmap-shared-checkout", "roadmap-milestones-ask-first",

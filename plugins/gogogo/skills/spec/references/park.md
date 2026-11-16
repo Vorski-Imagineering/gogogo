@@ -2,13 +2,26 @@
 
 Part of `/gogogo:spec`. Read it in full. Section names and § numbers here are `SKILL.md`'s. `${CLAUDE_PLUGIN_ROOT}` below is not filled in for you: it is the plugin's folder, the one whose `scripts/` `SKILL.md` names in full.
 
+## Contents
+
+- 1–2. The triggers, and an idea not yet filed
+- 3–4. The column, and the question
+- 5–7. The three lines, park, and close
+- 8–11. Spec it anyway, a decline, a public tracker, and measure first
+
 *Before you write* § 6, item 4: the issue hits today, but cannot be acted on
 yet. It holds whatever recon found, a person's request included. In order:
 
 1. **The two triggers**, each named with its evidence:
    - its own text says it waits for something (another issue's result,
      evidence, a measurement), and recon finds it has not arrived: a link or
-     `file:line` for what was checked;
+     `file:line` for what was checked.
+     When what it waits for is only a measurement, say whether the agent can
+     take it: with what the repo already has (log points, an existing test or
+     scenario, a script, a record it can read), with no person's decision, no
+     other team's or vendor's release, no production data out of its reach,
+     and no new tool or paid service. Failures that real use has not produced
+     yet are not a measurement the agent can take;
    - every design that would work needs a part the issue's text did not name
      and the repo does not have (a client built from undocumented lower-level
      parts, a hand-written wire format, a dependency that does not cover the
@@ -29,6 +42,12 @@ yet. It holds whatever recon found, a person's request included. In order:
    it until <the precondition, in one line>** (first, marked recommended) or
    **spec it anyway**. It opens with the real case in one plain sentence and
    names the evidence.
+   When rule 1 found a measurement the agent can take, a third choice comes
+   first: **spec a measure-first step** (rule 11). It is the recommended one
+   when the issue is a person's own request, in their own words on record
+   (in this session, or in the issue's report as their request); otherwise
+   park stays recommended. For an idea not yet filed (rule 2), the same
+   third choice is offered, and the idea is filed when its spec is posted.
 5. **The three lines**, written to `<scratch>/park-<N>.md`:
    ```
    Parked before speccing: <the trigger and its evidence>.
@@ -85,3 +104,12 @@ yet. It holds whatever recon found, a person's request included. In order:
    says. The four-choice menu for a declined question is not used here.
 10. **When `tracker.public` is true**, the three lines name no path, repo,
     host or person from outside this repo.
+11. **On measure first:** the spec covers only the measurement, and says
+    so in `## Context`. Its Design names each number to take, how it is
+    taken (the existing means rule 1 found), and a time box (how many
+    runs, or how long). Its Design also holds two items: the build posts
+    the numbers on this issue as a comment (a table, with how each was
+    taken), and the build files a follow-up issue in
+    `<tracker.issues_repo>` holding the original need, the numbers and a
+    link back, and names it in its report. The original design is not
+    specced here; the follow-up is specced when it is filed.
