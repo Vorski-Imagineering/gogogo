@@ -320,7 +320,7 @@ rebased.
 | `/gogogo:human-help` | Works the Human!Help! column: for each card whose question an answer has settled, records the answer and requeues it; asks you one question per card that needs a decision; leaves the rest in the column with a reason. Never a Hard Stop without your answer. |
 | `/gogogo:idea` | Files what the session has found as an un-specced issue (request, findings, open questions), after showing you the draft. No further research; `/gogogo:spec` designs it later. When you name gogogo's own tracker, it files a suspected gogogo fault there, only after `name_check.py` finds none of this repo's names in the title and body. |
 | `/gogogo:dev` | One issue end to end: read, triage, find the cause, change, review, verify on real data, report, move the card. An issue you authorised through `/gogogo:human-help` is reviewed until it is clean, on the model and effort you named. |
-| `/gogogo:auto-dev` | Works the ready queue unattended, one issue after another, each on its own branch. Passes over a card GitHub marks as blocked by an open issue (or, when the card's spec marks that blocker `(shipped)`, one not yet in production), and takes blockers first. `--triage-only` reads the queue and changes nothing. |
+| `/gogogo:auto-dev` | Works the ready queue unattended, one issue after another, each on its own branch. Takes the queue top to bottom as the board shows it, and passes over a card GitHub marks as blocked by an open issue (or, when the card's spec marks that blocker `(shipped)`, one not yet in production). `--triage-only` reads the queue and changes nothing. |
 | `/gogogo:setup` | Opens with the repo's setup and configuration, then onboards it, or checks it is still set up right: plugin settings, profile, Hard Stops, board and columns, ready label, competing local skills. |
 | `/gogogo:wrap-up` | Before you close a session: finds anything uncommitted, unpushed, stranded or still running, saves what the session learned, and says plainly whether it is safe to close. |
 | `/gogogo:tech-eval` | Evaluates a library, service or tool against the repo before anyone adopts it, and records the verdict in the repo's decisions register. |
@@ -329,7 +329,7 @@ rebased.
 | `/gogogo:auto-test` | Tests each shipped issue on the environment where a person confirms fixes, and records PASS, FAIL or NEEDS HUMAN on the issue. `--triage-only` lists what it would test or skip and changes nothing. |
 | `/gogogo:guided-review` | Walks a person through several shipped issues, or a release, in one sitting: gathers their *Verify by hand* steps into one ordered walk, prepares the data, gives one link and one sentence per step, checks the system side, and records each issue's outcome. Needs auto-test set up. `--plan-only` prints the walk and changes nothing. |
 | `/gogogo:sentry-debug` | Read-only Sentry debugging and weekly report through the Sentry MCP, with each repo's org, projects and release format from its profile's `[sentry]` table. |
-| `/gogogo:docs` | Audits a repo's docs against its code and, on your yes, files one issue per out-of-date doc; `write <N>` updates the docs a shipped issue touched in a pull request it never merges. |
+| `/gogogo:docs` | Audits a repo's docs against its code and, on your yes, files one issue per out-of-date doc; `write <N>` updates the docs a shipped issue touched in a pull request it never merges; `history` adds what happened since its last run (or since the history doc last changed), every date, quote and number linked to its record, in a pull request it never merges. |
 
 A session started or resumed in a repo with a profile opens with a one-line
 status from the plugin's own hook (the repo's independence level, coloured in
@@ -341,7 +341,7 @@ Scripts the skills call, all in `plugins/gogogo/scripts/`:
 - `spec_lint.py`: checks a spec's layout, approvals and hard-stop verdict.
 - `test_guard.py`: lists the test hunks a change touched and checks a reader's same, stronger or weaker verdict on each against the spec.
 - `spec_check.py`: lists a spec's items and checks that a reader answered every one against the change.
-- `tracker.py`: lists and moves cards on a GitHub Project board, by column name, with read-back, and refuses a move to the needs-a-person column unless the issue's newest comment says why. Its `block` command sets GitHub's "blocked by" link between two issues and reads it back from the blocker's side; `list --json` and `show` give each issue's links.
+- `tracker.py`: lists (each column top first) and moves cards on a GitHub Project board, by column name, with read-back, and refuses a move to the needs-a-person column unless the issue's newest comment says why. Its `block` command sets GitHub's "blocked by" link between two issues and reads it back from the blocker's side; `list --json` and `show` give each issue's links.
 - `merge_ready.py`: reads a PR's state and prints one outcome (`ready`, `behind`, `draft`, `checks-failed` and so on), so dev and auto-dev decide a merge the same way. It only reads.
 - `verify_merged.py`: confirms a PR's merge is really on the base branch.
 - `stage_sync.py`: writes the `Ships-issue` link at merge, moves cards to a stage when a tag ships their commits (run by a repo's CI), and with `reverts` hands back a card whose shipped fix was reverted.

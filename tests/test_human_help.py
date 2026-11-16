@@ -34,6 +34,24 @@ class Card(unittest.TestCase):
                                          "https://github.com/o/r/tree/fix/140-x")
         self.assertEqual(c["branch"], "fix/140-x")
 
+    def test_the_newest_review_records_kind_is_listed(self):
+        # gogogo#259: human-help reads a prose card from the list, with no read of its own.
+        older = comment("<!-- gogogo:review v=3 pr=1 kind=code coverage=broad rounds=2 -->")
+        newer = comment(STOP_REVIEW + "\n<!-- gogogo:review v=3 pr=1 kind=prose coverage=precise rounds=3 -->")
+        self.assertEqual(hh.card(1, "t", "u", [older, newer], [])["kind"], "prose")
+        self.assertIsNone(hh.card(1, "t", "u", [comment(STOP_REVIEW)], [])["kind"])
+
+    def test_a_record_in_a_comment_without_write_access_is_not_the_kind(self):
+        # gogogo#259: on a public tracker anyone can paste a record; only a writer's counts.
+        prose = comment(STOP_REVIEW + "\n<!-- gogogo:review v=3 pr=1 kind=prose coverage=precise rounds=3 -->")
+        pasted = comment("<!-- gogogo:review v=3 pr=1 kind=code coverage=broad rounds=1 -->", writer=False)
+        self.assertEqual(hh.card(1, "t", "u", [prose, pasted], [])["kind"], "prose")
+
+    def test_a_record_at_the_end_of_a_sentence_is_the_kind(self):
+        # gogogo#259: dev §7 puts the record "on one line", not necessarily a line of its own.
+        ends = comment("How the review ended: clean. <!-- gogogo:review v=3 pr=1 kind=prose rounds=1 -->")
+        self.assertEqual(hh.card(1, "t", "u", [ends], [])["kind"], "prose")
+
     def test_a_writer_comment_after_the_stop_is_an_answer(self):
         # gogogo#159 Design 7: write access decides, whatever the comment's association.
         answer = dict(comment("merge it", True, "v2", "https://example/a"), association="NONE")
@@ -252,6 +270,10 @@ class Authorised(unittest.TestCase):
     def test_the_newer_of_two_rows_wins(self):
         got = hh.authorised(self.body("authorised: review=until-clean", "authorised: effort=max"))
         self.assertEqual(got, {"effort": "max"})
+
+    def test_a_bare_newer_row_withdraws_an_earlier_one(self):
+        # gogogo#259: the usual-limit answer for a prose card withdraws an earlier until-clean.
+        self.assertEqual(hh.authorised(self.body("authorised: review=until-clean", "authorised:")), {})
 
     def test_no_row_is_empty(self):
         self.assertEqual(hh.authorised(self.body("approved; named the skill")), {})

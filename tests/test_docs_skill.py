@@ -36,5 +36,19 @@ class SkillNamesWhatItDependsOn(unittest.TestCase):
             self.assertIn(path, pc.FIELDS)
 
 
+class HistoryMode(unittest.TestCase):
+    # gogogo#269: a history mode under evidence rules, in a reference of its own.
+    def test_names_the_mode_its_rules_and_its_marker(self):
+        body = SKILL.read_text(encoding="utf-8")
+        self.assertIn("/gogogo:docs history", body)
+        self.assertIn("references/history.md", body)
+        self.assertIn("<!-- history: through", body)
+
+    def test_its_rules_are_named_from_the_skill_alone(self):
+        self.assertTrue((SKILL.parent / "references" / "history.md").is_file())
+        # No other reference naming it is test_skill_budget's check.
+        self.assertIn("references/history.md", SKILL.read_text(encoding="utf-8"))
+
+
 if __name__ == "__main__":
     unittest.main()

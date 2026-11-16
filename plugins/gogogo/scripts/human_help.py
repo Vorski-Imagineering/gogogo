@@ -38,6 +38,7 @@ REQUEUE = re.compile(r"<!-- gogogo:requeue v=1 reason=([a-z-]+) -->")
 MARKED = re.compile(r"^\s*<!-- gogogo:", re.M)
 NEEDS_YOU = re.compile(r"^\*\*Needs you:\*\*\s*(.*)$", re.M)
 BRANCH = re.compile(r"/tree/([^\s)>\"]+)")
+REVIEW_KIND = re.compile(r"<!-- gogogo:review v=\d+ [^>]*?\bkind=([a-z]+)")
 WRITE_PERMISSIONS = {"admin", "maintain", "write"}
 
 MODELS = {"fable", "opus", "sonnet", "inherit"}
@@ -79,6 +80,7 @@ def card(number, title, url, comments, labels):
         if c.get("writer") is True and not MARKED.search(c["body"])
     ]
     requeued = sum(1 for c in comments if (m := REQUEUE.search(c["body"])) and m.group(1) == reason)
+    kinds = [m.group(1) for c in comments if c.get("writer") is True for m in REVIEW_KIND.finditer(c["body"])]
     return {
         "number": number,
         "title": title,
@@ -88,6 +90,7 @@ def card(number, title, url, comments, labels):
         "branch": branch.group(1) if branch else None,
         "answers": answers,
         "requeued": requeued,
+        "kind": kinds[-1] if kinds else None,
         "labels": labels,
     }
 
