@@ -440,7 +440,7 @@ three lines, so the person can overturn any.
 
 Read it as the implementing agent: no memory, no access to you.
 
-1. Any point where I must choose and have no basis?
+1. Any point where I must choose and have no basis? Two items that cannot both hold (**REQUIRED REFERENCE:** `references/item-conflicts.md`)?
    Is every decision the agent took of a kind the level does not ask about,
    and listed under *Decided without asking*?
 2. Every claim checkable at a `file:line`?

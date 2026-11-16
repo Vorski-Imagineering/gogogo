@@ -459,5 +459,31 @@ class ShipWait(unittest.TestCase):
         self.assertIn("`references/posting.md` step 7", sentence)
 
 
+class ItemConflicts(unittest.TestCase):
+    REF = SKILL.parent / "references" / "item-conflicts.md"
+
+    def test_the_reference_is_named_from_skill_md_only(self):
+        """Guards the pointer, and CLAUDE.md's rule that a reference is named from its own SKILL.md only (gogogo#295 case 1)."""
+        self.assertIn("references/item-conflicts.md", SKILL.read_text(encoding="utf-8"))
+        for other in SKILL.parent.glob("references/*.md"):
+            if other != self.REF:
+                self.assertNotIn("item-conflicts.md", other.read_text(encoding="utf-8"), other.name)
+
+    def test_the_reference_holds_the_pair_format(self):
+        """Guards the pair format, the item ids and that a fork is ruled out (gogogo#295 case 2)."""
+        text = self.REF.read_text(encoding="utf-8")
+        for part in ("<idA> | <idB> | <certain|possible> | <why> | <question>", 'spec_check.py" items', "fork"):
+            self.assertIn(part, text)
+
+
+class CommittedLink(unittest.TestCase):
+    def test_posting_keeps_a_path_through_a_committed_link(self):
+        # gogogo#262 case 2: the same rule as idea's step 3
+        text = POSTING.read_text(encoding="utf-8")
+        step = text[text.index("\n2. **Write the spec to the scratchpad**"):text.index("\n3. **Compose the body file**")]
+        for name in ("--literal-pathspecs ls-files -s -z --", "120000"):
+            self.assertIn(name, step)
+
+
 if __name__ == "__main__":
     unittest.main()

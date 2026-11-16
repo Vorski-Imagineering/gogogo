@@ -91,6 +91,9 @@ Stop and say so, rather than guessing, when the issue:
 - names an **open decision of a kind the profile's `independence` asks
   about** (§ *Who decides* in `/gogogo:spec`), not answered in the body;
 - needs a **Hard Stop** under the repo's rules with no recorded approval;
+- has two items that cannot both hold, certainly: from their own words, with no assumption about a device, timing, data or
+  environment. Read the body's items (`spec_check.py" items`) against each other first, and name the two ids. A pair that
+  needs such an assumption is noted in §7 instead, and the build goes on;
 - is a feature with no analysis pass. Those need a spec first, via
   `/gogogo:spec`, not an improvised implementation.
 
@@ -428,6 +431,9 @@ Write the body to a file and pass `--body-file`; inline `--body` mangles markdow
 - Write to anything `state.forbidden` lists, or to production data.
 - Report "fixed" on a green suite alone.
 - Chain a commit, push or merge on anything but the run's own exit status: output piped through a filter, or the `echo "exit=$?"` after it.
+- Delete, move or overwrite a file a script read or wrote in the same command as that script (`&&`, `;`, a pipe).
+  Run it, look at its output (a count, a diff, the file), not only its exit status, then delete.
+  Copy an input git does not track to the scratchpad first.
 - Commit, push, or open a PR unless asked (outside `auto-dev`).
 - Move a card ahead of the code, or to Done.
 
