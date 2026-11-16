@@ -63,7 +63,8 @@ python3 "${CLAUDE_PLUGIN_ROOT}/scripts/human_help.py" authorised <scratch>/issue
   (`review=until-clean`, `model=<m>`, `effort=<e>`, each only when given),
   from the newest `authorised:` row of `## Approvals`. Note that row's number
   for §7. `review=until-clean` changes the review's limits
-  (`references/review.md`); `model` or `effort` moves §3 to §6 into a
+  (`references/review.md`). Otherwise the review's attempt limit is the run's `--attempts`, the profile's
+  `review.attempts`, or 3 (`references/review.md` rule 3). `model` or `effort` moves §3 to §6 into a
   subagent (`## Claude-specific`).
 - Exit 2: the `authorised:` row cannot be read. Hand the issue back by §8
   with `reason=spec`, the Needs-you line naming that row and the script's
@@ -342,7 +343,7 @@ Comment in the reporter's language, not the codebase's:
 - **How it was verified**: which rungs ran, how many new tests went red, what
   the real run showed.
 - **How it was reviewed**: the kind (code, prose, or mixed: code with prose
-  files, §5 rule 7), the coverage, and the size before round 1 as
+  files, §5 rule 7), the coverage, the attempt limit and where it came from (`until-clean`, run, profile or default), and the size before round 1 as
   `+<insertions> −<deletions>` (§5 rule 11). One line per round: how many
   findings were applied and how many declined, the most important applied
   finding in a few words, and the size after that round, written the same way.

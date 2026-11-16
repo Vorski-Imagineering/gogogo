@@ -429,5 +429,13 @@ class ItemConflictSkip(unittest.TestCase):
         self.assertIn("cannot both hold", rows[0])
 
 
+class AttemptsArgument(unittest.TestCase):
+    def test_triage_only_prints_the_attempts(self):
+        """Guards the run's --attempts argument and the preview line (gogogo#294 case 7)."""
+        section = SKILL.read_text(encoding="utf-8").split("## Triage-only mode")[1].split("\n## ")[0]
+        for part in ("--attempts", "attempts: <n> (from run|profile|default)"):
+            self.assertIn(part, section)
+
+
 if __name__ == "__main__":
     unittest.main()

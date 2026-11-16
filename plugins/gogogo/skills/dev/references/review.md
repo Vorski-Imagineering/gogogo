@@ -7,7 +7,7 @@ Part of `/gogogo:dev`. Read it in full. Section names and § numbers here are `S
 - First, the change against its spec
 - A round
 - Which findings are applied
-- Three attempts per finding
+- Attempts per finding
 - No flip-flops
 - Late findings
 - A small addition that goes wrong is removed
@@ -159,7 +159,7 @@ Then the review, by these rules:
    item and quotes its words. A finding that also meets test 1, 2 or 4 is
    never moved by this. It applies to a new finding in a correction (rule 3)
    too.
-3. **Three attempts per finding.** From round 2, a finding that meets tests 1
+3. **Attempts per finding.** From round 2, a finding that meets tests 1
    to 4 in what a correction changed is one of two kinds:
    - **Again**: the correction does not meet the finding it was for: that
      finding's own case (the input it was raised on) still fails. It is the
@@ -167,7 +167,7 @@ Then the review, by these rules:
    - **New**: the correction meets the finding it was for, and the round
      found a different case (another input) in the lines the correction
      added or changed, even when it shows the same symptom. It
-     is a new finding with its own three attempts. When it would be test 3,
+     is a new finding with its own attempts. When it would be test 3,
      it is applied only when its reach line names how a real user or run
      meets it, with evidence a reader can open (a `file:line`, a record, a
      device, browser or input the repo documents as supported); otherwise it
@@ -176,10 +176,13 @@ Then the review, by these rules:
    When the round cannot tell which kind, it is again. The second attempt
    says what the first got wrong and is smaller than the first: it takes out
    or narrows what the first attempt added, and only when no smaller fix
-   meets the finding does it take a different approach. Never a patch on the patch. A third attempt does the
-   same. When a round finds an *again* defect in the third attempt, the issue
-   stops for a person, with the three attempts and what each got wrong in the
-   report. Under `review=until-clean` (`/gogogo:dev` §1) there is no attempt
+   meets the finding does it take a different approach. Never a patch on the patch. Each later attempt does the
+   same. When a round finds an *again* defect in the last attempt the limit
+   allows, the issue stops for a person, with the attempts and what each got
+   wrong in the report. The limit is, first that applies: no limit under
+   `review=until-clean`; the number an `/gogogo:auto-dev` run was started with
+   (`--attempts <n>`); the profile's `review.attempts`; 3. Rule 7's prose
+   limit and rule 8's breaker do not change with it. Under `review=until-clean` (`/gogogo:dev` §1) there is no attempt
    limit: each attempt still says what the last got wrong and takes a
    different approach.
 4. **No flip-flops.** A finding that would undo a correction made in an

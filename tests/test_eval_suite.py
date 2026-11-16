@@ -24,7 +24,7 @@ import profile_check as pc  # noqa: E402
 
 CASES = {
     "dev-third-attempt", "dev-new-case-in-correction", "dev-new-case-needs-evidence", "dev-script-then-delete-apart",
-    "dev-finding-settled-by-spec",
+    "dev-finding-settled-by-spec", "dev-attempts-from-run",
     "dev-reversal", "dev-unlicensed-weaker-test", "dev-guard-refuses-what-spec-says",
     "dev-round-checks-focused-tests", "dev-silent-review-restarts", "dev-mutate-key-not-read",
     "auto-dev-label-less-card", "human-help-question-states-reach", "spec-question-states-reach", "wrap-up-question-states-reach", "auto-dev-continues-kept-worktree", "auto-dev-takes-board-order", "auto-dev-open-decision", "auto-dev-list-fails",
