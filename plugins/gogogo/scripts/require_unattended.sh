@@ -31,14 +31,19 @@ started_in_bypass() {
   i=0
   while [ "$pid" -gt 1 ] && [ $i -lt 8 ]; do
     comm=$(ps -o comm= -p "$pid" 2>/dev/null) || return 1
-    args=""
-    # Only a process that is Claude Code itself counts; a shell whose command
-    # text merely mentions the flag must not.
-    case "${comm##*/}" in claude) args=$(ps -o args= -p "$pid" 2>/dev/null) ;; esac
-    case "$args" in
-      *claude*--dangerously-skip-permissions*|*claude*--permission-mode\ bypassPermissions*|*claude*--permission-mode=bypassPermissions*)
-        [ "$need" = any ] && return 0
-        case "$args" in *" -p "*|*" --print "*|*" -p") return 0 ;; esac ;;
+    # Only a process that is Claude Code itself counts: named `claude`, or after
+    # its version for a background session. A shell whose command text merely
+    # mentions the flag must not. The first such process is this session's,
+    # and it alone decides.
+    case "${comm##*/}" in
+      claude|[0-9]*.[0-9]*.[0-9]*)
+        args=$(ps -o args= -p "$pid" 2>/dev/null)
+        case "$args" in
+          *claude*--dangerously-skip-permissions*|*claude*--permission-mode\ bypassPermissions*|*claude*--permission-mode=bypassPermissions*)
+            [ "$need" = any ] && return 0
+            case "$args" in *" -p "*|*" --print "*|*" -p") return 0 ;; esac ;;
+        esac
+        return 1 ;;
     esac
     pid=$(ps -o ppid= -p "$pid" 2>/dev/null | tr -d ' ') || return 1
     i=$((i + 1))
