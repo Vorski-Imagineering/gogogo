@@ -421,5 +421,13 @@ class CloseReport(unittest.TestCase):
             self.assertIn(words, close)
 
 
+class ItemConflictSkip(unittest.TestCase):
+    def test_the_decision_reason_covers_an_item_conflict(self):
+        """Guards a conflict skip having a reason the stats count (gogogo#295 case 4)."""
+        rows = [line for line in SKILL.read_text(encoding="utf-8").splitlines() if line.strip().startswith("| `decision` |")]
+        self.assertEqual(len(rows), 1)
+        self.assertIn("cannot both hold", rows[0])
+
+
 if __name__ == "__main__":
     unittest.main()

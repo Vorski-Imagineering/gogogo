@@ -227,5 +227,14 @@ class ShipWait(unittest.TestCase):
         self.assertIn("taken once <B> ships", case)
 
 
+class ItemConflictTriage(unittest.TestCase):
+    def test_triage_reads_the_items(self):
+        """Guards the triage read of a spec's items against each other, by the same ids (gogogo#295 case 3)."""
+        text = DEV.read_text(encoding="utf-8")
+        triage = text[text.index("## 2. Triage"):text.index(FOLD)]
+        for part in ('spec_check.py" items', "certain"):
+            self.assertIn(part, triage)
+
+
 if __name__ == "__main__":
     unittest.main()
