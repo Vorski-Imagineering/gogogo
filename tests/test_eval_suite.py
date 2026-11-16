@@ -23,7 +23,7 @@ sys.path.insert(0, str(ROOT / "plugins" / "gogogo" / "scripts"))
 import profile_check as pc  # noqa: E402
 
 CASES = {
-    "dev-third-attempt", "dev-reversal", "dev-unlicensed-weaker-test", "dev-guard-refuses-what-spec-says",
+    "dev-third-attempt", "dev-script-then-delete-apart", "dev-reversal", "dev-unlicensed-weaker-test", "dev-guard-refuses-what-spec-says",
     "dev-round-checks-focused-tests", "dev-silent-review-restarts", "dev-mutate-key-not-read",
     "auto-dev-label-less-card", "human-help-question-states-reach", "spec-question-states-reach", "wrap-up-question-states-reach", "auto-dev-continues-kept-worktree", "auto-dev-takes-board-order", "auto-dev-open-decision", "auto-dev-list-fails",
     "auto-dev-review-wait", "auto-dev-review-wait-no-goal", "auto-dev-review-wait-pauses",
