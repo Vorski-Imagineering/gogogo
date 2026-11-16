@@ -128,6 +128,7 @@ no skill requires it; a skill that finds it uses it.
 | `stop.extra` | list | optional | Extra conditions that stop a whole run. |
 | `notify` | str | optional | none / telegram. Optional; absent means telegram when this machine has credentials, else off. Credentials come from TELEGRAM_BOT_TOKEN and TELEGRAM_CHAT_ID in the environment, the repo's git-ignored .claude/gogogo/notify.env, or the per-user notify.env, never the profile. |
 | `review.coverage` | str | optional | precise / broad / exhaustive. Optional; absent means broad. How wide a net the first review round casts; correction rounds are always precise. |
+| `review.attempts` | int | optional | Optional; absent means 3. Attempts a review finding gets before the issue stops for a person; a whole number of 1 or more. An issue's review=until-clean authorisation and an auto-dev run's --attempts take precedence. |
 | `independence` | str | optional | junior-dev / tech-lead / product-owner. Optional; absent means junior-dev. Which decisions Claude asks about and which it takes itself; see docs/independence-mode.md. |
 | `publish.private_names` | list | optional | Optional; absent means []. Extra names the name check removes before filing on gogogo's tracker. |
 | `auto_test.pass_column` | str | `auto-test`, `guided-review` | Column a card moves to on PASS. |
@@ -501,9 +502,15 @@ applied does not depend on the setting; §5 decides that. What a repo treats as
 serious (its own rules a review must hold the change to) belongs in its
 `CLAUDE.md`, not here.
 
+`review.attempts` sets how many attempts a review finding gets before the
+issue stops for a person (`/gogogo:dev` §5 rule 3). Absent means 3. An issue
+authorised `review=until-clean` has no limit, and an `/gogogo:auto-dev` run
+started with `--attempts <n>` uses `n` for every issue it takes.
+
 ```toml
 [review]
 coverage = "broad"
+attempts = 3
 ```
 
 ### Independence

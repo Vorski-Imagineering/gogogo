@@ -113,6 +113,9 @@ FIELDS = {
                "profile."),
     "review.coverage": (str, (), "precise / broad / exhaustive. Optional; absent means broad. How wide a net "
                         "the first review round casts; correction rounds are always precise."),
+    "review.attempts": (int, (), "Optional; absent means 3. Attempts a review finding gets before the issue stops "
+                        "for a person; a whole number of 1 or more. An issue's review=until-clean authorisation "
+                        "and an auto-dev run's --attempts take precedence."),
     "independence": (str, (), "junior-dev / tech-lead / product-owner. Optional; absent means junior-dev. Which "
                      "decisions Claude asks about and which it takes itself; see docs/independence-mode.md."),
     "publish.private_names": (list, (), "Optional; absent means []. Extra names the name check removes before "
@@ -595,6 +598,9 @@ def check(settings, sections, skill=None, root=None):
     major, present = _lookup(settings, "release.major")
     if present and isinstance(major, int) and not isinstance(major, bool) and major < 1:
         errors.append("release.major: must be 1 or more")
+    attempts, present = _lookup(settings, "review.attempts")
+    if present and isinstance(attempts, int) and not isinstance(attempts, bool) and attempts < 1:
+        errors.append("review.attempts: must be 1 or more")
     if TEST in wanted or GUIDED in wanted:
         errors.extend(_check_auto_test(settings, sections))
     for path in DOCS_PATHS if DOCS in wanted else ():

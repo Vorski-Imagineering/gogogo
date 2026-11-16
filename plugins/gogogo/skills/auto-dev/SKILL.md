@@ -17,18 +17,17 @@ gates → merge → verify the merge → report → next.**
 
 ## Triage-only mode
 
-When invoked with `--triage-only` (or asked for a preview), do the preflight
-checks that read (not the ones that need a browser or bypass mode), run §1 and
-§2, and stop. Report every issue in the queue with **take** or **skip** and the
-reason, citing the Approvals row or the missing decision. A card without the
-ready label whose spec passed the lint (§1) is `take (no ready label; spec lint
-passed; the label would be added)`; one that failed is `skip` with §1's reason.
-When preflight 2 would stop the run, report that stop: the run would take nothing.
-For each issue taken, also run §3's `issue_work.py` (after `git fetch origin`)
-and report the outcome §3 would take: `continue on <branch>` (with its PR, if
-any), or §3's skip reason.
-Per issue, name each comment `/gogogo:dev` §2 would fold in or stop on, with
-its link; triage-only folds nothing.
+When invoked with `--triage-only` (or asked for a preview), do the preflight checks that read (not the
+ones that need a browser or bypass mode), run §1 and §2, and stop. Report every issue in the queue with
+**take** or **skip** and the reason, citing the Approvals row or the missing decision. A card without the
+ready label whose spec passed the lint (§1) is `take (no ready label; spec lint passed; the label would be
+added)`; one that failed is `skip` with §1's reason. When preflight 2 would stop the run, report that stop:
+the run would take nothing. For each issue taken, also run §3's `issue_work.py` (after `git fetch origin`)
+and report the outcome §3 would take: `continue on <branch>` (with its PR, if any), or §3's skip reason.
+Per issue, name each comment `/gogogo:dev` §2 would fold in or stop on, with its link;
+triage-only folds nothing. Started with `--attempts <n>` (a whole number of 1 or more), each issue's
+review uses `n` attempts per finding (`/gogogo:dev` §5 rule 3); any other value stops the run before it
+takes anything, naming the argument. Triage-only reports print `attempts: <n> (from run|profile|default)`.
 Create no branch, move no card, add no label, post nothing, send no message.
 
 ## Before anything: preflight

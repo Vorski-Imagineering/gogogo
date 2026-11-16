@@ -247,6 +247,20 @@ class SpecWording(unittest.TestCase):
         self.assertIn("quoted words", declined)
 
 
+class AttemptLimit(unittest.TestCase):
+    """gogogo#294: the attempt limit comes from until-clean, the run, the profile, or 3."""
+
+    def test_rule_3_names_every_source(self):
+        rule = DEV_REVIEW.read_text(encoding="utf-8").split("\n3. **")[1].split("\n4. **")[0]
+        for name in ("review.attempts", "--attempts", "review=until-clean"):
+            self.assertIn(name, rule)
+
+    def test_the_report_names_the_limit(self):
+        text = DEV.read_text(encoding="utf-8")
+        reviewed = text.split("- **How it was reviewed**")[1].split("\n- **")[0]
+        self.assertIn("attempt limit", reviewed)
+
+
 class Excess(unittest.TestCase):
     """The review's table names only reasons review_stats.py counts, and the size is measured (gogogo#231)."""
 

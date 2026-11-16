@@ -24,7 +24,7 @@ when it shows one of these:
 
 A small addition the spec does not have may be applied, with a test.
 Everything else is declined with a reason word. Each finding gets three
-attempts, a correction is never undone and redone, and prose files get two
+attempts by default (`review.attempts`), a correction is never undone and redone, and prose files get two
 rounds each, and one more for a fix made in the second, even inside a code change.
 
 A correction is the smallest fix: it deletes or narrows before it adds, and
@@ -35,7 +35,7 @@ it, what no finding needs is cut before the next round. The record (`v=3`)
 carries the size after every round and the reasons applied in each round.
 
 A review ends `clean` when a round applies nothing. It ends with a person on:
-- a third attempt that is still wrong;
+- a last attempt that is still wrong (the third, by default);
 - a reversal the spec doesn't settle;
 - an unfixable finding;
 - a defect in the round that reviews a prose file's second-round fix;
@@ -160,11 +160,11 @@ Decided on 2026-10-02 and specified in
 3. **Prose is judged per file.** Markdown and text files get the prose rule
    (two rounds) even inside a change that also has code. Most of the
    churn above was skill text reviewed under the code rule. Since 2026-10-03 a fix made in the second round gets one more round of its own: six issues stopped there in one day, and each one with a pull request merged after a model read the fix.
-4. **Three attempts per finding, and no flip-flops.** After the first round a
+4. **Three attempts per finding by default (`review.attempts`), and no flip-flops.** After the first round a
    review looks only at the corrections, so a real defect there that is the
    same failure again means a fix was wrong. The second attempt must say what the first got wrong and take a
-   different approach. A real defect in the third attempt sends the issue to a
-   person, with the three attempts. Only a defect that is the same failure
+   different approach. A real defect in the last attempt (the third, by default) sends the issue to a
+   person, with the attempts. Only a defect that is the same failure
    again counts as an attempt; a new case found in a fix's lines is a new
    finding, fixed only with evidence that someone meets it. A finding that would undo an earlier
    correction is never applied a second time: the spec's reading stands, and
