@@ -128,7 +128,7 @@ class CommittedLink(unittest.TestCase):
         text = skill_text()
         self.assertIn("\n## 3. Public trackers", text)
         step = text.split("\n## 3. Public trackers")[1].split("\n## ")[0]
-        for name in ("git ls-files -s", "120000"):
+        for name in ("--literal-pathspecs ls-files -s -z --", "120000", "resolved first"):
             self.assertIn(name, step)
 
 
