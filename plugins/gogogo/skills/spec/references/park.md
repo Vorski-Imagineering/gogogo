@@ -115,6 +115,6 @@ yet. It holds whatever recon found, a person's request included. In order:
     `<tracker.issues_repo>` holding the original need, the numbers and a
     link back, and names it in its report. The original design is not
     specced here; the follow-up is specced when it is filed. When
-    `tracker.public` is true, both items say that what they post names no
-    path, repo, host or person from outside this repo. Then carry on to
+    `tracker.public` is true, both items say that what they post is first
+    re-read and cleared as Posting step 2 says for a public tracker. Then carry on to
     *Before you write* § 7.
