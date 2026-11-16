@@ -8,16 +8,25 @@
 # ~/.claude/projects (the session may have started in another folder than the
 # one this runs from, such as a worktree). That is an undocumented format, so
 # it FAILS CLOSED: a missing transcript, a second transcript with the same id,
-# a missing field, or any other value is a stop.
+# a missing field, or any other value is a stop, with two exceptions that read
+# how this Claude process was started instead:
+# - no transcript at all: a headless run (claude -p) started with a bypass
+#   flag passes;
+# - a transcript with no permissionMode: any Claude process started with a
+#   bypass flag passes, interactive or background, since the transcript
+#   records the mode only when it changes. A recorded mode always wins.
 #
 # Exit 0 prints "bypassPermissions: on". Anything else prints ERROR and exits 1.
 set -u
 
 started_in_bypass() {
-  # Headless runs (claude -p) record no permissionMode in the transcript. Fall
-  # back to how this Claude process was started: walk up the process tree and
-  # accept only an explicit bypass flag. A headless run cannot change mode
-  # mid-session, so its start flag is its mode.
+  # $1 is `headless` or `any`. Fall back to how this Claude process was
+  # started: walk up the process tree and accept only an explicit bypass flag.
+  # `headless` also needs -p/--print: a headless run cannot change mode
+  # mid-session, so its start flag is its mode. `any` is for a transcript with
+  # no recorded mode: the mode is recorded only when it changes, so with no
+  # record it has not changed since launch.
+  need=$1
   pid=$$
   i=0
   while [ "$pid" -gt 1 ] && [ $i -lt 8 ]; do
@@ -28,6 +37,7 @@ started_in_bypass() {
     case "${comm##*/}" in claude) args=$(ps -o args= -p "$pid" 2>/dev/null) ;; esac
     case "$args" in
       *claude*--dangerously-skip-permissions*|*claude*--permission-mode\ bypassPermissions*|*claude*--permission-mode=bypassPermissions*)
+        [ "$need" = any ] && return 0
         case "$args" in *" -p "*|*" --print "*|*" -p") return 0 ;; esac ;;
     esac
     pid=$(ps -o ppid= -p "$pid" 2>/dev/null | tr -d ' ') || return 1
@@ -40,7 +50,9 @@ started_in_bypass() {
 fail() {
   echo "ERROR: $1" >&2
   echo "An unattended run needs bypassPermissions mode to merge." >&2
-  echo "Switch it on (Shift+Tab, or start with --dangerously-skip-permissions), then run again." >&2
+  echo "In a running session, switch the mode once with Shift+Tab (out of bypass and back) so it is recorded, then run again." >&2
+  echo "A background job that cannot switch modes is restarted with --permission-mode bypassPermissions." >&2
+  echo "A repo can replace this check with integration.mode_check in its profile." >&2
   exit 1
 }
 
@@ -53,15 +65,15 @@ for f in "$projects"/*/"$CLAUDE_CODE_SESSION_ID".jsonl; do
   transcript=$f
   count=$((count + 1))
 done
-if [ "$count" -eq 0 ] && started_in_bypass; then
+if [ "$count" -eq 0 ] && started_in_bypass headless; then
   echo "bypassPermissions: on (headless run started with a bypass flag)"; exit 0
 fi
 [ "$count" -gt 0 ] || fail "no session transcript named $CLAUDE_CODE_SESSION_ID.jsonl under $projects."
 [ "$count" -eq 1 ] || fail "$count session transcripts named $CLAUDE_CODE_SESSION_ID.jsonl under $projects; cannot tell which is this session's."
 mode=$(grep -o '"permissionMode":"[^"]*"' "$transcript" | tail -1 | cut -d'"' -f4)
 if [ -z "$mode" ]; then
-  started_in_bypass && { echo "bypassPermissions: on (headless run started with a bypass flag)"; exit 0; }
-  fail "no permissionMode recorded in the session transcript, and this is not a headless run started with a bypass flag; cannot tell the mode."
+  started_in_bypass any && { echo "bypassPermissions: on (started with a bypass flag; no mode change recorded)"; exit 0; }
+  fail "no permissionMode recorded in the session transcript, and this Claude process was not started with a bypass flag; cannot tell the mode."
 fi
 [ "$mode" = "bypassPermissions" ] || fail "permission mode is '$mode', not 'bypassPermissions'."
 echo "bypassPermissions: on"
