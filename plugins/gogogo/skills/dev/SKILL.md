@@ -92,7 +92,7 @@ Stop and say so, rather than guessing, when the issue:
   about** (§ *Who decides* in `/gogogo:spec`), not answered in the body;
 - needs a **Hard Stop** under the repo's rules with no recorded approval;
 - has two items that cannot both hold, certainly: from their own words, with no assumption about a device, timing, data or
-  environment. Read the body's items (`spec_check.py" items`) against each other first, and name the two ids. A pair that
+  environment. Read the body's items (`spec_check.py" items`) against each other first, and name the two ids (stop reason `decision`). A pair that
   needs such an assumption is noted in §7 instead, and the build goes on;
 - is a feature with no analysis pass. Those need a spec first, via
   `/gogogo:spec`, not an improvised implementation.
