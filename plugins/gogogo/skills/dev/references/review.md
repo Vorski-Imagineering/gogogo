@@ -141,17 +141,30 @@ Then the review, by these rules:
    ships, with evidence a reader can open (a `file:line`, a documentation link,
    a record), the finding is test 7 and is declined as `hypothetical`, and its
    Declined line in the report gives that evidence. A claim with no evidence,
-   or simply finding no path, declines nothing: the finding stays test 3. A
-   finding that also meets test 1, 2 or 4 needs no line and is never declined
-   by one, so "no client we ship does that" never declines a security hole or
-   lost data. The rule holds under `review=until-clean`.
+   or simply finding no path, declines nothing: the finding stays test 3.
+   Except a new finding in a correction (rule 3), which needs evidence that
+   it is met. A finding that also meets test 1, 2 or 4 needs no line and is
+   never declined by one, so "no client we ship does that" never declines a
+   security hole or lost data. The rule holds under `review=until-clean`.
 3. **Three attempts per finding.** From round 2, a finding that meets tests 1
-   to 4 means a correction was wrong; it belongs to the finding that
-   correction was for. The second attempt says what the first got wrong and
-   is smaller than the first: it takes out or narrows what the first attempt
-   added, and only when no smaller fix meets the finding does it take a
-   different approach. Never a patch on the patch. A third attempt does the
-   same. When a round finds such a defect in the third attempt, the issue
+   to 4 in what a correction changed is one of two kinds:
+   - **Again**: the correction does not meet the finding it was for: that
+     finding's own case (the input it was raised on) still fails. It is the
+     next attempt at that finding.
+   - **New**: the correction meets the finding it was for, and the round
+     found a different case (another input) in the lines the correction
+     added or changed, even when it shows the same symptom. It
+     is a new finding with its own three attempts. When it would be test 3,
+     it is applied only when its reach line names how a real user or run
+     meets it, with evidence a reader can open (a `file:line`, a record, a
+     device, browser or input the repo documents as supported); otherwise it
+     is declined as `hypothetical` and listed as a follow-up.
+
+   When the round cannot tell which kind, it is again. The second attempt
+   says what the first got wrong and is smaller than the first: it takes out
+   or narrows what the first attempt added, and only when no smaller fix
+   meets the finding does it take a different approach. Never a patch on the patch. A third attempt does the
+   same. When a round finds an *again* defect in the third attempt, the issue
    stops for a person, with the three attempts and what each got wrong in the
    report. Under `review=until-clean` (`/gogogo:dev` §1) there is no attempt
    limit: each attempt still says what the last got wrong and takes a

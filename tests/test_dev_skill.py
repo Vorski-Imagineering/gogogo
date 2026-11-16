@@ -196,6 +196,27 @@ class ReachLine(unittest.TestCase):
             self.assertNotIn("reach line", self.rows[row])
 
 
+class NewCaseInCorrection(unittest.TestCase):
+    """gogogo#296: a new case in a correction's lines is a new finding, not another attempt."""
+
+    def test_rule_3_names_both_kinds(self):
+        text = DEV_REVIEW.read_text(encoding="utf-8")
+        rule = text.split("\n3. **")[1].split("\n4. **")[0]
+        for name in ("**Again**", "**New**", "hypothetical"):
+            self.assertIn(name, rule)
+
+    def test_the_reach_line_points_at_rule_3(self):
+        text = DEV_REVIEW.read_text(encoding="utf-8")
+        paragraph = text.split("**The reach line.**")[1].split("\n3. **")[0]
+        self.assertIn("rule 3", paragraph)
+
+    def test_findings_table_has_a_kind_column(self):
+        text = DEV.read_text(encoding="utf-8")
+        self.assertIn("`| Id | Round | Test | Recorded as | Re-fixes | Kind |`", text)
+        refix = text.split("`refix` counts")[1].split("\n  - ")[0]
+        self.assertIn("both kinds", refix)
+
+
 class Excess(unittest.TestCase):
     """The review's table names only reasons review_stats.py counts, and the size is measured (gogogo#231)."""
 
