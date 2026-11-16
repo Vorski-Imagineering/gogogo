@@ -45,8 +45,9 @@ Every report ends with a record of the review (`v=3`; earlier reports carry `v=2
 prints them as a table, with each issue's outcome and any later bug traced
 back to the review that let it through. To read the numbers:
 - **Rounds** and **ended** say whether reviews converge.
-- **Refix rate** is the share of applied findings that fixed an earlier fix: a
-  high one means the attempts rule is doing work.
+- **Refix rate** is the share of applied findings that fixed an earlier fix,
+  the same failure again or a new case in the fix: a high one means fixes
+  keep needing fixes.
 - **Declined by reason** shows what the reviewer raises that does not matter.
 - **Escaped bugs**, declined against missed, say whether the judgement is too
   strict (declined) or the coverage too narrow (missed).
@@ -160,8 +161,8 @@ Decided on 2026-10-02 and specified in
    (two rounds) even inside a change that also has code. Most of the
    churn above was skill text reviewed under the code rule. Since 2026-10-03 a fix made in the second round gets one more round of its own: six issues stopped there in one day, and each one with a pull request merged after a model read the fix.
 4. **Three attempts per finding, and no flip-flops.** After the first round a
-   review looks only at the corrections, so a real defect there means a fix was
-   wrong. The second attempt must say what the first got wrong and take a
+   review looks only at the corrections, so a real defect there that is the
+   same failure again means a fix was wrong. The second attempt must say what the first got wrong and take a
    different approach. A real defect in the third attempt sends the issue to a
    person, with the three attempts. Only a defect that is the same failure
    again counts as an attempt; a new case found in a fix's lines is a new
