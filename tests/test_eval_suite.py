@@ -36,6 +36,7 @@ CASES = {
     "dev-authorised-until-clean", "dev-authorised-model", "dev-correction-smallest-fix",
     "dev-reach-line-declines", "dev-reach-line-spares-security",
     "spec-declined-question", "spec-being-built", "spec-nothing-hits-today",
+    "spec-items-conflict", "dev-triage-items-conflict",
     "spec-no-argument-offers-new", "spec-pr-mentions-only",
     "spec-reverses-tested-behaviour", "spec-licenses-a-deleted-folder", "spec-unmet-precondition",
     "spec-public-tracker-reread", "spec-files-the-related-half", "spec-keeps-a-listed-second-host",

@@ -190,11 +190,11 @@ issue whose answer sits in such a comment is taken, not skipped. Here a fold
 that stops the issue is a skip: reason `decision`, or `lint` when the folded
 body fails the lint. An issue is workable here only if every
 decision it depends on of a kind the level asks about is answered **in the
-body**, once folded in. Skip and record, never guess,
-when it has an open decision of a kind the profile's `independence` asks about
-(§ *Who decides* in `/gogogo:spec`), not answered in the body, a Hard Stop no
-Approvals row names, or a two-licence change whose apply row is missing (that
-one is buildable: build and test it, then stop that issue before applying).
+body**, once folded in. Skip and record, never guess, when it has an open decision
+of a kind the profile's `independence` asks about (§ *Who decides* in `/gogogo:spec`),
+not answered in the body, two spec items that certainly cannot both hold (`/gogogo:dev`
+§2), a Hard Stop no Approvals row names, or a two-licence change whose apply row is
+missing (that one is buildable: build and test it, then stop that issue before applying).
 
 **Hand back a skip.** Every skip from §1's lint and from this section, outside
 triage-only mode, once per issue per run: a later pass that reads the issue
@@ -216,7 +216,7 @@ apply row is missing, which is built and then stopped (§4), not skipped:
    |---|---|
    | `lint` | no ready label, and `spec_lint.py` failed or withheld it (§1); or a body §2 folded comments into failed it |
    | `nospec` | a feature with no analysis pass (`/gogogo:dev` §2) |
-   | `decision` | an open decision of a kind the level asks about, not answered in the body |
+   | `decision` | an open decision of a kind the level asks about, not answered in the body, or two spec items that certainly cannot both hold (a pair whose item is a Hard Stop no row approves stays `hard-stop`) |
    | `hard-stop` | a Hard Stop no Approvals row names |
 
    No review record and no stop marker on this comment: a skip is not a stop.
