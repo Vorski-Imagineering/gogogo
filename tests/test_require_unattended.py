@@ -95,18 +95,24 @@ class RequireUnattendedTest(unittest.TestCase):
         self.assertEqual(r.returncode, 0, r.stderr)
 
     def parent(self, comm, args):
-        """Replace the fake `ps` with one whose walk meets one parent process.
+        self.chain((comm, args))
+
+    def chain(self, *procs):
+        """Replace the fake `ps` with one whose walk meets `procs`, nearest first.
 
         Any pid it does not know is the script's own shell, whose parent is
-        pid 1001: `comm` with `args`, whose parent is 1, so the walk ends.
+        pid 1001; process 1000+k is procs[k-1], and the last one's parent is 1.
         """
         def q(v):
             return "'" + v.replace("'", "'\\''") + "'"
+        rows = "".join(
+            f"  {1001 + k}) comm={q(c)}; args={q(a)}; ppid={1002 + k if k + 1 < len(procs) else 1} ;;\n"
+            for k, (c, a) in enumerate(procs))
         with open(os.path.join(self.tmp, "bin", "ps"), "w") as f:
             f.write(
                 "#!/bin/sh\n"
                 'case "$4" in\n'
-                f"  1001) comm={q(comm)}; args={q(args)}; ppid=1 ;;\n"
+                + rows +
                 "  *) comm=sh; args='sh require_unattended.sh'; ppid=1001 ;;\n"
                 "esac\n"
                 'case "$2" in comm=) echo "$comm" ;; args=) echo "$args" ;; ppid=) echo "$ppid" ;; esac\n'
@@ -161,6 +167,21 @@ class RequireUnattendedTest(unittest.TestCase):
         r = self.run_script()
         self.assertEqual(r.returncode, 1)
         self.assertIn("no session transcript named", r.stderr)
+
+    def test_the_first_claude_process_decides(self):
+        self.bare_transcript("-Users-someone-repo", {"type": "user"})
+        self.chain(("claude", "claude --chrome"),
+                   ("claude", "claude --permission-mode bypassPermissions"))
+        r = self.run_script()
+        self.assertEqual(r.returncode, 1)
+        self.assertIn("not started with a bypass flag", r.stderr)
+
+    def test_a_background_session_named_by_its_version(self):
+        self.bare_transcript("-Users-someone-repo", {"type": "user"})
+        self.parent("2.1.325", "/home/someone/.local/share/claude/versions/2.1.325"
+                    " --session-id x --permission-mode bypassPermissions")
+        r = self.run_script()
+        self.assertEqual(r.returncode, 0, r.stderr)
 
     def test_no_session_id_fails(self):
         self.transcript("-Users-someone-repo", "bypassPermissions")
