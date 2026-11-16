@@ -70,10 +70,11 @@ order, checking each step before starting the next:
      (`../<folder>`). A path inside the checkout, relative to its root, and a
      placeholder such as `<scratch>` are kept, unless a link is on the path.
      A link is on it when, run from the checkout root, for the path or one of
-     its leading folders (with no trailing slash), `test -L` succeeds or
-     `git ls-files -s -- <that path>` prints a line for that exact path with
-     mode `120000`. A path
-     with a link on it is a path into another checkout, except, when the
+     its leading folders (with no trailing slash, and with `.` and `..`
+     segments resolved without following a link), `test -L` succeeds or
+     `git -c core.quotePath=false ls-files -s -- <that path>` prints a line
+     for that exact path with mode `120000`. A path with a link on it is a
+     path into another checkout, except, when the
      target is `tracker.issues_repo` (not a related repo's tracker), one
      where `git ls-files -s -- <link>` prints each such link with mode
      `120000`: a link this repo commits. That path is kept, and every segment
