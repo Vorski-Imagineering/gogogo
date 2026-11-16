@@ -31,11 +31,12 @@ yet. It holds whatever recon found, a person's request included. In order:
    apply: ask **don't file it** (file nothing; the reply gives the trigger,
    its evidence and what would make it actionable, under rule 10's limits)
    or **file and spec it** (carry on as rule 8; Posting step 0 files it when
-   the spec is posted), and rule 4's **spec a measure-first step** when rule
-   1 found a measurement the agent can take.
+   the spec is posted), and, when rule 1 found a measurement the agent can
+   take, rule 4's **spec a measure-first step** first, recommended as rule 4
+   says, with **don't file it** in park's place.
 3. **Finding the column:** the single column from `<tracker.tool> fields`
    whose name contains `backlog`, ignoring case and emoji. With none,
-   several, or no `tracker.tool`, the first choice in rule 4 is **close it as
+   several, or no `tracker.tool`, rule 4's park choice is **close it as
    not planned** instead. A non-zero exit from `fields` is said as such and is
    not a missing column: rule 4 then offers only **spec it anyway** or
    **stop here** (post nothing, and end this issue).
@@ -103,9 +104,8 @@ yet. It holds whatever recon found, a person's request included. In order:
    nothing, and end this issue, saying what recon found. In a run of several,
    no person to ask stops the run, as *Several issues in one run* rule 6
    says. The four-choice menu for a declined question is not used here.
-10. **When `tracker.public` is true**, the three lines, and rule 11's
-    numbers comment and follow-up issue, name no path, repo, host or person
-    from outside this repo.
+10. **When `tracker.public` is true**, the three lines name no path, repo,
+    host or person from outside this repo.
 11. **On measure first:** the spec covers only the measurement, and says
     so in `## Context`. Its Design names each number to take, how it is
     taken (the existing means rule 1 found), and a time box (how many
@@ -114,5 +114,6 @@ yet. It holds whatever recon found, a person's request included. In order:
     taken), and the build files a follow-up issue in
     `<tracker.issues_repo>` holding the original need, the numbers and a
     link back, and names it in its report. The original design is not
-    specced here; the follow-up is specced when it is filed. Then carry on
-    as rule 8 does.
+    specced here; the follow-up is specced when it is filed. When
+    `tracker.public` is true, both items say that what they post names
+    nothing rule 10 removes. Then carry on to *Before you write* § 7.
