@@ -1,4 +1,5 @@
 ---
 type: regex
-pattern: 'File attachments: left out'
+pattern: '^\W*File attachments: left out\W*$'
+flags: m
 ---
