@@ -1,5 +1,5 @@
 ---
 type: regex
-pattern: 'Approvals row'
+pattern: 'Approvals\W{0,3}row'
 flags: i
 ---
