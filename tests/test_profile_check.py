@@ -394,7 +394,7 @@ class WrongValues(unittest.TestCase):
 
     def test_review_attempts_absent_is_quiet(self):
         # gogogo#294 case 3: absent means 3, with no warning
-        for value in (None, 5):
+        for value in (None, 1, 5):
             settings, sections = parse()
             if value is None:
                 settings["review"].pop("attempts")
@@ -1016,6 +1016,11 @@ class SchemaDoc(unittest.TestCase):
         doc = (PLUGIN / "references" / "profile-schema.md").read_text()
         row = next(line for line in doc.splitlines() if line.startswith("| `integration.ci_before_merge` |"))
         self.assertEqual(row.split("|")[4].strip(), pc.FIELDS["integration.ci_before_merge"][2])
+
+    def test_doc_and_checker_describe_review_attempts_the_same(self):
+        doc = (PLUGIN / "references" / "profile-schema.md").read_text()
+        row = next(line for line in doc.splitlines() if line.startswith("| `review.attempts` |"))
+        self.assertEqual(row.split("|")[4].strip(), pc.FIELDS["review.attempts"][2])
 
     def test_doc_and_checker_describe_lanes_the_same(self):
         doc = (PLUGIN / "references" / "profile-schema.md").read_text()
