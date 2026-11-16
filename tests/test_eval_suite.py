@@ -27,7 +27,7 @@ CASES = {
     "dev-finding-settled-by-spec", "dev-attempts-from-run",
     "dev-reversal", "dev-unlicensed-weaker-test", "dev-guard-refuses-what-spec-says",
     "dev-round-checks-focused-tests", "dev-silent-review-restarts", "dev-mutate-key-not-read",
-    "auto-dev-label-less-card", "human-help-question-states-reach", "spec-question-states-reach", "wrap-up-question-states-reach", "auto-dev-continues-kept-worktree", "auto-dev-takes-board-order", "auto-dev-open-decision", "auto-dev-list-fails",
+    "auto-dev-label-less-card", "human-help-question-states-reach", "spec-question-states-reach", "spec-inference-is-not-a-requirement", "wrap-up-question-states-reach", "auto-dev-continues-kept-worktree", "auto-dev-takes-board-order", "auto-dev-open-decision", "auto-dev-list-fails",
     "auto-dev-review-wait", "auto-dev-review-wait-no-goal", "auto-dev-review-wait-pauses",
     "auto-dev-late-run-pr", "dev-merge-refused",
     "dev-deletes-merged-local-branch", "dev-blocked-goes-to-queue", "auto-dev-skips-blocked",
