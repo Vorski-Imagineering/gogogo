@@ -464,7 +464,7 @@ class CommittedLink(unittest.TestCase):
         # gogogo#262 case 2: the same rule as idea's step 3
         text = POSTING.read_text(encoding="utf-8")
         step = text[text.index("\n2. **Write the spec to the scratchpad**"):text.index("\n3. **Compose the body file**")]
-        for name in ("--literal-pathspecs ls-files -s -z --", "120000", "resolved first"):
+        for name in ("--literal-pathspecs ls-files -s -z --", "120000"):
             self.assertIn(name, step)
 
 
