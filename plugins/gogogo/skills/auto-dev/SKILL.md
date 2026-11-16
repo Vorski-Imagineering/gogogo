@@ -216,7 +216,7 @@ apply row is missing, which is built and then stopped (§4), not skipped:
    |---|---|
    | `lint` | no ready label, and `spec_lint.py` failed or withheld it (§1); or a body §2 folded comments into failed it |
    | `nospec` | a feature with no analysis pass (`/gogogo:dev` §2) |
-   | `decision` | an open decision of a kind the level asks about, not answered in the body, or two spec items that certainly cannot both hold (`hard-stop` when one needs a Hard Stop no row approves) |
+   | `decision` | an open decision of a kind the level asks about, not answered in the body, or two spec items that certainly cannot both hold (a pair whose item is a Hard Stop no row approves stays `hard-stop`) |
    | `hard-stop` | a Hard Stop no Approvals row names |
 
    No review record and no stop marker on this comment: a skip is not a stop.
