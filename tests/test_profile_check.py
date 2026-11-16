@@ -52,6 +52,7 @@ file = "docs/roadmap.md"
 
 [review]
 coverage = "broad"
+attempts = 3
 
 [publish]
 private_names = ["acme-secret"]
@@ -374,6 +375,35 @@ class WrongValues(unittest.TestCase):
         settings.pop("review")
         for skill in (None, *pc.SKILLS):
             self.assertEqual(pc.check(settings, sections, skill), ([], []), skill)
+
+    def test_review_attempts_must_be_one_or_more(self):
+        # gogogo#294 case 1
+        for bad in (0, -2):
+            settings, sections = parse()
+            settings["review"]["attempts"] = bad
+            errors, _ = pc.check(settings, sections)
+            self.assertIn("review.attempts: must be 1 or more", errors)
+
+    def test_review_attempts_is_a_whole_number(self):
+        # gogogo#294 case 2: a repo cannot remove the stop, and a bool is not a number
+        for bad in ("unlimited", True):
+            settings, sections = parse()
+            settings["review"]["attempts"] = bad
+            errors, _ = pc.check(settings, sections)
+            self.assertTrue(any(e.startswith("review.attempts: expected int") for e in errors), errors)
+
+    def test_review_attempts_absent_is_quiet(self):
+        # gogogo#294 case 3: absent means 3, with no warning
+        for value in (None, 1, 5):
+            settings, sections = parse()
+            if value is None:
+                settings["review"].pop("attempts")
+            else:
+                settings["review"]["attempts"] = value
+            for skill in (None, *pc.SKILLS):
+                errors, warnings = pc.check(settings, sections, skill)
+                self.assertFalse([e for e in errors if "review.attempts" in e], skill)
+                self.assertFalse([w for w in warnings if "review.attempts" in w], skill)
 
     def test_independence_is_one_of_three(self):
         # gogogo#90: optional; absent means junior-dev.
@@ -986,6 +1016,11 @@ class SchemaDoc(unittest.TestCase):
         doc = (PLUGIN / "references" / "profile-schema.md").read_text()
         row = next(line for line in doc.splitlines() if line.startswith("| `integration.ci_before_merge` |"))
         self.assertEqual(row.split("|")[4].strip(), pc.FIELDS["integration.ci_before_merge"][2])
+
+    def test_doc_and_checker_describe_review_attempts_the_same(self):
+        doc = (PLUGIN / "references" / "profile-schema.md").read_text()
+        row = next(line for line in doc.splitlines() if line.startswith("| `review.attempts` |"))
+        self.assertEqual(row.split("|")[4].strip(), pc.FIELDS["review.attempts"][2])
 
     def test_doc_and_checker_describe_lanes_the_same(self):
         doc = (PLUGIN / "references" / "profile-schema.md").read_text()

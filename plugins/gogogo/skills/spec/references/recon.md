@@ -6,6 +6,15 @@ whose Context contains no traps usually means nobody looked.
 This file holds the method. What this particular codebase hides is in the
 profile's `## Recon traps`; read both.
 
+## Contents
+
+- Hunt for data already on the wire before proposing new state
+- Distrust what looks live
+- Hunt non-atomic transitions
+- Correct the ticket where it is wrong
+- Trace each requirement
+- Tests a Design reverses
+
 ## Hunt for data already on the wire before proposing new state
 
 Highest-leverage step, most skipped, because the ticket's framing points
@@ -65,6 +74,31 @@ Implemented literally, a wrong sentence puts the change on the wrong element.
 State the correction in the spec, design the correct behaviour, and say so in
 your reply to the user. Do not spec a sentence you know to be wrong, and do not
 silently drop it either.
+
+## Trace each requirement
+
+A requirement is something the result must have or do. Before a question
+or a Design item rests on one, find its source:
+
+- the person's own words, quoted, with where they said them (the report,
+  their comment, this session); or
+- an Approvals row.
+
+A sentence an agent wrote into the issue (its *What is there today*, a
+filed follow-up, a summary of a wrap-up) is not a source on its own; the
+person's words it quotes are. A fact the code forces is not a requirement:
+it needs a `file:line`, not a quote.
+
+A requirement with neither source is an inference. Leave it out of the
+Design, and list it in `## Context` as `**Not asked for:** <the
+inference> (<where it was written>)`. When the design cannot do without
+it, it is a product question (`SKILL.md` § *Who decides*): at a level that
+asks product questions, ask it with "don't build it" as the first choice;
+otherwise decide it as not built, under *Decided without asking*. Never
+ask *when* or *how* to build something before anyone has said to build it.
+
+Loose words ("something like files") are quoted as they are; their reading
+is a product question in the same way.
 
 ## Tests a Design reverses
 

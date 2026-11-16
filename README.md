@@ -283,7 +283,7 @@ make a change worse, and a loop converges when findings are judged against the
 spec and a loop that will not settle goes to a person.
 That is how the skills now work
 ([#33](https://github.com/Vorski-Imagineering/gogogo/issues/33)): a finding is
-applied only with evidence, each finding gets three attempts, a fix is never
+applied only with evidence, each finding gets three attempts by default (`review.attempts`), a fix is never
 undone and redone, a correction is the smallest fix and a round that grows the change is cut back, and a review past 13 rounds goes to a person. The one
 exception is an issue a person has authorised, through `/gogogo:human-help`,
 to keep going until it is clean: it has no attempt or round limit.

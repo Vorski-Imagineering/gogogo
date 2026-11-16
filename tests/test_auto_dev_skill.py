@@ -421,5 +421,21 @@ class CloseReport(unittest.TestCase):
             self.assertIn(words, close)
 
 
+class ItemConflictSkip(unittest.TestCase):
+    def test_the_decision_reason_covers_an_item_conflict(self):
+        """Guards a conflict skip having a reason the stats count (gogogo#295 case 4)."""
+        rows = [line for line in SKILL.read_text(encoding="utf-8").splitlines() if line.strip().startswith("| `decision` |")]
+        self.assertEqual(len(rows), 1)
+        self.assertIn("cannot both hold", rows[0])
+
+
+class AttemptsArgument(unittest.TestCase):
+    def test_triage_only_prints_the_attempts(self):
+        """Guards the run's --attempts argument and the preview line (gogogo#294 case 7)."""
+        section = SKILL.read_text(encoding="utf-8").split("## Triage-only mode")[1].split("\n## ")[0]
+        for part in ("--attempts", "attempts: <n> (from run|profile|default)"):
+            self.assertIn(part, section)
+
+
 if __name__ == "__main__":
     unittest.main()

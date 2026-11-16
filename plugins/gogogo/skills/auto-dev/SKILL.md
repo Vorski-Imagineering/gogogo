@@ -17,18 +17,17 @@ gates → merge → verify the merge → report → next.**
 
 ## Triage-only mode
 
-When invoked with `--triage-only` (or asked for a preview), do the preflight
-checks that read (not the ones that need a browser or bypass mode), run §1 and
-§2, and stop. Report every issue in the queue with **take** or **skip** and the
-reason, citing the Approvals row or the missing decision. A card without the
-ready label whose spec passed the lint (§1) is `take (no ready label; spec lint
-passed; the label would be added)`; one that failed is `skip` with §1's reason.
-When preflight 2 would stop the run, report that stop: the run would take nothing.
-For each issue taken, also run §3's `issue_work.py` (after `git fetch origin`)
-and report the outcome §3 would take: `continue on <branch>` (with its PR, if
-any), or §3's skip reason.
-Per issue, name each comment `/gogogo:dev` §2 would fold in or stop on, with
-its link; triage-only folds nothing.
+When invoked with `--triage-only` (or asked for a preview), do the preflight checks that read (not the
+ones that need a browser or bypass mode), run §1 and §2, and stop. Report every issue in the queue with
+**take** or **skip** and the reason, citing the Approvals row or the missing decision. A card without the
+ready label whose spec passed the lint (§1) is `take (no ready label; spec lint passed; the label would be
+added)`; one that failed is `skip` with §1's reason. When preflight 2 would stop the run, report that stop:
+the run would take nothing. For each issue taken, also run §3's `issue_work.py` (after `git fetch origin`)
+and report the outcome §3 would take: `continue on <branch>` (with its PR, if any), or §3's skip reason.
+Per issue, name each comment `/gogogo:dev` §2 would fold in or stop on, with its link;
+triage-only folds nothing. Started with `--attempts <n>` (a whole number of 1 or more), each issue's
+review uses `n` attempts per finding (`/gogogo:dev` §5 rule 3); any other value stops the run before it
+takes anything, naming the argument. Triage-only reports print `attempts: <n> (from run|profile|default)`.
 Create no branch, move no card, add no label, post nothing, send no message.
 
 ## Before anything: preflight
@@ -190,11 +189,11 @@ issue whose answer sits in such a comment is taken, not skipped. Here a fold
 that stops the issue is a skip: reason `decision`, or `lint` when the folded
 body fails the lint. An issue is workable here only if every
 decision it depends on of a kind the level asks about is answered **in the
-body**, once folded in. Skip and record, never guess,
-when it has an open decision of a kind the profile's `independence` asks about
-(§ *Who decides* in `/gogogo:spec`), not answered in the body, a Hard Stop no
-Approvals row names, or a two-licence change whose apply row is missing (that
-one is buildable: build and test it, then stop that issue before applying).
+body**, once folded in. Skip and record, never guess, when it has an open decision
+of a kind the profile's `independence` asks about (§ *Who decides* in `/gogogo:spec`),
+not answered in the body, two spec items that certainly cannot both hold (`/gogogo:dev`
+§2), a Hard Stop no Approvals row names, or a two-licence change whose apply row is
+missing (that one is buildable: build and test it, then stop that issue before applying).
 
 **Hand back a skip.** Every skip from §1's lint and from this section, outside
 triage-only mode, once per issue per run: a later pass that reads the issue
@@ -216,7 +215,7 @@ apply row is missing, which is built and then stopped (§4), not skipped:
    |---|---|
    | `lint` | no ready label, and `spec_lint.py` failed or withheld it (§1); or a body §2 folded comments into failed it |
    | `nospec` | a feature with no analysis pass (`/gogogo:dev` §2) |
-   | `decision` | an open decision of a kind the level asks about, not answered in the body |
+   | `decision` | an open decision of a kind the level asks about, not answered in the body, or two spec items that certainly cannot both hold (a pair whose item is a Hard Stop no row approves stays `hard-stop`) |
    | `hard-stop` | a Hard Stop no Approvals row names |
 
    No review record and no stop marker on this comment: a skip is not a stop.

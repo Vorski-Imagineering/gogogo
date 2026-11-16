@@ -355,8 +355,8 @@ has no card and no pull request.
 3. **Distrust what looks live**, and end recon by listing the traps you found.
 4. **Hunt non-atomic transitions.** Two writes for one logical change is a
    visible transient and a flaky test.
-5. **Correct the ticket where it is wrong**, in the spec and in your reply to
-   the user.
+5. **Correct the ticket where it is wrong, and trace each requirement** to a
+   person's words or an Approvals row, in the spec and in your reply.
 6. **Does anything hit it today?** After steps 1 to 3, name the case that hits
    it today, with a link or `file:line`: a person asked for it, or a record (an
    issue report, a run report, an error) or a real path in a repo shows it. A
@@ -440,7 +440,7 @@ three lines, so the person can overturn any.
 
 Read it as the implementing agent: no memory, no access to you.
 
-1. Any point where I must choose and have no basis?
+1. Any point where I must choose and have no basis? Two items that cannot both hold (**REQUIRED REFERENCE:** `references/item-conflicts.md`)?
    Is every decision the agent took of a kind the level does not ask about,
    and listed under *Decided without asking*?
 2. Every claim checkable at a `file:line`?

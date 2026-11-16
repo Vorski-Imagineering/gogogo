@@ -7,7 +7,7 @@ Part of `/gogogo:dev`. Read it in full. Section names and § numbers here are `S
 - First, the change against its spec
 - A round
 - Which findings are applied
-- Three attempts per finding
+- Attempts per finding
 - No flip-flops
 - Late findings
 - A small addition that goes wrong is removed
@@ -109,7 +109,9 @@ Then the review, by these rules:
    spec or a rule in `CLAUDE.md`, breaks something that worked, or has a bug
    with a concrete triggering case, saying when it can how a real user or run
    reaches it in production, and to name any code, test or guard the
-   change has that the spec does not need. From round 2, also give it the findings
+   change has that the spec does not need. When a finding would change how a
+   check, filter or reader decides, it names the spec's line for that rule, or
+   says it found none. From round 2, also give it the findings
    already declined, one line each, and tell it not to raise them again.
 2. **Which findings are applied.** Take the first test a finding meets. A
    reviewer's own label ("correctness", a severity) does not change which
@@ -141,19 +143,46 @@ Then the review, by these rules:
    ships, with evidence a reader can open (a `file:line`, a documentation link,
    a record), the finding is test 7 and is declined as `hypothetical`, and its
    Declined line in the report gives that evidence. A claim with no evidence,
-   or simply finding no path, declines nothing: the finding stays test 3. A
-   finding that also meets test 1, 2 or 4 needs no line and is never declined
-   by one, so "no client we ship does that" never declines a security hole or
-   lost data. The rule holds under `review=until-clean`.
-3. **Three attempts per finding.** From round 2, a finding that meets tests 1
-   to 4 means a correction was wrong; it belongs to the finding that
-   correction was for. The second attempt says what the first got wrong and
-   is smaller than the first: it takes out or narrows what the first attempt
-   added, and only when no smaller fix meets the finding does it take a
-   different approach. Never a patch on the patch. A third attempt does the
-   same. When a round finds such a defect in the third attempt, the issue
-   stops for a person, with the three attempts and what each got wrong in the
-   report. Under `review=until-clean` (`/gogogo:dev` §1) there is no attempt
+   or simply finding no path, declines nothing: the finding stays test 3.
+   Except a new finding in a correction (rule 3), which needs evidence that
+   it is met. A finding that also meets test 1, 2 or 4 needs no line and is
+   never declined by one, so "no client we ship does that" never declines a
+   security hole or lost data. The rule holds under `review=until-clean`.
+
+   **The spec's own wording.** Before the reach line, and before changing
+   anything for a finding that would be test 3 and would change how a check,
+   filter, condition or reader decides something, find the spec's own words
+   for that rule (a Design item, a Verify step, a test case). When they name
+   the finding's case, or clearly cover it, the finding is test 7, declined as
+   `settled`. When the spec has words for the rule but none that cover the
+   case, the finding is test 5. Either way its line in the report names the
+   item and quotes its words. A finding that also meets test 1, 2 or 4 is
+   never moved by this. It applies to a new finding in a correction (rule 3)
+   too.
+3. **Attempts per finding.** From round 2, a finding that meets tests 1
+   to 4 in what a correction changed is one of two kinds:
+   - **Again**: the correction does not meet the finding it was for: that
+     finding's own case (the input it was raised on) still fails. It is the
+     next attempt at that finding.
+   - **New**: the correction meets the finding it was for, and the round
+     found a different case (another input) in the lines the correction
+     added or changed, even when it shows the same symptom. It
+     is a new finding with its own attempts. When it would be test 3,
+     it is applied only when its reach line names how a real user or run
+     meets it, with evidence a reader can open (a `file:line`, a record, a
+     device, browser or input the repo documents as supported); otherwise it
+     is declined as `hypothetical` and listed as a follow-up.
+
+   When the round cannot tell which kind, it is again. The second attempt
+   says what the first got wrong and is smaller than the first: it takes out
+   or narrows what the first attempt added, and only when no smaller fix
+   meets the finding does it take a different approach. Never a patch on the patch. Each later attempt does the
+   same. When a round finds an *again* defect in the last attempt the limit
+   allows, the issue stops for a person, with the attempts and what each got
+   wrong in the report. The limit is, first that applies: no limit under
+   `review=until-clean`; the number an `/gogogo:auto-dev` run was started with
+   (`--attempts <n>`); the profile's `review.attempts`; 3. Rule 7's prose
+   limit and rule 8's breaker do not change with it. Under `review=until-clean` (`/gogogo:dev` §1) there is no attempt
    limit: each attempt still says what the last got wrong and takes a
    different approach.
 4. **No flip-flops.** A finding that would undo a correction made in an
@@ -164,8 +193,8 @@ Then the review, by these rules:
    the issue stops for a person, who decides.
 5. **Late findings.** From round 2, a finding about something no correction
    touched is declined as `late` and listed as a follow-up, unless it meets
-   test 2, 3 or 4, in which case it is a new finding with its own three
-   attempts.
+   test 2, 3 or 4, in which case it is a new finding with its own
+   attempts (rule 3).
 6. **A small addition that goes wrong is removed.** When a later round finds a
    defect in something applied as `added`, the addition is taken out and
    listed as a follow-up.
