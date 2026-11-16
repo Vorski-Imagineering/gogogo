@@ -109,7 +109,9 @@ Then the review, by these rules:
    spec or a rule in `CLAUDE.md`, breaks something that worked, or has a bug
    with a concrete triggering case, saying when it can how a real user or run
    reaches it in production, and to name any code, test or guard the
-   change has that the spec does not need. From round 2, also give it the findings
+   change has that the spec does not need. When a finding would change how a
+   check, filter or reader decides, it names the spec's line for that rule, or
+   says it found none. From round 2, also give it the findings
    already declined, one line each, and tell it not to raise them again.
 2. **Which findings are applied.** Take the first test a finding meets. A
    reviewer's own label ("correctness", a severity) does not change which
@@ -146,6 +148,17 @@ Then the review, by these rules:
    it is met. A finding that also meets test 1, 2 or 4 needs no line and is
    never declined by one, so "no client we ship does that" never declines a
    security hole or lost data. The rule holds under `review=until-clean`.
+
+   **The spec's own wording.** Before the reach line, and before changing
+   anything for a finding that would be test 3 and would change how a check,
+   filter, condition or reader decides something, find the spec's own words
+   for that rule (a Design item, a Verify step, a test case). When they name
+   the finding's case, or clearly cover it, the finding is test 7, declined as
+   `settled`. When the spec has words for the rule but none that cover the
+   case, the finding is test 5. Either way its line in the report names the
+   item and quotes its words. A finding that also meets test 1, 2 or 4 is
+   never moved by this. It applies to a new finding in a correction (rule 3)
+   too.
 3. **Three attempts per finding.** From round 2, a finding that meets tests 1
    to 4 in what a correction changed is one of two kinds:
    - **Again**: the correction does not meet the finding it was for: that

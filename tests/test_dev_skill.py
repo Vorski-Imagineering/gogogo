@@ -217,6 +217,34 @@ class NewCaseInCorrection(unittest.TestCase):
         self.assertIn("both kinds", refix)
 
 
+class SpecWording(unittest.TestCase):
+    """gogogo#291: a bug finding about a rule is weighed against the spec's own words first."""
+
+    def paragraph(self):
+        text = DEV_REVIEW.read_text(encoding="utf-8")
+        return text.split("**The spec's own wording.**")[1].split("\n3. **")[0]
+
+    def test_the_paragraph_is_after_the_reach_line(self):
+        text = DEV_REVIEW.read_text(encoding="utf-8")
+        at = text.index("**The spec's own wording.**")
+        self.assertLess(text.index("**The reach line.**"), at)
+        self.assertLess(at, text.index("\n3. **"))
+
+    def test_it_names_its_tests(self):
+        for name in ("test 7", "settled", "test 5", "test 1, 2 or 4"):
+            self.assertIn(name, self.paragraph())
+
+    def test_the_brief_asks_for_the_spec_line(self):
+        text = DEV_REVIEW.read_text(encoding="utf-8")
+        rule = text.split("\n1. **")[1].split("\n2. **")[0]
+        self.assertIn("spec's line", rule)
+
+    def test_the_declined_line_quotes_the_spec(self):
+        text = DEV.read_text(encoding="utf-8")
+        declined = text.split("**Declined**:")[1].split("\n  -")[0]
+        self.assertIn("quoted words", declined)
+
+
 class Excess(unittest.TestCase):
     """The review's table names only reasons review_stats.py counts, and the size is measured (gogogo#231)."""
 
