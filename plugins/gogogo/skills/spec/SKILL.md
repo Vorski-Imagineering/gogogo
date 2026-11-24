@@ -61,7 +61,7 @@ by what the choice changes, never by how sure you are:
 | **Engineering** | How it is built, where a later change could undo it without anyone noticing a difference | Which pattern finds an issue number in a branch name |
 
 A choice that could be two kinds counts as the one that asks more: approval
-over product, product over engineering.
+over product, product over engineering. A visible difference between the planned build and a mock the person chose is asked at every level, in an *as built* round: **REQUIRED REFERENCE:** read `references/chosen-mock.md` before writing the Design.
 
 The profile's `independence` sets which kinds you ask about. Absent means `junior-dev`.
 
@@ -71,10 +71,9 @@ The profile's `independence` sets which kinds you ask about. Absent means `junio
 | `tech-lead` | approvals, product | engineering |
 | `product-owner` | approvals | product, engineering |
 
-Approvals are asked at every level. A kind the level does not ask about is
-yours to decide: pick, and record it under *Decided without asking* in
-`## Approvals` with its reason (§ *`## Approvals`*), and build the spec's
-`## Design` on it.
+Approvals are asked at every level. A kind the level does not ask about is yours
+to decide: pick, and record it under *Decided without asking* in `## Approvals`
+with its reason (§ *`## Approvals`*), and build the spec's `## Design` on it.
 
 At `tech-lead` or `product-owner`, when your model is not Opus-class or above,
 say in one line that this level is recommended for an Opus-class model at
@@ -105,10 +104,9 @@ argument, or words that name none of them):
    `references/several-issues.md` and start at rule 2 with the column chosen;
    its list is read again there. *Name an issue* with none given: ask for it
    in plain text and wait for the reply.
-7. A decline, or no person to ask (the question tool errors, or
-   `claude -p`): stop, post nothing, and say nothing was
-   specced. The four-choice menu of *When the user declines a question* is
-   not used: no spec fork was asked.
+7. A decline, or no person to ask (the question tool errors, or `claude -p`):
+   stop, post nothing, and say nothing was specced. The four-choice menu of
+   *When the user declines a question* is not used: no spec fork was asked.
 
 ## Several issues in one run
 
@@ -317,14 +315,13 @@ has no card and no pull request.
      `resolves` or `resolved` (any case, optional `:`), then references split by `,` or `and`, one being `#<N>` or
      `<tracker.issues_repo>#<N>` as a whole token.
 
-   Match the token, not a plain number search (`1<N>`, line numbers). A
-   non-zero exit from either command counts as being built, with the reason
-   "could not check". A card in `tracker.columns.needs_human` does not count:
-   it was handed back for a person, usually for exactly this re-spec.
-   An open pull request with `#<N>` as a token in its title or body that claims
-   it by none of these is a *mention*: say one line per mention, "PR <link>
-   mentions #<N> but does not claim it", whether or not it is being built, and
-   ask nothing about it.
+   Match the token, not a plain number search (`1<N>`, line numbers). A non-zero
+   exit from either command counts as being built, with the reason "could not
+   check". A card in `tracker.columns.needs_human` does not count: it was handed
+   back for a person, usually for exactly this re-spec. An open pull request
+   with `#<N>` as a token in its title or body that claims it by none of these
+   is a *mention*: say one line per mention, "PR <link> mentions #<N> but does
+   not claim it", whether or not it is being built, and ask nothing about it.
 3. Not being built: go on to *Before you write*.
 4. Being built: say so in one sentence, naming the column or the pull request
    link, and that the build was made against the current spec. Ask: **change
@@ -492,6 +489,7 @@ Listed in one place so an adapter for another agent knows what to replace.
   has started.
 - **Prior work** (*Before you write* § 7) uses `WebSearch`, and `WebFetch` to
   read a page it finds. Without them, say so in the `Prior work` paragraph.
+- **An *as built* round** (*Who decides*) draws its frames with the `Artifact` tool (a Design type when one is listed, else an HTML page) and asks with `AskUserQuestion`; without a way to draw, the reference's list form.
 
 ## Working alongside superpowers
 

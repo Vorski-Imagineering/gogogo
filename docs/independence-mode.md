@@ -37,6 +37,10 @@ more.
 - **Approvals are always asked.** No level lets Claude approve its own change
   to anything on the repo's ask-before-changing list, or apply a change to a
   shared environment.
+- **A difference from a mock you chose is always asked.** When you picked a
+  design from mock-ups, every visible way the plan differs from it is shown to
+  you as an "as built" picture beside the mock, in one question after the
+  usual round, and never decided by Claude.
 - **What Claude decides is written down.** In a spec, each decision Claude
   took goes under *Decided without asking* in the issue, with its reason. The
   reply ends with a short list of them, so you can overturn any one. An
