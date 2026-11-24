@@ -61,7 +61,9 @@ by what the choice changes, never by how sure you are:
 | **Engineering** | How it is built, where a later change could undo it without anyone noticing a difference | Which pattern finds an issue number in a branch name |
 
 A choice that could be two kinds counts as the one that asks more: approval
-over product, product over engineering. A visible difference between the planned build and a mock the person chose is asked at every level, in an *as built* round: **REQUIRED REFERENCE:** read `references/chosen-mock.md` before writing the Design.
+over product, product over engineering.
+
+A visible difference between the planned build and a mock the person chose is asked at every level, in an *as built* round: **REQUIRED REFERENCE:** read `references/chosen-mock.md` before writing the Design.
 
 The profile's `independence` sets which kinds you ask about. Absent means `junior-dev`.
 
