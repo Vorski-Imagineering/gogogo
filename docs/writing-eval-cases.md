@@ -72,6 +72,25 @@ plugins/gogogo/evals/<skill>-<what-it-checks>/
   step or an order that is in the skill's text and nowhere in the prompt.
 - No `llm` or `baseline` graders; the suite test rejects them.
 
+## Checking a new case alone first
+
+Runs one case, with and without the plugin, three times each, for about
+$0.50–1 a try. It shows in minutes whether a new or changed case does worse
+without the plugin, before a spec is posted or a full baseline run is paid for:
+
+```bash
+claude plugin eval <copy> --runs 3 --threshold 0.66 --concurrency 3 --ablation with-without --trust-plugin --no-publish --json <scratch>/<case>.json --case <case>
+```
+
+`<copy>` is, for a spec, a copy of `plugins/gogogo` in the scratchpad with the
+case written into it; for a build, the worktree's `plugins/gogogo`. The case
+passes the check when it scores at least 0.66 with the plugin and lower
+without it. When it does as well without, reword the prompt, never a grader's
+expected answer, and run again: at most 3 tries in all.
+
+This repo requires it in the evals bullet of the profile's
+`## Lane constraints` (`.agents/dev-process.md`).
+
 ## Showing it does worse without the plugin
 
 ```bash
@@ -130,6 +149,12 @@ load the installed gogogo plugin instead of the working tree's, so its answer
 says nothing about your change.
 
 ## Why it is written this way
+
+A new case is checked alone first because a spec-written prompt often gives
+the answer away, and the full `--baseline` run that would show it costs
+$24–35. A spec runs it from a scratch copy because the eval tool writes its
+results under the folder it is given, and other sessions load this repo's
+plugin tree.
 
 - **0.66.** The lane passes a case at a score of 0.66 or more over its graders
   in two of three runs, so a case that loses one of three graders can still
