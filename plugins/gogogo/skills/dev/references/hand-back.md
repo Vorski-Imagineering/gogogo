@@ -235,7 +235,8 @@ repo's own command merges instead, and its own checks stand. In order:
    must contain the base as it is now, which this command checks:
    `git merge-base --is-ancestor origin/<base> HEAD`. When it fails, the base
    moved while the issue was built: do *The base moved*, below, before recording anything. Once it
-   holds, with the verification and gates passed: `<verified sha>` =
+   holds, with the verification and gates passed and the review reached the
+   latest commit (§5 rule 12): `<verified sha>` =
    `git rev-parse HEAD`, `<verified base>` = `git rev-parse origin/<base>`.
 3. **Closing references.** The check under *Name the issue without closing it*.
 4. **Wait for the checks, on every PR merge**, in the foreground:

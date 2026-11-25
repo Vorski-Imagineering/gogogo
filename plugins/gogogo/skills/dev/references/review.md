@@ -249,6 +249,27 @@ Then the review, by these rules:
     a run that commits, committed with them before the next round's range is
     taken). When the change is still larger, the round's line in the report
     says in a few words what grew it. The sizes go in the record as `size`.
+12. **Commits after the clean round.** Before the report (§7), and before any
+    merge (step 2 of the merge procedure, which records the verified commit, or
+    a `merge-script` repo's own merge command), check that the review reached
+    the latest commit. In a run that commits, take the last round's range's
+    upper end as `<reviewed>`, `git fetch origin`, and list
+    `git rev-list --no-merges <reviewed>..HEAD ^origin/<base>`. In a run that
+    does not commit, list the files changed since the last round. Nothing listed: the review
+    stands. Otherwise review those commits (or files) in one more round at
+    `precise`, as a correction round under rules 1 to 11, with rule 8 deciding
+    how it ends; for rule 5 the listed commits are the previous round's
+    corrections. Its line in the report names the commits and what made each (a
+    restored test, a fix after a failed verification or gate, a regenerated
+    file). When it applies anything, the full run, the test comparison (§6) and
+    the gates run again, and this rule is checked again after them. Commits from
+    the base are not listed; a base that moved follows *The base moved*. When
+    §3 to §6 run in a subagent (an authorisation with `model` or `effort`), the
+    subagent also checks this rule at the end of §6 and, in a run that
+    commits, returns its last reviewed commit, which the session that started
+    it takes as `<reviewed>` until it runs a round of its own; in a run that
+    does not commit, that session lists the files changed since its own last
+    round, or, before it has run one, since the subagent returned.
 
 When the spec moves content unchanged, findings about that content are not
 part of the move: list them in the report as follow-ups. A finding there that

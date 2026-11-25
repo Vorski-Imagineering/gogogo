@@ -29,7 +29,7 @@ CASES = {
     "dev-round-checks-focused-tests", "dev-silent-review-restarts", "dev-mutate-key-not-read",
     "auto-dev-label-less-card", "human-help-question-states-reach", "spec-question-states-reach", "spec-inference-is-not-a-requirement", "wrap-up-question-states-reach", "auto-dev-continues-kept-worktree", "auto-dev-takes-board-order", "auto-dev-open-decision", "auto-dev-list-fails",
     "auto-dev-review-wait", "auto-dev-review-wait-no-goal", "auto-dev-review-wait-pauses",
-    "auto-dev-late-run-pr", "dev-merge-refused",
+    "auto-dev-late-run-pr", "dev-merge-refused", "dev-post-clean-commit-reviewed",
     "dev-deletes-merged-local-branch", "dev-blocked-goes-to-queue", "auto-dev-skips-blocked",
     "auto-dev-related-board-unreadable",
     "human-help-review-stop", "human-help-hard-stop-asks", "human-help-requeued-twice",
