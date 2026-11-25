@@ -90,13 +90,14 @@ order, checking each step before starting the next:
    - links, except into `tracker.issues_repo` or `tracker.code_repo`, under
      an `environments` entry's `url` or one of its `other_urls` in the profile,
      to a public product's documentation or public project page, or to a page
-     this run opened without signing in, cited as a source in `## Context`
-     (the `**Prior work.**` paragraph of *Before you write* § 7 included),
-     unless the page could be read only while signed in (a paywalled paper, a
-     members-only post, a private forum). A Prior work source that loses its
-     link for that reason keeps its one-line summary. A shared, preview, signed or secret link is removed
-     wherever it points. The rule on names above and
-     the token rule below apply inside a kept link too;
+     this run read in full without signing in, cited as a source in
+     `## Context` (the `**Prior work.**` paragraph of *Before you write* § 7
+     included). A Prior work source that no other exception here keeps and
+     that this run could not read in full without signing in (a paywalled
+     paper, a members-only post, a private forum) loses its link and keeps its
+     one-line summary. A shared, preview, signed or secret link is removed
+     wherever it points. The rule on names above and the token rule below
+     apply inside a kept link too;
    - anything that looks like a token or key, and email addresses;
    - people's names (use their role);
    - anything else not known to be safe to publish.
