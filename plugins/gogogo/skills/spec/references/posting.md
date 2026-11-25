@@ -93,10 +93,11 @@ order, checking each step before starting the next:
      cited as a source in `## Context` (the `**Prior work.**` paragraph of
      *Before you write* § 7 included) that this run opened without signing in
      (a search or a fetch with no credentials, so anyone can read it; not a
-     paywalled paper, a members-only post or a private forum). A Prior work source whose link this
-     step removes loses the link and keeps its one-line summary. A shared,
-     preview, signed or secret link is removed wherever it points. The rule on
-     names above and the token rule below apply inside a kept link too;
+     paywalled paper, a members-only post or a private forum). A Prior work
+     source whose link this step removes loses the link and keeps its one-line
+     summary. A shared, preview, signed or secret link is removed wherever it
+     points. The rule on names above and the token rule below apply inside a
+     kept link too;
    - anything that looks like a token or key, and email addresses;
    - people's names (use their role);
    - anything else not known to be safe to publish.
