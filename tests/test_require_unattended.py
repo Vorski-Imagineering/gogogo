@@ -94,6 +94,95 @@ class RequireUnattendedTest(unittest.TestCase):
         r = self.run_script(cwd=repo)
         self.assertEqual(r.returncode, 0, r.stderr)
 
+    def parent(self, comm, args):
+        self.chain((comm, args))
+
+    def chain(self, *procs):
+        """Replace the fake `ps` with one whose walk meets `procs`, nearest first.
+
+        Any pid it does not know is the script's own shell, whose parent is
+        pid 1001; process 1000+k is procs[k-1], and the last one's parent is 1.
+        """
+        def q(v):
+            return "'" + v.replace("'", "'\\''") + "'"
+        rows = "".join(
+            f"  {1001 + k}) comm={q(c)}; args={q(a)}; ppid={1002 + k if k + 1 < len(procs) else 1} ;;\n"
+            for k, (c, a) in enumerate(procs))
+        with open(os.path.join(self.tmp, "bin", "ps"), "w") as f:
+            f.write(
+                "#!/bin/sh\n"
+                'case "$4" in\n'
+                + rows +
+                "  *) comm=sh; args='sh require_unattended.sh'; ppid=1001 ;;\n"
+                "esac\n"
+                'case "$2" in comm=) echo "$comm" ;; args=) echo "$args" ;; ppid=) echo "$ppid" ;; esac\n'
+            )
+
+    def bare_transcript(self, folder, *lines):
+        d = os.path.join(self.projects, folder)
+        os.makedirs(d, exist_ok=True)
+        with open(os.path.join(d, SESSION + ".jsonl"), "w") as f:
+            for line in lines:
+                f.write(json.dumps(line, separators=(",", ":")) + "\n")
+
+    def test_no_mode_recorded_passes_when_started_with_bypass(self):
+        self.bare_transcript("-Users-someone-repo", {"type": "user"})
+        self.parent("claude", "claude --permission-mode bypassPermissions")
+        r = self.run_script()
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertEqual(r.stdout.strip(),
+                         "bypassPermissions: on (started with a bypass flag; no mode change recorded)")
+
+    def test_no_mode_recorded_fails_without_the_flag(self):
+        self.bare_transcript("-Users-someone-repo", {"type": "user"})
+        self.parent("claude", "claude --chrome")
+        r = self.run_script()
+        self.assertEqual(r.returncode, 1)
+        self.assertIn("not started with a bypass flag", r.stderr)
+        self.assertIn("Shift+Tab", r.stderr)
+
+    def test_a_recorded_mode_wins_over_the_flag(self):
+        self.transcript("-Users-someone-repo", "default")
+        self.parent("claude", "claude --permission-mode bypassPermissions")
+        r = self.run_script()
+        self.assertEqual(r.returncode, 1)
+        self.assertIn("permission mode is 'default'", r.stderr)
+
+    def test_permission_mode_record_type_is_read(self):
+        self.bare_transcript("-Users-someone-repo", {"type": "user"},
+                             {"type": "permission-mode", "permissionMode": "bypassPermissions"})
+        r = self.run_script()
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertEqual(r.stdout.strip(), "bypassPermissions: on")
+
+    def test_a_shell_mentioning_the_flag_does_not_count(self):
+        self.bare_transcript("-Users-someone-repo", {"type": "user"})
+        self.parent("sh", 'sh -c "claude --permission-mode bypassPermissions"')
+        r = self.run_script()
+        self.assertEqual(r.returncode, 1)
+        self.assertIn("not started with a bypass flag", r.stderr)
+
+    def test_no_transcript_interactive_still_fails(self):
+        self.parent("claude", "claude --permission-mode bypassPermissions")
+        r = self.run_script()
+        self.assertEqual(r.returncode, 1)
+        self.assertIn("no session transcript named", r.stderr)
+
+    def test_the_first_claude_process_decides(self):
+        self.bare_transcript("-Users-someone-repo", {"type": "user"})
+        self.chain(("claude", "claude --chrome"),
+                   ("claude", "claude --permission-mode bypassPermissions"))
+        r = self.run_script()
+        self.assertEqual(r.returncode, 1)
+        self.assertIn("not started with a bypass flag", r.stderr)
+
+    def test_a_background_session_named_by_its_version(self):
+        self.bare_transcript("-Users-someone-repo", {"type": "user"})
+        self.parent("2.1.325", "/home/someone/.local/share/claude/versions/2.1.325"
+                    " --session-id x --permission-mode bypassPermissions")
+        r = self.run_script()
+        self.assertEqual(r.returncode, 0, r.stderr)
+
     def test_no_session_id_fails(self):
         self.transcript("-Users-someone-repo", "bypassPermissions")
         env = dict(self.env)
