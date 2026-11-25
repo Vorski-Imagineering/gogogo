@@ -564,9 +564,13 @@ class IssueSideCrossCheckTests(unittest.TestCase):
         busy = issue_node(9, "busy", "New")
         busy["projectItems"]["totalCount"] = 11
         busy["projectItems"]["nodes"] = busy["projectItems"]["nodes"] * 10
-        with mock.patch.object(board, "graphql", side_effect=[issue_page([busy])]):
-            with self.assertRaisesRegex(board.BoardError, "#9"):
-                board.issue_side_cards(board.DEFAULT_REPO)
+        err = io.StringIO()
+        with mock.patch.object(sys, "argv", ["tracker.py", "list"]), \
+             mock.patch.object(board, "configure"), \
+             mock.patch.object(board, "graphql", side_effect=[page([], total=0), issue_page([busy])]), \
+             redirect_stdout(io.StringIO()), redirect_stderr(err):
+            self.assertEqual(board.main(), 2)
+        self.assertIn("#9", err.getvalue())
 
     def test_one_issue_side_read_serves_both_checks(self):
         cards, err, sent = self.run_list("New", [
