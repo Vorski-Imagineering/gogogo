@@ -259,14 +259,14 @@ Then the review, by these rules:
     stands. Otherwise review those commits (or files) in one more round at
     `precise`, as a correction round under rules 1 to 11, with rule 8 deciding
     how it ends; for rule 5 the listed commits are the previous round's
-    corrections, and a finding in them is new under rule 3. Its line in the report names the commits and what made each (a
+    corrections. Its line in the report names the commits and what made each (a
     restored test, a fix after a failed verification or gate, a regenerated
     file). When it applies anything, the full run, the test comparison (§6) and
     the gates run again, and this rule is checked again after them. Commits from
     the base are not listed; a base that moved follows *The base moved*. When
-    §3 to §6 ran in a subagent (an authorisation with `model` or `effort`), it
-    returns `<reviewed>` with its report, and the session that started it
-    checks this rule, starting the late round in a subagent the same way.
+    §3 to §6 run in a subagent (an authorisation with `model` or `effort`), the
+    subagent also checks this rule at the end of §6 and, in a run that
+    commits, returns its last reviewed commit as `<reviewed>` with its report.
 
 When the spec moves content unchanged, findings about that content are not
 part of the move: list them in the report as follow-ups. A finding there that
