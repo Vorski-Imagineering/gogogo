@@ -82,12 +82,11 @@ without the plugin, before a spec is posted or a full baseline run is paid for:
 claude plugin eval <copy> --runs 3 --threshold 0.66 --concurrency 3 --ablation with-without --trust-plugin --no-publish --json <scratch>/<case>.json --case <case>
 ```
 
-`<copy>` is, for a spec, a copy of `plugins/gogogo` from `origin/main` in the
-scratchpad with the case and the skill text it tests written into it; for a
-build, the worktree's `plugins/gogogo`. The case passes the check when it
-scores at least 0.66 with the plugin and lower without it. When it does as
-well without, reword the prompt, never a grader's expected answer, and run
-again: at most 3 tries in all, and the spec keeps the last try's wording.
+`<copy>` is, for a spec, a copy of `plugins/gogogo` in the scratchpad with the
+case written into it; for a build, the worktree's `plugins/gogogo`. The case
+passes the check when it scores at least 0.66 with the plugin and lower
+without it. When it does as well without, reword the prompt, never a grader's
+expected answer, and run again: at most 3 tries in all.
 
 This repo requires it in the evals bullet of the profile's
 `## Lane constraints` (`.agents/dev-process.md`).

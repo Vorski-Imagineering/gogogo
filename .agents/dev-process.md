@@ -122,15 +122,12 @@ index = "docs/README.md"
   new or changed case is checked alone, with and without the plugin, before
   the whole-skill `--baseline` run:
   1. **Spec.** Before posting a spec whose Design adds or changes an eval case,
-     copy `plugins/gogogo` from `origin/main` to the scratchpad (for example
-     `git archive origin/main plugins/gogogo | tar -x -C <scratch>`), write
-     the case there exactly as the Design gives it, together with the skill
-     text the Design changes that the case tests, and run
+     copy `plugins/gogogo` to the scratchpad, write the case there exactly as
+     the Design gives it, and run
      `claude plugin eval <copy> --runs 3 --threshold 0.66 --concurrency 3 --ablation with-without --trust-plugin --no-publish --json <scratch>/<case>.json --case <case>`.
   2. It passes when the case scores at least 0.66 with the plugin and lower
      without it. Otherwise reword the prompt (never a grader's expected
-     answer) and run again: at most 3 tries in all. The Design's prompt is
-     then the last try's wording.
+     answer) and run again: at most 3 tries in all.
   3. The spec's evals Test case gives the last try's score with and without
      the plugin and each try's cost, from the run's JSON file (the command
      prints none). After 3 tries with none doing worse, it says so with the

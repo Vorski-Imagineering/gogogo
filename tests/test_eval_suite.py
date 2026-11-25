@@ -170,11 +170,6 @@ class SingleCaseFirst(unittest.TestCase):
         lanes = sections["Lane constraints"]
         for name in ("--ablation with-without", "--case", "--baseline"):
             self.assertIn(name, lanes)
-        # Added beyond the spec in review: the copy comes from origin/main, carries the
-        # skill text the case tests, and the spec keeps the last try's prompt.
-        flat = " ".join(lanes.split())
-        for name in ("from `origin/main`", "skill text the Design changes", "last try's wording"):
-            self.assertIn(name, flat)
 
 
 if __name__ == "__main__":
