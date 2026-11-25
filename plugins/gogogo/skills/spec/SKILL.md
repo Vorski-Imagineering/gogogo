@@ -84,9 +84,7 @@ medium effort or higher, then carry on.
 ## Given nothing to spec
 
 When the user gives no issue, no idea and no column (`/gogogo:spec` with no
-argument, or words that name none of them). Words that name none of them get
-a plain-text question asking which issue; the steps below are for
-`/gogogo:spec` alone:
+argument, or words that name none of them):
 
 1. Without `tracker.tool`, ask for an issue number or an idea; the rest of
    this section does not apply.
@@ -102,8 +100,7 @@ a plain-text question asking which issue; the steps below are for
    issue and why, and stop.
 5. Otherwise start without asking: a board-column run of that column. Read
    `references/several-issues.md` and start at rule 2 with that column; its
-   list is read again there. With no person present (`claude -p`), stop
-   instead, post nothing, and say nothing was specced.
+   list is read again there.
 
 ## Several issues in one run
 
