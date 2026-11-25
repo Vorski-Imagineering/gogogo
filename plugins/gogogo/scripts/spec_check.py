@@ -28,7 +28,7 @@ A Files entry ending `/` is a folder: it covers every file beneath it.
 An `F:` item may be answered in `verify`, only to declare that a planned file
 the change does not touch was built at another path:
 `F:<planned> | differs | <actual> | <why>`, where `<actual>` is one path listed
-as `outside:` that no other such line names. The item then counts as one
+as `outside:`, a file in the working tree, that no other such line names. The item then counts as one
 difference and `<actual>` is no longer outside; an `F:` item with no line keeps
 its status.
 
@@ -278,9 +278,8 @@ def _move_problem(item: dict, status: str, evidence: str, note: str, outside: li
         return "a declared move is differs"
     if evidence not in outside:
         return f"evidence {evidence!r} is not one path listed as outside"
-    problem = _resolves(evidence)
-    if problem:
-        return f"evidence {problem}"
+    if not Path(evidence).is_file():
+        return f"evidence {evidence!r} is not a file in the working tree"
     if evidence in taken:
         return f"{evidence} is named by another declared move"
     if not note:
