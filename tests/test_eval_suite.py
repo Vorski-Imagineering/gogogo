@@ -43,6 +43,7 @@ CASES = {
     "spec-reverses-tested-behaviour", "spec-licenses-a-deleted-folder", "spec-unmet-precondition",
     "spec-measure-first",
     "spec-public-tracker-reread", "spec-files-the-related-half", "spec-keeps-a-listed-second-host",
+    "spec-keeps-a-public-source",
     "docs-history-counts-or-cuts", "docs-history-keeps-mistakes", "docs-history-starts-after-the-doc",
     "roadmap-shared-checkout", "roadmap-milestones-ask-first",
     "status-sweep-lists-only", "status-shows-independence", "status-related-repos", "auto-dev-close-lists-related",
