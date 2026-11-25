@@ -775,6 +775,16 @@ class DeclaredMove(Verify):
 
     MOVE = "F:lib/new.py | differs | app/new.py | lint forbids lib/ from importing app"
 
+    def setUp(self):
+        super().setUp()
+        (self.dir / "app" / "new.py").write_text("RANK = 1\n")
+
+    def test_a_move_to_a_file_not_on_disk_is_refused(self):
+        (self.dir / "app" / "new.py").unlink()
+        out, code = self.moved(self.answers() + self.MOVE + "\n")
+        self.assertEqual(code, 2, out)
+        self.assertIn("F:lib/new.py", out)
+
     def moved(self, answers, changed=None):
         body = BODY.replace("**Create:** `tests/test_list.py`.", "**Create:** `tests/test_list.py`, `lib/new.py`.")
         return call("verify", "--base", "main", body=body, answers=answers,

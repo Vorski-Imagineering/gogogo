@@ -58,7 +58,6 @@ from __future__ import annotations
 
 import argparse
 import json
-import posixpath
 import re
 import subprocess
 import sys
@@ -277,11 +276,13 @@ def _move_problem(item: dict, status: str, evidence: str, note: str, outside: li
         return "only a missing planned file can be declared moved"
     if status != "differs":
         return "a declared move is differs"
-    path = posixpath.normpath(evidence)
-    if path not in outside or ":" in evidence or ", " in evidence:
+    if evidence not in outside:
         return f"evidence {evidence!r} is not one path listed as outside"
-    if path in taken:
-        return f"{path} is named by another declared move"
+    problem = _resolves(evidence)
+    if problem:
+        return f"evidence {problem}"
+    if evidence in taken:
+        return f"{evidence} is named by another declared move"
     if not note:
         return "differs needs a note"
     return None
@@ -291,7 +292,7 @@ def check_answers(listed: dict, answers: str) -> tuple[list[str], list[dict], di
     """(errors, answers as dicts in item order, declared moves by F: id)."""
     ids = [i["id"] for i in listed["items"] if not i["id"].startswith("F:")]
     files = {i["id"]: i for i in listed["items"] if i["id"].startswith("F:")}
-    outside = [posixpath.normpath(f) for f in listed["outside"]]
+    outside = listed["outside"]
     errors, seen, moves = [], {}, {}
     for number, raw in enumerate(answers.splitlines(), 1):
         line = raw.strip()
@@ -311,7 +312,7 @@ def check_answers(listed: dict, answers: str) -> tuple[list[str], list[dict], di
             if problem:
                 errors.append(f"line {number}: {id_}: {problem}")
             else:
-                moves[id_] = {"path": posixpath.normpath(evidence),
+                moves[id_] = {"path": evidence,
                               "line": f"{id_} | differs | {evidence} | {note}"}
             continue
         if id_ not in ids:
@@ -383,7 +384,7 @@ def main(argv=None) -> int:
             print(f"error: {line}", file=sys.stderr)
         return 2
     moved = {m["path"] for m in moves.values()}
-    listed["outside"] = [f for f in listed["outside"] if posixpath.normpath(f) not in moved]
+    listed["outside"] = [f for f in listed["outside"] if f not in moved]
     files = [i for i in listed["items"] if i["id"].startswith("F:")]
     for f in files:
         if f["id"] in moves:
