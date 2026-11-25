@@ -770,5 +770,89 @@ class Verify(unittest.TestCase):
         self.assertEqual([i["id"] for i in json.loads(out)["items"]], IDS)
 
 
+class DeclaredMove(Verify):
+    """A planned file built at another path is one declared difference (gogogo#328)."""
+
+    MOVE = "F:lib/new.py | differs | app/new.py | lint forbids lib/ from importing app"
+
+    def setUp(self):
+        super().setUp()
+        (self.dir / "app" / "new.py").write_text("RANK = 1\n")
+
+    def test_a_move_to_a_file_not_on_disk_is_refused(self):
+        (self.dir / "app" / "new.py").unlink()
+        out, code = self.moved(self.answers() + self.MOVE + "\n")
+        self.assertEqual(code, 2, out)
+        self.assertIn("F:lib/new.py", out)
+
+    def test_a_move_path_ending_in_a_number_is_one_file(self):
+        # Guards that the moved path is not read as `path:line`.
+        (self.dir / "app" / "new:12").write_text("RANK = 1\n")
+        out, code = self.moved(self.answers() + self.MOVE.replace("app/new.py", "app/new:12") + "\n",
+                               changed=self.changed + ["app/new:12"])
+        self.assertEqual(code, 1, out)
+        self.assertIn("missing=0 differs=1", self.summary(out))
+
+    def test_a_move_line_twice_is_refused_once(self):
+        out, code = self.moved(self.MOVE + "\n" + self.MOVE + "\n" + self.answers())
+        self.assertEqual(code, 2, out)
+        self.assertIn("F:lib/new.py is answered twice", out)
+        self.assertNotIn("no answer", out)
+
+    def test_the_printed_lines_are_exact(self):
+        out, code = self.moved(self.answers() + self.MOVE + "\n")
+        lines = out.splitlines()
+        self.assertIn(self.MOVE, lines)
+        self.assertFalse([line for line in lines if line.startswith("F:") and line != self.MOVE], out)
+        out, code = self.moved(self.answers())
+        self.assertIn("F:lib/new.py\tmissing", out.splitlines())
+
+    def test_without_a_base_a_file_reads_na(self):
+        out, code = call("verify", answers=self.answers(), cwd=self.dir)
+        self.assertIn("F:app/views.py\tna", out.splitlines())
+
+    def moved(self, answers, changed=None):
+        body = BODY.replace("**Create:** `tests/test_list.py`.", "**Create:** `tests/test_list.py`, `lib/new.py`.")
+        return call("verify", "--base", "main", body=body, answers=answers,
+                    changed=self.changed + ["app/new.py"] if changed is None else changed, cwd=self.dir)
+
+    def summary(self, out):
+        return out.strip().splitlines()[-1]
+
+    def test_a_declared_move_is_one_difference(self):
+        out, code = self.moved(self.answers() + self.MOVE + "\n")
+        self.assertEqual(code, 1, out)
+        self.assertIn("missing=0 differs=1", self.summary(out))
+        self.assertTrue(self.summary(out).endswith("outside=0"), out)
+        self.assertIn(self.MOVE, out)
+
+    def test_a_move_to_a_path_not_outside_is_refused(self):
+        out, code = self.moved(self.answers() + self.MOVE.replace("app/new.py", "app/views.py") + "\n")
+        self.assertEqual(code, 2, out)
+        self.assertIn("F:lib/new.py", out)
+
+    def test_a_met_file_cannot_be_declared_moved(self):
+        out, code = self.moved(self.answers() + "F:app/views.py | differs | app/new.py | moved\n")
+        self.assertEqual(code, 2, out)
+
+    def test_two_moves_to_one_path_are_refused(self):
+        second = "F:tests/test_list.py | differs | app/new.py | moved too"
+        out, code = self.moved(self.answers() + self.MOVE + "\n" + second + "\n",
+                                changed=["app/views.py", "plugins/x/skills/dev/SKILL.md", "app/new.py"])
+        self.assertEqual(code, 2, out)
+
+    def test_a_move_needs_differs_and_a_note(self):
+        for line in (self.MOVE.replace("| differs |", "| met |"),
+                     "F:lib/new.py | differs | app/new.py | "):
+            out, code = self.moved(self.answers() + line + "\n")
+            self.assertEqual(code, 2, line + "\n" + out)
+
+    def test_unanswered_files_keep_their_status(self):
+        out, code = self.moved(self.answers())
+        self.assertEqual(code, 1, out)
+        self.assertIn("missing=1", self.summary(out))
+        self.assertTrue(self.summary(out).endswith("outside=1"), out)
+
+
 if __name__ == "__main__":
     unittest.main()

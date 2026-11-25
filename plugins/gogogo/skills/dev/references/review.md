@@ -49,6 +49,10 @@ change for bugs. In order:
   - `missing`: nothing in the change does it. `differs`: the change does it
     another way than the item says; the note gives the spec's words and what
     the change has.
+  - An `F:` item the change built at another path is answered
+    `F:<planned path> | differs | <actual path> | <why>`, the actual path
+    being one the list printed as `outside:`. Every other `F:` item gets no
+    line.
   - `na`: only for what cannot be seen in the change (a run in a lane no test
     reaches, another repo), with the reason.
   - `met` and `differs` on a `D`, `T` or `A` item always have evidence. An
@@ -78,7 +82,9 @@ change for bugs. In order:
   - `differs`, and matching the spec is not possible or would be wrong, and
     the difference is small (it touches no Hard Stop item, adds no
     user-visible behaviour, setting or message the spec does not have, and
-    stays inside the files the spec lists) → keep it and declare it in §7;
+    stays inside the files the spec lists (a declared move counts as inside when
+    the actual path is under the same top-level folder as the planned one)) →
+    keep it and declare it in §7;
   - any other `differs`, and a `missing` item that cannot be built → the
     issue stops for a person (§8);
   - an `outside` file → take it out of the change, or keep it when a spec
