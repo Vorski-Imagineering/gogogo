@@ -320,5 +320,13 @@ class LateCommits(unittest.TestCase):
         self.assertIn("§5 rule 12", step)
 
 
+class DeclaredMoveRule(unittest.TestCase):
+    def test_the_reader_rules_name_the_move_line(self):
+        # gogogo#328: a planned file built at another path is declared, not missing.
+        text = DEV_REVIEW.read_text(encoding="utf-8")
+        for name in ("F:<planned path> | differs | <actual path>", "a declared move counts as inside when"):
+            self.assertIn(name, text)
+
+
 if __name__ == "__main__":
     unittest.main()

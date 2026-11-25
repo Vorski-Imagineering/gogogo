@@ -25,6 +25,13 @@ no list to be outside of). A file the change renames away counts as touched
 under its old path too, and only its new path is checked for `outside:`.
 A Files entry ending `/` is a folder: it covers every file beneath it.
 
+An `F:` item may be answered in `verify`, only to declare that a planned file
+the change does not touch was built at another path:
+`F:<planned> | differs | <actual> | <why>`, where `<actual>` is one path listed
+as `outside:` that no other such line names. The item then counts as one
+difference and `<actual>` is no longer outside; an `F:` item with no line keeps
+its status.
+
 `verify` reads a reader's answers, one line per `V`, `A`, `D`, `T` and `N`
 item: `<id> | <met|missing|differs|na> | <evidence> | <note>`. Evidence is
 `path`, `path:line`, `path::name`, or for a test inside a class
@@ -51,6 +58,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import posixpath
 import re
 import subprocess
 import sys
@@ -263,10 +271,28 @@ def _resolves(evidence: str) -> str | None:
     return None
 
 
-def check_answers(listed: dict, answers: str) -> tuple[list[str], list[dict]]:
-    """(errors, answers as dicts in item order)."""
+def _move_problem(item: dict, status: str, evidence: str, note: str, outside: list[str], taken: set) -> str | None:
+    """None when an `F:` answer declares a move the check accepts, else why not."""
+    if item.get("status") != "missing":
+        return "only a missing planned file can be declared moved"
+    if status != "differs":
+        return "a declared move is differs"
+    path = posixpath.normpath(evidence)
+    if path not in outside or ":" in evidence or ", " in evidence:
+        return f"evidence {evidence!r} is not one path listed as outside"
+    if path in taken:
+        return f"{path} is named by another declared move"
+    if not note:
+        return "differs needs a note"
+    return None
+
+
+def check_answers(listed: dict, answers: str) -> tuple[list[str], list[dict], dict]:
+    """(errors, answers as dicts in item order, declared moves by F: id)."""
     ids = [i["id"] for i in listed["items"] if not i["id"].startswith("F:")]
-    errors, seen = [], {}
+    files = {i["id"]: i for i in listed["items"] if i["id"].startswith("F:")}
+    outside = [posixpath.normpath(f) for f in listed["outside"]]
+    errors, seen, moves = [], {}, {}
     for number, raw in enumerate(answers.splitlines(), 1):
         line = raw.strip()
         if not line or line.startswith("#"):
@@ -276,6 +302,18 @@ def check_answers(listed: dict, answers: str) -> tuple[list[str], list[dict]]:
             errors.append(f"line {number}: expected <id> | <status> | <evidence> | <note>")
             continue
         id_, status, evidence, note = parts
+        if id_ in files:
+            if id_ in moves:
+                errors.append(f"line {number}: {id_} is answered twice")
+                continue
+            problem = _move_problem(files[id_], status, evidence, note, outside,
+                                    {m["path"] for m in moves.values()})
+            if problem:
+                errors.append(f"line {number}: {id_}: {problem}")
+            else:
+                moves[id_] = {"path": posixpath.normpath(evidence),
+                              "line": f"{id_} | differs | {evidence} | {note}"}
+            continue
         if id_ not in ids:
             errors.append(f"line {number}: {id_} is not an item")
             continue
@@ -298,7 +336,7 @@ def check_answers(listed: dict, answers: str) -> tuple[list[str], list[dict]]:
     for id_ in ids:
         if id_ not in seen:
             errors.append(f"{id_}: no answer")
-    return errors, [seen[i] for i in ids if i in seen]
+    return errors, [seen[i] for i in ids if i in seen], moves
 
 
 def main(argv=None) -> int:
@@ -339,18 +377,24 @@ def main(argv=None) -> int:
             print(f"outside: {name}")
         return 0
 
-    errors, answered = check_answers(listed, answers)
+    errors, answered, moves = check_answers(listed, answers)
     if errors:
         for line in errors:
             print(f"error: {line}", file=sys.stderr)
         return 2
+    moved = {m["path"] for m in moves.values()}
+    listed["outside"] = [f for f in listed["outside"] if posixpath.normpath(f) not in moved]
     files = [i for i in listed["items"] if i["id"].startswith("F:")]
+    for f in files:
+        if f["id"] in moves:
+            f["status"] = "differs"
     statuses = [a["status"] for a in answered] + [f.get("status", "na") for f in files]
     counts = {s: statuses.count(s) for s in STATUSES}
     summary = (f"spec-check: items={len(statuses)} met={counts['met']} missing={counts['missing']} "
                f"differs={counts['differs']} na={counts['na']} outside={len(listed['outside'])}")
     unmet = [a["line"] for a in answered if a["status"] != "met"]
-    unmet += [f"{f['id']}\t{f.get('status', 'na')}" for f in files if f.get("status") != "met"]
+    unmet += [moves[f["id"]]["line"] if f["id"] in moves else f"{f['id']}\t{f.get('status', 'na')}"
+              for f in files if f.get("status") != "met"]
     if args.json:
         print(json.dumps({"unmet": unmet, "outside": listed["outside"], "counts": counts,
                           "items": len(statuses), "summary": summary}, indent=2))
