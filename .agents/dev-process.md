@@ -118,10 +118,30 @@ index = "docs/README.md"
 - **evals**: `python3 tools/eval_changed.py` runs the eval cases of each skill the
   change touched (`plugins/gogogo/evals/`, with `claude plugin eval` on the
   session's own login, about $0.60 a case), and passes when every case scores 2
-  of 3 runs. A case passing on its own does not prove the plugin did it: a new
-  case is first run with `--skill <s> --baseline`, which fails when the case does
-  as well without the plugin. Its `tests` pattern makes the test guard read a
-  weakened or removed case like a weakened test. Not run in CI.
+  of 3 runs. A case passing on its own does not prove the plugin did it, so a
+  new or changed case is checked alone, with and without the plugin, before
+  anything else runs it:
+  1. **Spec.** Before posting a spec whose Design adds or changes an eval case,
+     copy `plugins/gogogo` to the scratchpad, write the case there exactly as
+     the Design gives it, and run
+     `claude plugin eval <copy> --runs 3 --threshold 0.66 --concurrency 3 --ablation with-without --trust-plugin --no-publish --json <scratch>/<case>.json --case <case>`.
+  2. It passes when the case scores at least 0.66 with the plugin and lower
+     without it. Otherwise reword the prompt (never a grader's expected
+     answer) and run again: at most 3 tries in all.
+  3. The spec's evals Test case gives the last try's score with and without
+     the plugin and each try's cost, from the printed lines. After 3 tries with
+     none doing worse, it says so with the scores, and the spec is posted as
+     usual. A run that fails or cannot start is "not run: <reason>", never a
+     pass.
+  4. **Build.** Before `python3 tools/eval_changed.py --skill <s> --baseline`,
+     run each new or changed case alone with the same command against the
+     worktree's `plugins/gogogo`; a case that does as well without the plugin
+     is reworded first, as above, and the change is named in the report.
+  5. The whole-skill `--skill <s> --baseline` run still fails a case that does
+     as well without the plugin; it stays the build's gate.
+
+  Its `tests` pattern makes the test guard read a weakened or removed case like
+  a weakened test. Not run in CI.
 - **live**: a real run of the changed skill in an adopting repo, read-only
   unless the spec says otherwise. Triage-only (`/gogogo:auto-dev
   --triage-only`) and dry runs with posting blocked are the default. Say which

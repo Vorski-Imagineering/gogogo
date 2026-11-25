@@ -163,5 +163,14 @@ class Suite(unittest.TestCase):
         self.assertGreater(rungs.index("evals"), rungs.index("unit"))
 
 
+class SingleCaseFirst(unittest.TestCase):
+    def test_the_profile_runs_a_new_case_alone_before_the_baseline(self):
+        # gogogo#321: a new or changed case is run alone, with and without the plugin, first
+        _, sections = pc.split_profile((ROOT / ".agents" / "dev-process.md").read_text(encoding="utf-8"))
+        lanes = sections["Lane constraints"]
+        for name in ("--ablation with-without", "--case", "--baseline"):
+            self.assertIn(name, lanes)
+
+
 if __name__ == "__main__":
     unittest.main()
