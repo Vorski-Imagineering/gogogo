@@ -267,8 +267,9 @@ Then the review, by these rules:
     §3 to §6 run in a subagent (an authorisation with `model` or `effort`), the
     subagent also checks this rule at the end of §6 and, in a run that
     commits, returns its last reviewed commit, which the session that started
-    it takes as `<reviewed>`; in a run that does not commit, that session lists
-    the files it changed after the subagent returned.
+    it takes as `<reviewed>` until it runs a round of its own; in a run that
+    does not commit, that session lists the files changed in the working tree
+    since the subagent returned, or since its own last round.
 
 When the spec moves content unchanged, findings about that content are not
 part of the move: list them in the report as follow-ups. A finding there that
