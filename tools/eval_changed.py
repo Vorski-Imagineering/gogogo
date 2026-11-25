@@ -17,8 +17,10 @@ skill when its `tags` holds the skill's name.
 No skill: prints `evals: no skill changed` and exits 0, running nothing. A
 skill with no case: prints `evals: no case for <s>; ...` and exits 1, running
 nothing. Otherwise it runs `claude plugin eval` on those skills' cases, three
-runs each, with the plugin only (`--ablation none`), and a case passes at 2 of
-3 runs. A case below the gate is run again on the base, alone, from a worktree
+runs each, with the plugin only (`--ablation none`), and a case passes when
+at least 2 of its 3 runs got every grader right (the result's `passRate`; a
+result without one falls back to the average score). The average score is
+printed for reading only. A case below the gate is run again on the base, alone, from a worktree
 at the fork point taken down afterwards, with the base's own plugin and cases:
 failing there too, it is an old failure, printed `evals: <name> fails on <base>
 too score=<s>; not this change`, and does not fail the lane; passing there
@@ -28,8 +30,9 @@ does not have, or whose folder this change edited, is not re-run. It prints
 `evals: cases=<n> passed=<n> base_failed=<k> cost=$<x>`, the cost including
 the re-runs, and exits 0 only when every case passed or failed on the base too.
 After that line it prints one line per case in the result,
-`evals: <name> score=<score>` (and ` without=<score>` under --baseline), the
-base re-run lines, and
+`evals: <name> score=<score>` (and ` without=<score>` under --baseline, then
+` runs=<k>/<n>`, the runs with every grader right, and ` failed` for a case
+below the gate), the base re-run lines, and
 `evals: <name> did not run` for a case of those skills the result leaves out,
 which fails the run (docs/writing-eval-cases.md). A result it cannot read, with no case in it, or cut short
 (`partial`) is a failure, never a pass.
@@ -104,6 +107,12 @@ def changed_files(root: Path, fork: str) -> list[str]:
     return files
 
 
+def _measure(aggregates: dict) -> float | None:
+    """What the gate reads: the share of runs with every grader right, else the average score."""
+    value = aggregates.get("passRate", aggregates.get("score"))
+    return None if value is None else float(value)
+
+
 def _read(out: Path) -> dict | None:
     try:
         doc = json.loads(out.read_text(encoding="utf-8"))
@@ -138,12 +147,17 @@ def base_score(root: Path, fork: str, name: str) -> tuple[float | None, float]:
     cost = float(doc.get("costUsd") or 0)
     for c in doc.get("cases") or []:
         if c.get("name") == name:
-            score = (c.get("aggregates") or {}).get("score")
+            score = _measure(c.get("aggregates") or {})
             runs = (c.get("arms") or {}).get("with") or []
-            finished = [float(r.get("score") or 0) for r in runs if not r.get("error")]
+            finished = [r for r in runs if not r.get("error")]
             if runs:  # an errored run is no evidence; the gate needs 2 of 3 runs to decide
-                score = sum(finished) / len(finished) if len(finished) >= 2 else None
-            return (None if score is None else float(score)), cost
+                if len(finished) < 2:
+                    score = None
+                elif all("passed" in r for r in finished):
+                    score = sum(1 for r in finished if r["passed"]) / len(finished)
+                else:
+                    score = sum(float(r.get("score") or 0) for r in finished) / len(finished)
+            return score, cost
     return None, cost
 
 
@@ -207,8 +221,8 @@ def main(argv=None, root: Path = ROOT) -> int:
     # and does not fail this change. A case the base does not have keeps its failure.
     cost, on_base, base_failed, below = float(doc.get("costUsd") or 0), [], set(), set()
     for c in listed:
-        score = (c.get("aggregates") or {}).get("score")
-        if score is None or float(score) >= THRESHOLD:
+        measure = _measure(c.get("aggregates") or {})
+        if measure is not None and measure >= THRESHOLD:
             continue
         below.add(c.get("name"))
         if at_fork is None or edited is None:
@@ -232,13 +246,19 @@ def main(argv=None, root: Path = ROOT) -> int:
             on_base.append(f"evals: {c['name']} fails on {a.base} too score={_score(there)}; not this change")
         else:
             on_base.append(f"evals: {c['name']} passes on {a.base} score={_score(there)}")
-    print(f"evals: cases={agg['casesTotal']} passed={agg.get('casesPassed', 0)} "
+    print(f"evals: cases={agg['casesTotal']} passed={int(agg['casesTotal']) - len(below)} "
           f"base_failed={len(base_failed)} cost=${cost:.2f}")
     for c in listed:
         aggregates = c.get("aggregates") or {}
         line = f"evals: {c.get('name')} score={_score(aggregates.get('score'))}"
         if aggregates.get("scoreWithout") is not None:
             line += f" without={_score(aggregates['scoreWithout'])}"
+        if aggregates.get("passRate") is not None:
+            runs = (c.get("arms") or {}).get("with") or []
+            n = len(runs) or int(FIXED[FIXED.index("--runs") + 1])
+            line += f" runs={round(float(aggregates['passRate']) * n)}/{n}"
+        if c.get("name") in below:
+            line += " failed"
         print(line)
     for line in on_base:
         print(line)

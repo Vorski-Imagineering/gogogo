@@ -156,9 +156,9 @@ $24–35. A spec runs it from a scratch copy because the eval tool writes its
 results under the folder it is given, and other sessions load this repo's
 plugin tree.
 
-- **0.66.** The lane passes a case at a score of 0.66 or more over its graders
-  in two of three runs, so a case that loses one of three graders can still
-  count as passed. The per-case score line exists so a lowered score is
+- **0.66.** A case passes the lane when at least 2 of its 3 runs got every
+  grader right. One wrong answer in every run fails it, however many graders
+  the case has. The score line shows the average too, so a lowered score is
   visible without opening the report.
 - **`--baseline` is a floor, not a margin.** It fails only a case that does as
   well without the plugin, not one that is only a little worse. A prompt that

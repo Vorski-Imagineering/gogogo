@@ -45,7 +45,7 @@ def doc(total=3, passed=3, cost=1.234, partial=False, deltas=None, scores=None):
         # A real result lists every case it ran: here, the cases `Lane.setUp` creates.
         scores = {name: {"score": 1} for name in LANE_CASES}
     for name, delta in (deltas or {}).items():
-        d["cases"].append({"name": name, "aggregates": {"delta": delta}})
+        d["cases"].append({"name": name, "aggregates": {"score": 1, "delta": delta}})  # a real result always scores
     for name, aggregates in (scores or {}).items():
         d["cases"].append({"name": name, "aggregates": aggregates})
     return d
@@ -153,6 +153,42 @@ class Lane(unittest.TestCase):
     def base_run(self, score):
         return doc(total=1, passed=1 if score >= 0.66 else 0, cost=0.5,
                    scores={"dev-third-attempt": {"score": score}})
+
+    def test_a_case_with_one_wrong_answer_in_every_run_fails(self):
+        # gogogo#330: 0.75 on the average, but no run got every grader right.
+        write(self.root, "plugins/gogogo/skills/spec/SKILL.md", "changed\n")
+        result = doc(total=1, passed=1, scores={"spec-being-built": {"score": 0.75, "passRate": 0}})
+        result["cases"][0]["arms"] = {"with": [{"score": 0.75, "passed": False}] * 3}
+        rc, out = self.run_lane(result=result, code=0)
+        self.assertEqual(rc, 1, out)
+        self.assertIn("evals: spec-being-built score=0.75 runs=0/3 failed", out.splitlines())
+        self.assertIn("passed=0 ", out)
+
+    def test_two_of_three_runs_all_right_passes(self):
+        write(self.root, "plugins/gogogo/skills/spec/SKILL.md", "changed\n")
+        result = doc(total=1, passed=1, scores={"spec-being-built": {"score": 0.92, "passRate": 0.67}})
+        rc, out = self.run_lane(result=result, code=0)
+        self.assertEqual(rc, 0, out)
+
+    def test_a_result_without_pass_rate_keeps_the_score_gate(self):
+        write(self.root, "plugins/gogogo/skills/spec/SKILL.md", "changed\n")
+        result = doc(total=1, passed=1, scores={"spec-being-built": {"score": 0.75}})
+        rc, out = self.run_lane(result=result, code=0)
+        self.assertEqual(rc, 0, out)
+
+    def test_a_base_run_is_judged_by_its_runs_passing(self):
+        write(self.root, "plugins/gogogo/skills/dev/SKILL.md", "changed\n")
+        base = self.base_run(0.83)
+        base["cases"][0]["arms"] = {"with": [{"score": 0.75, "passed": False}, {"score": 0.75, "passed": False},
+                                             {"score": 1, "passed": True}]}
+        rc, out = self.run_lane(result=self.failing(), code=1, base=base)
+        self.assertIn("evals: dev-third-attempt fails on main too score=0.33; not this change", out)
+        self.assertEqual(rc, 0, out)
+        for run in base["cases"][0]["arms"]["with"]:
+            run["passed"] = True
+        rc, out = self.run_lane(result=self.failing(), code=1, base=base)
+        self.assertIn("evals: dev-third-attempt passes on main score=1.00", out)
+        self.assertEqual(rc, 1, out)
 
     def test_a_failing_case_fails_the_lane(self):
         # Licensed rewrite (gogogo#277 Approvals row 1): a case that passes on the base still fails the change.
