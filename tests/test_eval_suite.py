@@ -40,7 +40,7 @@ CASES = {
     "dev-reach-line-declines", "dev-reach-line-spares-security",
     "spec-declined-question", "spec-being-built", "spec-nothing-hits-today",
     "spec-items-conflict", "dev-triage-items-conflict",
-    "spec-no-argument-offers-new", "spec-pr-mentions-only",
+    "spec-no-argument-specs-new", "spec-pr-mentions-only",
     "spec-reverses-tested-behaviour", "spec-licenses-a-deleted-folder", "spec-unmet-precondition",
     "spec-measure-first",
     "spec-public-tracker-reread", "spec-files-the-related-half", "spec-keeps-a-listed-second-host",
