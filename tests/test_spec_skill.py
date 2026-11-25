@@ -412,7 +412,7 @@ GIVEN_NOTHING = "## Given nothing to spec"
 
 
 class GivenNothing(unittest.TestCase):
-    """With no argument, spec offers the standard New column (gogogo#136)."""
+    """With no argument, spec runs the standard New column without asking (gogogo#136)."""
 
     def test_section_placed(self):
         lines = skill_text().splitlines()
@@ -431,8 +431,9 @@ class GivenNothing(unittest.TestCase):
 
     def test_uses_the_run_rules(self):
         sub = "\n".join(section(skill_text(), GIVEN_NOTHING))
-        for name in ("references/several-issues.md", "rule 2", "rule 3", "AskUserQuestion"):
+        for name in ("references/several-issues.md", "rule 2", "rule 3"):
             self.assertIn(name, sub)
+        self.assertNotIn("AskUserQuestion", sub)  # it starts without asking
         for setting in re.findall(r"`(tracker\.[a-z_.]+)`", sub):
             self.assertIn(setting, pc.FIELDS, setting)
 

@@ -1,6 +1,6 @@
 ---
 name: spec
-description: Use when turning a tracker issue, or an idea not yet filed as one, into a specification another agent will implement (also a list of issues or a board column, such as "spec these five" or "spec everything in New", specced one at a time; with no argument, it offers to spec everything in New), when triaging whether an issue is ready to hand off, or when an agent came back blocked on an issue that looked fully specified.
+description: Use when turning a tracker issue, or an idea not yet filed as one, into a specification another agent will implement (also a list of issues or a board column, such as "spec these five" or "spec everything in New", specced one at a time; with no argument, it specs everything in New), when triaging whether an issue is ready to hand off, or when an agent came back blocked on an issue that looked fully specified.
 ---
 
 # spec
@@ -98,17 +98,10 @@ argument, or words that name none of them):
    read is not an empty column.
 4. None left (empty, or every issue skipped): say so, naming each skipped
    issue and why, and stop.
-5. Otherwise ask one `AskUserQuestion` naming the column, the count and the
-   numbers in the list's order: **spec everything in `<column>` (<k>: #a,
-   #b, …)** or **name an issue instead**. A typed answer naming an issue, idea
-   or column is that request.
-6. *Spec everything*: a board-column run of that column. Read
-   `references/several-issues.md` and start at rule 2 with the column chosen;
-   its list is read again there. *Name an issue* with none given: ask for it
-   in plain text and wait for the reply.
-7. A decline, or no person to ask (the question tool errors, or `claude -p`):
-   stop, post nothing, and say nothing was specced. The four-choice menu of
-   *When the user declines a question* is not used: no spec fork was asked.
+5. Otherwise say, in one line, the column, the count and the numbers in the
+   list's order, and start without asking: a board-column run of that column.
+   Read `references/several-issues.md` and start at rule 2 with that column;
+   its list is read again there.
 
 ## Several issues in one run
 

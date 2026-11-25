@@ -55,7 +55,8 @@ repo first ([Adopting it in a repo](#adopting-it-in-a-repo), step 1).
    issue (filing one if there isn't one yet), marks it ready and moves its card
    to the `Dev Ready` column (not when someone is already working on it). Several issues, or a whole column, go in one
    run, one issue at a time: `/gogogo:spec #12 #14` or
-   `/gogogo:spec everything in New`.
+   `/gogogo:spec everything in New`. `/gogogo:spec` alone specs everything in
+   New without asking.
 3. **`/gogogo:dev <issue>`**: builds that one issue end to end. It finds the
    cause, changes the code, reviews it, verifies it on a real environment,
    reports on the issue and moves its card. Watch what it does.
