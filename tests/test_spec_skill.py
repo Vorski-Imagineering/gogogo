@@ -536,5 +536,14 @@ class ChosenMock(unittest.TestCase):
         self.assertNotIn("chosen-mock.md", text)
 
 
+class PublicSource(unittest.TestCase):
+    def test_posting_step_2_keeps_a_cited_public_source(self):
+        # gogogo#313: a page read without signing in, cited in Context, is kept
+        text = POSTING.read_text(encoding="utf-8")
+        step = text[text.index("\n2. **Write the spec to the scratchpad**"):text.index("\n3. **Compose the body file**")]
+        for name in ("## Context", "§ 7"):
+            self.assertIn(name, step)
+
+
 if __name__ == "__main__":
     unittest.main()
