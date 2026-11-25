@@ -93,9 +93,9 @@ order, checking each step before starting the next:
      this run opened without signing in, cited as a source in `## Context`
      (the `**Prior work.**` paragraph of *Before you write* § 7 included). That
      last exception keeps no page that could be read only while signed in (a
-     paywalled paper, a members-only post, a private forum): such a Prior work
-     source loses its link, and its one-line summary in the `**Prior work.**`
-     paragraph stays. A shared, preview, signed or secret link is removed
+     paywalled paper, a members-only post, a private forum): a cited source
+     that exception does not keep loses its link, and its one-line summary
+     stays. A shared, preview, signed or secret link is removed
      wherever it points. The rule on names above and
      the token rule below apply inside a kept link too;
    - anything that looks like a token or key, and email addresses;
