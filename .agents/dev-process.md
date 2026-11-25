@@ -132,9 +132,9 @@ index = "docs/README.md"
      answer) and run again: at most 3 tries in all. The Design's prompt is
      then the last try's wording.
   3. The spec's evals Test case gives the last try's score with and without
-     the plugin and each try's cost, from the printed lines. After 3 tries with
-     none doing worse, it says so with the scores, and the spec is posted as
-     usual. A run that fails or cannot start is "not run: <reason>", never a
+     the plugin and each try's cost, from the run's JSON file (the command
+     prints none). After 3 tries with none doing worse, it says so with the
+     scores, and the spec is posted as usual. A run that fails or cannot start is "not run: <reason>", never a
      pass.
   4. **Build.** Before `python3 tools/eval_changed.py --skill <s> --baseline`,
      run each new or changed case alone with the same command against the
