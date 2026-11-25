@@ -605,6 +605,7 @@ query($owner: String!, $name: String!, $size: Int!, $after: String) {
         blockedBy(first: 20) { totalCount nodes { number state stateReason repository { nameWithOwner } } }
         blocking(first: 20) { totalCount nodes { number state repository { nameWithOwner } } }
         projectItems(first: 10, includeArchived: true) {
+          totalCount
           nodes {
             id
             isArchived
@@ -650,7 +651,11 @@ def issue_side_cards(repo: str) -> list[dict]:
     """
     cards: list[dict] = []
     for issue in open_issues(repo):
-        for node in (issue.get("projectItems") or {}).get("nodes") or []:
+        items = issue.get("projectItems") or {}
+        if items.get("totalCount", 0) > len(items.get("nodes") or []):
+            raise BoardError(f"issue #{issue['number']} sits on more than 10 projects; "
+                             "its card on this board may not be read")
+        for node in items.get("nodes") or []:
             if node["isArchived"] or node["project"]["number"] != PROJECT_NUMBER:
                 continue
             cards.append({
@@ -674,7 +679,7 @@ def issue_side_cards(repo: str) -> list[dict]:
     return cards
 
 
-def cards_the_board_did_not_list(board_cards: list[dict], repo: str) -> list[dict]:
+def cards_the_board_did_not_list(board_cards: list[dict], issue_cards: list[dict]) -> list[dict]:
     """Cards that exist issue-side and are missing from the project-side read.
 
     **Why a second read at all, when `fetch_items` already reconciles.** It
@@ -691,24 +696,49 @@ def cards_the_board_did_not_list(board_cards: list[dict], repo: str) -> list[dic
 
     Open issues only: that is what the queue is selected from, and it keeps the
     second read to two pages where enumerating everything would be five.
+
+    The same second read also corrects a card whose column the project index
+    has stale (`cards_whose_column_disagrees`). The issue side wins: it is the
+    index `move` and `show` use, so a card is placed where a move put it.
     """
     listed = {card["item_id"] for card in board_cards}
-    return [card for card in issue_side_cards(repo) if card["item_id"] not in listed]
+    return [card for card in issue_cards if card["item_id"] not in listed]
 
 
-def list_cards(
+def cards_whose_column_disagrees(
+    board_cards: list[dict], issue_cards: list[dict]
+) -> list[tuple[dict, str | None, str | None]]:
+    """(board card, board status, issue-side status) for each card the two sides place apart."""
+    by_id = {card["item_id"]: card for card in board_cards}
+    found = []
+    for issue_card in issue_cards:
+        board_card = by_id.get(issue_card["item_id"])
+        if board_card is None:
+            continue
+        if _bare(board_card["status"] or "") != _bare(issue_card["status"] or ""):
+            found.append((board_card, board_card["status"], issue_card["status"]))
+    return found
+
+
+def list_cards(**filters) -> tuple[list[dict], list[dict], int]:
+    """The cards matching the filters, the recovered ones, and the board total.
+
+    The one reading of a column, for `list` and any other caller alike — so no
+    caller can quietly skip the issue-side cross-check that `list` relies on.
+    """
+    cards, recovered, total, _placed = read_cards(**filters)
+    return cards, recovered, total
+
+
+def read_cards(
     *,
     status: str | None = None,
     open_only: bool = False,
     issues_only: bool = False,
     repo: str = DEFAULT_REPO,
     crosscheck: bool = True,
-) -> tuple[list[dict], list[dict], int]:
-    """The cards matching the filters, the recovered ones, and the board total.
-
-    The one reading of a column, for `list` and any other caller alike — so no
-    caller can quietly skip the issue-side cross-check that `list` relies on.
-    """
+) -> tuple[list[dict], list[dict], int, list[tuple[dict, str | None, str | None]]]:
+    """`list_cards`, plus the cards whose column the issue side corrected."""
     if status:
         # A column the board does not have filters to no cards, which reads
         # exactly like an empty column. Refuse it instead (BoardError, exit 2).
@@ -720,8 +750,15 @@ def list_cards(
     # Recovered cards go last: the board did not list them, so their place in
     # a column is unknown, and the queue is taken top first.
     recovered: list[dict] = []
+    disagreeing: list[tuple[dict, str | None, str | None]] = []
     if crosscheck:
-        recovered = cards_the_board_did_not_list(cards, repo)
+        issue_cards = issue_side_cards(repo)
+        recovered = cards_the_board_did_not_list(cards, issue_cards)
+        disagreeing = cards_whose_column_disagrees(cards, issue_cards)
+        since = {c["item_id"]: c["status_since"] for c in issue_cards}
+        for board_card, _board_status, issue_status in disagreeing:
+            board_card["status"] = issue_status
+            board_card["status_since"] = since[board_card["item_id"]]
         cards = cards + recovered
     # Over the whole board, before any filter: a blocker's column is read from
     # its own card, wherever it sits.
@@ -734,11 +771,11 @@ def list_cards(
         cards = [c for c in cards if c["state"] in (None, "OPEN")]
     if issues_only:
         cards = [c for c in cards if c["kind"] == "Issue"]
-    return cards, recovered, total
+    return cards, recovered, total, disagreeing
 
 
 def cmd_list(args: argparse.Namespace) -> int:
-    cards, recovered, total = list_cards(
+    cards, recovered, total, disagreeing = read_cards(
         status=args.status,
         open_only=args.open_only,
         issues_only=args.issues_only,
@@ -756,7 +793,7 @@ def cmd_list(args: argparse.Namespace) -> int:
             print(f"{ref:>7}{where}  {card['title']}")
 
     label = f"{column(args.status)!r} " if args.status else ""
-    summary = f"\n{len(cards)} {label}card(s); {total} of {total} board items read"
+    summary = f"\n{len(cards)} {label}card(s); {total} board items read, all of the board's count"
     if args.no_crosscheck:
         summary += "; issue-side cross-check SKIPPED"
     elif recovered:
@@ -764,9 +801,15 @@ def cmd_list(args: argparse.Namespace) -> int:
             f"; {len(recovered)} card(s) recovered from the issue side "
             "(GitHub's project index did not list them)"
         )
-    else:
+    elif not disagreeing:
         summary += "; issue side agrees"
+    if disagreeing:
+        summary += f"; {len(disagreeing)} card(s) placed by the issue side (the board's index disagreed)"
     print(summary + ".", file=sys.stderr)
+    for board_card, board_status, issue_status in disagreeing:
+        print(f"  #{board_card['number']} board: {board_status or 'no status'} "
+              f"issue side: {issue_status or 'no status'} "
+              f"(since {board_card['status_since'] or 'unknown'})", file=sys.stderr)
 
     if recovered:
         # Every recovered card is named, whatever `--status` was asked for: the

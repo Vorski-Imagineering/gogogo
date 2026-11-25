@@ -483,7 +483,7 @@ class IssueSideCrossCheckTests(unittest.TestCase):
         ])
         with mock.patch.object(board, "graphql", side_effect=[board_side, issue_side]):
             missing = board.cards_the_board_did_not_list(
-                [board.flatten(i) for i in board.fetch_items()], board.DEFAULT_REPO
+                [board.flatten(i) for i in board.fetch_items()], board.issue_side_cards(board.DEFAULT_REPO)
             )
         self.assertEqual([c["number"] for c in missing], [410])
         self.assertEqual(missing[0]["status"], "Dev Priority")
@@ -497,13 +497,13 @@ class IssueSideCrossCheckTests(unittest.TestCase):
     def test_an_archived_card_is_not_reported_as_missing(self):
         issue_side = issue_page([issue_node(9, "archived", "Done", archived=True)])
         with mock.patch.object(board, "graphql", side_effect=[issue_side]):
-            missing = board.cards_the_board_did_not_list([], board.DEFAULT_REPO)
+            missing = board.cards_the_board_did_not_list([], board.issue_side_cards(board.DEFAULT_REPO))
         self.assertEqual(missing, [])
 
     def test_a_card_on_another_project_is_not_reported_as_missing(self):
         issue_side = issue_page([issue_node(9, "elsewhere", "Todo", project=3)])
         with mock.patch.object(board, "graphql", side_effect=[issue_side]):
-            missing = board.cards_the_board_did_not_list([], board.DEFAULT_REPO)
+            missing = board.cards_the_board_did_not_list([], board.issue_side_cards(board.DEFAULT_REPO))
         self.assertEqual(missing, [])
 
     def test_an_agreeing_board_recovers_nothing(self):
@@ -511,7 +511,7 @@ class IssueSideCrossCheckTests(unittest.TestCase):
         issue_side = issue_page([issue_node(1, "listed", "Dev Priority")])
         with mock.patch.object(board, "graphql", side_effect=[board_side, issue_side]):
             missing = board.cards_the_board_did_not_list(
-                [board.flatten(i) for i in board.fetch_items()], board.DEFAULT_REPO
+                [board.flatten(i) for i in board.fetch_items()], board.issue_side_cards(board.DEFAULT_REPO)
             )
         self.assertEqual(missing, [])
 
@@ -521,8 +521,93 @@ class IssueSideCrossCheckTests(unittest.TestCase):
             issue_page([issue_node(2, "b", "Dev Priority")]),
         ]
         with mock.patch.object(board, "graphql", side_effect=pages):
-            missing = board.cards_the_board_did_not_list([], board.DEFAULT_REPO)
+            missing = board.cards_the_board_did_not_list([], board.issue_side_cards(board.DEFAULT_REPO))
         self.assertEqual([c["number"] for c in missing], [1, 2])
+
+    def run_list(self, status, graphql_pages, columns=("New", "Backlog")):
+        args = Namespace(status=status, open_only=True, issues_only=True,
+                         json=True, repo=board.DEFAULT_REPO, no_crosscheck=False)
+        out, err = io.StringIO(), io.StringIO()
+        with mock.patch.object(board, "graphql", side_effect=graphql_pages) as sent, \
+             mock.patch.object(board, "board_meta",
+                               return_value={"options": {c: str(i) for i, c in enumerate(columns)}}), \
+             redirect_stdout(out), redirect_stderr(err):
+            board.cmd_list(args)
+        return json.loads(out.getvalue()), err.getvalue(), sent
+
+    def test_a_card_whose_board_column_is_stale_is_placed_by_the_issue_side(self):
+        # gogogo#329: the project index had the card in its old column.
+        moved = issue_node(7, "moved", "New")
+        moved["projectItems"]["nodes"][0]["fieldValueByName"]["updatedAt"] = "2026-11-25T01:02:03Z"
+        cards, err, _ = self.run_list("New", [page([card(7, "moved", "Backlog")], total=1),
+                                              issue_page([moved])])
+        self.assertEqual([c["number"] for c in cards], [7])
+        self.assertIn("#7 board: Backlog issue side: New (since 2026-11-25T01:02:03Z)", err)
+        self.assertIn("1 card(s) placed by the issue side", err)
+
+    def test_a_stale_card_leaves_its_old_column(self):
+        cards, _, _ = self.run_list("Backlog", [page([card(7, "moved", "Backlog")], total=1),
+                                                issue_page([issue_node(7, "moved", "New")])])
+        self.assertEqual(cards, [])
+
+    def test_an_agreeing_board_says_so(self):
+        _, err, _ = self.run_list("New", [page([card(7, "same", "New")], total=1),
+                                          issue_page([issue_node(7, "same", "New")])])
+        self.assertIn("issue side agrees", err)
+        self.assertNotIn("placed by the issue side", err)
+
+    def test_the_summary_states_the_count_once(self):
+        nodes = [card(1, "a", "New"), card(2, "b", "New"), card(3, "c", "New")]
+        _, err, _ = self.run_list(None, [page(nodes, total=3), issue_page([])])
+        self.assertIn("3 board items read, all of the board's count", err)
+        self.assertNotIn("3 of 3", err)
+
+    def test_an_issue_on_more_than_ten_projects_is_refused(self):
+        busy = issue_node(9, "busy", "New")
+        busy["projectItems"]["totalCount"] = 11
+        busy["projectItems"]["nodes"] = busy["projectItems"]["nodes"] * 10
+        err = io.StringIO()
+        with mock.patch.object(sys, "argv", ["tracker.py", "list"]), \
+             mock.patch.object(board, "configure"), \
+             mock.patch.object(board, "graphql", side_effect=[page([], total=0), issue_page([busy])]), \
+             redirect_stdout(io.StringIO()), redirect_stderr(err):
+            self.assertEqual(board.main(), 2)
+        self.assertIn("#9", err.getvalue())
+
+    def test_an_issue_on_exactly_its_read_projects_is_read(self):
+        full = issue_node(9, "full", "New")
+        full["projectItems"]["totalCount"] = 1
+        bare = issue_node(10, "no items", "New")
+        bare["projectItems"] = {"nodes": []}
+        with mock.patch.object(board, "graphql", side_effect=[issue_page([full, bare])]):
+            cards = board.issue_side_cards(board.DEFAULT_REPO)
+        self.assertEqual([c["number"] for c in cards], [9])
+
+    def test_a_card_missing_from_the_board_does_not_hide_a_later_disagreement(self):
+        _, err, _ = self.run_list("New", [
+            page([card(7, "moved", "Backlog")], total=1),
+            issue_page([issue_node(8, "unlisted", "New"), issue_node(7, "moved", "New")]),
+        ])
+        self.assertIn("#7 board: Backlog issue side: New", err)
+
+    def test_no_column_on_both_sides_agrees(self):
+        _, err, _ = self.run_list(None, [page([card(7, "loose", None)], total=1),
+                                         issue_page([issue_node(7, "loose", None)])])
+        self.assertNotIn("placed by the issue side", err)
+
+    def test_the_placed_count_follows_the_summary(self):
+        _, err, _ = self.run_list("New", [page([card(7, "moved", "Backlog")], total=1),
+                                          issue_page([issue_node(7, "moved", "New")])])
+        self.assertIn("1 board items read, all of the board's count; 1 card(s) placed by the issue side", err)
+
+    def test_one_issue_side_read_serves_both_checks(self):
+        cards, err, sent = self.run_list("New", [
+            page([card(7, "moved", "Backlog")], total=1),
+            issue_page([issue_node(7, "moved", "New"), issue_node(8, "unlisted", "New")]),
+        ])
+        self.assertEqual(sorted(c["number"] for c in cards), [7, 8])
+        issue_side_queries = [c for c in sent.call_args_list if "projectItems" in c.args[0]]
+        self.assertEqual(len(issue_side_queries), 1)
 
     def test_list_puts_recovered_cards_last(self):
         """Licensed rewrite (gogogo#272 Approvals row 1): a recovered card's place on the
@@ -839,6 +924,15 @@ class LabelTests(unittest.TestCase):
         self.assertEqual(len(json.loads(out.getvalue())), 2)
         self.assertNotIn("card(s);", out.getvalue())
         self.assertIn("card(s);", err.getvalue())
+        # With a card the issue side places elsewhere, stdout is still the JSON alone.
+        args.no_crosscheck = False
+        out, err = io.StringIO(), io.StringIO()
+        with mock.patch.object(board, "graphql", side_effect=[
+                page(nodes, total=2), issue_page([issue_node(2, "b", "Backlog")])]), \
+             redirect_stdout(out), redirect_stderr(err):
+            board.cmd_list(args)
+        self.assertEqual(len(json.loads(out.getvalue())), 2)
+        self.assertIn("placed by the issue side", err.getvalue())
 
 
 class ColumnGuardTests(unittest.TestCase):
