@@ -91,8 +91,8 @@ order, checking each step before starting the next:
      an `environments` entry's `url` or one of its `other_urls` in the profile,
      to a public product's documentation or public project page, or to a page
      cited as a source in `## Context` (the `**Prior work.**` paragraph of
-     *Before you write* § 7 included) that this run opened (by a search or a
-     fetch), and anyone can read, without signing in: not a paywalled paper, a
+     *Before you write* § 7 included) that this run opened without signing in
+     (a search or a fetch with no credentials): not a paywalled paper, a
      members-only post or a private forum. A Prior work source whose link this
      step removes loses the link and keeps its one-line summary. A shared,
      preview, signed or secret link is removed wherever it points. The rule on
