@@ -84,7 +84,9 @@ medium effort or higher, then carry on.
 ## Given nothing to spec
 
 When the user gives no issue, no idea and no column (`/gogogo:spec` with no
-argument, or words that name none of them):
+argument, or words that name none of them). Words that name none of them get
+a plain-text question asking which issue; the steps below are for
+`/gogogo:spec` alone:
 
 1. Without `tracker.tool`, ask for an issue number or an idea; the rest of
    this section does not apply.
@@ -98,14 +100,14 @@ argument, or words that name none of them):
    read is not an empty column.
 4. None left (empty, or every issue skipped): say so, naming each skipped
    issue and why, and stop.
-5. Otherwise say, in one line, the column, the count and the numbers in the
-   list's order, and start without asking: a board-column run of that column.
-   Read `references/several-issues.md` and start at rule 2 with that column;
-   its list is read again there.
+5. Otherwise start without asking: a board-column run of that column. Read
+   `references/several-issues.md` and start at rule 2 with that column; its
+   list is read again there. With no person present (`claude -p`), stop
+   instead, post nothing, and say nothing was specced.
 
 ## Several issues in one run
 
-Only when the user gives more than one issue, or a board column, or accepted the offer in *Given nothing to spec*. **REQUIRED REFERENCE:** then read `references/several-issues.md` (in this skill's folder) in full before starting the first issue. With one issue, skip it.
+Only when the user gives more than one issue, or a board column, or started *Given nothing to spec*'s run (its step 5). **REQUIRED REFERENCE:** then read `references/several-issues.md` (in this skill's folder) in full before starting the first issue. With one issue, skip it.
 
 ## The issue body IS these sections, in this order
 
@@ -472,8 +474,7 @@ Listed in one place so an adapter for another agent knows what to replace.
   or wording, its option previews settle it faster than prose.
 - **A declined question**: when the user declines or interrupts it,
   `AskUserQuestion` comes back as a refusal with no answer. In an interactive
-  session that is the decline *When the user declines a question* describes,
-  except for the offer in *Given nothing to spec*, which stops (its step 7).
+  session that is the decline *When the user declines a question* describes.
   A run with no person (`claude -p`) gets the same refusal, which is why that
   subsection shows the menu once and stops when the menu is refused too.
 - **Research one issue ahead** (*Several issues in one run*, rule 5) is an
