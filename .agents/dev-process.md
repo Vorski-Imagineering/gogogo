@@ -120,14 +120,17 @@ index = "docs/README.md"
   session's own login, about $0.60 a case), and passes when every case scores 2
   of 3 runs. A case passing on its own does not prove the plugin did it, so a
   new or changed case is checked alone, with and without the plugin, before
-  anything else runs it:
+  the whole-skill `--baseline` run:
   1. **Spec.** Before posting a spec whose Design adds or changes an eval case,
-     copy `plugins/gogogo` to the scratchpad, write the case there exactly as
-     the Design gives it, and run
+     copy `plugins/gogogo` from `origin/main` to the scratchpad (for example
+     `git archive origin/main plugins/gogogo | tar -x -C <scratch>`), write
+     the case there exactly as the Design gives it, together with the skill
+     text the Design changes that the case tests, and run
      `claude plugin eval <copy> --runs 3 --threshold 0.66 --concurrency 3 --ablation with-without --trust-plugin --no-publish --json <scratch>/<case>.json --case <case>`.
   2. It passes when the case scores at least 0.66 with the plugin and lower
      without it. Otherwise reword the prompt (never a grader's expected
-     answer) and run again: at most 3 tries in all.
+     answer) and run again: at most 3 tries in all. The Design's prompt is
+     then the last try's wording.
   3. The spec's evals Test case gives the last try's score with and without
      the plugin and each try's cost, from the printed lines. After 3 tries with
      none doing worse, it says so with the scores, and the spec is posted as
@@ -140,8 +143,8 @@ index = "docs/README.md"
   5. The whole-skill `--skill <s> --baseline` run still fails a case that does
      as well without the plugin; it stays the build's gate.
 
-  Its `tests` pattern makes the test guard read a weakened or removed case like
-  a weakened test. Not run in CI.
+  The evals lane's `tests` pattern makes the test guard read a weakened or
+  removed case like a weakened test. Not run in CI.
 - **live**: a real run of the changed skill in an adopting repo, read-only
   unless the spec says otherwise. Triage-only (`/gogogo:auto-dev
   --triage-only`) and dry runs with posting blocked are the default. Say which
