@@ -574,6 +574,32 @@ class IssueSideCrossCheckTests(unittest.TestCase):
             self.assertEqual(board.main(), 2)
         self.assertIn("#9", err.getvalue())
 
+    def test_an_issue_on_exactly_its_read_projects_is_read(self):
+        full = issue_node(9, "full", "New")
+        full["projectItems"]["totalCount"] = 1
+        bare = issue_node(10, "no items", "New")
+        bare["projectItems"] = {"nodes": []}
+        with mock.patch.object(board, "graphql", side_effect=[issue_page([full, bare])]):
+            cards = board.issue_side_cards(board.DEFAULT_REPO)
+        self.assertEqual([c["number"] for c in cards], [9])
+
+    def test_a_card_missing_from_the_board_does_not_hide_a_later_disagreement(self):
+        _, err, _ = self.run_list("New", [
+            page([card(7, "moved", "Backlog")], total=1),
+            issue_page([issue_node(8, "unlisted", "New"), issue_node(7, "moved", "New")]),
+        ])
+        self.assertIn("#7 board: Backlog issue side: New", err)
+
+    def test_no_column_on_both_sides_agrees(self):
+        _, err, _ = self.run_list(None, [page([card(7, "loose", None)], total=1),
+                                         issue_page([issue_node(7, "loose", None)])])
+        self.assertNotIn("placed by the issue side", err)
+
+    def test_the_placed_count_follows_the_summary(self):
+        _, err, _ = self.run_list("New", [page([card(7, "moved", "Backlog")], total=1),
+                                          issue_page([issue_node(7, "moved", "New")])])
+        self.assertIn("1 board items read, all of the board's count; 1 card(s) placed by the issue side", err)
+
     def test_one_issue_side_read_serves_both_checks(self):
         cards, err, sent = self.run_list("New", [
             page([card(7, "moved", "Backlog")], total=1),
