@@ -94,9 +94,9 @@ order, checking each step before starting the next:
      (the `**Prior work.**` paragraph of *Before you write* § 7 included), but
      not to one that could be read only while signed in (a paywalled paper, a
      members-only post, a private forum). A Prior work source whose link no
-     exception here keeps loses the link and keeps its one-line summary. A shared, preview, signed or secret link is removed
-     wherever it points. The rule on names above and the token rule below
-     apply inside a kept link too;
+     exception here keeps loses the link and keeps its one-line summary. A
+     shared, preview, signed or secret link is removed wherever it points. The
+     rule on names above and the token rule below apply inside a kept link too;
    - anything that looks like a token or key, and email addresses;
    - people's names (use their role);
    - anything else not known to be safe to publish.
