@@ -41,6 +41,12 @@ class QueueSelection(unittest.TestCase):
         for name in ("tracker.ready_marker", "spec_lint.py", "--json"):
             self.assertIn(name, select)
 
+    def test_preflight_six_names_shift_tab(self):
+        # gogogo#310: the skill's advice on a failed mode check matches the script's.
+        item = self.text.split("\n6. **Unattended mode.**")[1].split("\n7. **")[0]
+        for name in ("Shift+Tab", "--permission-mode bypassPermissions"):
+            self.assertIn(name, item)
+
     def test_the_lint_verdict_is_named(self):
         self.assertIn("label: apply", self.text)
 

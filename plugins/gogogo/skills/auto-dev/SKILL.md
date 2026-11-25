@@ -78,8 +78,8 @@ means finished work sits unverified while you go and ask.
    sh "${CLAUDE_PLUGIN_ROOT}/scripts/require_unattended.sh"
    ```
    It fails closed. Do not look for a way around it. On a failure, stop before
-   any issue and tell the user to restart the session with
-   `claude --permission-mode bypassPermissions`.
+   any issue and give the user the check's last lines: switch the mode once with
+   Shift+Tab and run again, or restart a background job with `claude --permission-mode bypassPermissions`.
 7. **The board has the columns this run moves cards into:**
    `<tracker.tool> fields --check` must exit 0, and every column in the
    profile's `stages` and `tracker.columns` must be in its output. A missing
