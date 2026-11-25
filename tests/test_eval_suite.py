@@ -173,6 +173,13 @@ class SingleCaseFirst(unittest.TestCase):
         for name in ("--ablation with-without", "--case", "--baseline"):
             self.assertIn(name, lanes)
 
+    def test_the_spec_check_judges_what_its_copy_can_show(self):
+        # gogogo#331: a copy of main cannot show new behaviour, so only the without side is judged then
+        _, sections = pc.split_profile((ROOT / ".agents" / "dev-process.md").read_text(encoding="utf-8"))
+        lanes = " ".join(sections["Lane constraints"].split())
+        for name in ("git archive origin/main", "word for word", "with-plugin: not judged", "skill-fired"):
+            self.assertIn(name, lanes)
+
 
 if __name__ == "__main__":
     unittest.main()
