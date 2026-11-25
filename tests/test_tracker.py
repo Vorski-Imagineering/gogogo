@@ -537,10 +537,12 @@ class IssueSideCrossCheckTests(unittest.TestCase):
 
     def test_a_card_whose_board_column_is_stale_is_placed_by_the_issue_side(self):
         # gogogo#329: the project index had the card in its old column.
+        moved = issue_node(7, "moved", "New")
+        moved["projectItems"]["nodes"][0]["fieldValueByName"]["updatedAt"] = "2026-11-25T01:02:03Z"
         cards, err, _ = self.run_list("New", [page([card(7, "moved", "Backlog")], total=1),
-                                              issue_page([issue_node(7, "moved", "New")])])
+                                              issue_page([moved])])
         self.assertEqual([c["number"] for c in cards], [7])
-        self.assertIn("#7 board: Backlog issue side: New", err)
+        self.assertIn("#7 board: Backlog issue side: New (since 2026-11-25T01:02:03Z)", err)
         self.assertIn("1 card(s) placed by the issue side", err)
 
     def test_a_stale_card_leaves_its_old_column(self):

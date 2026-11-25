@@ -808,7 +808,8 @@ def cmd_list(args: argparse.Namespace) -> int:
     print(summary + ".", file=sys.stderr)
     for board_card, board_status, issue_status in disagreeing:
         print(f"  #{board_card['number']} board: {board_status or 'no status'} "
-              f"issue side: {issue_status or 'no status'}", file=sys.stderr)
+              f"issue side: {issue_status or 'no status'} "
+              f"(since {board_card['status_since'] or 'unknown'})", file=sys.stderr)
 
     if recovered:
         # Every recovered card is named, whatever `--status` was asked for: the
