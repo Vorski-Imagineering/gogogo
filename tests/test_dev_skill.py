@@ -301,5 +301,24 @@ class ItemConflictTriage(unittest.TestCase):
             self.assertIn(part, triage)
 
 
+class LateCommits(unittest.TestCase):
+    """A commit after the clean round gets a round of its own before the merge (gogogo#322)."""
+
+    def test_rule_12_follows_rule_11(self):
+        text = DEV_REVIEW.read_text(encoding="utf-8")
+        at = text.index("\n12. **Commits after the clean round.**")
+        self.assertLess(text.index("\n11. **"), at)
+        end = text.index("When the spec moves content unchanged")
+        self.assertLess(at, end)
+        rule = text[at:end]
+        for name in ("--no-merges", "^origin/<base>", "precise", "merge-script"):
+            self.assertIn(name, rule)
+
+    def test_merge_step_two_waits_for_the_review(self):
+        text = DEV_HAND_BACK.read_text(encoding="utf-8")
+        step = text[text.index("2. **Record what was verified.**"):text.index("3. **Closing references.**")]
+        self.assertIn("§5 rule 12", step)
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -143,7 +143,9 @@ Every issue goes through the same checks, in this order, before its merge:
    when small, declared in the report, and anything larger goes to a person.
 3. **Review.** `/code-review`, applying a finding only on evidence, with three
    attempts per finding by default (`review.attempts`), each correction the smallest fix, and two rounds per prose file, and one more for a fix made in the second, until a round applies
-   nothing (a person after 13 rounds). See
+   nothing (a person after 13 rounds); a commit made after that round (a
+   restored test, a fix, a regenerated file) gets one more round of its own
+   before the merge. See
    [when-is-enough-enough.md](when-is-enough-enough.md).
 4. **Verify.** The path the issue describes is run on real data in the
    pre-merge environment. A green suite alone counts as "written", not "done".
