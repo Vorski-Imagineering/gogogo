@@ -83,14 +83,15 @@ claude plugin eval <copy> --runs 3 --threshold 0.66 --concurrency 3 --ablation w
 ```
 
 `<copy>` is, for a build, the worktree's `plugins/gogogo`. For a spec it is a
-copy of `plugins/gogogo` from a freshly fetched `origin/main` (`git archive
-origin/main plugins/gogogo | tar -x -C <scratch>`), with the case written into
-it, in one of two forms:
+copy of `plugins/gogogo` from a freshly fetched `origin/main` (`git fetch
+origin`, then `git archive origin/main plugins/gogogo | tar -x -C <scratch>`
+into an empty folder; the copy is `<scratch>/plugins/gogogo`), with the case
+written into it, in one of two forms:
 
 - **Both sides**, when the Design quotes word for word the skill text the case
   tests: that text goes into the copy too. A try passes when every check
-  passed in at least 2 of 3 runs with the plugin, `skill-fired` passed in 2 of
-  them (the skill loaded), and the score without the plugin is lower.
+  passed in at least 2 of 3 runs with the plugin, `skill-fired` passed in any 2
+  of the 3 (the skill loaded), and the score without the plugin is lower.
 - **The without side only**, otherwise: the command still runs both sides, but
   only the score without the plugin is judged, and it must be below 0.66. The
   Test case records "with-plugin: not judged (the copy lacks Design <k>)"; the

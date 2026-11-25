@@ -115,16 +115,18 @@ index = "docs/README.md"
   Under load the tool marks slow kills "suspicious"; `tools/mutate.py` counts
   them as killed (#75), so a busy machine changes how long the run takes, not
   its counts.
-- **evals**: `python3 tools/eval_changed.py` runs the eval cases of each skill the
-  change touched (`plugins/gogogo/evals/`, with `claude plugin eval` on the
+- **evals**: `python3 tools/eval_changed.py` runs the eval cases of each skill
+  the change touched (`plugins/gogogo/evals/`, with `claude plugin eval` on the
   session's own login, about $0.60 a case), and passes when every case scores 2
   of 3 runs. A case passing on its own does not prove the plugin did it, so a
   new or changed case is checked alone, with and without the plugin, before
   the whole-skill `--baseline` run:
   1. **Spec.** Before posting a spec whose Design adds or changes an eval case,
-     `git fetch origin`, copy `plugins/gogogo` from `origin/main` to the
-     scratchpad (`git archive origin/main plugins/gogogo | tar -x -C <scratch>`),
-     and write the case there exactly as the Design gives it. When the Design
+     `git fetch origin`, copy `plugins/gogogo` from `origin/main` into an
+     empty scratch folder
+     (`git archive origin/main plugins/gogogo | tar -x -C <scratch>`; the
+     copy is `<scratch>/plugins/gogogo`), and write the case there exactly as
+     the Design gives it. When the Design
      quotes word for word the skill text the case tests, write that text into
      the copy too and run both sides:
      `claude plugin eval <copy> --runs 3 --threshold 0.66 --concurrency 3 --ablation with-without --trust-plugin --no-publish --json <scratch>/<case>.json --case <case>`.
