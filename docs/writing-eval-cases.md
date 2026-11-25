@@ -118,13 +118,15 @@ The case should fail there and pass in your working tree.
 
 `tools/eval_changed.py` prints `evals: cases=<n> passed=<n> base_failed=<k>
 cost=$<x>`, then one line per case, `evals: <name> score=<score>`, with
-` without=<score>` added under `--baseline`. A case that was meant to run and is
+` without=<score>` added under `--baseline`, then ` runs=<k>/<n>` (the runs that
+got every grader right) and ` failed` for a case below the gate. A case that was meant to run and is
 not in the result (a grader file that failed to load, for example) is printed as
 `evals: <name> did not run` and fails the lane.
 
 A case below the gate is run again on the base, from the base's own files. When
 it fails there too, the lane prints `evals: <name> fails on <base> too
-score=<s>; not this change`, counts it in `base_failed`, and does not fail the
+score=<s>; not this change` (`<s>` is the base's share of runs with every grader
+right), counts it in `base_failed`, and does not fail the
 change: the change did not cause it. Fix such a case in an issue of its own.
 When it passes on the base (`passes on <base>`), or the base run gives no
 result (every run there errored, say), its failure stands. A case the base does
@@ -156,9 +158,9 @@ $24–35. A spec runs it from a scratch copy because the eval tool writes its
 results under the folder it is given, and other sessions load this repo's
 plugin tree.
 
-- **0.66.** The lane passes a case at a score of 0.66 or more over its graders
-  in two of three runs, so a case that loses one of three graders can still
-  count as passed. The per-case score line exists so a lowered score is
+- **0.66.** A case passes the lane when at least 2 of its 3 runs got every
+  grader right. One wrong answer in every run fails it, however many graders
+  the case has. The score line shows the average too, so a lowered score is
   visible without opening the report.
 - **`--baseline` is a floor, not a margin.** It fails only a case that does as
   well without the plugin, not one that is only a little worse. A prompt that
