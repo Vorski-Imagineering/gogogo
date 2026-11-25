@@ -34,6 +34,8 @@ Write it for someone who has not read the rest of the spec and never will:
   The failure is often the thing that looked almost right.
 - **Cover what a human can catch that a test cannot**: does it look right, read
   right, feel fast enough. Skip anything the automated lanes already prove.
+- **When the person chose a mock**, a step opens it beside the built page and
+  names each part to find in its place.
 - **Say plainly which parts of the report this does not cover**, if any.
 - **Keep it short.** Five to ten steps. If it needs thirty, the scope is too big
   for one issue.

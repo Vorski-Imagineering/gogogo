@@ -508,5 +508,33 @@ class CommittedLink(unittest.TestCase):
             self.assertIn(name, step)
 
 
+class ChosenMock(unittest.TestCase):
+    """A difference from a chosen mock is asked at every level (gogogo#323)."""
+
+    REF = SKILL.parent / "references" / "chosen-mock.md"
+
+    def test_who_decides_names_the_chosen_mock_reference(self):
+        sub = "\n".join(section(skill_text(), "## Who decides"))
+        for name in ("references/chosen-mock.md", "REQUIRED REFERENCE"):
+            self.assertIn(name, sub)
+
+    def test_the_reference_exists_and_writes_two_sections(self):
+        text = self.REF.read_text(encoding="utf-8")
+        numbers = [int(n) for n in re.findall(r"^(\d+)\. \*\*", text, re.M)]
+        self.assertEqual(numbers, list(range(1, 10)))
+        for name in ("Decided without asking", "## Context", "Verify by hand"):
+            self.assertIn(name, text)
+
+    def test_claude_specific_names_the_drawing_tool(self):
+        sub = "\n".join(section(skill_text(), "## Claude-specific"))
+        for name in ("Artifact", "as built"):
+            self.assertIn(name, sub)
+
+    def test_verify_by_hand_compares_with_the_mock(self):
+        text = VERIFY_BY_HAND.read_text(encoding="utf-8")
+        self.assertIn("chose a mock", text)
+        self.assertNotIn("chosen-mock.md", text)
+
+
 if __name__ == "__main__":
     unittest.main()
