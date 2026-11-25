@@ -28,9 +28,9 @@ A Files entry ending `/` is a folder: it covers every file beneath it.
 An `F:` item may be answered in `verify`, only to declare that a planned file
 the change does not touch was built at another path:
 `F:<planned> | differs | <actual> | <why>`, where `<actual>` is one path listed
-as `outside:`, a file in the working tree, that no other such line names. The item then counts as one
-difference and `<actual>` is no longer outside; an `F:` item with no line keeps
-its status.
+as `outside:`, a file in the working tree, that no other such line names. The
+item then counts as one difference and `<actual>` is no longer outside; an `F:`
+item with no line keeps its status.
 
 `verify` reads a reader's answers, one line per `V`, `A`, `D`, `T` and `N`
 item: `<id> | <met|missing|differs|na> | <evidence> | <note>`. Evidence is
