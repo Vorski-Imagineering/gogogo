@@ -785,6 +785,14 @@ class DeclaredMove(Verify):
         self.assertEqual(code, 2, out)
         self.assertIn("F:lib/new.py", out)
 
+    def test_a_move_path_ending_in_a_number_is_one_file(self):
+        # Guards that the moved path is not read as `path:line`.
+        (self.dir / "app" / "new:12").write_text("RANK = 1\n")
+        out, code = self.moved(self.answers() + self.MOVE.replace("app/new.py", "app/new:12") + "\n",
+                               changed=self.changed + ["app/new:12"])
+        self.assertEqual(code, 1, out)
+        self.assertIn("missing=0 differs=1", self.summary(out))
+
     def moved(self, answers, changed=None):
         body = BODY.replace("**Create:** `tests/test_list.py`.", "**Create:** `tests/test_list.py`, `lib/new.py`.")
         return call("verify", "--base", "main", body=body, answers=answers,
