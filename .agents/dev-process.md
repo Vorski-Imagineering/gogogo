@@ -122,17 +122,26 @@ index = "docs/README.md"
   new or changed case is checked alone, with and without the plugin, before
   the whole-skill `--baseline` run:
   1. **Spec.** Before posting a spec whose Design adds or changes an eval case,
-     copy `plugins/gogogo` to the scratchpad, write the case there exactly as
-     the Design gives it, and run
+     `git fetch origin`, copy `plugins/gogogo` from `origin/main` to the
+     scratchpad (`git archive origin/main plugins/gogogo | tar -x -C <scratch>`),
+     and write the case there exactly as the Design gives it. When the Design
+     quotes word for word the skill text the case tests, write that text into
+     the copy too and run both sides:
      `claude plugin eval <copy> --runs 3 --threshold 0.66 --concurrency 3 --ablation with-without --trust-plugin --no-publish --json <scratch>/<case>.json --case <case>`.
-  2. It passes when the case scores at least 0.66 with the plugin and lower
-     without it. Otherwise reword the prompt (never a grader's expected
-     answer) and run again: at most 3 tries in all.
-  3. The spec's evals Test case gives the last try's score with and without
-     the plugin and each try's cost, from the run's JSON file (the command
-     prints none). After 3 tries with none doing worse, it says so with the
-     scores, and the spec is posted as usual. A run that fails or cannot start is "not run: <reason>", never a
-     pass.
+     Otherwise run the same command (it always runs both sides) and judge only
+     the without side, recording "with-plugin: not judged (the copy lacks
+     Design <k>)".
+  2. With both sides, a try passes when every check passed in at least 2 of 3
+     with-plugin runs, `skill-fired` passed in any 2 of the 3 with-plugin runs,
+     and the without side scores lower. With the without side only, a try
+     passes when it scores below 0.66. Otherwise reword the prompt (never a
+     grader's expected answer) and run again: at most 3 tries in all.
+  3. The Design's prompt is the last try's wording. The spec's evals Test case
+     gives the form used, the last try's scores (with the skill-load count
+     when the with side ran) and each try's cost, from the run's JSON file
+     (the command prints none). After 3 tries with none passing, it says so
+     with the scores, and the spec is posted as usual. A run that fails or
+     cannot start is "not run: <reason>", never a pass.
   4. **Build.** Before `python3 tools/eval_changed.py --skill <s> --baseline`,
      run each new or changed case alone with the same command against the
      worktree's `plugins/gogogo`; a case that does as well without the plugin

@@ -82,11 +82,24 @@ without the plugin, before a spec is posted or a full baseline run is paid for:
 claude plugin eval <copy> --runs 3 --threshold 0.66 --concurrency 3 --ablation with-without --trust-plugin --no-publish --json <scratch>/<case>.json --case <case>
 ```
 
-`<copy>` is, for a spec, a copy of `plugins/gogogo` in the scratchpad with the
-case written into it; for a build, the worktree's `plugins/gogogo`. The case
-passes the check when it scores at least 0.66 with the plugin and lower
-without it. When it does as well without, reword the prompt, never a grader's
-expected answer, and run again: at most 3 tries in all.
+`<copy>` is, for a build, the worktree's `plugins/gogogo`. For a spec it is a
+copy of `plugins/gogogo` from a freshly fetched `origin/main` (`git archive
+origin/main plugins/gogogo | tar -x -C <scratch>`), with the case written into
+it, in one of two forms:
+
+- **Both sides**, when the Design quotes word for word the skill text the case
+  tests: that text goes into the copy too. A try passes when every check
+  passed in at least 2 of 3 runs with the plugin, `skill-fired` passed in 2 of
+  them (the skill loaded), and the score without the plugin is lower.
+- **The without side only**, otherwise: the command still runs both sides, but
+  only the score without the plugin is judged, and it must be below 0.66. The
+  Test case records "with-plugin: not judged (the copy lacks Design <k>)"; the
+  build measures both sides.
+
+When a try fails, reword the prompt, never a grader's expected answer, and run
+again: at most 3 tries in all. The Design keeps the last try's prompt. A build
+passes the check when the case scores at least 0.66 with the plugin and lower
+without it.
 
 This repo requires it in the evals bullet of the profile's
 `## Lane constraints` (`.agents/dev-process.md`).
@@ -157,6 +170,13 @@ the answer away, and the full `--baseline` run that would show it costs
 $24–35. A spec runs it from a scratch copy because the eval tool writes its
 results under the folder it is given, and other sessions load this repo's
 plugin tree.
+
+The spec's copy is of `main`, so it lacks the change the Design makes: a case
+about new behaviour cannot pass there with the plugin, and only the score
+without it says anything. That is why the with-plugin side is judged only when
+the Design gives the skill text word for word. A pass on one grader hit while
+the skill never loaded is noise, so a with-plugin pass also needs `skill-fired`
+in 2 of 3 runs (seen in #321's dry run).
 
 - **0.66.** A case passes the lane when at least 2 of its 3 runs got every
   grader right. One wrong answer in every run fails it, however many graders
