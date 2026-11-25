@@ -118,13 +118,15 @@ The case should fail there and pass in your working tree.
 
 `tools/eval_changed.py` prints `evals: cases=<n> passed=<n> base_failed=<k>
 cost=$<x>`, then one line per case, `evals: <name> score=<score>`, with
-` without=<score>` added under `--baseline`. A case that was meant to run and is
+` without=<score>` added under `--baseline`, then ` runs=<k>/<n>` (the runs that
+got every grader right) and ` failed` for a case below the gate. A case that was meant to run and is
 not in the result (a grader file that failed to load, for example) is printed as
 `evals: <name> did not run` and fails the lane.
 
 A case below the gate is run again on the base, from the base's own files. When
 it fails there too, the lane prints `evals: <name> fails on <base> too
-score=<s>; not this change`, counts it in `base_failed`, and does not fail the
+score=<s>; not this change` (`<s>` is the base's share of runs with every grader
+right), counts it in `base_failed`, and does not fail the
 change: the change did not cause it. Fix such a case in an issue of its own.
 When it passes on the base (`passes on <base>`), or the base run gives no
 result (every run there errored, say), its failure stands. A case the base does

@@ -176,6 +176,20 @@ class Lane(unittest.TestCase):
         rc, out = self.run_lane(result=result, code=0)
         self.assertEqual(rc, 0, out)
 
+    def test_the_runs_count_is_the_runs_that_passed(self):
+        write(self.root, "plugins/gogogo/skills/spec/SKILL.md", "changed\n")
+        result = doc(total=1, passed=1, scores={"spec-being-built": {"score": 1, "passRate": 1.0}})
+        result["cases"][0]["arms"] = {"with": [{"score": 1, "passed": True}, {"score": 1, "passed": True},
+                                               {"score": 0, "passed": False, "error": "timed out"}]}
+        _, out = self.run_lane(result=result, code=0)
+        self.assertIn("evals: spec-being-built score=1.00 runs=2/3", out.splitlines())
+
+    def test_a_null_pass_rate_falls_back_to_the_score(self):
+        write(self.root, "plugins/gogogo/skills/spec/SKILL.md", "changed\n")
+        result = doc(total=1, passed=1, scores={"spec-being-built": {"score": 0.9, "passRate": None}})
+        rc, out = self.run_lane(result=result, code=0)
+        self.assertEqual(rc, 0, out)
+
     def test_a_base_run_is_judged_by_its_runs_passing(self):
         write(self.root, "plugins/gogogo/skills/dev/SKILL.md", "changed\n")
         base = self.base_run(0.83)

@@ -30,9 +30,10 @@ does not have, or whose folder this change edited, is not re-run. It prints
 `evals: cases=<n> passed=<n> base_failed=<k> cost=$<x>`, the cost including
 the re-runs, and exits 0 only when every case passed or failed on the base too.
 After that line it prints one line per case in the result,
-`evals: <name> score=<score>` (and ` without=<score>` under --baseline, then
+`evals: <name> score=<score>` (and ` without=<score>` under --baseline), then
 ` runs=<k>/<n>`, the runs with every grader right, and ` failed` for a case
-below the gate), the base re-run lines, and
+below the gate; then the base re-run lines, whose score is the base's share of
+runs with every grader right, and
 `evals: <name> did not run` for a case of those skills the result leaves out,
 which fails the run (docs/writing-eval-cases.md). A result it cannot read, with no case in it, or cut short
 (`partial`) is a failure, never a pass.
@@ -109,7 +110,9 @@ def changed_files(root: Path, fork: str) -> list[str]:
 
 def _measure(aggregates: dict) -> float | None:
     """What the gate reads: the share of runs with every grader right, else the average score."""
-    value = aggregates.get("passRate", aggregates.get("score"))
+    value = aggregates.get("passRate")
+    if value is None:
+        value = aggregates.get("score")
     return None if value is None else float(value)
 
 
@@ -253,10 +256,9 @@ def main(argv=None, root: Path = ROOT) -> int:
         line = f"evals: {c.get('name')} score={_score(aggregates.get('score'))}"
         if aggregates.get("scoreWithout") is not None:
             line += f" without={_score(aggregates['scoreWithout'])}"
-        if aggregates.get("passRate") is not None:
-            runs = (c.get("arms") or {}).get("with") or []
-            n = len(runs) or int(FIXED[FIXED.index("--runs") + 1])
-            line += f" runs={round(float(aggregates['passRate']) * n)}/{n}"
+        runs = (c.get("arms") or {}).get("with") or []
+        if aggregates.get("passRate") is not None and runs:
+            line += f" runs={sum(1 for r in runs if r.get('passed') is True)}/{len(runs)}"
         if c.get("name") in below:
             line += " failed"
         print(line)
