@@ -793,6 +793,24 @@ class DeclaredMove(Verify):
         self.assertEqual(code, 1, out)
         self.assertIn("missing=0 differs=1", self.summary(out))
 
+    def test_a_move_line_twice_is_refused_once(self):
+        out, code = self.moved(self.MOVE + "\n" + self.MOVE + "\n" + self.answers())
+        self.assertEqual(code, 2, out)
+        self.assertIn("F:lib/new.py is answered twice", out)
+        self.assertNotIn("no answer", out)
+
+    def test_the_printed_lines_are_exact(self):
+        out, code = self.moved(self.answers() + self.MOVE + "\n")
+        lines = out.splitlines()
+        self.assertIn(self.MOVE, lines)
+        self.assertFalse([line for line in lines if line.startswith("F:") and line != self.MOVE], out)
+        out, code = self.moved(self.answers())
+        self.assertIn("F:lib/new.py\tmissing", out.splitlines())
+
+    def test_without_a_base_a_file_reads_na(self):
+        out, code = call("verify", answers=self.answers(), cwd=self.dir)
+        self.assertIn("F:app/views.py\tna", out.splitlines())
+
     def moved(self, answers, changed=None):
         body = BODY.replace("**Create:** `tests/test_list.py`.", "**Create:** `tests/test_list.py`, `lib/new.py`.")
         return call("verify", "--base", "main", body=body, answers=answers,
